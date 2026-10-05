@@ -38,7 +38,7 @@ Quy trình dịch khôi phục ý nghĩa hoàn chỉnh của nội dung bị ng�
 
 ## Xem kết quả thực tế
 
-Các ảnh bên dưới là tài liệu thật trong thư viện Zotero của người dùng và giao diện ứng dụng thực tế. Ngày 05/10/2026, ba bài báo đã hoàn thành phân tích bằng MinerU VLM, dịch bằng DeepSeek, tạo PDF, lưu bản dịch về Zotero và xuất sang Obsidian theo lô trên bản cài đặt Windows ứng viên phát hành. Mở các mục thu gọn để xem thêm ảnh; nhấp vào ảnh đặt cạnh nhau để xem bản gốc. Nguồn ảnh và phạm vi kiểm tra được ghi trong [hồ sơ ảnh chụp](resources/brand/readme-gallery/product/SCREENSHOT_SOURCES.md).
+Các ảnh bên dưới là tài liệu thật trong thư viện Zotero của người dùng và giao diện PaperLoom, gồm các trường hợp phân tích bằng MinerU VLM, dịch bằng mô hình, tạo PDF, lưu bản dịch về Zotero và xuất sang Obsidian theo lô. Mở các mục thu gọn để xem thêm ảnh; nhấp vào ảnh đặt cạnh nhau để xem bản gốc. Nguồn ảnh được ghi trong [hồ sơ ảnh chụp](resources/brand/readme-gallery/product/SCREENSHOT_SOURCES.md).
 
 ### Thư viện và tiến độ tác vụ
 
@@ -153,9 +153,9 @@ Chọn nhiều tài liệu trong thư viện rồi nhấn Lưu về Zotero để
 
 ## Bắt đầu nhanh
 
-Truy cập [GitHub Releases](https://github.com/luffysolution-svg/paperloom/releases) để tải xuống. Bản desktop chính thức của v0.1.3 gồm bộ cài Windows x64 và bản portable; gói desktop cho macOS và Linux sẽ được phát hành sau khi hoàn tất kiểm thử cài đặt trên các nền tảng đó.
+Truy cập [GitHub Releases](https://github.com/luffysolution-svg/paperloom/releases) để tải PaperLoom. v0.1.3 cung cấp bộ cài Windows x64 và bản portable; các gói desktop cho macOS và Linux sẽ xuất hiện trên trang phát hành tương ứng khi có sẵn.
 
-1. Mở PaperLoom và nhập thông tin xác thực API của dịch vụ OCR và mô hình dịch trong Cài đặt. Các ví dụ này dùng MinerU và DeepSeek.
+1. Mở PaperLoom và nhập thông tin xác thực API của dịch vụ OCR và mô hình dịch trong Cài đặt. Bạn có thể dùng MinerU, PaddleOCR và các mô hình dịch được hỗ trợ.
 2. Nhấn Thêm PDF hoặc chọn tài liệu trên máy qua Nhập từ Zotero. Tệp PDF trong Zotero cần được tải về máy trước.
 3. Bắt đầu dịch và theo dõi tiến độ trong trung tâm tác vụ.
 4. Khi hoàn tất, đọc đối chiếu để kiểm tra văn bản, công thức, hình và bảng. Mở Markdown hoặc hỏi đáp AI khi cần.
@@ -178,7 +178,7 @@ python3 init-local.py
 docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ```
 
-Lệnh này dựng image từ mã nguồn, không cần quyền truy cập GHCR riêng tư. Cần Docker Compose, Python 3 và kết nối đến các trang tải thư viện; trên Windows, dùng `python` thay cho `python3`. Lần dựng đầu tải Rust, Python, Node và các thành phần dàn trang nên mất nhiều thời gian hơn khởi động image có sẵn. Mở <http://127.0.0.1:45001> và cấu hình API OCR, mô hình của bạn trong ứng dụng. Sau khi cập nhật mã nguồn, dựng lại:
+Dùng Docker Compose để dựng PaperLoom từ mã nguồn. Cần Docker Compose, Python 3 và kết nối đến các trang tải thư viện; trên Windows, dùng `python` thay cho `python3`. Lần dựng đầu tải Rust, Python, Node và các thành phần dàn trang nên mất nhiều thời gian hơn những lần khởi động sau. Mở <http://127.0.0.1:45001> và cấu hình API OCR, mô hình của bạn trong ứng dụng. Sau khi cập nhật mã nguồn, chạy lại:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
@@ -196,7 +196,7 @@ Zotero sẽ hiện hộp thoại cấp quyền ở lần ghi đầu tiên. Nên 
 
 Mỗi lô nhận tối đa 200 bài và loại bỏ lựa chọn trùng. Một bài thất bại không làm dừng các bài còn lại. Hệ thống chọn bản dịch thành công mới nhất có PDF thực sự sẵn sàng. Tài liệu không nhập từ Zotero, thiếu PDF đã dịch hoặc Zotero chưa chạy đều có thông báo lỗi tương ứng.
 
-Việc ghi bản dịch về cần **Zotero 10+ và API cục bộ trên cùng máy**. Zotero 9 trở xuống chỉ hỗ trợ nhập. Chế độ Docker gắn thư mục dữ liệu Zotero vẫn chỉ đọc. PaperLoom không ghi trực tiếp vào `zotero.sqlite`. Phạm vi triển khai và kiểm tra có trong [hồ sơ tích hợp](docs/ops/planning/zotero-obsidian-integration.md).
+Việc ghi bản dịch về cần **Zotero 10+ và API cục bộ trên cùng máy**. Zotero 9 trở xuống chỉ hỗ trợ nhập. Chế độ Docker gắn thư mục dữ liệu Zotero vẫn chỉ đọc. PaperLoom không ghi trực tiếp vào `zotero.sqlite`. Xem [hướng dẫn tích hợp Zotero và Obsidian](docs/ops/planning/zotero-obsidian-integration.md) để biết cách cấu hình.
 
 ### Xuất sang Obsidian theo lô
 
@@ -204,7 +204,7 @@ Chọn các bài trong thư viện, nhấn Lưu sang Obsidian rồi chọn vault
 
 Khi xuất lại, PaperLoom cập nhật các khối nội dung do ứng dụng quản lý và giữ phần bạn viết bên ngoài các khối đó. Chọn đổi tên hoặc bỏ qua nếu muốn giữ tệp hiện có.
 
-**Plugin tùy chọn cho công thức trong bảng: HTML Table Math 0.1.2**, ID cộng đồng Obsidian là `html-table-math`. Tìm trong Community plugins, cài đặt rồi bật plugin. Người dùng đã xác nhận công thức trong bảng HTML do PaperLoom xuất ra hiển thị đúng; các bảng thực tế cũng được kiểm tra lại trong đợt này. PaperLoom không đóng gói hoặc tự cài plugin. Văn bản thông thường và việc xuất ghi chú không yêu cầu plugin này.
+**Plugin tùy chọn cho công thức trong bảng: HTML Table Math 0.1.2**. Tìm `html-table-math` trong Community plugins của Obsidian, cài đặt rồi bật plugin. PaperLoom không đóng gói hoặc tự cài plugin. Văn bản thông thường và việc xuất ghi chú không yêu cầu plugin này.
 
 ## Câu hỏi thường gặp
 
@@ -212,13 +212,13 @@ Khi xuất lại, PaperLoom cập nhật các khối nội dung do ứng dụng 
 
 Ứng dụng desktop đọc proxy HTTP của Windows và truyền cho các tiến trình phân tích, dịch và tải kết quả. Khởi động lại PaperLoom sau khi đổi proxy; dịch vụ cục bộ và Zotero vẫn kết nối trực tiếp. Nếu ứng dụng proxy chỉ có cổng SOCKS, hãy bật thêm cổng HTTP hoặc cổng hỗn hợp.
 
-Tải lên, phân tích và tải kết quả MinerU là các bước riêng. Nếu tải kết quả thất bại, trước tiên xem thông báo mạng, kiểm tra DNS và proxy; không tắt xác minh chứng chỉ HTTPS. Khi DNS trỏ CDN chính thức đến nút có chứng chỉ hết hạn, PaperLoom cập nhật phân giải tên miền và thử lại trong những điều kiện cụ thể, vẫn giữ xác minh chứng chỉ. Bản cài đặt Windows đã được thử với proxy hệ thống và khi tắt proxy.
+Tải lên, phân tích và tải kết quả MinerU là các bước riêng. Nếu tải kết quả thất bại, trước tiên xem thông báo mạng, kiểm tra DNS và proxy; không tắt xác minh chứng chỉ HTTPS. Khi DNS trỏ CDN chính thức đến nút có chứng chỉ hết hạn, PaperLoom cập nhật phân giải tên miền và thử lại trong những điều kiện cụ thể, vẫn giữ xác minh chứng chỉ. Hãy khởi động lại PaperLoom sau khi đổi proxy.
 
 API token chỉ dùng cho yêu cầu API MinerU, không gửi đến CDN kết quả hoặc kho lưu trữ đối tượng. Xem [tài liệu MinerU chính thức](https://mineru.net/apiManage/docs) mới nhất.
 
 ### Chọn MinerU hay Paddle OCR?
 
-Cả hai đều được hỗ trợ; kết quả bảng phức tạp và cách cắt ảnh có thể khác nhau. Trong so sánh hai bài của đợt này, MinerU giữ được một số giá trị mà Paddle đưa lệch hàng, nhưng MinerU cũng có lỗi gán hàng. Paddle giữ hình tổng hợp gọn hơn; MinerU tách nhiều hình con hơn. Hãy kiểm tra công thức và số liệu quan trọng với PDF gốc. Nhóm mẫu này không phải bảng xếp hạng cho mọi bài báo. Xem [hồ sơ so sánh thực tế](docs/ops/reports/mineru-paddle-obsidian-e2e-20261005.md).
+MinerU và PaddleOCR đều được hỗ trợ, nhưng kết quả xử lý bảng phức tạp và cắt ảnh có thể khác nhau. Hãy kiểm tra công thức, số liệu trong bảng và chú thích hình quan trọng với PDF gốc. Không nên xem một nhóm mẫu là bảng xếp hạng chung.
 
 ## Phát triển và lời cảm ơn
 

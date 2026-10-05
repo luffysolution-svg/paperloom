@@ -1,6 +1,6 @@
 ﻿# 使用 Docker 部署 PaperLoom
 
-默认推荐从源码构建，不需要登录私有 GHCR。适合个人或小组在自己的机器上运行；OCR 和翻译仍调用你配置的服务商 API，容器不需要 GPU。
+PaperLoom 默认从源码构建，适合个人或小组在自己的机器上运行。OCR 和翻译仍会调用你配置的服务商 API，容器不需要 GPU。
 
 ## 第一次启动
 
@@ -27,7 +27,7 @@ curl http://127.0.0.1:45001/health
 
 ## 更新、停止与备份
 
-更新源码后，在同一目录重新构建。所有操作都使用两个 Compose 文件，避免意外切回拉取私有镜像的模式。
+更新源码后，在同一目录重新构建。请继续使用下面的两个 Compose 文件：
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
@@ -72,8 +72,8 @@ Docker 不会继承 Electron 解析的 Windows 系统代理。如宿主机需要
 
 ## 使用预构建镜像
 
-基础 Compose 仍保留 `APP_IMAGE`／`WEB_IMAGE`，方便使用自己发布的镜像。但当前 GHCR 包的公开可拉取状态尚未确认，因此不作为新用户的默认入口。
+如果你使用自己发布的镜像，可以通过 `APP_IMAGE` 和 `WEB_IMAGE` 指定镜像地址。直接从源码构建时不需要配置这些变量。
 
-使用这一模式时只传 `docker-compose.yml`，并把 `docker/auth.local.json` 和 `docker/web.env` 中的内部 key 配成同一个随机值，不能沿用模板的占位 key。确认镜像有读取权限后才执行 `docker compose pull`。本地源码构建不需要这一步。
+使用镜像时只传 `docker-compose.yml`，并把 `docker/auth.local.json` 和 `docker/web.env` 中的内部 key 配成同一个随机值，不能沿用模板的占位 key。确认镜像地址可访问后，再执行 `docker compose pull`。本地源码构建不需要这一步。
 
 镜像运行用户、目录权限和后端端口详见 [后端容器说明](../backend/README.md)。软件及捆绑运行时的许可说明见 [第三方通知](../../../../THIRD_PARTY_NOTICES.md)。

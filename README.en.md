@@ -38,7 +38,7 @@ The translation pipeline first restores complete meaning across columns, pages, 
 
 ## See it in use
 
-These screenshots show real papers from the user's Zotero library and the actual application interfaces. On October 5, 2026, three papers completed MinerU VLM parsing, DeepSeek translation, PDF generation, batch Zotero writeback, and batch Obsidian export in the Windows release candidate. Expand the sections for more screenshots; click side-by-side images to view the originals. See the [screenshot record](resources/brand/readme-gallery/product/SCREENSHOT_SOURCES.md) for their sources and verification scope.
+These screenshots show real papers from the user's Zotero library and PaperLoom interfaces, including MinerU VLM parsing, model translation, PDF generation, batch Zotero writeback, and batch Obsidian export. Expand the sections for more screenshots; click side-by-side images to view the originals. See the [screenshot record](resources/brand/readme-gallery/product/SCREENSHOT_SOURCES.md) for their sources.
 
 ### Library and task progress
 
@@ -153,9 +153,9 @@ Select several documents in the library and click Save to Zotero to see creation
 
 ## Quick start
 
-Visit [GitHub Releases](https://github.com/luffysolution-svg/paperloom/releases) for downloads. The official v0.1.3 desktop artifacts are the Windows x64 installer and portable package; macOS and Linux desktop packages will be published after installation testing on those platforms.
+Visit [GitHub Releases](https://github.com/luffysolution-svg/paperloom/releases) to download PaperLoom. v0.1.3 provides a Windows x64 installer and portable package; macOS and Linux desktop packages will be listed on their release pages when available.
 
-1. Open PaperLoom and enter your OCR-service and translation-model API credentials in Settings. These examples use MinerU and DeepSeek.
+1. Open PaperLoom and enter your OCR-service and translation-model API credentials in Settings. You can use MinerU, PaddleOCR, and supported translation models.
 2. Click Add PDF, or select local papers through Import from Zotero. Zotero PDF attachments must be downloaded to your computer first.
 3. Start translation and follow its progress in the task center.
 4. Once it finishes, read source and translation side by side to check text, formulas, figures, and tables. Open Markdown or document AI when needed.
@@ -178,7 +178,7 @@ python3 init-local.py
 docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ```
 
-This builds from source without private GHCR access. You need Docker Compose, Python 3, and network access to dependency download sites; on Windows, use `python` instead of `python3`. The first build downloads Rust, Python, Node, and typesetting dependencies, so it takes longer than starting an existing image. Open <http://127.0.0.1:45001> and configure your own OCR and model APIs in the application. After updating the source, rebuild:
+Build PaperLoom from source with Docker Compose. You need Docker Compose, Python 3, and network access to dependency download sites; on Windows, use `python` instead of `python3`. The first build downloads Rust, Python, Node, and typesetting dependencies, so it takes longer than subsequent restarts. Open <http://127.0.0.1:45001> and configure your own OCR and model APIs in the application. After updating the source, run again:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
@@ -196,7 +196,7 @@ Zotero displays an authorization dialog on the first write. Choose Always allow 
 
 A batch accepts up to 200 papers and removes duplicate selections. One failure does not stop the rest. It selects the latest successful translation that actually has an available PDF. Non-Zotero documents, missing translated PDFs, and a stopped Zotero app each receive a corresponding error.
 
-Writeback requires **Zotero 10+ and its local API on the same computer**. Zotero 9 and earlier support import only. Docker's mounted Zotero-data-directory mode remains read-only. PaperLoom does not write directly to `zotero.sqlite`. See the [integration record](docs/ops/planning/zotero-obsidian-integration.md) for implementation and verification scope.
+Writeback requires **Zotero 10+ and its local API on the same computer**. Zotero 9 and earlier support import only. Docker's mounted Zotero-data-directory mode remains read-only. PaperLoom does not write directly to `zotero.sqlite`. See the [Zotero and Obsidian integration guide](docs/ops/planning/zotero-obsidian-integration.md) for configuration details.
 
 ### Batch export to Obsidian
 
@@ -204,7 +204,7 @@ Select papers in the library, click Save to Obsidian, and choose a vault and fol
 
 On repeat export, PaperLoom updates its managed content blocks and keeps your writing outside those blocks. Choose rename or skip when you want to keep an existing file.
 
-**Optional plugin for table formulas: HTML Table Math 0.1.2**, Obsidian community ID `html-table-math`. Search for it in Community plugins, install it, and enable it. The user confirmed that it renders formulas in PaperLoom's exported HTML tables, and the real tables were checked again in this session. PaperLoom does not bundle or automatically install the plugin. Ordinary note text and export do not require it.
+**Optional plugin for table formulas: HTML Table Math 0.1.2**. Search for `html-table-math` in Obsidian Community plugins, install it, and enable it. PaperLoom does not bundle or automatically install the plugin. Ordinary note text and export do not require it.
 
 ## Common questions
 
@@ -212,13 +212,13 @@ On repeat export, PaperLoom updates its managed content blocks and keeps your wr
 
 The desktop app reads the Windows HTTP proxy and passes it to parsing, translation, and result-download processes. Restart PaperLoom after changing the proxy; local services and Zotero keep direct connections. If your proxy app provides only a SOCKS port, enable an HTTP or mixed port as well.
 
-MinerU upload, parsing, and result download are separate stages. If downloading fails, check the network message, DNS, and proxy first; do not disable HTTPS certificate validation. When DNS points the official CDN to a node with an expired certificate, PaperLoom refreshes hostname resolution and retries under specific conditions while keeping certificate validation enabled. The Windows installer has been tested with a system proxy and with the proxy disabled.
+MinerU upload, parsing, and result download are separate stages. If downloading fails, check the network message, DNS, and proxy first; do not disable HTTPS certificate validation. When DNS points the official CDN to a node with an expired certificate, PaperLoom refreshes hostname resolution and retries under specific conditions while keeping certificate validation enabled. Restart PaperLoom after changing proxy settings.
 
 The API token is used only for MinerU API requests, never sent to the result CDN or object storage. See the latest [official MinerU documentation](https://mineru.net/apiManage/docs).
 
 ### MinerU or Paddle OCR?
 
-Both are supported, and their complex-table and image-cropping results can differ. In the two-paper comparison from this session, MinerU preserved some table values that Paddle shifted into the wrong rows, but MinerU also had row-assignment errors. Paddle kept composite figures more compact; MinerU split out more subfigures. Check important formulas and table values against the original PDF. These samples are not a ranking for all papers. See the [real comparison record](docs/ops/reports/mineru-paddle-obsidian-e2e-20261005.md).
+MinerU and PaddleOCR are both supported, but their complex-table and image-cropping results can differ. Check important formulas, table values, and figure captions against the original PDF. Do not treat one sample set as a general ranking.
 
 ## Development and acknowledgments
 

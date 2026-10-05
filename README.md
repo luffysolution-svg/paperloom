@@ -38,13 +38,13 @@ PaperLoom 是目前唯一面向图片型 / 扫描版 PDF、支持保留排版翻
 
 ## 看看实际效果
 
-下面展示的是用户 Zotero 文库中的真实文献和真实界面。2026-10-05，在 Windows 候选安装版上完成了三篇论文的 MinerU VLM 解析、DeepSeek 翻译、PDF 生成、Zotero 批量写回和 Obsidian 批量导出。补充截图可展开查看，并排图片可点击打开原图。截图来源和验证范围见 [截图记录](resources/brand/readme-gallery/product/SCREENSHOT_SOURCES.md)。
+下面展示的是用户 Zotero 文库中的真实文献和 PaperLoom 界面，包含 MinerU VLM 解析、模型翻译、PDF 生成、Zotero 批量写回和 Obsidian 批量导出等场景。补充截图可展开查看，并排图片可点击打开原图。截图来源见 [截图记录](resources/brand/readme-gallery/product/SCREENSHOT_SOURCES.md)。
 
 ### 书库与任务进度
 
 导入后，文献留在书库里。想知道卡在哪一步，打开详情页的“进度”，查看 OCR、翻译和渲染状态；已经完成的文献可以直接阅读。
 
-![PaperLoom 真实书库：本轮完成的 Talebian、Pan 和 Yang 文献](resources/brand/readme-gallery/product/paperloom-library-real.png)
+![PaperLoom 书库中的 Talebian、Pan 和 Yang 文献](resources/brand/readme-gallery/product/paperloom-library-real.png)
 
 <details>
 <summary>展开任务进度、Zotero 导入与下载产物</summary>
@@ -153,9 +153,9 @@ PaperLoom 是目前唯一面向图片型 / 扫描版 PDF、支持保留排版翻
 
 ## 快速开始
 
-前往 [GitHub Releases](https://github.com/luffysolution-svg/paperloom/releases) 查看可下载版本。v0.1.3 的正式桌面产物为 Windows x64 安装版和便携版；macOS、Linux 桌面产物需完成对应平台安装验收后再发布。
+前往 [GitHub Releases](https://github.com/luffysolution-svg/paperloom/releases) 下载 PaperLoom。v0.1.3 提供 Windows x64 安装版和便携版；macOS、Linux 桌面版将在相应版本页面提供。
 
-1. 打开 PaperLoom，在“设置”中填写 OCR 服务和翻译模型的 API 凭据。本轮示例使用 MinerU 与 DeepSeek。
+1. 打开 PaperLoom，在“设置”中填写 OCR 服务和翻译模型的 API 凭据。你可以使用 MinerU、PaddleOCR 以及支持的翻译模型。
 2. 点击“添加 PDF”，或“从 Zotero 导入”选择本机文献。Zotero 的 PDF 需要先下载到本地。
 3. 开始翻译，在任务中心查看进度。
 4. 完成后打开对照阅读，核对正文、公式和图表；需要时打开 Markdown 或 AI 问答。
@@ -178,7 +178,7 @@ python3 init-local.py
 docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ```
 
-从源码构建，不需要私有 GHCR 权限。需要 Docker Compose、Python 3 和能访问依赖下载站点的网络；Windows 上将 `python3` 换成 `python`。首次构建会下载 Rust、Python、Node 和排版依赖，耗时比启动已有镜像长。启动后访问 <http://127.0.0.1:45001>，在页面中填写自己的 OCR 和模型 API 配置。更新源码后重新构建：
+使用 Docker Compose 从源码构建 PaperLoom。准备好 Docker Compose、Python 3，以及可以访问依赖下载站点的网络即可；Windows 上请把 `python3` 换成 `python`。首次构建会下载 Rust、Python、Node 和排版依赖，耗时会比后续重新启动更长。启动后访问 <http://127.0.0.1:45001>，在页面中填写自己的 OCR 和模型 API 配置。更新源码后，重新执行：
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
@@ -196,7 +196,7 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 
 每批最多 200 篇，重复选择会去重；一篇失败不会中断其他文献。批量写回选择最新实际可用的成功译文 PDF。非 Zotero 来源、尚无译文 PDF 或 Zotero 未运行时，会显示对应错误。
 
-写回需要 **Zotero 10+、同机本地 API**。Zotero 9 及以下只支持导入；Docker 挂载 Zotero 数据目录的模式保持只读。PaperLoom 不直接写入 `zotero.sqlite`。实现和验证范围见 [联动记录](docs/ops/planning/zotero-obsidian-integration.md)。
+写回需要 **Zotero 10+、同机本地 API**。Zotero 9 及以下只支持导入；Docker 挂载 Zotero 数据目录的模式保持只读。PaperLoom 不直接写入 `zotero.sqlite`。详细配置见 [Zotero 与 Obsidian 联动说明](docs/ops/planning/zotero-obsidian-integration.md)。
 
 ### Obsidian 批量导出
 
@@ -204,7 +204,7 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 
 再次导出时，PaperLoom 更新自己管理的内容区块，保留你写在区块外的笔记。需要保留旧文件时，可以选择重命名或跳过。
 
-**表格公式可选插件：HTML Table Math 0.1.2**，Obsidian 社区 ID 为 `html-table-math`。在社区插件中搜索、安装并启用即可。用户已确认它能渲染 PaperLoom 导出的 HTML 表格公式；本轮真实表格也完成了复验。PaperLoom 不捆绑或自动安装这个插件，普通正文和笔记导出不要求安装它。
+**表格公式可选插件：HTML Table Math 0.1.2**。在 Obsidian 社区插件中搜索 `html-table-math`，安装并启用即可。PaperLoom 不捆绑或自动安装这个插件；普通正文和笔记导出不需要安装它。
 
 ## 常见问题
 
@@ -212,13 +212,13 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 
 桌面版会读取 Windows 系统 HTTP 代理，并传给解析、翻译及结果下载进程。修改代理后重启 PaperLoom；本地服务和 Zotero 保留直连。代理软件只有 SOCKS 端口时，请同时开启 HTTP 或混合端口。
 
-MinerU 上传、解析和下载结果是不同阶段。下载失败时先查看网络提示，检查 DNS 和代理；不要关闭 HTTPS 证书校验。对于官方 CDN 被 DNS 指向过期证书节点的情况，PaperLoom 会在限定条件下刷新域名解析并重试，保持证书校验。Windows 安装版已验证系统代理与关闭代理的场景。
+MinerU 上传、解析和下载结果是不同阶段。下载失败时先查看网络提示，检查 DNS 和代理；不要关闭 HTTPS 证书校验。对于官方 CDN 被 DNS 指向过期证书节点的情况，PaperLoom 会在限定条件下刷新域名解析并重试，保持证书校验。修改代理设置后，请重启 PaperLoom。
 
 API token 只用于 MinerU API 请求，不发送给结果 CDN 或对象存储。最新接口说明见 [MinerU 官方文档](https://mineru.net/apiManage/docs)。
 
 ### OCR 选 MinerU 还是 Paddle
 
-两者都可以使用，复杂表格和图像裁剪的结果可能不同。在本轮两篇同文献比较中，MinerU 保留了部分被 Paddle 错位的表格数值，但它也有行归属错误；Paddle 的组合图更紧凑，MinerU 会拆出更多子图。关键公式和表格数据建议回到原 PDF 核对，不能把这组样本当作所有论文的排名。详见 [真实比较记录](docs/ops/reports/mineru-paddle-obsidian-e2e-20261005.md)。
+MinerU 和 PaddleOCR 都可以使用，但复杂表格和图像裁剪的结果可能不同。重要的公式、表格数据和图注建议回到原 PDF 核对，不要把某一组样本的结果当成普遍排名。
 
 ## 开发与致谢
 
