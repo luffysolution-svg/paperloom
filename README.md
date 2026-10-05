@@ -232,10 +232,9 @@ PaperLoom 以 [GNU AGPL-3.0](LICENSE) 发布。每个正式版本都会同时提
 
 ## PaperLoom 交流群
 
-<p align="center">
-  <img src="resources/brand/paperloom-community-qr.png" alt="PaperLoom 交流群二维码" width="280" />
-</p>
-
-<p align="center">
-  <img src="resources/brand/paperloom-community-qr-backup.jpg" alt="PaperLoom 交流群备用二维码" width="280" />
-</p>
+<table>
+  <tr>
+    <td align="center" valign="top">交流群二维码<br /><img src="resources/brand/paperloom-community-qr.png" alt="PaperLoom 交流群二维码" width="280" /></td>
+    <td align="center" valign="top">备用二维码<br /><img src="resources/brand/paperloom-community-qr-backup.jpg" alt="PaperLoom 交流群备用二维码" width="280" /></td>
+  </tr>
+</table>
