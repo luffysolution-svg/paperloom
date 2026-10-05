@@ -234,7 +234,11 @@ PaperLoom được phát hành theo [GNU AGPL-3.0](LICENSE). Mỗi bản phát h
 
 <table>
   <tr>
-    <td align="center" valign="top">Mã QR cộng đồng<br /><img src="resources/brand/paperloom-community-qr.png" alt="Mã QR cộng đồng PaperLoom" width="280" /></td>
-    <td align="center" valign="top">Mã QR dự phòng<br /><img src="resources/brand/paperloom-community-qr-backup.jpg" alt="Mã QR dự phòng của cộng đồng PaperLoom" width="280" /></td>
+    <th width="50%"></th>
+    <th width="50%">Nếu mã QR nhóm không còn hiệu lực, hãy<br />thêm WeChat cá nhân của tôi để tôi mời bạn vào nhóm</th>
+  </tr>
+  <tr>
+    <td align="center" valign="top"><img src="resources/brand/paperloom-community-qr.png" alt="Mã QR cộng đồng PaperLoom" height="360" /></td>
+    <td align="center" valign="top"><img src="resources/brand/paperloom-community-qr-backup.jpg" alt="Mã QR WeChat cá nhân của PaperLoom" height="360" /></td>
   </tr>
 </table>

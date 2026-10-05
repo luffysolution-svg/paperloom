@@ -234,7 +234,11 @@ PaperLoom is released under the [GNU AGPL-3.0](LICENSE). Every official release 
 
 <table>
   <tr>
-    <td align="center" valign="top">Community QR code<br /><img src="resources/brand/paperloom-community-qr.png" alt="PaperLoom community QR code" width="280" /></td>
-    <td align="center" valign="top">Backup QR code<br /><img src="resources/brand/paperloom-community-qr-backup.jpg" alt="PaperLoom community backup QR code" width="280" /></td>
+    <th width="50%"></th>
+    <th width="50%">If the group QR code expires, please<br />add me on WeChat and I will invite you</th>
+  </tr>
+  <tr>
+    <td align="center" valign="top"><img src="resources/brand/paperloom-community-qr.png" alt="PaperLoom community QR code" height="360" /></td>
+    <td align="center" valign="top"><img src="resources/brand/paperloom-community-qr-backup.jpg" alt="PaperLoom personal WeChat QR code" height="360" /></td>
   </tr>
 </table>
