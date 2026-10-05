@@ -112,3 +112,14 @@ def test_network_ui_and_images_offer_agpl_source() -> None:
     assert "对应源码（AGPL-3.0）" in top_bar
     assert "org.opencontainers.image.source=https://github.com/${{ github.repository }}" in docker_workflow
     assert "org.opencontainers.image.licenses=AGPL-3.0-only" in docker_workflow
+
+def test_docker_release_separates_manifest_platforms_from_image_config() -> None:
+    workflow = (RELEASE_ROOT.parents[1] / ".github/workflows/release-docker.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "--format '{{json .Manifest}}'" in workflow
+    assert "--format '{{json .Image}}'" in workflow
+    assert 'docker-candidates/${target}-manifest.json' in workflow
+    assert 'docker-candidates/${target}-image.json' in workflow
+    assert '.manifests[]' in workflow
+    assert "jq -r 'keys[]'" not in workflow

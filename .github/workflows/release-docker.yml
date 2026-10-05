@@ -402,9 +402,10 @@ jobs:
             esac
             image="${{ steps.hub.outputs.user }}/${repo}@${digest}"
             echo "Verifying ${image} for ${platforms}"
-            docker buildx imagetools inspect "$image" --format '{{json .Image}}' > "docker-candidates/${target}-images.json"
+            docker buildx imagetools inspect "$image" --format '{{json .Manifest}}' > "docker-candidates/${target}-manifest.json"
+            docker buildx imagetools inspect "$image" --format '{{json .Image}}' > "docker-candidates/${target}-image.json"
             expected_platforms="$(printf '%s' "$platforms" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sort)"
-            actual_platforms="$(jq -r 'keys[]' "docker-candidates/${target}-images.json" | sort)"
+            actual_platforms="$(jq -r '.manifests[] | select(.platform.os != "unknown" and .platform.architecture != "unknown") | "\(.platform.os)/\(.platform.architecture)"' "docker-candidates/${target}-manifest.json" | sort)"
             if [ "$actual_platforms" != "$expected_platforms" ]; then
               echo "Candidate platform mismatch for $target" >&2
               echo "expected: $expected_platforms" >&2
@@ -419,7 +420,7 @@ jobs:
                   .value.config.Labels["org.opencontainers.image.revision"] != $revision or
                   .value.config.Labels["org.opencontainers.image.version"] != $version
                 )] | length' \
-                "docker-candidates/${target}-images.json"
+                "docker-candidates/${target}-image.json"
             )"
             if [ "$label_mismatches" != "0" ]; then
               echo "Candidate OCI identity labels do not match this release for $target" >&2
