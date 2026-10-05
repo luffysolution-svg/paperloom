@@ -1109,6 +1109,18 @@ jobs:
           name: desktop-windows-${{ github.sha }}
           path: release-assets
 
+      - name: Download Linux package artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: desktop-linux-${{ github.sha }}
+          path: release-assets
+
+      - name: Download macOS package artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: desktop-macos-${{ github.sha }}
+          path: release-assets
+
       - name: Prepare complete corresponding source
         shell: bash
         env:
@@ -1138,6 +1150,8 @@ jobs:
             "release-assets/PaperLoom-Windows-${version}-Setup.exe"
             "release-assets/PaperLoom-Windows-${version}-Setup.exe.blockmap"
             "release-assets/PaperLoom-Windows-${version}.exe"
+            "release-assets/PaperLoom-Linux-${version}.deb"
+            "release-assets/PaperLoom-Mac-${version}.dmg"
             "release-assets/PaperLoom-${version}-source.tar.gz"
             "release-assets/PyMuPDF-1.26.5-source.tar.gz"
             "release-assets/CORRESPONDING_SOURCE.md"
@@ -1155,6 +1169,8 @@ jobs:
               "PaperLoom-Windows-${version}-Setup.exe" \
               "PaperLoom-Windows-${version}-Setup.exe.blockmap" \
               "PaperLoom-Windows-${version}.exe" \
+              "PaperLoom-Linux-${version}.deb" \
+              "PaperLoom-Mac-${version}.dmg" \
               "PaperLoom-${version}-source.tar.gz" \
               "PyMuPDF-1.26.5-source.tar.gz" \
               "CORRESPONDING_SOURCE.md" \
@@ -1188,6 +1204,8 @@ jobs:
             release-assets/PaperLoom-Windows-${{ steps.version.outputs.version }}-Setup.exe
             release-assets/PaperLoom-Windows-${{ steps.version.outputs.version }}-Setup.exe.blockmap
             release-assets/PaperLoom-Windows-${{ steps.version.outputs.version }}.exe
+            release-assets/PaperLoom-Linux-${{ steps.version.outputs.version }}.deb
+            release-assets/PaperLoom-Mac-${{ steps.version.outputs.version }}.dmg
             release-assets/PaperLoom-${{ steps.version.outputs.version }}-source.tar.gz
             release-assets/PyMuPDF-1.26.5-source.tar.gz
             release-assets/CORRESPONDING_SOURCE.md

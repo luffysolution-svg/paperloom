@@ -82,7 +82,12 @@ def test_desktop_release_is_published_once_after_all_platforms_finish() -> None:
     assert "- build-windows-release" in workflow
     assert "- build-linux-release" in workflow
     assert "- build-macos-release" in workflow
-    assert "release-assets/SHA256SUMS.txt" in workflow
+    publish = workflow.split("  publish-desktop-release:", 1)[1]
+    assert "name: desktop-linux-${{ github.sha }}" in publish
+    assert "name: desktop-macos-${{ github.sha }}" in publish
+    assert "release-assets/PaperLoom-Linux-${{ steps.version.outputs.version }}.deb" in publish
+    assert "release-assets/PaperLoom-Mac-${{ steps.version.outputs.version }}.dmg" in publish
+    assert "release-assets/SHA256SUMS.txt" in publish
     assert 'tag = "v$version"' not in workflow
 
 
