@@ -229,3 +229,13 @@ Xin cảm ơn tác giả và những người đóng góp cho [RetainPDF](https:
 ## Giấy phép
 
 PaperLoom được phát hành theo [GNU AGPL-3.0](LICENSE). Mỗi bản phát hành chính thức cũng cung cấp đầy đủ [mã nguồn tương ứng](CORRESPONDING_SOURCE.md), gồm mã nguồn PyMuPDF/MuPDF khớp với bộ cài đặt và image app. Phần nền tảng RetainPDF giữ nguyên [thông báo bản quyền và giấy phép MIT](LICENSE-MIT); các phần phụ thuộc và tài nguyên khác tiếp tục tuân theo giấy phép riêng như ghi trong [thông báo bên thứ ba](THIRD_PARTY_NOTICES.md).
+
+## Cộng đồng PaperLoom
+
+<p align="center">
+  <img src="resources/brand/paperloom-community-qr.png" alt="Mã QR cộng đồng PaperLoom" width="280" />
+</p>
+
+<p align="center">
+  <img src="resources/brand/paperloom-community-qr-backup.jpg" alt="Mã QR dự phòng của cộng đồng PaperLoom" width="280" />
+</p>

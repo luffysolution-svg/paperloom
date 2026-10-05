@@ -229,3 +229,13 @@ Thank you again to the original author and contributors of [RetainPDF](https://g
 ## License
 
 PaperLoom is released under the [GNU AGPL-3.0](LICENSE). Every official release also provides the complete [corresponding source](CORRESPONDING_SOURCE.md), including the PyMuPDF/MuPDF source matching the installers and app image. The RetainPDF foundation retains its original [MIT copyright and permission notice](LICENSE-MIT); other dependencies and assets remain under their respective licenses as documented in the [third-party notices](THIRD_PARTY_NOTICES.md).
+
+## PaperLoom community
+
+<p align="center">
+  <img src="resources/brand/paperloom-community-qr.png" alt="PaperLoom community QR code" width="280" />
+</p>
+
+<p align="center">
+  <img src="resources/brand/paperloom-community-qr-backup.jpg" alt="PaperLoom community backup QR code" width="280" />
+</p>

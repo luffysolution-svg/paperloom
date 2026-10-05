@@ -229,3 +229,13 @@ MinerU 和 PaddleOCR 都可以使用，但复杂表格和图像裁剪的结果�
 ## License
 
 PaperLoom 以 [GNU AGPL-3.0](LICENSE) 发布。每个正式版本都会同时提供完整的 [对应源码](CORRESPONDING_SOURCE.md)，包括与安装包及 app 镜像匹配的 PyMuPDF／MuPDF 源码。RetainPDF 基础代码保留原 [MIT 版权与许可声明](LICENSE-MIT)，其他依赖与素材继续遵循各自许可，详见 [第三方通知](THIRD_PARTY_NOTICES.md)。
+
+## PaperLoom 交流群
+
+<p align="center">
+  <img src="resources/brand/paperloom-community-qr.png" alt="PaperLoom 交流群二维码" width="280" />
+</p>
+
+<p align="center">
+  <img src="resources/brand/paperloom-community-qr-backup.jpg" alt="PaperLoom 交流群备用二维码" width="280" />
+</p>
