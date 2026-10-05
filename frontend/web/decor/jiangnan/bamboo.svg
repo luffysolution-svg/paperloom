@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 420" preserveAspectRatio="xMinYMax meet">
+  <!-- 墨竹（正式稿，left-bottom 锚点）：三竿贴左缘、下缘生长，右侧上侧留透明呼吸；
+       青绿色阶 #4c7466 / #5d8273，叶三五成组、疏朗不茂密。 -->
+  <defs>
+    <linearGradient id="leaf" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4c7466"/>
+      <stop offset="1" stop-color="#6f9583"/>
+    </linearGradient>
+    <!-- 标准叶片：基部尖、腹宽、尾梢尖，沿 +x 方向，用 transform 摆放 -->
+    <path id="blade" d="M0 0 C18 -10 44 -12 80 2 C50 10 22 8 0 0 Z" fill="url(#leaf)"/>
+  </defs>
+
+  <!-- 竹竿：分节写出，节处略粗，色阶由基到梢渐淡 -->
+  <g fill="none" stroke-linecap="round" opacity="0.9">
+    <!-- 主竿 -->
+    <g stroke="#456f61">
+      <path d="M45 420 C44 396 46 372 47 348" stroke-width="11"/>
+      <path d="M47 344 C48 318 50 296 52 272" stroke-width="10"/>
+      <path d="M52 268 C54 242 57 220 60 196" stroke-width="8.5"/>
+      <path d="M60 192 C63 168 66 142 70 118" stroke-width="7"/>
+      <path d="M70 114 C73 98 76 84 79 72" stroke-width="5.5"/>
+    </g>
+    <!-- 副竿 -->
+    <g stroke="#52796a">
+      <path d="M104 420 C105 398 106 376 107 354" stroke-width="7"/>
+      <path d="M107 350 C108 326 110 304 112 282" stroke-width="6.5"/>
+      <path d="M112 278 C114 254 117 232 120 210" stroke-width="5.5"/>
+      <path d="M120 206 C123 190 126 178 129 166" stroke-width="4.5"/>
+    </g>
+    <!-- 新篁 -->
+    <g stroke="#6b9080">
+      <path d="M146 420 C147 392 149 366 152 340" stroke-width="4"/>
+      <path d="M152 336 C154 318 156 304 158 292" stroke-width="3"/>
+    </g>
+    <!-- 节环 -->
+    <g stroke="#33574b" stroke-width="2.5" opacity="0.8">
+      <path d="M40 346 L54 345"/>
+      <path d="M45 270 L59 269"/>
+      <path d="M54 194 L67 193"/>
+      <path d="M64 116 L76 115"/>
+      <path d="M101 352 L113 351"/>
+      <path d="M106 280 L118 279"/>
+      <path d="M114 208 L126 207"/>
+      <path d="M148 338 L158 337"/>
+    </g>
+    <!-- 出枝 -->
+    <g stroke="#456f61" stroke-width="2">
+      <path d="M70 116 C66 108 63 102 60 96"/>
+      <path d="M60 194 C54 190 49 186 44 184"/>
+      <path d="M129 166 C133 158 137 152 141 146"/>
+    </g>
+  </g>
+
+  <!-- 竹叶：标准叶片按角度摆出，四组、三五成簇、浓淡相间 -->
+  <g>
+    <!-- 主竿梢头一组（五叶） -->
+    <use href="#blade" transform="translate(66 100) rotate(220)" opacity="0.92"/>
+    <use href="#blade" transform="translate(64 102) rotate(185) scale(0.8)" opacity="0.8"/>
+    <use href="#blade" transform="translate(62 108) rotate(125) scale(0.82)" opacity="0.7"/>
+    <use href="#blade" transform="translate(70 96) rotate(-38) scale(0.77)" opacity="0.6"/>
+    <use href="#blade" transform="translate(70 104) rotate(27) scale(0.52)" opacity="0.75"/>
+    <!-- 主竿中节一组（三叶，下垂） -->
+    <use href="#blade" transform="translate(58 192) rotate(197) scale(0.6)" opacity="0.85"/>
+    <use href="#blade" transform="translate(58 198) rotate(142) scale(0.62)" opacity="0.65"/>
+    <use href="#blade" transform="translate(60 190) rotate(252) scale(0.5)" opacity="0.55"/>
+    <!-- 副竿梢头一组（四叶） -->
+    <use href="#blade" transform="translate(131 162) rotate(-30) scale(0.85)" opacity="0.9"/>
+    <use href="#blade" transform="translate(132 166) rotate(2) scale(0.86)" opacity="0.7"/>
+    <use href="#blade" transform="translate(131 172) rotate(42) scale(0.75)" opacity="0.75"/>
+    <use href="#blade" transform="translate(128 160) rotate(-69) scale(0.59)" opacity="0.55"/>
+    <!-- 新篁梢头两叶 -->
+    <use href="#blade" transform="translate(159 290) rotate(-22) scale(0.55)" opacity="0.65"/>
+    <use href="#blade" transform="translate(158 294) rotate(35) scale(0.5)" opacity="0.6"/>
+  </g>
+</svg>

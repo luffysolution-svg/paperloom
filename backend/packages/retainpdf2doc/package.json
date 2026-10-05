@@ -1,0 +1,29 @@
+{
+  "name": "retainpdf2doc",
+  "private": true,
+  "version": "0.1.0",
+  "description": "RetainPDF 排版规格 → 保留排版的 Word 文档（公式走原生 OMML）。",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "retainpdf2doc": "./dist/cli.mjs"
+  },
+  "exports": {
+    ".": "./dist/index.mjs"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --experimental-strip-types --test tests/"
+  },
+  "dependencies": {
+    "@xmldom/xmldom": "^0.9.10",
+    "fflate": "^0.8.2",
+    "mathjax-full": "^3.2.2"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.0"
+  }
+}

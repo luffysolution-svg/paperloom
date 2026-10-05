@@ -1,0 +1,1 @@
+{"version":3,"file":"markdown-outline.d.ts","sourceRoot":"","sources":["../../../src/shared/content/markdown-outline.ts"],"names":[],"mappings":"AAEA,MAAM,MAAM,mBAAmB,GAAG;IAChC,EAAE,EAAE,MAAM,CAAC;IACX,KAAK,EAAE,MAAM,CAAC;IACd,IAAI,EAAE,MAAM,CAAC;CACd,CAAC;AAWF,wBAAgB,oBAAoB,CAClC,SAAS,EAAE,UAAU,EACrB,IAAI,GAAE,GAAG,CAAC,MAAM,EAAE,MAAM,CAAa,GACpC,mBAAmB,EAAE,CAYvB"}

@@ -1,0 +1,71 @@
+.detail-artifact-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.detail-artifact-row {
+  border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  border-radius: 16px;
+  padding: 0.9rem 1rem;
+  background: color-mix(in srgb, var(--paper) 82%, transparent);
+}
+
+.detail-artifact-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.detail-artifact-key {
+  font-size: 0.94rem;
+  color: var(--ink);
+  word-break: break-all;
+}
+
+.detail-artifact-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 74px;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.detail-artifact-chip.is-ready {
+  color: color-mix(in srgb, var(--ok) 50%, var(--ink));
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+}
+
+.detail-artifact-chip.is-pending {
+  color: color-mix(in srgb, var(--warn) 50%, var(--ink));
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+}
+
+.detail-markdown-image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.85rem;
+  margin: 1rem 0;
+}
+
+.detail-markdown-image-card {
+  display: grid;
+  gap: 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  border-radius: 16px;
+  padding: 0.85rem;
+  background: color-mix(in srgb, var(--paper) 82%, transparent);
+}
+
+.detail-markdown-image {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  border-radius: 12px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--gold) 8%, var(--paper)), var(--bg));
+}

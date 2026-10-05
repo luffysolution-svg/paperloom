@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 720" fill="none">
+  <!-- branches -->
+  <g stroke="#2f6f5e" stroke-linecap="round" fill="none">
+    <path d="M-8 20 C 42 46 76 90 92 150 C 104 196 110 244 108 298" stroke-width="3.6"/>
+    <path d="M90 140 C 124 154 148 182 160 220" stroke-width="2.2"/>
+    <path d="M108 296 C 110 342 102 390 86 434 C 78 456 68 474 56 488" stroke-width="2.6"/>
+    <path d="M106 248 C 126 256 140 270 148 290" stroke-width="1.5"/>
+    <path d="M160 218 C 174 230 182 246 184 264" stroke-width="1.2"/>
+    <path d="M90 418 C 108 424 122 436 130 454" stroke-width="1.3"/>
+  </g>
+
+  <!-- blossom, upper -->
+  <g transform="translate(166 240) rotate(10)">
+    <g stroke="#5a6b5c" stroke-width="1.1" fill="none">
+      <circle cx="0" cy="-7" r="7"/>
+      <circle cx="6.7" cy="-2.2" r="7"/>
+      <circle cx="4.1" cy="5.7" r="7"/>
+      <circle cx="-4.1" cy="5.7" r="7"/>
+      <circle cx="-6.7" cy="-2.2" r="7"/>
+    </g>
+    <g stroke="#b85c38" stroke-width="0.8" stroke-linecap="round" fill="none">
+      <path d="M0 0 L-1 -6"/>
+      <path d="M0 0 L4 -4"/>
+      <path d="M0 0 L6 1"/>
+      <path d="M0 0 L2 6"/>
+      <path d="M0 0 L-4 5"/>
+      <path d="M0 0 L-6 -1"/>
+    </g>
+    <g fill="#b85c38">
+      <circle cx="-1" cy="-6.4" r="1"/>
+      <circle cx="4.4" cy="-4.4" r="1"/>
+      <circle cx="6.4" cy="1" r="1"/>
+      <circle cx="2.2" cy="6.4" r="1"/>
+      <circle cx="-4.4" cy="5.4" r="1"/>
+      <circle cx="-6.4" cy="-1.1" r="1"/>
+    </g>
+  </g>
+
+  <!-- half-open blossom on twig tip -->
+  <g transform="translate(150 296)">
+    <path d="M-7 3 C -7 -4 -4 -8 0 -8 C 4 -8 7 -4 7 3 C 4 1 -4 1 -7 3 Z" stroke="#5a6b5c" stroke-width="1.1" fill="none"/>
+    <path d="M-5 -1 C -3 -4 3 -4 5 -1" stroke="#5a6b5c" stroke-width="0.9" fill="none"/>
+    <circle cx="0" cy="-4" r="1" fill="#b85c38"/>
+  </g>
+
+  <!-- blossom, lower -->
+  <g transform="translate(132 460) rotate(-14) scale(0.85)">
+    <g stroke="#5a6b5c" stroke-width="1.1" fill="none">
+      <circle cx="0" cy="-7" r="7"/>
+      <circle cx="6.7" cy="-2.2" r="7"/>
+      <circle cx="4.1" cy="5.7" r="7"/>
+      <circle cx="-4.1" cy="5.7" r="7"/>
+      <circle cx="-6.7" cy="-2.2" r="7"/>
+    </g>
+    <g stroke="#b85c38" stroke-width="0.8" stroke-linecap="round" fill="none">
+      <path d="M0 0 L-1 -6"/>
+      <path d="M0 0 L4 -4"/>
+      <path d="M0 0 L6 1"/>
+      <path d="M0 0 L2 6"/>
+      <path d="M0 0 L-4 5"/>
+      <path d="M0 0 L-6 -1"/>
+    </g>
+    <g fill="#b85c38">
+      <circle cx="-1" cy="-6.4" r="1"/>
+      <circle cx="4.4" cy="-4.4" r="1"/>
+      <circle cx="6.4" cy="1" r="1"/>
+      <circle cx="2.2" cy="6.4" r="1"/>
+      <circle cx="-4.4" cy="5.4" r="1"/>
+      <circle cx="-6.4" cy="-1.1" r="1"/>
+    </g>
+  </g>
+
+  <!-- buds with stems -->
+  <g stroke="#2f6f5e" stroke-width="1" stroke-linecap="round" fill="none">
+    <path d="M184 264 C 185 265.5 185 266 184.5 267.5"/>
+    <path d="M142 275 C 141.5 273 141 272 140.5 271"/>
+    <path d="M56 488 C 57 490 57.5 491 58 492"/>
+    <path d="M93 132 C 94 130 94.5 129 95 128"/>
+  </g>
+  <g fill="#b85c38">
+    <circle cx="184.5" cy="270" r="3.2"/>
+    <circle cx="141" cy="272" r="2.6"/>
+    <circle cx="59" cy="495" r="3"/>
+    <circle cx="96" cy="125" r="2.8"/>
+  </g>
+
+  <!-- moss dots -->
+  <g fill="#2f6f5e" opacity="0.6">
+    <circle cx="98" cy="182" r="1.3"/>
+    <circle cx="104" cy="330" r="1.2"/>
+    <circle cx="80" cy="452" r="1.1"/>
+  </g>
+</svg>

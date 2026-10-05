@@ -1,0 +1,22 @@
+[Unit]
+Description=Retain PDF Frontend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=wxyhgk
+Group=users
+WorkingDirectory=/home/wxyhgk/tmp/Code
+Environment=RETAIN_PDF_FRONTEND_ROOT=/home/wxyhgk/tmp/Code/frontend
+Environment=RETAIN_PDF_FRONTEND_BIND_HOST=0.0.0.0
+Environment=RETAIN_PDF_FRONTEND_PORT=40001
+Environment=RETAIN_PDF_FRONTEND_X_API_KEY=
+ExecStart=/usr/local/bin/retain-pdf-frontend
+Restart=always
+RestartSec=3
+TimeoutStartSec=15
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

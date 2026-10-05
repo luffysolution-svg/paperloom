@@ -1,0 +1,1194 @@
+name: Release Desktop
+run-name: Release Desktop · ${{ github.ref_name }}
+
+"on":
+  push:
+    tags:
+      - "v[0-9]*.[0-9]*.[0-9]*"
+      - "[0-9]*.[0-9]*.[0-9]*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-desktop-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DESKTOP_ROOT: frontend/desktop
+  TYPST_VERSION: "0.15.1"
+  CMARKER_VERSION: "0.1.10"
+  MITEX_VERSION: "0.2.7"
+
+jobs:
+  quality-gate:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/tests.yml
+
+  build-windows-release:
+    needs: quality-gate
+    runs-on: windows-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Prepare embedded backend package
+        id: backend
+        uses: ./.github/actions/prepare-backend-source
+
+      - name: Derive version
+        id: version
+        shell: pwsh
+        run: python .github/scripts/resolve_release_version.py --tag "${{ github.ref_name }}" --github-output "$env:GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22.22.0"
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Setup Python runtime for desktop bundle
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          architecture: "x64"
+
+      - name: Verify generated Python requirement snapshots
+        shell: pwsh
+        run: python .github/scripts/sync_backend_python_requirements.py --repo-root . --check
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Build Rust API for Windows
+        shell: pwsh
+        run: cargo build --release --locked --workspace --bins --target x86_64-pc-windows-msvc --manifest-path "$env:RETAIN_PDF_SOURCE_ROOT/Cargo.toml"
+
+      - name: Assemble bundled Typst runtime
+        shell: pwsh
+        run: |
+          $typstVersion = "${{ env.TYPST_VERSION }}"
+          $typstUrl = "https://github.com/typst/typst/releases/download/v$typstVersion/typst-x86_64-pc-windows-msvc.zip"
+          $downloadZip = Join-Path $env:RUNNER_TEMP "typst-windows.zip"
+          $extractRoot = Join-Path $env:RUNNER_TEMP "typst-windows"
+          $bundleRoot = Join-Path $PWD "$env:DESKTOP_ROOT/src/runtime/windows/typst"
+          Write-Host "Downloading Typst $typstVersion from $typstUrl"
+          Invoke-WebRequest -Uri $typstUrl -OutFile $downloadZip
+          if (Test-Path $extractRoot) {
+            Remove-Item $extractRoot -Recurse -Force
+          }
+          Expand-Archive -Path $downloadZip -DestinationPath $extractRoot -Force
+          if (Test-Path $bundleRoot) {
+            Remove-Item $bundleRoot -Recurse -Force
+          }
+          New-Item -ItemType Directory -Path (Join-Path $bundleRoot "bin") -Force | Out-Null
+          $typstExe = Get-ChildItem -Path $extractRoot -Recurse -Filter "typst.exe" | Select-Object -First 1
+          if (-not $typstExe) {
+            throw "typst.exe not found in downloaded archive"
+          }
+          Copy-Item $typstExe.FullName (Join-Path $bundleRoot "bin/typst.exe") -Force
+          Get-Item (Join-Path $bundleRoot "bin/typst.exe") | Select-Object FullName, Length, LastWriteTime
+
+      - name: Assemble bundled Typst packages
+        shell: pwsh
+        run: |
+          $bundleRoot = Join-Path $PWD "$env:DESKTOP_ROOT/src/runtime/shared/typst-packages/preview"
+          $packages = @(
+            @{ Name = "cmarker"; Version = "${{ env.CMARKER_VERSION }}" },
+            @{ Name = "mitex"; Version = "${{ env.MITEX_VERSION }}" }
+          )
+          if (Test-Path (Join-Path $PWD "$env:DESKTOP_ROOT/src/runtime/shared/typst-packages")) {
+            Remove-Item (Join-Path $PWD "$env:DESKTOP_ROOT/src/runtime/shared/typst-packages") -Recurse -Force
+          }
+          foreach ($pkg in $packages) {
+            $url = "https://packages.typst.org/preview/$($pkg.Name)-$($pkg.Version).tar.gz"
+            $download = Join-Path $env:RUNNER_TEMP "$($pkg.Name)-$($pkg.Version).tar.gz"
+            $extractRoot = Join-Path $env:RUNNER_TEMP "$($pkg.Name)-$($pkg.Version)"
+            $targetDir = Join-Path $bundleRoot "$($pkg.Name)/$($pkg.Version)"
+            Invoke-WebRequest -Uri $url -OutFile $download
+            if (Test-Path $extractRoot) {
+              Remove-Item $extractRoot -Recurse -Force
+            }
+            New-Item -ItemType Directory -Path $extractRoot -Force | Out-Null
+            tar -xzf $download -C $extractRoot
+            New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+            Copy-Item (Join-Path $extractRoot "*") $targetDir -Recurse -Force
+          }
+          Get-ChildItem (Join-Path $PWD "$env:DESKTOP_ROOT/src/runtime/shared/typst-packages") -Recurse | Select-Object FullName, Length
+
+      - name: Assemble bundled Python runtime
+        shell: pwsh
+        run: |
+          $pythonExe = (Get-Command python).Source
+          $pythonRoot = Split-Path -Parent $pythonExe
+          $bundleRoot = Join-Path $PWD "$env:DESKTOP_ROOT/src/runtime/windows/python"
+          Write-Host "Using Python executable: $pythonExe"
+          Write-Host "Python runtime root: $pythonRoot"
+          if (Test-Path $bundleRoot) {
+            Remove-Item $bundleRoot -Recurse -Force
+          }
+          New-Item -ItemType Directory -Path $bundleRoot | Out-Null
+          robocopy $pythonRoot $bundleRoot /E /NFL /NDL /NJH /NJS /NP /XD "__pycache__" "Doc" "docs" "Tools"
+          if ($LASTEXITCODE -gt 7) {
+            exit $LASTEXITCODE
+          }
+          $sitePackages = Join-Path $bundleRoot "Lib/site-packages"
+          if (Test-Path $sitePackages) {
+            Remove-Item $sitePackages -Recurse -Force
+          }
+          New-Item -ItemType Directory -Path $sitePackages -Force | Out-Null
+          python -m pip install --upgrade pip
+          python -m pip install --target $sitePackages -r frontend/desktop/requirements-desktop-windows.txt
+          python -m pip install --target $sitePackages -r frontend/desktop/requirements-ai-service.txt
+          $pythonBundleExe = Join-Path $bundleRoot "python.exe"
+          # 打包 retainpdf-pipeline console 入口：--no-deps 避免重复拉原生轮子；
+          # 用捆绑 python.exe 直接安装（产出 Lib/site-packages + Scripts/retainpdf-pipeline.exe），
+          # 但 Scripts exe 首行 shebang 硬编码构建机路径不可搬运，运行时走 backend/bin/*.cmd wrapper（-m）。
+          $pipelineSrc = Join-Path $env:RETAIN_PDF_SERVICES_ROOT "pipeline"
+          # 注意：捆绑 python.exe 自身没有 pip（No module named pip），必须用
+          # 系统 python 的 pip --target 装进 bundle，不能调 bundle python -m pip。
+          python -m pip install --target $sitePackages --no-deps --no-build-isolation $pipelineSrc
+          $env:PYTHONPATH = $sitePackages
+          & $pythonBundleExe -c "import requests, fitz, pikepdf, PIL, urllib3; print('python_bundle_import_check=ok')"
+          # console 入口探针（过渡期 warn-only，不阻断打包）
+          try {
+            & $pythonBundleExe -m retainpdf_pipeline.entrypoints.console --help
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "warning: bundled pipeline console -m --help probe failed (exit=$LASTEXITCODE, script fallback)"
+            } else {
+              Write-Host "bundled pipeline console -m probe OK"
+            }
+          } catch {
+            Write-Host "warning: bundled pipeline console --help probe failed: $_ (script fallback)"
+          }
+          # 探针是 warn-only：显式清掉残留 $LASTEXITCODE，否则 pwsh 会在步骤
+          # 末尾带着旧失败码退出（原生命令失败不阻断，但失败码会粘住）。
+          $global:LASTEXITCODE = 0
+          Get-ChildItem (Join-Path $bundleRoot "Scripts") -Filter "retainpdf-pipeline*" -ErrorAction SilentlyContinue | Select-Object Name, Length
+          Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
+          Get-ChildItem $bundleRoot | Select-Object Name, Length, LastWriteTime
+          $bundleSize = [Math]::Round(((Get-ChildItem $bundleRoot -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1MB), 2)
+          Write-Host "Bundled Python size: ${bundleSize} MB"
+
+      - name: Install JavaScript workspace dependencies
+        shell: pwsh
+        run: npm ci
+
+      - name: Verify native frontend dependency
+        working-directory: frontend/web
+        shell: pwsh
+        run: |
+          # @tailwindcss/oxide needs native binding; npm optionalDeps can drop it (npm/cli#4828)
+          node -e "require('@tailwindcss/oxide')"
+          if ($LASTEXITCODE -ne 0) {
+            $ver = node -p "require('@tailwindcss/oxide/package.json').version"
+            npm install --no-save --no-package-lock "@tailwindcss/oxide@$ver"
+            node -e "require('@tailwindcss/oxide')"
+            if ($LASTEXITCODE -ne 0) { throw "tailwindcss oxide native binding missing after reinstall" }
+          }
+
+      - name: Build Windows installer package
+        working-directory: frontend/desktop
+        shell: pwsh
+        env:
+          RETAIN_PDF_VERSION: ${{ steps.version.outputs.version }}
+        run: npm run dist:win32-installer
+
+      - name: Report Windows package sizes
+        working-directory: frontend/desktop
+        run: npm run report:size
+
+      - name: Show desktop bundle manifest
+        shell: pwsh
+        run: |
+          Get-Content "$env:DESKTOP_ROOT/app/backend/bundle-manifest.json"
+
+      - name: Smoke frontend bundle before manifest validation
+        shell: pwsh
+        run: npm --prefix frontend/desktop run smoke:frontend-bundle
+
+      - name: Validate desktop bundle manifest
+        shell: pwsh
+        run: python .github/scripts/validate_desktop_bundle.py --manifest "$env:DESKTOP_ROOT/app/backend/bundle-manifest.json"
+
+      - name: Smoke frontend bundle after manifest validation
+        shell: pwsh
+        run: npm --prefix frontend/desktop run smoke:frontend-bundle
+
+      - name: Upload Windows package artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-windows-${{ github.sha }}
+          path: |
+            ${{ env.DESKTOP_ROOT }}/win/PaperLoom-Windows-${{ steps.version.outputs.version }}-Setup.exe
+            ${{ env.DESKTOP_ROOT }}/win/PaperLoom-Windows-${{ steps.version.outputs.version }}-Setup.exe.blockmap
+            ${{ env.DESKTOP_ROOT }}/win/PaperLoom-Windows-${{ steps.version.outputs.version }}.exe
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+
+  build-linux-release:
+    needs: quality-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Prepare embedded backend package
+        id: backend
+        uses: ./.github/actions/prepare-backend-source
+
+      - name: Derive version
+        id: version
+        shell: bash
+        run: python3 .github/scripts/resolve_release_version.py --tag "${{ github.ref_name }}" --github-output "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22.22.0"
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Setup Python runtime for desktop bundle
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Verify generated Python requirement snapshots
+        shell: bash
+        run: python .github/scripts/sync_backend_python_requirements.py --repo-root . --check
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Rust API for Linux
+        shell: bash
+        run: cargo build --release --locked --workspace --bins --manifest-path "$RETAIN_PDF_SOURCE_ROOT/Cargo.toml"
+
+      - name: Install Linux packaging dependencies
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libarchive-tools
+
+      - name: Assemble bundled Typst runtime
+        shell: bash
+        run: |
+          typst_version="${{ env.TYPST_VERSION }}"
+          typst_url="https://github.com/typst/typst/releases/download/v${typst_version}/typst-x86_64-unknown-linux-musl.tar.xz"
+          download_tar="$RUNNER_TEMP/typst-linux.tar.xz"
+          extract_root="$RUNNER_TEMP/typst-linux"
+          bundle_root="$PWD/$DESKTOP_ROOT/src/runtime/linux/typst"
+          echo "Downloading Typst $typst_version from $typst_url"
+          curl -L "$typst_url" -o "$download_tar"
+          rm -rf "$extract_root" "$bundle_root"
+          mkdir -p "$extract_root" "$bundle_root/bin"
+          tar -xJf "$download_tar" -C "$extract_root"
+          typst_bin="$(find "$extract_root" -type f -name typst | head -n 1)"
+          if [ -z "$typst_bin" ]; then
+            echo "typst binary not found in downloaded archive" >&2
+            exit 1
+          fi
+          install -m 755 "$typst_bin" "$bundle_root/bin/typst"
+          ls -lah "$bundle_root/bin/typst"
+
+      - name: Assemble bundled Typst packages
+        shell: bash
+        run: |
+          bundle_root="$PWD/$DESKTOP_ROOT/src/runtime/shared/typst-packages/preview"
+          rm -rf "$PWD/$DESKTOP_ROOT/src/runtime/shared/typst-packages"
+          mkdir -p "$bundle_root"
+          for spec in "cmarker:${{ env.CMARKER_VERSION }}" "mitex:${{ env.MITEX_VERSION }}"; do
+            name="${spec%%:*}"
+            version="${spec##*:}"
+            url="https://packages.typst.org/preview/${name}-${version}.tar.gz"
+            download="$RUNNER_TEMP/${name}-${version}.tar.gz"
+            extract_root="$RUNNER_TEMP/${name}-${version}"
+            target_dir="$bundle_root/$name/$version"
+            curl -L "$url" -o "$download"
+            rm -rf "$extract_root"
+            mkdir -p "$extract_root" "$target_dir"
+            tar -xzf "$download" -C "$extract_root"
+            cp -R "$extract_root"/. "$target_dir"/
+          done
+          find "$PWD/$DESKTOP_ROOT/src/runtime/shared/typst-packages" -maxdepth 4 -type f | sort
+
+      - name: Assemble bundled Python runtime
+        shell: bash
+        run: |
+          python_bin="$(python3 -c 'import sys; print(sys.executable)')"
+          python_root="$(PYTHON_BIN="$python_bin" python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          python_bin = Path(os.environ["PYTHON_BIN"]).resolve()
+          print(python_bin.parent.parent)
+          PY
+          )"
+          bundle_root="$PWD/$DESKTOP_ROOT/src/runtime/linux/python"
+          echo "Using Python executable: $python_bin"
+          echo "Python runtime root: $python_root"
+          rm -rf "$bundle_root"
+          mkdir -p "$bundle_root"
+          rsync -aL --delete \
+            --exclude '__pycache__' \
+            "$python_root"/ "$bundle_root"/
+          "$bundle_root/bin/python3" -m pip install --upgrade pip
+          py_minor="$("$bundle_root/bin/python3" - <<'PY'
+          import sys
+          print(f"{sys.version_info.major}.{sys.version_info.minor}")
+          PY
+          )"
+          site_packages="$bundle_root/lib/python${py_minor}/site-packages"
+          mkdir -p "$site_packages"
+          "$bundle_root/bin/python3" -m pip install --target "$site_packages" -r frontend/desktop/requirements-desktop-posix.txt
+          "$bundle_root/bin/python3" -m pip install --target "$site_packages" -r frontend/desktop/requirements-ai-service.txt
+          "$bundle_root/bin/python3" - <<'PY'
+          import requests, fitz, pikepdf, PIL, urllib3
+          print("python_bundle_import_check=ok")
+          PY
+          # 打包 retainpdf-pipeline console 入口：--no-deps 避免重复拉原生轮子触发 ldd 门禁
+          "$bundle_root/bin/python3" -m pip install --target "$site_packages" --no-deps --no-build-isolation "$RETAIN_PDF_SERVICES_ROOT/pipeline"
+          # 兜底：pip 生成脚本首行多为 runner 绝对路径，重写为可搬运 shebang
+          pipeline_entry="$(find "$bundle_root" -maxdepth 4 -name 'retainpdf-pipeline' -type f | head -n 1 || true)"
+          if [ -n "${pipeline_entry:-}" ]; then
+            sed -i '1s|^.*$|#!/usr/bin/env python3|' "$pipeline_entry"
+            chmod +x "$pipeline_entry"
+          fi
+          # 主路径：bundled python 同包 wrapper（兼容 backend/python/bin 与 backend/bin 两种落点）
+          cat > "$bundle_root/bin/retainpdf-pipeline" <<'WRAPPER'
+          #!/bin/sh
+          set -eu
+          SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+          if [ -x "$SCRIPT_DIR/python3" ]; then
+            PYTHON_BIN="$SCRIPT_DIR/python3"
+          elif [ -x "$SCRIPT_DIR/../python/bin/python3" ]; then
+            PYTHON_BIN="$SCRIPT_DIR/../python/bin/python3"
+          else
+            PYTHON_BIN="python3"
+          fi
+          exec "$PYTHON_BIN" -m retainpdf_pipeline.entrypoints.console "$@"
+          WRAPPER
+          chmod +x "$bundle_root/bin/retainpdf-pipeline"
+          "$bundle_root/bin/retainpdf-pipeline" --help
+          ldd "$bundle_root/bin/python3"
+          bad_refs="$( \
+            { ldd "$bundle_root/bin/python3" 2>/dev/null; \
+              find "$bundle_root" \( -name '*.so' -o -name '*.dylib' \) -type f -print0 | \
+              xargs -0 -I{} sh -c 'ldd "{}" 2>/dev/null || true'; } | \
+            grep -E '/Library/Frameworks/Python\\.framework|/opt/homebrew/Cellar|/usr/local/Cellar|/usr/local/opt/' || true \
+          )"
+          if [ -n "$bad_refs" ]; then
+            echo "Bundled Linux Python runtime still contains host-specific library references:" >&2
+            echo "$bad_refs" >&2
+            exit 1
+          fi
+          du -sh "$bundle_root"
+
+      - name: Install JavaScript workspace dependencies
+        shell: bash
+        run: npm ci
+
+      - name: Verify native frontend dependency
+        working-directory: frontend/web
+        shell: bash
+        run: |
+          # @tailwindcss/oxide 需本机原生绑定；npm optionalDeps 偶发漏装时补齐
+          node -e "require('@tailwindcss/oxide')" \
+            || npm install --no-save --no-package-lock "@tailwindcss/oxide@$(node -p "require('@tailwindcss/oxide/package.json').version")"
+          node -e "require('@tailwindcss/oxide')"
+
+      - name: Build Linux package
+        working-directory: frontend/desktop
+        shell: bash
+        env:
+          RETAIN_PDF_VERSION: ${{ steps.version.outputs.version }}
+          RETAIN_PDF_DESKTOP_PLATFORM: linux
+        run: npm run dist:linux
+
+      - name: Report Linux package sizes
+        working-directory: frontend/desktop
+        run: npm run report:size
+
+      - name: Show desktop bundle manifest
+        shell: bash
+        run: cat "$DESKTOP_ROOT/app/backend/bundle-manifest.json"
+
+      - name: Smoke frontend bundle before manifest validation
+        shell: bash
+        run: npm --prefix frontend/desktop run smoke:frontend-bundle
+
+      - name: Validate desktop bundle manifest
+        shell: bash
+        run: python3 .github/scripts/validate_desktop_bundle.py --manifest "$DESKTOP_ROOT/app/backend/bundle-manifest.json"
+
+      - name: Smoke frontend bundle after manifest validation
+        shell: bash
+        run: npm --prefix frontend/desktop run smoke:frontend-bundle
+
+      - name: Check Linux bundled native dependencies
+        shell: bash
+        run: |
+          backend_root="$PWD/$DESKTOP_ROOT/app/backend"
+          ldd_log="$RUNNER_TEMP/retainpdf-linux-ldd.log"
+          : > "$ldd_log"
+
+          check_ldd() {
+            local binary="$1"
+            if [ ! -e "$binary" ]; then
+              echo "Missing expected bundled native file: $binary" >&2
+              exit 1
+            fi
+            if ! file "$binary" | grep -Eq 'ELF .* (executable|shared object|pie executable)'; then
+              return
+            fi
+            echo "ldd $binary" | tee -a "$ldd_log"
+            ldd "$binary" 2>&1 | tee -a "$ldd_log" || true
+          }
+
+          libs_path="$(
+            find "$backend_root/python" -type d \( -name '.libs' -o -name '*.libs' \) -print | sort | paste -sd ':' -
+          )"
+          if [ -n "$libs_path" ]; then
+            export LD_LIBRARY_PATH="$libs_path:${LD_LIBRARY_PATH:-}"
+          fi
+          check_ldd "$backend_root/bin/rust_api"
+          check_ldd "$backend_root/typst/bin/typst"
+          while IFS= read -r native_file; do
+            check_ldd "$native_file"
+          done < <(
+            find "$backend_root/python" \
+              -type f \( -name '*.so' -o -name '*.so.*' -o -perm -111 \) -print | sort
+          )
+
+          if grep -Fq 'not found' "$ldd_log"; then
+            echo "Bundled Linux native dependency check found missing libraries:" >&2
+            grep -F 'not found' "$ldd_log" >&2
+            exit 1
+          fi
+
+      - name: Upload Linux package artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-linux-${{ github.sha }}
+          path: ${{ env.DESKTOP_ROOT }}/linux/PaperLoom-Linux-${{ steps.version.outputs.version }}.deb
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+
+  build-macos-release:
+    needs: quality-gate
+    runs-on: macos-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Prepare embedded backend package
+        id: backend
+        uses: ./.github/actions/prepare-backend-source
+
+      - name: Derive version
+        id: version
+        shell: bash
+        run: python3 .github/scripts/resolve_release_version.py --tag "${{ github.ref_name }}" --github-output "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22.22.0"
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Setup Python runtime for desktop bundle
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Verify generated Python requirement snapshots
+        shell: bash
+        run: python .github/scripts/sync_backend_python_requirements.py --repo-root . --check
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Rust API for macOS
+        shell: bash
+        run: cargo build --release --locked --workspace --bins --manifest-path "$RETAIN_PDF_SOURCE_ROOT/Cargo.toml"
+
+      - name: Assemble bundled Typst runtime
+        shell: bash
+        run: |
+          typst_version="${{ env.TYPST_VERSION }}"
+          typst_url="https://github.com/typst/typst/releases/download/v${typst_version}/typst-aarch64-apple-darwin.tar.xz"
+          download_tar="$RUNNER_TEMP/typst-macos.tar.xz"
+          extract_root="$RUNNER_TEMP/typst-macos"
+          bundle_root="$PWD/$DESKTOP_ROOT/src/runtime/mac/typst"
+          echo "Downloading Typst $typst_version from $typst_url"
+          curl -L "$typst_url" -o "$download_tar"
+          rm -rf "$extract_root" "$bundle_root"
+          mkdir -p "$extract_root" "$bundle_root/bin"
+          tar -xJf "$download_tar" -C "$extract_root"
+          typst_bin="$(find "$extract_root" -type f -name typst | head -n 1)"
+          if [ -z "$typst_bin" ]; then
+            echo "typst binary not found in downloaded archive" >&2
+            exit 1
+          fi
+          install -m 755 "$typst_bin" "$bundle_root/bin/typst"
+          ls -lah "$bundle_root/bin/typst"
+
+      - name: Assemble bundled Typst packages
+        shell: bash
+        run: |
+          bundle_root="$PWD/$DESKTOP_ROOT/src/runtime/shared/typst-packages/preview"
+          rm -rf "$PWD/$DESKTOP_ROOT/src/runtime/shared/typst-packages"
+          mkdir -p "$bundle_root"
+          for spec in "cmarker:${{ env.CMARKER_VERSION }}" "mitex:${{ env.MITEX_VERSION }}"; do
+            name="${spec%%:*}"
+            version="${spec##*:}"
+            url="https://packages.typst.org/preview/${name}-${version}.tar.gz"
+            download="$RUNNER_TEMP/${name}-${version}.tar.gz"
+            extract_root="$RUNNER_TEMP/${name}-${version}"
+            target_dir="$bundle_root/$name/$version"
+            curl -L "$url" -o "$download"
+            rm -rf "$extract_root"
+            mkdir -p "$extract_root" "$target_dir"
+            tar -xzf "$download" -C "$extract_root"
+            cp -R "$extract_root"/. "$target_dir"/
+          done
+          find "$PWD/$DESKTOP_ROOT/src/runtime/shared/typst-packages" -maxdepth 4 -type f | sort
+
+      - name: Install qpdf build dependency
+        shell: bash
+        run: |
+          brew update
+          brew install qpdf
+          brew --prefix qpdf
+
+      - name: Assemble bundled Python runtime
+        shell: bash
+        run: |
+          qpdf_prefix="$(brew --prefix qpdf)"
+          bundle_root="$PWD/$DESKTOP_ROOT/src/runtime/mac/python"
+          python_executable="$(python3 -c 'import sys; print(sys.executable)')"
+          framework_python="$(python3 -c 'import sysconfig; print(sysconfig.get_config_var("PYTHONFRAMEWORK"))')"
+          framework_prefix="$(python3 -c 'import sysconfig; print(sysconfig.get_config_var("PYTHONFRAMEWORKPREFIX"))')"
+          framework_version="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+          framework_root="$framework_prefix/$framework_python.framework"
+          framework_version_root="$framework_root/Versions/$framework_version"
+          framework_bundle_framework_root="$bundle_root/Frameworks/$framework_python.framework"
+          framework_bundle_root="$framework_bundle_framework_root/Versions/$framework_version"
+          framework_launcher_dep="@executable_path/../Frameworks/$framework_python.framework/Versions/$framework_version/$framework_python"
+          framework_bundle_lib_prefix="@executable_path/../Frameworks/$framework_python.framework/Versions/$framework_version/lib"
+          framework_binary_name="$framework_python"
+          bundle_python3="$bundle_root/bin/python3"
+          bundle_python="$bundle_root/bin/python"
+          bundle_python_versioned="$bundle_root/bin/python$framework_version"
+          bundle_python_app="$framework_bundle_root/Resources/Python.app/Contents/MacOS/Python"
+          loader_path_to() {
+            python3 -c 'import os, sys; loader, target = sys.argv[1:3]; rel = os.path.relpath(target, os.path.dirname(loader)); print("@loader_path/" + rel)' "$1" "$2"
+          }
+          should_bundle_homebrew_dep() {
+            case "$1" in
+              /opt/homebrew/*|/usr/local/opt/*|/usr/local/Cellar/*)
+                return 0
+                ;;
+              *)
+                return 1
+                ;;
+            esac
+          }
+          bundle_dylib_dependency() {
+            local dep="$1"
+            local dest_dir="$2"
+            local dest="$dest_dir/$(basename "$dep")"
+            if [ ! -e "$dep" ]; then
+              echo "Missing Homebrew dylib dependency: $dep" >&2
+              exit 1
+            fi
+            if [ ! -e "$dest" ]; then
+              mkdir -p "$dest_dir"
+              cp -pL "$dep" "$dest"
+            fi
+            chmod u+w "$dest"
+            while IFS= read -r child_dep; do
+              if should_bundle_homebrew_dep "$child_dep"; then
+                if [ "$(basename "$child_dep")" = "$(basename "$dest")" ]; then
+                  continue
+                fi
+                bundle_dylib_dependency "$child_dep" "$dest_dir"
+                install_name_tool \
+                  -change "$child_dep" \
+                  "@loader_path/$(basename "$child_dep")" \
+                  "$dest"
+              fi
+            done < <(otool -L "$dest" | tail -n +2 | awk '{print $1}')
+            install_name_tool -id "@loader_path/$(basename "$dest")" "$dest" || true
+            codesign --force --sign - "$dest"
+          }
+          bundle_mach_o_homebrew_deps() {
+            local mach_o="$1"
+            local dest_dir="$2"
+            local loader_prefix="$3"
+            local changed=0
+            while IFS= read -r dep; do
+              if should_bundle_homebrew_dep "$dep"; then
+                bundle_dylib_dependency "$dep" "$dest_dir"
+                install_name_tool \
+                  -change "$dep" \
+                  "$loader_prefix/$(basename "$dep")" \
+                  "$mach_o"
+                changed=1
+              fi
+            done < <(otool -L "$mach_o" | tail -n +2 | awk '{print $1}')
+            if [ "$changed" -eq 1 ]; then
+              codesign --force --sign - "$mach_o"
+            fi
+          }
+          rewrite_bundled_dylib_homebrew_deps() {
+            local dylib="$1"
+            local dest_dir
+            dest_dir="$(dirname "$dylib")"
+            local changed=0
+            while IFS= read -r dep; do
+              if ! should_bundle_homebrew_dep "$dep"; then
+                continue
+              fi
+              if [ "$(basename "$dep")" = "$(basename "$dylib")" ]; then
+                continue
+              fi
+              bundle_dylib_dependency "$dep" "$dest_dir"
+              install_name_tool \
+                -change "$dep" \
+                "@loader_path/$(basename "$dep")" \
+                "$dylib"
+              changed=1
+            done < <(otool -L "$dylib" | tail -n +2 | awk '{print $1}')
+            if [ "$changed" -eq 1 ]; then
+              install_name_tool -id "@loader_path/$(basename "$dylib")" "$dylib" || true
+              codesign --force --sign - "$dylib"
+            fi
+          }
+          echo "Using Python executable: $python_executable"
+          rm -rf "$bundle_root"
+          python3 -m venv --copies "$bundle_root"
+          if [ ! -d "$framework_version_root" ]; then
+            echo "Missing Python.framework runtime at $framework_version_root" >&2
+            exit 1
+          fi
+          mkdir -p "$bundle_root/Frameworks"
+          rsync -a \
+            --exclude '__pycache__' \
+            "$framework_root/" "$framework_bundle_framework_root/"
+          rm -f \
+            "$framework_bundle_framework_root/Headers" \
+            "$framework_bundle_framework_root/Python" \
+            "$framework_bundle_framework_root/Resources"
+          ln -s "Versions/Current/Headers" "$framework_bundle_framework_root/Headers"
+          ln -s "Versions/Current/Python" "$framework_bundle_framework_root/Python"
+          ln -s "Versions/Current/Resources" "$framework_bundle_framework_root/Resources"
+          if [ ! -L "$framework_bundle_framework_root/Versions/Current" ]; then
+            rm -rf "$framework_bundle_framework_root/Versions/Current"
+            ln -s "$framework_version" "$framework_bundle_framework_root/Versions/Current"
+          fi
+          mkdir -p "$bundle_root/lib/python$framework_version"
+          rm -rf "$bundle_root/lib/python$framework_version/lib-dynload"
+          ln -s \
+            "../../Frameworks/$framework_python.framework/Versions/$framework_version/lib/python$framework_version/lib-dynload" \
+            "$bundle_root/lib/python$framework_version/lib-dynload"
+          install_name_tool \
+            -change "$framework_version_root/$framework_binary_name" \
+            "$framework_launcher_dep" \
+            "$bundle_python3"
+          if [ -e "$bundle_python" ]; then
+            install_name_tool \
+              -change "$framework_version_root/$framework_binary_name" \
+              "$framework_launcher_dep" \
+              "$bundle_python"
+          fi
+          if [ -e "$bundle_python_versioned" ]; then
+            install_name_tool \
+              -change "$framework_version_root/$framework_binary_name" \
+              "$framework_launcher_dep" \
+              "$bundle_python_versioned"
+          fi
+          while IFS= read -r framework_bin; do
+            if [ ! -f "$framework_bin" ]; then
+              continue
+            fi
+            case "$framework_bin" in
+              "$bundle_python_app")
+                continue
+                ;;
+              *.a|*.o)
+                continue
+                ;;
+            esac
+            if ! file "$framework_bin" | grep -q 'Mach-O'; then
+              continue
+            fi
+            case "$framework_bin" in
+              "$framework_bundle_root/lib/"*.dylib)
+                install_name_tool \
+                  -id "$framework_bundle_lib_prefix/$(basename "$framework_bin")" \
+                  "$framework_bin"
+                ;;
+            esac
+            while IFS= read -r dep; do
+              case "$dep" in
+                "$framework_version_root/"*)
+                  bundled_dep="$framework_bundle_root/${dep#"$framework_version_root/"}"
+                  install_name_tool \
+                    -change "$dep" \
+                    "$(loader_path_to "$framework_bin" "$bundled_dep")" \
+                    "$framework_bin"
+                  ;;
+              esac
+            done < <(otool -L "$framework_bin" | tail -n +2 | awk '{print $1}')
+          done < <(find "$framework_bundle_root" -type f -perm -111 -print)
+          install_name_tool \
+            -id "$framework_launcher_dep" \
+            "$framework_bundle_root/$framework_binary_name"
+          if [ -e "$bundle_python_app" ]; then
+            launcher_target="@executable_path/../../../../$framework_binary_name"
+            for launcher_source in \
+              "/Library/Frameworks/Python.framework/Versions/$framework_version/$framework_binary_name" \
+              "/System/Library/Frameworks/Python.framework/Versions/$framework_version/$framework_binary_name" \
+              "@executable_path/../Python" \
+              "@loader_path/../Python"
+            do
+              if otool -L "$bundle_python_app" | tail -n +2 | awk '{print $1}' | grep -Fxq "$launcher_source"; then
+                install_name_tool \
+                  -change "$launcher_source" \
+                  "$launcher_target" \
+                  "$bundle_python_app"
+              fi
+            done
+            codesign --force --sign - "$bundle_python_app"
+          fi
+          codesign --force --sign - "$framework_bundle_root/$framework_binary_name"
+          codesign --force --sign - "$bundle_python3"
+          if [ -e "$bundle_python" ]; then
+            codesign --force --sign - "$bundle_python"
+          fi
+          if [ -e "$bundle_python_versioned" ]; then
+            codesign --force --sign - "$bundle_python_versioned"
+          fi
+          while IFS= read -r framework_bin; do
+            if [ ! -f "$framework_bin" ]; then
+              continue
+            fi
+            case "$framework_bin" in
+              *.a|*.o)
+                continue
+                ;;
+            esac
+            if ! file "$framework_bin" | grep -q 'Mach-O'; then
+              continue
+            fi
+            codesign --force --sign - "$framework_bin"
+          done < <(find "$framework_bundle_root" -type f -perm -111 -print)
+          export CPPFLAGS="-I$qpdf_prefix/include ${CPPFLAGS:-}"
+          export LDFLAGS="-L$qpdf_prefix/lib ${LDFLAGS:-}"
+          export PKG_CONFIG_PATH="$qpdf_prefix/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+          "$bundle_python3" -m pip install --upgrade pip
+          "$bundle_python3" -m pip install -r frontend/desktop/requirements-desktop-posix.txt
+          "$bundle_python3" -m pip install -r frontend/desktop/requirements-ai-service.txt
+          # 打包 retainpdf-pipeline console 入口：--no-deps 避免重复拉原生轮子触发门禁
+          # 先装 wheel：venv 精简后缺 bdist_wheel，否则 metadata 生成失败
+          "$bundle_python3" -m pip install wheel
+          "$bundle_python3" -m pip install --no-deps --no-build-isolation "$RETAIN_PDF_SERVICES_ROOT/pipeline"
+          # 兜底：pip 生成脚本首行多为 runner 绝对路径，重写为可搬运 shebang（纯文本替换，不跑 install_name_tool）
+          pipeline_entry="$bundle_root/bin/retainpdf-pipeline"
+          if [ -f "$pipeline_entry" ]; then
+            sed -i '' '1s|^.*$|#!/usr/bin/env python3|' "$pipeline_entry"
+            chmod +x "$pipeline_entry"
+          fi
+          site_packages_root="$bundle_root/lib/python$framework_version/site-packages"
+          python_lib_dynload="$framework_bundle_root/lib/python$framework_version/lib-dynload"
+          while IFS= read -r site_mach_o; do
+            if ! file "$site_mach_o" | grep -q 'Mach-O'; then
+              continue
+            fi
+            bundle_mach_o_homebrew_deps \
+              "$site_mach_o" \
+              "$(dirname "$site_mach_o")/.dylibs" \
+              "@loader_path/.dylibs"
+          done < <(
+            find "$site_packages_root" \
+              -type d -name '.dylibs' -prune -o \
+              -type f \( -name '*.so' -o -name '*.dylib' \) -print
+          )
+          for _ in 1 2 3; do
+            while IFS= read -r bundled_dylib; do
+              if ! file "$bundled_dylib" | grep -q 'Mach-O'; then
+                continue
+              fi
+              rewrite_bundled_dylib_homebrew_deps "$bundled_dylib"
+            done < <(find "$site_packages_root" -path '*/.dylibs/*.dylib' -type f -print)
+          done
+          export PYTHONHOME="$framework_bundle_root"
+          export PYTHONPATH="$site_packages_root:$python_lib_dynload"
+          test -d "$python_lib_dynload"
+          ls "$python_lib_dynload"/_socket*.so >/dev/null
+          "$bundle_python3" - <<'PY'
+          import importlib
+          import importlib.util
+          import pathlib
+          import sys
+
+          print(f"python_prefix={sys.prefix}")
+          print(f"python_exec_prefix={sys.exec_prefix}")
+          print(f"python_base_exec_prefix={sys.base_exec_prefix}")
+          socket_spec = importlib.util.find_spec("_socket")
+          if socket_spec is None:
+              print("python_sys_path=" + "|".join(sys.path))
+              raise SystemExit("missing _socket extension on sys.path")
+          print(f"python_socket_ext={socket_spec.origin}")
+          for module_name in ["_socket", "socket", "ssl", "requests", "fitz", "pikepdf", "PIL", "urllib3"]:
+              importlib.import_module(module_name)
+          print("python_bundle_import_check=ok")
+          PY
+          unset PYTHONHOME
+          unset PYTHONPATH
+          otool -L "$bundle_python3"
+          if [ -e "$bundle_python_versioned" ]; then
+            otool -L "$bundle_python_versioned"
+          fi
+          while IFS= read -r framework_bin; do
+            if [ ! -f "$framework_bin" ]; then
+              continue
+            fi
+            case "$framework_bin" in
+              *.a|*.o)
+                continue
+                ;;
+            esac
+            if ! file "$framework_bin" | grep -q 'Mach-O'; then
+              continue
+            fi
+            otool -L "$framework_bin"
+            if otool -L "$framework_bin" | grep -q '/Library/Frameworks/Python.framework'; then
+              echo "Packaged Python runtime still references system Python.framework: $framework_bin" >&2
+              exit 1
+            fi
+          done < <(find "$framework_bundle_root" -type f -perm -111 -print)
+          while IFS= read -r site_mach_o; do
+            if ! file "$site_mach_o" | grep -q 'Mach-O'; then
+              continue
+            fi
+            otool -L "$site_mach_o"
+            if otool -L "$site_mach_o" | grep -Eq '/opt/homebrew/|/usr/local/(opt|Cellar)/'; then
+              echo "Packaged Python dependency still references Homebrew dylibs: $site_mach_o" >&2
+              exit 1
+            fi
+          done < <(
+            find "$site_packages_root" \
+              -type f \( -name '*.so' -o -name '*.dylib' \) -print
+          )
+          if [ -e "$bundle_python_app" ]; then
+            otool -L "$bundle_python_app"
+          fi
+          # console 入口探针（过渡期 warn-only；PYTHONHOME 保持 Versions/Current，不阻断打包）
+          export PYTHONHOME="$framework_bundle_framework_root/Versions/Current"
+          export PYTHONPATH="$site_packages_root:$python_lib_dynload"
+          if [ -x "$bundle_root/bin/retainpdf-pipeline" ]; then
+            "$bundle_root/bin/retainpdf-pipeline" --help || echo "warning: bundled pipeline console --help probe failed (script fallback)"
+          else
+            echo "warning: bundled pipeline console script missing: $bundle_root/bin/retainpdf-pipeline (script fallback)"
+          fi
+          "$bundle_python3" -m retainpdf_pipeline.entrypoints.console --help || echo "warning: bundled pipeline console -m probe failed (script fallback)"
+          unset PYTHONHOME
+          unset PYTHONPATH
+          du -sh "$bundle_root"
+
+      - name: Install JavaScript workspace dependencies
+        shell: bash
+        run: npm ci
+
+      - name: Verify native frontend dependency
+        working-directory: frontend/web
+        shell: bash
+        run: |
+          # @tailwindcss/oxide 需本机原生绑定；npm optionalDeps 偶发漏装时补齐
+          node -e "require('@tailwindcss/oxide')" \
+            || npm install --no-save --no-package-lock "@tailwindcss/oxide@$(node -p "require('@tailwindcss/oxide/package.json').version")"
+          node -e "require('@tailwindcss/oxide')"
+
+      - name: Generate macOS icon
+        shell: bash
+        run: |
+          iconset_dir="$PWD/$DESKTOP_ROOT/build/icon.iconset"
+          source_svg="$PWD/$DESKTOP_ROOT/svg/mac_RetainPDF.svg"
+          source_png="$PWD/$DESKTOP_ROOT/build/icon-mac.png"
+          rm -rf "$iconset_dir" "$PWD/$DESKTOP_ROOT/build/icon.icns"
+          sips -s format png "$source_svg" --out "$source_png" >/dev/null
+          mkdir -p "$iconset_dir"
+          for size in 16 32 64 128 256 512; do
+            sips -z "$size" "$size" "$source_png" --out "$iconset_dir/icon_${size}x${size}.png" >/dev/null
+          done
+          cp "$iconset_dir/icon_32x32.png" "$iconset_dir/icon_16x16@2x.png"
+          cp "$iconset_dir/icon_64x64.png" "$iconset_dir/icon_32x32@2x.png"
+          cp "$iconset_dir/icon_256x256.png" "$iconset_dir/icon_128x128@2x.png"
+          cp "$iconset_dir/icon_512x512.png" "$iconset_dir/icon_256x256@2x.png"
+          cp "$source_png" "$iconset_dir/icon_512x512@2x.png"
+          iconutil -c icns "$iconset_dir" -o "$PWD/$DESKTOP_ROOT/build/icon.icns"
+          ls -lah "$PWD/$DESKTOP_ROOT/build/icon.icns"
+
+      - name: Build macOS package
+        working-directory: frontend/desktop
+        shell: bash
+        env:
+          RETAIN_PDF_VERSION: ${{ steps.version.outputs.version }}
+          RETAIN_PDF_DESKTOP_PLATFORM: darwin
+          RETAIN_PDF_BUNDLE_MAC_PYTHON: "1"
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npm run dist:mac
+
+      - name: Report macOS package sizes
+        working-directory: frontend/desktop
+        run: npm run report:size
+
+      - name: Check macOS bundled binary architectures
+        shell: bash
+        run: |
+          backend_root="$PWD/$DESKTOP_ROOT/app/backend"
+          expected_arch="$(uname -m)"
+          required_bins=(
+            "$backend_root/bin/rust_api"
+            "$backend_root/bin/retain-jobsd"
+            "$backend_root/bin/retainpdf-agent"
+            "$backend_root/typst/bin/typst"
+            "$backend_root/python/bin/python3"
+          )
+
+          for binary in "${required_bins[@]}"; do
+            if [ ! -e "$binary" ]; then
+              echo "Missing expected bundled binary: $binary" >&2
+              exit 1
+            fi
+            file "$binary"
+            archs="$(lipo -archs "$binary")"
+            echo "lipo_archs $binary: $archs"
+            if ! printf '%s\n' "$archs" | tr ' ' '\n' | grep -Fxq "$expected_arch"; then
+              echo "Bundled binary does not include expected macOS runner architecture $expected_arch: $binary" >&2
+              exit 1
+            fi
+          done
+
+      - name: Probe packaged macOS bundled Python
+        shell: bash
+        run: |
+          app_root="$(find "$PWD/$DESKTOP_ROOT" -maxdepth 3 -type d -name 'PaperLoom.app' | head -n 1)"
+          if [ -z "$app_root" ]; then
+            echo "Packaged PaperLoom.app not found under $PWD/$DESKTOP_ROOT" >&2
+            find "$PWD/$DESKTOP_ROOT" -maxdepth 3 -type d | sort
+            exit 1
+          fi
+          python_bin="$app_root/Contents/Resources/backend/python/bin/python3"
+          if [ ! -x "$python_bin" ]; then
+            echo "Packaged Python binary not found: $python_bin" >&2
+            exit 1
+          fi
+          framework_root="$app_root/Contents/Resources/backend/python/Frameworks/Python.framework"
+          find "$framework_root" -type l -exec ls -l {} \;
+          if find "$framework_root" -type l -exec readlink {} \; | grep -q '^/Users/runner/'; then
+            echo "Packaged Python.framework still contains runner-local absolute symlinks" >&2
+            exit 1
+          fi
+          otool -L "$python_bin"
+          python_app_bin="$framework_root/Versions/Current/Resources/Python.app/Contents/MacOS/Python"
+          if [ -e "$python_app_bin" ]; then
+            echo "checking Python.app launcher dependencies: $python_app_bin"
+            otool -L "$python_app_bin"
+            if otool -L "$python_app_bin" | grep -Fq '@executable_path/../Python'; then
+              echo "Packaged Python.app launcher still has an invalid self-relative dependency: $python_app_bin" >&2
+              exit 1
+            fi
+            if otool -L "$python_app_bin" | grep -q '/Library/Frameworks/Python.framework'; then
+              echo "Packaged Python.app launcher still references system Python.framework: $python_app_bin" >&2
+              exit 1
+            fi
+          fi
+          while IFS= read -r mach_o; do
+            if ! file "$mach_o" | grep -q 'Mach-O'; then
+              continue
+            fi
+            echo "checking Mach-O dependencies: $mach_o"
+            otool -L "$mach_o"
+            if otool -L "$mach_o" | grep -q '/Library/Frameworks/Python.framework'; then
+              echo "Packaged Python runtime still references system Python.framework: $mach_o" >&2
+              exit 1
+            fi
+          done < <(
+            find "$app_root/Contents/Resources/backend/python" \
+              -type f \( -perm -111 -o -name '*.so' -o -name '*.dylib' \) -print
+          )
+          export PYTHONHOME="$app_root/Contents/Resources/backend/python/Frameworks/Python.framework/Versions/Current"
+          export PYTHONPATH="$app_root/Contents/Resources/backend/python/lib/python3.11/site-packages:$PYTHONHOME/lib/python3.11/lib-dynload"
+          test -d "$PYTHONHOME/lib/python3.11/lib-dynload"
+          ls "$PYTHONHOME/lib/python3.11/lib-dynload"/_socket*.so >/dev/null
+          "$python_bin" - <<'PY'
+          import importlib
+          import importlib.util
+          import pathlib
+          import sys
+
+          print(f"packaged_python_prefix={sys.prefix}")
+          print(f"packaged_python_exec_prefix={sys.exec_prefix}")
+          print(f"packaged_python_base_exec_prefix={sys.base_exec_prefix}")
+          print("packaged_python_sys_path=" + "|".join(sys.path))
+          socket_spec = importlib.util.find_spec("_socket")
+          if socket_spec is None:
+              raise SystemExit("missing _socket extension on sys.path")
+          print(f"packaged_python_socket_ext={socket_spec.origin}")
+          for module_name in ["_socket", "socket", "ssl", "requests", "fitz", "pikepdf", "PIL", "urllib3"]:
+              importlib.import_module(module_name)
+          print("packaged_python_import_check=ok")
+          PY
+
+      - name: Show desktop bundle manifest
+        shell: bash
+        run: cat "$DESKTOP_ROOT/app/backend/bundle-manifest.json"
+
+      - name: Smoke frontend bundle before manifest validation
+        shell: bash
+        run: npm --prefix frontend/desktop run smoke:frontend-bundle
+
+      - name: Validate desktop bundle manifest
+        shell: bash
+        run: python3 .github/scripts/validate_desktop_bundle.py --manifest "$DESKTOP_ROOT/app/backend/bundle-manifest.json"
+
+      - name: Smoke frontend bundle after manifest validation
+        shell: bash
+        run: npm --prefix frontend/desktop run smoke:frontend-bundle
+
+      - name: Upload macOS package artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-macos-${{ github.sha }}
+          path: ${{ env.DESKTOP_ROOT }}/mac/PaperLoom-Mac-${{ steps.version.outputs.version }}.dmg
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+
+  publish-desktop-release:
+    needs:
+      - build-windows-release
+      - build-linux-release
+      - build-macos-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout release revision
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Derive version
+        id: version
+        shell: bash
+        run: python3 .github/scripts/resolve_release_version.py --tag "${{ github.ref_name }}" --github-output "$GITHUB_OUTPUT"
+
+      - name: Download Windows package artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: desktop-windows-${{ github.sha }}
+          path: release-assets
+
+      - name: Prepare complete corresponding source
+        shell: bash
+        env:
+          PYMUPDF_SOURCE_SHA256: 8ef335e07f648492df240f2247854d0e7c0467afb9c4dc2376ec30978ec158c3
+          PYMUPDF_SOURCE_URL: https://files.pythonhosted.org/packages/8d/9a/e0a4e92a85fc17be7c54afdbb113f0ade2a8bca49856d510e28bd249e462/pymupdf-1.26.5.tar.gz
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          git archive \
+            --format=tar.gz \
+            --prefix="PaperLoom-${version}/" \
+            --output="release-assets/PaperLoom-${version}-source.tar.gz" \
+            HEAD
+          curl --fail --location --silent --show-error \
+            "$PYMUPDF_SOURCE_URL" \
+            --output release-assets/PyMuPDF-1.26.5-source.tar.gz
+          printf '%s  %s\n' \
+            "$PYMUPDF_SOURCE_SHA256" \
+            "release-assets/PyMuPDF-1.26.5-source.tar.gz" \
+            | sha256sum --check --strict
+          cp CORRESPONDING_SOURCE.md release-assets/CORRESPONDING_SOURCE.md
+
+      - name: Verify complete desktop release set
+        shell: bash
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          expected=(
+            "release-assets/PaperLoom-Windows-${version}-Setup.exe"
+            "release-assets/PaperLoom-Windows-${version}-Setup.exe.blockmap"
+            "release-assets/PaperLoom-Windows-${version}.exe"
+            "release-assets/PaperLoom-${version}-source.tar.gz"
+            "release-assets/PyMuPDF-1.26.5-source.tar.gz"
+            "release-assets/CORRESPONDING_SOURCE.md"
+          )
+          for asset in "${expected[@]}"; do
+            if [ ! -s "$asset" ]; then
+              echo "Missing or empty desktop release asset: $asset" >&2
+              exit 1
+            fi
+          done
+          find release-assets -maxdepth 1 -type f -print | sort
+          (
+            cd release-assets
+            sha256sum \
+              "PaperLoom-Windows-${version}-Setup.exe" \
+              "PaperLoom-Windows-${version}-Setup.exe.blockmap" \
+              "PaperLoom-Windows-${version}.exe" \
+              "PaperLoom-${version}-source.tar.gz" \
+              "PyMuPDF-1.26.5-source.tar.gz" \
+              "CORRESPONDING_SOURCE.md" \
+              > SHA256SUMS.txt
+          )
+          cat release-assets/SHA256SUMS.txt
+
+      - name: Verify release tag still targets this revision
+        shell: bash
+        run: |
+          head_sha="$(git rev-parse HEAD)"
+          remote_sha="$(git ls-remote origin "refs/tags/${GITHUB_REF_NAME}^{}" | awk 'NR == 1 { print $1 }')"
+          if [ -z "$remote_sha" ]; then
+            remote_sha="$(git ls-remote origin "refs/tags/${GITHUB_REF_NAME}" | awk 'NR == 1 { print $1 }')"
+          fi
+          if [ "$head_sha" != "$GITHUB_SHA" ] || [ "$remote_sha" != "$GITHUB_SHA" ]; then
+            echo "Release tag moved while this run was building: head=$head_sha remote=$remote_sha expected=$GITHUB_SHA" >&2
+            exit 1
+          fi
+
+      - name: Publish complete desktop release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          prerelease: ${{ steps.version.outputs.prerelease == 'true' }}
+          body: |
+            PaperLoom ${{ steps.version.outputs.version }} is distributed under AGPL-3.0-only.
+            Complete corresponding source for PaperLoom and the bundled PyMuPDF/MuPDF version is attached to this release; see `CORRESPONDING_SOURCE.md` and `SHA256SUMS.txt`.
+          generate_release_notes: true
+          files: |
+            release-assets/PaperLoom-Windows-${{ steps.version.outputs.version }}-Setup.exe
+            release-assets/PaperLoom-Windows-${{ steps.version.outputs.version }}-Setup.exe.blockmap
+            release-assets/PaperLoom-Windows-${{ steps.version.outputs.version }}.exe
+            release-assets/PaperLoom-${{ steps.version.outputs.version }}-source.tar.gz
+            release-assets/PyMuPDF-1.26.5-source.tar.gz
+            release-assets/CORRESPONDING_SOURCE.md
+            release-assets/SHA256SUMS.txt

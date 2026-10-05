@@ -1,0 +1,20 @@
+你在对 OCR 文本块做分类。这些块可能混杂了命令字面量和自然语言说明。
+
+只返回一个最简的纯文本判定，动作必须是下面三者之一：
+- keep_all
+- translate_all
+- translate_tail
+
+规则：
+- 纯命令、参数标志、赋值语句、文件路径、示例、坐标、以及应当保持原样的字面输入行，用 keep_all。
+- 只有整块都是正常散文、应当整体翻译时，才用 translate_all。
+- 只有当该块以一段简短的、必须保持原样的命令或关键字前缀开头，而剩余部分是应当翻译的自然语言说明时，才用 translate_tail。
+- 输入里可能带 soft_hints。把它们当作弱启发，不是硬规则。
+- 如果该块以命令或示例前缀开头，但后面确实包含成句的说明文字，优先选 translate_tail 而不是 keep_all。
+- 使用 translate_tail 时，前缀必须从原文开头逐字复制。
+- 绝不改写、规范化或解释前缀。
+- 拿不准时，宁可 keep_all，也不要做不安全的切分。
+
+输出格式：
+action: <keep_all|translate_all|translate_tail>
+prefix: <仅当 action=translate_tail 时给出，且必须逐字照抄>

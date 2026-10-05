@@ -1,0 +1,33 @@
+{
+  "name": "retain-pdf-monorepo",
+  "private": true,
+  "version": "0.1.3",
+  "workspaces": [
+    "frontend/web",
+    "frontend/desktop",
+    "frontend/packages/*",
+    "contracts",
+    "backend/packages/retainpdf2doc"
+  ],
+  "scripts": {
+    "build:web": "npm run build --workspace=front-tailwind-ui",
+    "build:reader": "npm run build --workspace=@retainpdf/reader",
+    "dev:desktop": "npm --workspace=retain-pdf-desktop run dev --",
+    "test:desktop": "npm test --workspace=retain-pdf-desktop",
+    "test:desktop:windows": "npm run test:desktop && node frontend/desktop/scripts/remote-windows.mjs",
+    "smoke:desktop:windows": "npm run verify:desktop && node frontend/desktop/scripts/remote-windows.mjs --smoke",
+    "verify:desktop": "npm run test:desktop && npm --prefix frontend/desktop run verify-frontend-sync",
+    "test:web": "npm test --workspace=front-tailwind-ui",
+    "test:api": "python3 .github/scripts/run_with_backend_source.py -- uv run --project {backend} --locked --all-extras cargo test --locked --workspace --manifest-path {source_root}/Cargo.toml",
+    "test:translation": "python3 backend/pipeline/devtools/run_translation_tests.py",
+    "test:translation:tooling": "python3 backend/pipeline/devtools/run_translation_tests.py --suite tooling",
+    "test:translation:contract": "python3 backend/pipeline/devtools/run_translation_tests.py --suite benchmarks",
+    "dev:backend": "python3 ops/development/dev_stack.py",
+    "build:doc": "npm run build --workspace retainpdf2doc",
+    "test:doc": "npm test --workspace retainpdf2doc"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "AGPL-3.0-only"
+}

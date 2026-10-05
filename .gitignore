@@ -1,0 +1,92 @@
+__pycache__/
+*.pyc
+*.egg-info/
+.ipynb_checkpoints/
+*.log
+node_modules/
+target/
+build/
+
+# `output/` 不带斜杠前缀，会匹配**任意深度**的同名目录——包括
+# `retainpdf_pipeline/render/output/` 这个真实的源码包。下面的解除忽略规则必须跟着
+# 它走。
+#
+# 这几条原来写的是改名前的 `services/pipeline/services/rendering/output/`，改名之后
+# 没人更新，于是那个源码包被无差别忽略了很久:已跟踪的文件不受影响，所以谁都没发现，
+# 但**新建的文件会被 `git add -A` 静默跳过**。v4.2.5 就是这么少推了两个模块
+# （html_fit.py、cli.py），CI 报 ModuleNotFoundError 才查出来。
+output/
+!backend/pipeline/retainpdf_pipeline/render/output/
+!backend/pipeline/retainpdf_pipeline/render/output/**/
+!backend/pipeline/retainpdf_pipeline/render/output/**/*.py
+!backend/pipeline/retainpdf_pipeline/render/output/**/*.md
+backend/pipeline/retainpdf_pipeline/render/output/**/__pycache__/
+backend/pipeline/retainpdf_pipeline/render/output/**/.ipynb_checkpoints/
+pipeline/.env/*.env
+Fast_API/jobs/
+Fast_API/jobs.db
+Fast_API/uploads/
+Fast_API/downloads/
+Fast_API/*.log
+Fast_API/downloads-check/
+Fast_API/downloads-check-*.zip
+front/http.server.log
+
+# Restructured workspace
+data/db/
+data/uploads/
+data/jobs/
+data/downloads/
+services/api/target/
+services/dist/
+services/api/auth.local.json
+services/pipeline/.env/*.env
+apps/web/node_modules/
+apps/desktop/node_modules/
+secrets/
+infra/docker/delivery/docker-compose.override.yml
+output/mcp-downloads/
+untitled.txt
+__MACOSX/
+apps/desktop/linux/
+apps/desktop/win_jobid/
+data/
+!apps/web/src/shared/data/
+!apps/web/src/shared/data/**
+!packages/reader/src/shared/data/
+!packages/reader/src/shared/data/**
+!frontend/web/src/shared/data/
+!frontend/packages/reader/dist/shared/data/
+!frontend/packages/reader/dist/shared/data/**
+!frontend/web/src/shared/data/**
+!frontend/packages/reader/src/shared/data/
+!frontend/packages/reader/src/shared/data/**
+backend/api/auth.local.json
+/backend/dist/
+backend/pipeline/.env/*.env
+ops/deployment/docker/delivery/docker-compose.override.yml
+ops/deployment/typst/*/bin/
+frontend/desktop/linux/
+frontend/desktop/win_jobid/
+/var/
+/tmp/
+*.dmg
+*.AppImage
+backend/python/
+infra/typst/win32/bin/
+infra/typst/*/bin/
+VERSION
+.codex
+.codex/
+
+# macOS
+.DS_Store
+
+# 第三方资料/参考实现的落脚处。解压出来动辄几十万文件、还带 node_modules，
+# 不进版本库。
+research/
+
+# 子 agent 的临时 git worktree。注意只忽略这一层——`.claude/` 下的 skills、
+# launch.json 都是跟踪的。worktree 正常跑完会自己清掉，但进程被打断就会残留，
+# 而它是一整个仓库副本，误 `git add -A` 一次就炸。
+.claude/worktrees/

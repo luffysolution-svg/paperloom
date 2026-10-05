@@ -1,0 +1,91 @@
+{
+  "providers": {
+    "mineru": {
+      "display_name": "MinerU",
+      "kind": "remote",
+      "credential": {
+        "field": "mineru_token",
+        "env": "RETAIN_MINERU_API_TOKEN",
+        "required_for": ["remote_url", "local_upload"]
+      },
+      "options": {
+        "model_version": {
+          "type": "string",
+          "default": "vlm"
+        },
+        "language": {
+          "type": "string",
+          "default": "ch"
+        },
+        "disable_formula": {
+          "type": "boolean",
+          "default": false
+        },
+        "disable_table": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "paddle": {
+      "display_name": "PaddleOCR",
+      "kind": "remote",
+      "credential": {
+        "field": "paddle_token",
+        "env": "RETAIN_PADDLE_API_TOKEN",
+        "required_for": ["remote_url", "local_upload"]
+      },
+      "options": {
+        "transport": {
+          "type": "string",
+          "default": "official_http",
+          "choices": ["official_http", "official_cli"]
+        },
+        "paddle_api_url": {
+          "type": "string",
+          "default": ""
+        },
+        "paddle_model": {
+          "type": "string",
+          "default": "PaddleOCR-VL-1.6",
+          "aliases": {
+            "paddleocr-vl": "PaddleOCR-VL-1.6",
+            "paddle-ocr-vl": "PaddleOCR-VL-1.6",
+            "paddleocr-vl-1.6": "PaddleOCR-VL-1.6",
+            "paddle-ocr-vl-1.6": "PaddleOCR-VL-1.6",
+            "paddleocr-vl-1.5": "PaddleOCR-VL-1.5",
+            "paddle-ocr-vl-1.5": "PaddleOCR-VL-1.5"
+          }
+        }
+      }
+    },
+    "local": {
+      "display_name": "Local OCR",
+      "kind": "local_command",
+      "credential": null,
+      "options": {
+        "command": {
+          "type": "string",
+          "env": "RETAIN_LOCAL_OCR_COMMAND",
+          "default": ""
+        },
+        "raw_provider": {
+          "type": "string",
+          "env": "RETAIN_OCR_RAW_PROVIDER",
+          "default": "generic_flat_ocr"
+        }
+      }
+    }
+  },
+  "paddle": {
+    "default_model": "PaddleOCR-VL-1.6",
+    "model_aliases": {
+      "paddleocr-vl": "PaddleOCR-VL-1.6",
+      "paddle-ocr-vl": "PaddleOCR-VL-1.6",
+      "paddleocr-vl-1.6": "PaddleOCR-VL-1.6",
+      "paddle-ocr-vl-1.6": "PaddleOCR-VL-1.6",
+      "paddleocr-vl-1.5": "PaddleOCR-VL-1.5",
+      "paddle-ocr-vl-1.5": "PaddleOCR-VL-1.5"
+    }
+  }
+}

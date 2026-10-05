@@ -1,0 +1,51 @@
+name: paperloom
+
+services:
+  app:
+    image: ${APP_IMAGE:-ghcr.io/luffysolution-svg/paperloom-app:latest}
+    restart: unless-stopped
+    env_file:
+      - ./docker/app.env
+    ports:
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-46000}:41000"
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${APP_SIMPLE_PORT:-47000}:42000"
+    volumes:
+      - app_data:/data
+      - ./docker/auth.local.json:/app/services/api/auth.local.json:ro
+      # Obsidian 联动（可选）：挂载存放库的父目录，其下每个含 .obsidian 的子目录即一个库；
+      # 子目录名需与 Obsidian 里的库名一致，「在 Obsidian 中打开」才能定位。
+      # 同时在 docker/app.env 设置 PAPERLOOM_OBSIDIAN_VAULTS_DIR=/vaults。
+      # - /path/to/ObsidianVaults:/vaults
+      # Zotero 联动（可选）：只读挂载 Zotero 数据目录（含 zotero.sqlite 与 storage/），
+      # 默认在 ~/Zotero，以 Zotero「设置 → 高级 → 文件和文件夹」为准。Zotero 运行时也可读：
+      # 后端复制快照后再读，不会锁库。同时在 docker/app.env 设置 PAPERLOOM_ZOTERO_DATA_DIR=/zotero。
+      # - /path/to/Zotero:/zotero:ro
+    healthcheck:
+      # Readiness includes the database and every supervised runtime.  The
+      # liveness endpoint intentionally remains 200 while degraded, so using
+      # /health here would release dependent services before app is usable.
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:41000/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  web:
+    image: ${WEB_IMAGE:-ghcr.io/luffysolution-svg/paperloom-web:latest}
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    env_file:
+      - ./docker/web.env
+    ports:
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${WEB_PORT:-45001}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  app_data:

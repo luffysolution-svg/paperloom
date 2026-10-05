@@ -1,0 +1,3 @@
+只返回符合以下结构的 JSON：
+{"translations":[{"item_id":"ITEM_ID","translated_text":"translated text","decision":"translate"}]}.
+每个请求的 item_id 都必须输出一个对象。不要包含 Markdown、代码块或解释说明。

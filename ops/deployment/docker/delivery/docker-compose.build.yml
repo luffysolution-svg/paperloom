@@ -1,0 +1,20 @@
+# Use with docker-compose.yml to build from this checkout, without GHCR access.
+services:
+  app:
+    image: paperloom-app:local
+    pull_policy: build
+    build:
+      context: ../../../..
+      dockerfile: ops/deployment/docker/backend/Dockerfile.app
+    environment:
+      RUST_API_KEYS: ${PAPERLOOM_API_KEY:?Run python3 init-local.py first}
+      PAPERLOOM_PUBLIC_BASE_URL: ${PAPERLOOM_PUBLIC_BASE_URL:-http://localhost:45001}
+
+  web:
+    image: paperloom-web:local
+    pull_policy: build
+    build:
+      context: ../../../..
+      dockerfile: ops/deployment/docker/Dockerfile.web
+    environment:
+      RETAINPDF_PROXY_API_KEY: ${PAPERLOOM_API_KEY:?Run python3 init-local.py first}

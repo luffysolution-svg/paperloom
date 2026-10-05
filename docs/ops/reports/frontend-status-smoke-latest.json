@@ -1,0 +1,224 @@
+{
+  "ok": true,
+  "apiBase": "http://127.0.0.1:41000",
+  "workflow": "book",
+  "ocrProvider": "paddle",
+  "file": "/home/wxyhgk/tmp/Code/data/20260418-strict-contract-smoke/source/test1.pdf",
+  "uploadId": "20260510173313-602be4",
+  "jobId": "20260510173313-ed54c4",
+  "finalStatus": "succeeded",
+  "observedLabels": [
+    "排队中",
+    "第 1/4 步 · OCR 解析",
+    "第 1/4 步 · OCR 解析",
+    "第 2/4 步 · 翻译",
+    "第 2/4 步 · 翻译",
+    "第 2/4 步 · 翻译",
+    "第 2/4 步 · 翻译",
+    "第 3/4 步 · 渲染",
+    "第 3/4 步 · 渲染",
+    "完成"
+  ],
+  "missingLabels": [],
+  "observations": [
+    {
+      "ts": "2026-05-10T17:33:14.009Z",
+      "status": "queued",
+      "stage": "queued",
+      "label": "排队中",
+      "detail": "排队中，等待可用执行槽位",
+      "progressCurrent": 0,
+      "progressTotal": 0,
+      "progressText": ""
+    },
+    {
+      "ts": "2026-05-10T17:33:15.023Z",
+      "status": "running",
+      "stage": "ocr_upload",
+      "label": "第 1/4 步 · OCR 解析",
+      "detail": "正在上传 PDF",
+      "progressCurrent": 0,
+      "progressTotal": 0,
+      "progressText": "OCR 准备中"
+    },
+    {
+      "ts": "2026-05-10T17:33:17.055Z",
+      "status": "running",
+      "stage": "ocr_result_ready",
+      "label": "第 1/4 步 · OCR 解析",
+      "detail": "Paddle 结果已就绪，准备标准化",
+      "progressCurrent": 1,
+      "progressTotal": 1,
+      "progressText": "第 1/1 页"
+    },
+    {
+      "ts": "2026-05-10T17:33:18.071Z",
+      "status": "running",
+      "stage": "translating",
+      "label": "第 2/4 步 · 翻译",
+      "detail": "正在翻译正文内容",
+      "progressCurrent": 0,
+      "progressTotal": 0,
+      "progressText": ""
+    },
+    {
+      "ts": "2026-05-10T17:33:31.233Z",
+      "status": "running",
+      "stage": "translating",
+      "label": "第 2/4 步 · 翻译",
+      "detail": "正在翻译正文内容",
+      "progressCurrent": 1,
+      "progressTotal": 5,
+      "progressText": "第 1/5 批"
+    },
+    {
+      "ts": "2026-05-10T17:33:32.245Z",
+      "status": "running",
+      "stage": "translating",
+      "label": "第 2/4 步 · 翻译",
+      "detail": "正在翻译正文内容",
+      "progressCurrent": 3,
+      "progressTotal": 5,
+      "progressText": "第 3/5 批"
+    },
+    {
+      "ts": "2026-05-10T17:33:33.259Z",
+      "status": "running",
+      "stage": "translating",
+      "label": "第 2/4 步 · 翻译",
+      "detail": "正在翻译正文内容",
+      "progressCurrent": 4,
+      "progressTotal": 5,
+      "progressText": "第 4/5 批"
+    },
+    {
+      "ts": "2026-05-10T17:33:35.283Z",
+      "status": "running",
+      "stage": "finished",
+      "label": "第 3/4 步 · 渲染",
+      "detail": "正在生成翻译后的 PDF",
+      "progressCurrent": 0,
+      "progressTotal": 0,
+      "progressText": ""
+    },
+    {
+      "ts": "2026-05-10T17:33:36.293Z",
+      "status": "running",
+      "stage": "rendering",
+      "label": "第 3/4 步 · 渲染",
+      "detail": "正在生成翻译后的 PDF",
+      "progressCurrent": 0,
+      "progressTotal": 1,
+      "progressText": "第 0/1 页"
+    },
+    {
+      "ts": "2026-05-10T17:33:37.307Z",
+      "status": "succeeded",
+      "stage": "finished",
+      "label": "完成",
+      "detail": "翻译 PDF 已生成",
+      "progressCurrent": 0,
+      "progressTotal": 0,
+      "progressText": ""
+    }
+  ],
+  "eventCount": 51,
+  "eventSamples": [
+    {
+      "ts": "2026-05-10T17:33:35.552208Z",
+      "status": "running",
+      "stage": "render_prepare",
+      "label": "第 3/4 步 · 渲染",
+      "detail": "正在生成翻译后的 PDF",
+      "event": "stage_transition"
+    },
+    {
+      "ts": "2026-05-10T17:33:35.777971Z",
+      "status": "running",
+      "stage": "rendering",
+      "label": "第 3/4 步 · 渲染",
+      "detail": "正在生成翻译后的 PDF",
+      "event": "stage_transition"
+    },
+    {
+      "ts": "2026-05-10T17:33:35Z",
+      "status": "running",
+      "stage": "rendering",
+      "label": "第 3/4 步 · 渲染",
+      "detail": "正在生成翻译后的 PDF",
+      "event": "stage_updated"
+    },
+    {
+      "ts": "2026-05-10T17:33:35Z",
+      "status": "running",
+      "stage": "rendering",
+      "label": "第 3/4 步 · 渲染",
+      "detail": "正在生成翻译后的 PDF",
+      "event": "stage_transition"
+    },
+    {
+      "ts": "2026-05-10T17:33:36.751537Z",
+      "status": "running",
+      "stage": "rendering",
+      "label": "第 3/4 步 · 渲染",
+      "detail": "正在生成翻译后的 PDF",
+      "event": "stage_progress"
+    },
+    {
+      "ts": "2026-05-10T17:33:36.752031Z",
+      "status": "running",
+      "stage": "saving",
+      "label": "第 3/4 步 · 渲染",
+      "detail": "正在生成翻译后的 PDF",
+      "event": "artifact_published"
+    },
+    {
+      "ts": "2026-05-10T17:33:36.752185Z",
+      "status": "running",
+      "stage": "saving",
+      "label": "第 3/4 步 · 渲染",
+      "detail": "正在生成翻译后的 PDF",
+      "event": "artifact_published"
+    },
+    {
+      "ts": "2026-05-10T17:33:36.752253Z",
+      "status": "running",
+      "stage": "finished",
+      "label": "第 3/4 步 · 渲染",
+      "detail": "正在生成翻译后的 PDF",
+      "event": "stage_transition"
+    },
+    {
+      "ts": "2026-05-10T17:33:36Z",
+      "status": "running",
+      "stage": "finished",
+      "label": "第 3/4 步 · 渲染",
+      "detail": "正在生成翻译后的 PDF",
+      "event": "status_changed"
+    },
+    {
+      "ts": "2026-05-10T17:33:36Z",
+      "status": "succeeded",
+      "stage": "finished",
+      "label": "完成",
+      "detail": "翻译 PDF 已生成",
+      "event": "job_terminal"
+    },
+    {
+      "ts": "2026-05-10T17:33:36Z",
+      "status": "running",
+      "stage": "finished",
+      "label": "第 3/4 步 · 渲染",
+      "detail": "正在生成翻译后的 PDF",
+      "event": "stage_updated"
+    },
+    {
+      "ts": "2026-05-10T17:33:36Z",
+      "status": "running",
+      "stage": "finished",
+      "label": "第 3/4 步 · 渲染",
+      "detail": "正在生成翻译后的 PDF",
+      "event": "stage_transition"
+    }
+  ]
+}

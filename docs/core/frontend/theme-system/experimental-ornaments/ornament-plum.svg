@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 720" fill="none" aria-hidden="true">
+  <!-- 左缘梅枝：稀疏、偏上，右侧留白给主内容 -->
+  <g stroke-linecap="round" stroke-linejoin="round">
+    <!-- 主枝 -->
+    <path d="M28 8 C36 90 22 170 40 250 C52 310 28 380 48 460 C62 520 38 580 52 660 C56 690 48 710 44 720"
+          stroke="#3d5c4a" stroke-width="2.2" opacity="0.85"/>
+    <!-- 副枝 -->
+    <path d="M40 120 C90 100 130 130 155 175" stroke="#4a6b58" stroke-width="1.4" opacity="0.75"/>
+    <path d="M36 210 C80 200 110 230 125 280" stroke="#4a6b58" stroke-width="1.3" opacity="0.7"/>
+    <path d="M44 340 C95 320 140 350 165 400" stroke="#4a6b58" stroke-width="1.35" opacity="0.72"/>
+    <path d="M48 480 C100 470 135 510 150 560" stroke="#4a6b58" stroke-width="1.25" opacity="0.68"/>
+    <!-- 细梢 -->
+    <path d="M155 175 C175 190 180 210 172 230" stroke="#5a7a68" stroke-width="1" opacity="0.6"/>
+    <path d="M125 280 C145 300 148 330 138 355" stroke="#5a7a68" stroke-width="1" opacity="0.55"/>
+    <path d="M165 400 C185 420 188 450 175 475" stroke="#5a7a68" stroke-width="1" opacity="0.55"/>
+  </g>
+  <!-- 梅花（五瓣简化） -->
+  <g fill="#c4786a" opacity="0.72">
+    <g transform="translate(148 168)">
+      <circle r="3.2"/><circle cx="5" cy="-3" r="3"/><circle cx="5" cy="3.5" r="3"/>
+      <circle cx="-4.5" cy="-3" r="3"/><circle cx="-4.5" cy="3.5" r="3"/>
+      <circle r="1.6" fill="#e8c4a8"/>
+    </g>
+    <g transform="translate(118 255)">
+      <circle r="2.8"/><circle cx="4.2" cy="-2.6" r="2.6"/><circle cx="4.2" cy="3" r="2.6"/>
+      <circle cx="-3.8" cy="-2.6" r="2.6"/><circle cx="-3.8" cy="3" r="2.6"/>
+      <circle r="1.4" fill="#e8c4a8"/>
+    </g>
+    <g transform="translate(158 392)">
+      <circle r="3"/><circle cx="4.6" cy="-2.8" r="2.8"/><circle cx="4.6" cy="3.2" r="2.8"/>
+      <circle cx="-4.2" cy="-2.8" r="2.8"/><circle cx="-4.2" cy="3.2" r="2.8"/>
+      <circle r="1.5" fill="#e8c4a8"/>
+    </g>
+    <g transform="translate(132 530)">
+      <circle r="2.6"/><circle cx="3.8" cy="-2.4" r="2.4"/><circle cx="3.8" cy="2.8" r="2.4"/>
+      <circle cx="-3.5" cy="-2.4" r="2.4"/><circle cx="-3.5" cy="2.8" r="2.4"/>
+      <circle r="1.3" fill="#e8c4a8"/>
+    </g>
+  </g>
+  <!-- 花苞 -->
+  <g fill="#b85c50" opacity="0.55">
+    <ellipse cx="168" cy="200" rx="2.2" ry="3.2" transform="rotate(-20 168 200)"/>
+    <ellipse cx="108" cy="300" rx="2" ry="2.8" transform="rotate(15 108 300)"/>
+    <ellipse cx="175" cy="430" rx="2.1" ry="3" transform="rotate(-10 175 430)"/>
+    <ellipse cx="140" cy="580" rx="1.9" ry="2.7" transform="rotate(25 140 580)"/>
+  </g>
+</svg>

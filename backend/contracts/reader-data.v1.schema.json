@@ -1,0 +1,339 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "retainpdf/contracts/reader-data/v1",
+  "title": "Reader Read Model Contract",
+  "description": "Stable Reader-facing read DTOs. Each successful HTTP response is wrapped in { code, message, data }; this schema describes data and SSE event payloads only. It deliberately exposes public API paths/URLs and never backend filesystem paths, checkpoints, workspace state, credentials, or provider request payloads. RetainPDF-specific host adapters map endpoint responses into these DTOs before supplying @retainpdf/reader ports.",
+  "base_path": "/api/v1",
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/api/v1/jobs/:job_id/artifacts",
+      "output": "ReaderArtifactLinks",
+      "rust_view": "ArtifactLinksView (Reader-safe consumer subset)",
+      "ts_consumer": "@retainpdf/contracts/reader-data :: ReaderArtifactLinks"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/jobs/:job_id/artifacts-manifest",
+      "output": "ReaderArtifactManifestView",
+      "rust_view": "JobArtifactManifestView (Reader-safe consumer subset)",
+      "ts_consumer": "@retainpdf/contracts/reader-data :: ReaderArtifactManifestView"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/jobs/:job_id/markdown/document",
+      "output": "MarkdownDocumentView",
+      "rust_view": "MarkdownDocumentView",
+      "ts_consumer": "@retainpdf/contracts/reader-data :: MarkdownDocumentView"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/jobs/:job_id/reader/regions",
+      "output": "ReaderRegionsView",
+      "rust_view": "ReaderRegionsView",
+      "ts_consumer": "@retainpdf/contracts/reader-data :: ReaderRegionsView"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/jobs/:job_id/reader/metadata",
+      "output": "ReaderMetadataView",
+      "rust_view": "ReaderMetadataView",
+      "ts_consumer": "@retainpdf/contracts/reader-data :: ReaderMetadataView"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/jobs/:job_id/live-translation/layout",
+      "output": "LiveTranslationLayout",
+      "rust_view": "LiveTranslationLayoutView",
+      "ts_consumer": "@retainpdf/contracts/reader-data :: LiveTranslationLayout"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/jobs/:job_id/live-translation/pages/:page_idx",
+      "output": "LiveTranslationPageSnapshot",
+      "rust_view": "LiveTranslationPageView",
+      "ts_consumer": "@retainpdf/contracts/reader-data :: LiveTranslationPageSnapshot"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/jobs/:job_id/live-events?after_seq=:seq",
+      "output": "LiveTranslationCommitEvent",
+      "rust_view": "LiveTranslationCommitEventView",
+      "ts_consumer": "@retainpdf/contracts/reader-data :: LiveTranslationCommitEvent"
+    }
+  ],
+  "definitions": {
+    "PublicResourceLink": {
+      "type": "object",
+      "description": "A publicly routable API resource. path is an API path and url may be absolute; neither is a filesystem path.",
+      "additionalProperties": false,
+      "required": ["ready", "path", "url", "method", "content_type", "file_name", "size_bytes"],
+      "properties": {
+        "ready": { "type": "boolean" },
+        "path": { "type": "string", "description": "Public API path, never a local filesystem path." },
+        "url": { "type": "string", "description": "Public absolute or API-relative URL." },
+        "method": { "type": "string", "const": "GET" },
+        "content_type": { "type": "string" },
+        "file_name": { "type": ["string", "null"] },
+        "size_bytes": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "ReaderArtifactLinks": {
+      "type": "object",
+      "description": "Reader-safe subset of ArtifactLinksView. The endpoint may carry compatibility fields outside this subset; hosts must ignore them and consume only public resource links/readiness values instead of artifact storage conventions.",
+      "additionalProperties": true,
+      "required": ["pdf_ready", "markdown_ready", "bundle_ready", "pdf_url", "markdown_url", "markdown_images_base_url", "bundle_url", "normalized_document_url", "normalization_report_url", "manifest_path", "manifest_url", "actions", "normalized_document", "normalization_report", "pdf", "markdown", "bundle"],
+      "properties": {
+        "pdf_ready": { "type": "boolean" },
+        "markdown_ready": { "type": "boolean" },
+        "bundle_ready": { "type": "boolean" },
+        "pdf_url": { "type": "string" },
+        "markdown_url": { "type": "string" },
+        "markdown_images_base_url": { "type": "string" },
+        "bundle_url": { "type": "string" },
+        "normalized_document_url": { "type": "string" },
+        "normalization_report_url": { "type": "string" },
+        "manifest_path": { "type": "string", "description": "Public API path for the artifact manifest." },
+        "manifest_url": { "type": "string", "description": "Public URL for the artifact manifest." },
+        "actions": { "type": "object", "description": "Existing job action links; this schema does not own their detailed control-plane shape." },
+        "normalized_document": { "$ref": "#/definitions/PublicResourceLink" },
+        "normalization_report": { "$ref": "#/definitions/PublicResourceLink" },
+        "pdf": { "$ref": "#/definitions/PublicResourceLink" },
+        "markdown": { "$ref": "#/definitions/MarkdownArtifactLink" },
+        "bundle": { "$ref": "#/definitions/PublicResourceLink" }
+      }
+    },
+    "MarkdownArtifactLink": {
+      "type": "object",
+      "description": "Published Markdown artifact links from ArtifactLinksView.",
+      "additionalProperties": false,
+      "required": ["ready", "json_path", "json_url", "raw_path", "raw_url", "images_base_path", "images_base_url", "file_name", "size_bytes"],
+      "properties": {
+        "ready": { "type": "boolean" },
+        "json_path": { "type": "string" },
+        "json_url": { "type": "string" },
+        "raw_path": { "type": "string" },
+        "raw_url": { "type": "string" },
+        "images_base_path": { "type": "string" },
+        "images_base_url": { "type": "string" },
+        "file_name": { "type": ["string", "null"] },
+        "size_bytes": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "ReaderArtifactManifestItem": {
+      "type": "object",
+      "description": "Reader-safe subset of a job artifact manifest entry. The endpoint may carry compatibility fields such as relative_path; hosts must discard those fields and use public resource links only.",
+      "additionalProperties": true,
+      "required": ["artifact_key", "artifact_group", "artifact_kind", "ready", "file_name", "content_type", "size_bytes", "checksum", "source_stage", "updated_at", "attempt", "resource_path", "resource_url"],
+      "properties": {
+        "artifact_key": { "type": "string" },
+        "artifact_group": { "type": "string" },
+        "artifact_kind": { "type": "string" },
+        "ready": { "type": "boolean" },
+        "file_name": { "type": ["string", "null"] },
+        "content_type": { "type": "string" },
+        "size_bytes": { "type": ["integer", "null"], "minimum": 0 },
+        "checksum": { "type": ["string", "null"] },
+        "source_stage": { "type": ["string", "null"] },
+        "updated_at": { "type": "string" },
+        "attempt": { "type": "integer", "minimum": 1, "description": "One-based durable pipeline attempt." },
+        "resource_path": { "type": ["string", "null"], "description": "Public API path when published." },
+        "resource_url": { "type": ["string", "null"], "description": "Public URL when published." }
+      }
+    },
+    "ReaderArtifactManifestView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["job_id", "items"],
+      "properties": {
+        "job_id": { "type": "string" },
+        "items": { "type": "array", "items": { "$ref": "#/definitions/ReaderArtifactManifestItem" } }
+      }
+    },
+    "MarkdownImageView": {
+      "type": "object",
+      "description": "Published Markdown image. path is document-relative and url is a public authenticated Reader resource URL.",
+      "additionalProperties": false,
+      "required": ["path", "url", "content_type", "size_bytes"],
+      "properties": {
+        "path": { "type": "string" },
+        "url": { "type": "string" },
+        "content_type": { "type": "string" },
+        "size_bytes": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "MarkdownDocumentView": {
+      "type": "object",
+      "description": "Structured published Markdown for Reader/preview/AI. content_with_absolute_image_urls is a convenience projection; clients must not derive image filesystem paths.",
+      "additionalProperties": false,
+      "required": ["job_id", "ready", "content", "content_with_absolute_image_urls", "markdown_path", "markdown_url", "raw_path", "raw_url", "images_base_path", "images_base_url", "images"],
+      "properties": {
+        "job_id": { "type": "string" },
+        "ready": { "type": "boolean" },
+        "content": { "type": "string" },
+        "content_with_absolute_image_urls": { "type": "string" },
+        "markdown_path": { "type": "string" },
+        "markdown_url": { "type": "string" },
+        "raw_path": { "type": "string" },
+        "raw_url": { "type": "string" },
+        "images_base_path": { "type": "string" },
+        "images_base_url": { "type": "string" },
+        "images": { "type": "array", "items": { "$ref": "#/definitions/MarkdownImageView" } }
+      }
+    },
+    "ReaderRegionBox": {
+      "type": "object",
+      "description": "Reader regions use a one-based page number and a [x0,y0,x1,y1] bbox in top-left-origin PDF points. text may be null for non-text/image blocks.",
+      "additionalProperties": false,
+      "required": ["page", "bbox", "unit", "origin", "text"],
+      "properties": {
+        "page": { "type": "integer", "minimum": 1, "description": "One-based page number." },
+        "bbox": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "type": "number" }, "description": "[x0,y0,x1,y1] in PDF points; producer guarantees an ordered finite rectangle." },
+        "unit": { "type": "string", "const": "pdf_point" },
+        "origin": { "type": "string", "const": "top_left" },
+        "text": { "type": ["string", "null"] }
+      }
+    },
+    "ReaderRegionItem": {
+      "type": "object",
+      "description": "item_id is canonicalized and joinable with other Reader projections when they describe the same document block. Empty asset collections are serialized as [] rather than omitted.",
+      "additionalProperties": false,
+      "required": ["item_id", "source", "translated", "markdown", "region_type", "status", "asset_ids", "asset_urls"],
+      "properties": {
+        "item_id": { "type": "string", "minLength": 1 },
+        "source": { "$ref": "#/definitions/ReaderRegionBox" },
+        "translated": { "$ref": "#/definitions/ReaderRegionBox" },
+        "markdown": { "type": ["string", "null"] },
+        "region_type": { "type": "string" },
+        "status": { "type": "string" },
+        "asset_ids": { "type": "array", "items": { "type": "string" } },
+        "asset_urls": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "ReaderRegionsView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items"],
+      "properties": {
+        "items": { "type": "array", "items": { "$ref": "#/definitions/ReaderRegionItem" } }
+      }
+    },
+    "ReaderPageMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["page", "width", "height"],
+      "properties": {
+        "page": { "type": "integer", "minimum": 1, "description": "One-based PDF page number." },
+        "width": { "type": "number", "minimum": 0 },
+        "height": { "type": "number", "minimum": 0 }
+      }
+    },
+    "ReaderDocumentMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["page_count", "pages"],
+      "properties": {
+        "page_count": { "type": "integer", "minimum": 0 },
+        "pages": { "type": "array", "items": { "$ref": "#/definitions/ReaderPageMetadata" } }
+      }
+    },
+    "ReaderMetadataView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "translated"],
+      "properties": {
+        "source": { "anyOf": [{ "$ref": "#/definitions/ReaderDocumentMetadata" }, { "type": "null" }] },
+        "translated": { "anyOf": [{ "$ref": "#/definitions/ReaderDocumentMetadata" }, { "type": "null" }] }
+      }
+    },
+    "LiveTranslationTypography": {
+      "type": "object",
+      "description": "Optional renderer-authored typography plan. All dimensional values are PDF points except leading_em.",
+      "additionalProperties": false,
+      "required": ["font_family", "font_size_pt", "leading_em", "font_weight", "text_align", "padding_top_pt", "padding_right_pt", "padding_bottom_pt", "padding_left_pt", "fit_min_font_size_pt", "fit_max_font_size_pt"],
+      "properties": {
+        "font_family": { "type": "string" },
+        "font_size_pt": { "type": "number", "exclusiveMinimum": 0 },
+        "leading_em": { "type": "number", "exclusiveMinimum": 0 },
+        "font_weight": { "type": "integer", "minimum": 1 },
+        "text_align": { "type": "string" },
+        "padding_top_pt": { "type": "number", "minimum": 0 },
+        "padding_right_pt": { "type": "number", "minimum": 0 },
+        "padding_bottom_pt": { "type": "number", "minimum": 0 },
+        "padding_left_pt": { "type": "number", "minimum": 0 },
+        "fit_min_font_size_pt": { "type": "number", "exclusiveMinimum": 0 },
+        "fit_max_font_size_pt": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "LiveTranslationLayoutBlock": {
+      "type": "object",
+      "description": "page_idx is supplied by the enclosing page and is zero-based. item_id is canonicalized for joins with page snapshots and Reader regions.",
+      "additionalProperties": false,
+      "required": ["item_id", "bbox", "source_text", "kind"],
+      "properties": {
+        "item_id": { "type": "string", "minLength": 1 },
+        "bbox": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "type": "number" }, "description": "[x0,y0,x1,y1] in top-left-origin PDF points." },
+        "source_text": { "type": "string" },
+        "kind": { "type": "string" },
+        "typography": { "$ref": "#/definitions/LiveTranslationTypography" }
+      }
+    },
+    "LiveTranslationLayoutPage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["page_idx", "width", "height", "blocks"],
+      "properties": {
+        "page_idx": { "type": "integer", "minimum": 0, "description": "Zero-based page index." },
+        "width": { "type": "number", "exclusiveMinimum": 0 },
+        "height": { "type": "number", "exclusiveMinimum": 0 },
+        "blocks": { "type": "array", "items": { "$ref": "#/definitions/LiveTranslationLayoutBlock" } }
+      }
+    },
+    "LiveTranslationLayout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pages"],
+      "properties": {
+        "pages": { "type": "array", "items": { "$ref": "#/definitions/LiveTranslationLayoutPage" } }
+      }
+    },
+    "LiveTranslationItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["item_id", "translated_text", "status"],
+      "properties": {
+        "item_id": { "type": "string", "minLength": 1 },
+        "translated_text": { "type": "string", "description": "Durably committed text; LaTeX delimiters are preserved." },
+        "status": { "type": "string" }
+      }
+    },
+    "LiveTranslationPageSnapshot": {
+      "type": "object",
+      "description": "A durable, hash-matched page snapshot. Do not replace a newer attempt/generation/page_hash with an older event or mutable working file.",
+      "additionalProperties": false,
+      "required": ["attempt", "generation", "page_idx", "page_hash", "items"],
+      "properties": {
+        "attempt": { "type": "integer", "minimum": 0 },
+        "generation": { "type": "integer", "minimum": 0 },
+        "page_idx": { "type": "integer", "minimum": 0, "description": "Zero-based page index." },
+        "page_hash": { "type": "string", "pattern": "^[0-9A-Fa-f]{64}$" },
+        "items": { "type": "array", "items": { "$ref": "#/definitions/LiveTranslationItem" } }
+      }
+    },
+    "LiveTranslationCommitEvent": {
+      "type": "object",
+      "description": "SSE event data for event: translation_units_committed. It is a refresh hint: reconnect using the greater of after_seq and Last-Event-ID, then refetch the authoritative page snapshot.",
+      "additionalProperties": false,
+      "required": ["event", "seq", "attempt", "generation", "page_idx", "page_hash", "changed_item_ids"],
+      "properties": {
+        "event": { "type": "string", "const": "translation_units_committed" },
+        "seq": { "type": "integer", "minimum": 0, "description": "Authoritative per-job database sequence and SSE id." },
+        "attempt": { "type": "integer", "minimum": 0 },
+        "generation": { "type": "integer", "minimum": 0 },
+        "page_idx": { "type": "integer", "minimum": 0, "description": "Zero-based page index." },
+        "page_hash": { "type": "string", "pattern": "^[0-9A-Fa-f]{64}$" },
+        "changed_item_ids": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    }
+  }
+}

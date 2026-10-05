@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "id": "jiangnan",
+  "layers": [
+    { "type": "image", "slot": "backdrop", "src": "bg.svg", "parallax": 0.02 },
+    { "type": "image", "slot": "left-bottom", "src": "bamboo.svg", "parallax": 0.06 },
+    { "type": "image", "slot": "right-bottom", "src": "seal.svg", "parallax": 0.04, "opacity": 0.92 }
+  ],
+  "quote": { "slot": "quote", "text": "书藏万卷\n心游千载" }
+}

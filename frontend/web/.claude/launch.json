@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend-static",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "python3 scripts/serve_static.py --host 127.0.0.1 --port \"${PORT:-40011}\" --root ."],
+      "port": 40011,
+      "autoPort": true
+    }
+  ]
+}

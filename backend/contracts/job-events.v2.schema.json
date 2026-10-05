@@ -1,0 +1,290 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "retainpdf/contracts/job-events/v2",
+  "title": "Job event cursor feed v2",
+  "description": "Breaking replacement of offset-based job events. Success envelopes describe data below. Authorization, OCR scope and storage checks precede cursor validation. Invalid query or foreign scope returns 400; an expired epoch returns 410 with error.code EVENT_CURSOR_EXPIRED.",
+  "base_path": "/api/v1/jobs",
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/api/v1/jobs/:job_id/events",
+      "query": "ListJobEventsQuery",
+      "output": "JobEventListView"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ocr/jobs/:job_id/events",
+      "query": "ListJobEventsQuery",
+      "output": "JobEventListView"
+    }
+  ],
+  "definitions": {
+    "JsonValue": {
+      "description": "可安全跨线传输的任意 JSON 值；用于 provider 扩展 options 与事件 payload。",
+      "tsType": "null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue }",
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JsonValue"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/JsonValue"
+          }
+        }
+      ]
+    },
+    "JobEventProgressView": {
+      "type": "object",
+      "description": "translation.rs :: JobEventProgressView。字段为可选，因为未知进度可序列化为空对象。",
+      "additionalProperties": false,
+      "properties": {
+        "unit": {
+          "type": "string"
+        },
+        "current": {
+          "type": "integer"
+        },
+        "total": {
+          "type": "integer"
+        },
+        "percent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        }
+      }
+    },
+    "JobEventRawView": {
+      "type": "object",
+      "description": "事件进入 API 归一化之前的来源追踪字段。",
+      "additionalProperties": false,
+      "properties": {
+        "source_kind": {
+          "type": "string"
+        },
+        "source_seq": {
+          "type": "integer"
+        },
+        "stage": {
+          "type": "string"
+        },
+        "user_stage": {
+          "type": "string"
+        },
+        "event_type": {
+          "type": "string"
+        }
+      }
+    },
+    "JobEventRecord": {
+      "type": "object",
+      "description": "translation.rs :: JobEventRecord 的公开序列化形状。payload 保留递归 JSON 类型，不再退化为 {}。",
+      "required": [
+        "event_id",
+        "job_id",
+        "seq",
+        "ts",
+        "level",
+        "lane",
+        "stage",
+        "substage",
+        "stage_detail",
+        "provider",
+        "provider_stage",
+        "event",
+        "event_type",
+        "raw_event_type",
+        "message",
+        "retry_count",
+        "elapsed_ms",
+        "payload"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "job_id": {
+          "type": "string"
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Persistent feed import order, not presentation or source order."
+        },
+        "ts": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "level": {
+          "type": "string"
+        },
+        "lane": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "display_stage": {
+          "type": "string"
+        },
+        "stage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "substage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stage_detail": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provider": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provider_stage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "event": {
+          "type": "string"
+        },
+        "event_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "raw_event_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "raw": {
+          "$ref": "#/definitions/JobEventRawView"
+        },
+        "progress": {
+          "$ref": "#/definitions/JobEventProgressView"
+        },
+        "message": {
+          "type": "string"
+        },
+        "retry_count": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "elapsed_ms": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "payload": {
+          "$ref": "#/definitions/JsonValue"
+        },
+        "event_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "ListJobEventsQuery": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Use start for the first page or cursor for continuation, never both. Offset is rejected. Limit is clamped to 1..500. Head pagination has a fixed upper bound.",
+      "not": {
+        "required": [
+          "cursor",
+          "start"
+        ]
+      },
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295,
+          "default": 500
+        },
+        "start": {
+          "type": "string",
+          "enum": [
+            "head",
+            "tail"
+          ],
+          "default": "tail"
+        },
+        "cursor": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "JobEventListView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol_version",
+        "items",
+        "next_cursor",
+        "has_more",
+        "limit"
+      ],
+      "properties": {
+        "protocol_version": {
+          "const": 2
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JobEventRecord"
+          },
+          "maxItems": 500
+        },
+        "next_cursor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "has_more": {
+          "type": "boolean"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        }
+      }
+    }
+  }
+}

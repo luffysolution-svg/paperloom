@@ -1,0 +1,4 @@
+runs/
+case-data/
+typst-cases/
+*.prof

@@ -1,0 +1,17 @@
+Droid Sans Fallback / DroidSansFallbackFull.ttf
+
+Digitized data copyright Google Corporation © 2006
+Font vendor: Ascender Corporation
+Designer: Steve Matteson
+Font version: Version 1.00c
+
+The unmodified font's embedded name table states:
+"Licensed under the Apache License, Version 2.0"
+http://www.apache.org/licenses/LICENSE-2.0
+
+The font supplied by frontend/desktop/assets/fonts/DroidSansFallbackFull.ttf
+has SHA-256 acb6440a713d880a13a21b468ba7cd43f5a2b2934972e51be791c880730777b8.
+The installed PaperLoom copy has the same hash.
+The full Apache license is included in ../licenses/Apache-2.0.txt.
+Upstream MuPDF also distributes the Droid font family with an Apache notice:
+https://github.com/artifexsoftware/mupdf/blob/1.26.11/resources/fonts/droid/NOTICE

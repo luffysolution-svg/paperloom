@@ -1,0 +1,347 @@
+@utility reader-annotations-panel {
+  /* ===== 阅读器批注面板(抽屉内容区) ===== */
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-height: 0;
+  padding: 12px;
+  overflow: auto;
+}
+
+@utility reader-annotations-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+@utility reader-annotations-count {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+@utility reader-annotations-export {
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    color 140ms ease,
+    border-color 140ms ease;
+
+  &:hover {
+    border-color: color-mix(in srgb, var(--ink) 20%, transparent);
+    color: var(--ink);
+  }
+
+  &:disabled {
+    color: var(--muted);
+    cursor: default;
+  }
+}
+
+@utility reader-annotations-loading {
+  margin: 0;
+  padding: 18px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+@utility reader-annotations-empty {
+  margin: 0;
+  padding: 18px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+@utility reader-annotations-error {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 16px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+
+  & p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+}
+
+@utility reader-annotations-group {
+  display: grid;
+  gap: 8px;
+}
+
+@utility reader-annotations-group-title {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+@utility reader-annotations-group-items {
+  display: grid;
+  gap: 8px;
+}
+
+@utility reader-annotations-item {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+}
+
+@utility reader-annotations-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+@utility reader-annotations-kind {
+  /* kind 徽章:小圆角胶囊,三种批注类型三种色调 */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 18px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+
+  &.is-sentence {
+    background: color-mix(in srgb, var(--ink) 10%, transparent);
+    color: var(--ink);
+  }
+
+  &.is-data {
+    background: color-mix(in srgb, var(--ok) 12%, transparent);
+    color: var(--ok);
+  }
+
+  &.is-figure {
+    background: color-mix(in srgb, var(--warn) 14%, transparent);
+    color: var(--warn);
+  }
+}
+
+@utility is-sentence {
+  &.reader-annotations-kind {
+    background: color-mix(in srgb, var(--ink) 10%, transparent);
+    color: var(--ink);
+  }
+}
+
+@utility is-data {
+  &.reader-annotations-kind {
+    background: color-mix(in srgb, var(--ok) 12%, transparent);
+    color: var(--ok);
+  }
+}
+
+@utility is-figure {
+  &.reader-annotations-kind {
+    background: color-mix(in srgb, var(--warn) 14%, transparent);
+    color: var(--warn);
+  }
+}
+
+@utility reader-annotations-quote {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+@utility reader-annotations-translated {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+@utility reader-annotations-note {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.5;
+  cursor: pointer;
+
+  &:hover {
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
+  }
+}
+
+@utility reader-annotations-note-add {
+  /* 轻量文本按钮:透明底、无阴影、hover 变 ink */
+  min-height: 22px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 140ms ease;
+
+  &:hover {
+    color: var(--ink);
+  }
+  justify-self: start;
+}
+
+@utility reader-annotations-locate {
+  min-height: 22px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 140ms ease;
+
+  &:hover {
+    color: var(--ink);
+  }
+}
+
+@utility reader-annotations-remove {
+  min-height: 22px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 140ms ease;
+
+  &:hover {
+    color: var(--ink);
+  }
+}
+
+@utility reader-annotations-note-save {
+  min-height: 22px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 140ms ease;
+
+  &:hover {
+    color: var(--ink);
+  }
+}
+
+@utility reader-annotations-note-cancel {
+  min-height: 22px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 140ms ease;
+
+  &:hover {
+    color: var(--ink);
+  }
+}
+
+@utility reader-annotations-retry {
+  min-height: 22px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 140ms ease;
+
+  &:hover {
+    color: var(--ink);
+  }
+}
+
+@utility reader-annotations-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+@utility reader-annotations-note-editor {
+  display: grid;
+  gap: 6px;
+}
+
+@utility reader-annotations-note-input {
+  min-height: 56px;
+  padding: 8px 9px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  resize: none;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+@utility reader-annotations-note-editor-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}

@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 140" preserveAspectRatio="xMaxYMax meet">
+  <!-- 朱砂藏书印（正式稿，right-bottom 锚点）：白文方印，印文取"藏书"篆意，
+       边缘以湍流置换做出手工钤印的残缺感，整体右倾 2.5°。 -->
+  <defs>
+    <radialGradient id="ink" cx="0.5" cy="0.45" r="0.75">
+      <stop offset="0" stop-color="#b54e42"/>
+      <stop offset="0.7" stop-color="#b0493f"/>
+      <stop offset="1" stop-color="#9c3f36"/>
+    </radialGradient>
+    <filter id="wear" x="-6%" y="-6%" width="112%" height="112%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.55" numOctaves="2" seed="11" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="2.6" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+  </defs>
+
+  <g transform="rotate(2.5 70 70)">
+    <g filter="url(#wear)">
+      <rect x="12" y="12" width="116" height="116" rx="12" fill="url(#ink)"/>
+      <rect x="22" y="22" width="96" height="96" rx="7" fill="none" stroke="#f6efe4" stroke-width="4" opacity="0.92"/>
+      <g stroke="#f6efe4" stroke-width="6" stroke-linecap="round" fill="none" opacity="0.95">
+        <!-- 藏（上）：艹头 + 匚抱 + 内叠画 + 戈钩 -->
+        <path d="M42 36 h56"/>
+        <path d="M54 30 v12 M88 30 v12"/>
+        <path d="M44 48 h52 M44 48 v20"/>
+        <path d="M52 56 h34 M52 63 h28"/>
+        <path d="M92 48 v14 q0 4 -6 4"/>
+        <!-- 書（下）：聿叠画 + 中竖 + 日底 -->
+        <path d="M44 80 h52 M46 88 h48 M48 96 h44"/>
+        <path d="M70 76 v32"/>
+        <path d="M56 104 h28 M56 98 v6 M84 98 v6"/>
+      </g>
+    </g>
+    <!-- 钤印不匀：一角印泥偏薄 + 细残缺斑 -->
+    <ellipse cx="102" cy="36" rx="30" ry="22" fill="#f6efe4" opacity="0.1"/>
+    <g fill="#f6efe4" opacity="0.85">
+      <circle cx="24" cy="28" r="1.4"/>
+      <circle cx="30" cy="110" r="1.2"/>
+      <circle cx="112" cy="30" r="1.6"/>
+      <circle cx="118" cy="104" r="1.3"/>
+      <circle cx="40" cy="18" r="1.1"/>
+      <circle cx="96" cy="122" r="1.4"/>
+      <circle cx="16" cy="70" r="1.2"/>
+      <circle cx="124" cy="64" r="1.1"/>
+      <circle cx="60" cy="52" r="0.9"/>
+      <circle cx="82" cy="90" r="1"/>
+      <circle cx="48" cy="88" r="0.8"/>
+      <circle cx="100" cy="52" r="0.9"/>
+      <ellipse cx="26" cy="116" rx="2.4" ry="1.6" opacity="0.7"/>
+    </g>
+  </g>
+</svg>

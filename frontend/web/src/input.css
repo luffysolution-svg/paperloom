@@ -1,0 +1,7 @@
+/* 已拆为按页入口（见 src/styles/entries/）。
+ *
+ *   npm run build:css  → dist/css/{home,detail,reader}.css
+ *
+ * 本文件保留为「主页」别名，仅供遗留文档 / 单入口实验；请勿再往这里堆全站 import。
+ */
+@import "./styles/entries/home.css";

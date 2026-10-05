@@ -1,0 +1,19 @@
+@layer components {
+  @keyframes uploadSweep {
+    0% {
+      transform: translateX(-120%) skewX(-24deg);
+      opacity: 0;
+    }
+    12% {
+      opacity: 0.95;
+    }
+    100% {
+      transform: translateX(340%) skewX(-24deg);
+      opacity: 0;
+    }
+  }
+}
+
+page-range-summary {
+  display: block;
+}

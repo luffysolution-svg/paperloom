@@ -1,0 +1,3 @@
+export const JOB_EVENTS_REFRESH_MS = 1000;
+export const JOB_MANIFEST_REFRESH_MS = 5000;
+export const JOB_STAGE_ACTIONS_REFRESH_MS = 5000;

@@ -1,0 +1,13 @@
+pub const STDOUT_LABEL_JOB_ROOT: &str = "job root";
+pub const STDOUT_LABEL_SOURCE_PDF: &str = "source pdf";
+pub const STDOUT_LABEL_LAYOUT_JSON: &str = "layout json";
+pub const STDOUT_LABEL_NORMALIZED_DOCUMENT_JSON: &str = "normalized document json";
+pub const STDOUT_LABEL_NORMALIZATION_REPORT_JSON: &str = "normalization report json";
+pub const STDOUT_LABEL_PROVIDER_RAW_DIR: &str = "provider raw dir";
+pub const STDOUT_LABEL_PROVIDER_ZIP: &str = "provider zip";
+pub const STDOUT_LABEL_PROVIDER_SUMMARY_JSON: &str = "provider summary json";
+pub const STDOUT_LABEL_SCHEMA_VERSION: &str = "schema version";
+pub const STDOUT_LABEL_TRANSLATIONS_DIR: &str = "translations dir";
+pub const STDOUT_LABEL_OUTPUT_PDF: &str = "output pdf";
+pub const STDOUT_LABEL_SUMMARY: &str = "summary";
+pub const STDOUT_LABEL_EVENTS_JSONL: &str = "events jsonl";

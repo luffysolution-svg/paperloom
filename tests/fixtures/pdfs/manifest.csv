@@ -1,0 +1,14 @@
+id,file,category,pages,focus,notes
+editable-paper-formula,1.pdf,editable-paper,13,redaction/layout/formula,"可编辑 PDF；有文本层和图片，无大背景图"
+pseudo-editable,2.pdf,pseudo-editable,29,visual-only/background/text-layer,"伪可编辑 PDF；有文本层但按扫描/伪可编辑风险回归"
+dark-background,,dark-background,,text-color/background,
+programming-manual,,technical-manual,,code-block/preserve-layout,
+bookmarks,,editable-book,,toc/bookmarks-preservation,
+multi-column-paper,,multi-column-paper,,ocr-order/layout,
+navier-stokes-166,navier-stokes-166p.pdf,editable-paper,166,background-render/mitex-cjk,流体 NS 方程英文论文；公式多；p143 有 CJK 公式导致首编失败（预筛回归样本）
+d3cs00837a-69,d3cs00837a-69p.pdf,editable-paper,69,background-render/mitex-unicode,化学论文；翻译含 unicode 转义导致首编失败（预筛回归样本）
+cr5c00021-55,cr5c00021-55p.pdf,editable-paper,55,background-render,化学论文；中等体量速度回归
+tibetan-plateau-21,s41524-tibetan-plateau-21p.pdf,editable-paper,21,background-render,21 页小体量速度回归
+lda-lithiation-zh-17,lda-lithiation-zh-17p.pdf,editable-paper,17,cjk/background-render,中文化学论文；CJK 覆盖
+yakubenko-halogen-10,yakubenko-halogen-lithium-10p.pdf,editable-paper,10,background-render,10 页小体量速度回归
+babeldoc-10,babeldoc-10p.pdf,editable-paper,10,background-render,10 页小体量速度回归

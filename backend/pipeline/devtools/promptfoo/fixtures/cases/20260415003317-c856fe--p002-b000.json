@@ -1,0 +1,3842 @@
+{
+  "schema": "translation_case_bundle_v1",
+  "captured_at": "2026-04-16T09:28:11Z",
+  "fixture": {
+    "job_root": "20260415003317-c856fe",
+    "item_id": "p002-b000",
+    "description": "bp86 basis-set paragraph kept_origin",
+    "case_artifact": "cases/20260415003317-c856fe--p002-b000.json",
+    "expected_contains": [],
+    "required_terms": [],
+    "forbidden_substrings": [],
+    "require_cjk": true,
+    "min_cjk_chars": 1,
+    "min_output_chars": 60,
+    "notes": "Continuation paragraph after geometry optimization kept original English"
+  },
+  "saved": {
+    "snapshot": {
+      "job_root": "20260415003317-c856fe",
+      "job_id": "20260415003317-c856fe",
+      "item_id": "p002-b000",
+      "page_idx": 1,
+      "page_number": 2,
+      "page_path": "translated/page-002-deepseek.json",
+      "block_idx": 0,
+      "block_type": "text",
+      "math_mode": "direct_typst",
+      "source_text": "to represent the Coulomb and exchange potentials in each SCF cycle.32 This basis-set combination is denoted \\mathrm { I I I } \\sim . 22,23 Unless otherwise stated, energies reported refer to the BP86/III∼ level. The calculations were carried out using the ADF 2000 program package.34",
+      "translated_text": "",
+      "source_preview": "to represent the Coulomb and exchange potentials in each SCF cycle.32 This basis-set combination is denoted \\mathrm { I I I } \\sim . 22,23 Unless otherwise stated, energies report…",
+      "translated_preview": "",
+      "classification_label": "skip_model_keep_origin",
+      "should_translate": false,
+      "skip_reason": "skip_model_keep_origin",
+      "final_status": "kept_origin",
+      "translation_diagnostics": {}
+    },
+    "item": {
+      "item_id": "p002-b000",
+      "page_idx": 1,
+      "block_idx": 0,
+      "block_type": "text",
+      "bbox": [
+        50,
+        45,
+        295,
+        100
+      ],
+      "source_text": "to represent the Coulomb and exchange potentials in each SCF cycle.32 This basis-set combination is denoted \\mathrm { I I I } \\sim . 22,23 Unless otherwise stated, energies reported refer to the BP86/III∼ level. The calculations were carried out using the ADF 2000 program package.34",
+      "lines": [
+        {
+          "bbox": [
+            52,
+            45,
+            295,
+            56
+          ],
+          "spans": [
+            {
+              "type": "text",
+              "content": "to represent the Coulomb and exchange potentials in each SCF",
+              "bbox": [
+                52,
+                45,
+                295,
+                56
+              ]
+            }
+          ]
+        },
+        {
+          "bbox": [
+            52,
+            55,
+            296,
+            68
+          ],
+          "spans": [
+            {
+              "type": "text",
+              "content": "cycle.32 This basis-set combination is denoted",
+              "bbox": [
+                52,
+                55,
+                230,
+                68
+              ]
+            },
+            {
+              "type": "inline_equation",
+              "content": "\\mathrm { I I I } \\sim",
+              "bbox": [
+                230,
+                57,
+                248,
+                67
+              ]
+            },
+            {
+              "type": "text",
+              "content": ". 22,23 Unless",
+              "bbox": [
+                249,
+                55,
+                296,
+                68
+              ]
+            }
+          ]
+        },
+        {
+          "bbox": [
+            52,
+            67,
+            295,
+            79
+          ],
+          "spans": [
+            {
+              "type": "text",
+              "content": "otherwise stated, energies reported refer to the BP86/III∼ level.",
+              "bbox": [
+                52,
+                67,
+                295,
+                79
+              ]
+            }
+          ]
+        },
+        {
+          "bbox": [
+            52,
+            78,
+            294,
+            91
+          ],
+          "spans": [
+            {
+              "type": "text",
+              "content": "The calculations were carried out using the ADF 2000 program",
+              "bbox": [
+                52,
+                78,
+                294,
+                91
+              ]
+            }
+          ]
+        },
+        {
+          "bbox": [
+            50,
+            89,
+            97,
+            102
+          ],
+          "spans": [
+            {
+              "type": "text",
+              "content": "package.34",
+              "bbox": [
+                50,
+                89,
+                97,
+                102
+              ]
+            }
+          ]
+        }
+      ],
+      "metadata": {
+        "ocr_sub_type": "body",
+        "normalized_sub_type": "body",
+        "structure_role": "body",
+        "raw_type": "text",
+        "tags": [],
+        "derived": {
+          "role": "",
+          "by": "",
+          "confidence": 0.0
+        },
+        "continuation_hint": {
+          "source": "",
+          "group_id": "",
+          "role": "",
+          "scope": "",
+          "reading_order": -1,
+          "confidence": 0.0
+        },
+        "source": {
+          "provider": "mineru",
+          "raw_page_index": 1,
+          "raw_path": "/pdf_info/1/para_blocks/0",
+          "raw_type": "text",
+          "raw_sub_type": "",
+          "raw_bbox": [
+            50,
+            45,
+            295,
+            100
+          ],
+          "raw_text_excerpt": "to represent the Coulomb and exchange potentials in each SCF cycle.32 This basis-set combination is denoted \\mathrm { I I I } \\sim . 22,23 Unless otherwise stated, energies reported refer to the BP86/"
+        },
+        "structure_group": "",
+        "pair_with": ""
+      },
+      "ocr_continuation_source": "",
+      "ocr_continuation_group_id": "",
+      "ocr_continuation_role": "",
+      "ocr_continuation_scope": "",
+      "ocr_continuation_reading_order": -1,
+      "ocr_continuation_confidence": 0.0,
+      "layout_mode": "single",
+      "layout_split_x": 0.0,
+      "layout_zone": "single_column",
+      "layout_zone_rank": 0,
+      "layout_zone_size": 5,
+      "layout_boundary_role": "head",
+      "math_mode": "direct_typst",
+      "protected_source_text": "to represent the Coulomb and exchange potentials in each SCF cycle.32 This basis-set combination is denoted \\mathrm { I I I } \\sim . 22,23 Unless otherwise stated, energies reported refer to the BP86/III∼ level. The calculations were carried out using the ADF 2000 program package.34",
+      "mixed_original_protected_source_text": "to represent the Coulomb and exchange potentials in each SCF cycle.32 This basis-set combination is denoted \\mathrm { I I I } \\sim . 22,23 Unless otherwise stated, energies reported refer to the BP86/III∼ level. The calculations were carried out using the ADF 2000 program package.34",
+      "formula_map": [],
+      "protected_map": [],
+      "classification_label": "skip_model_keep_origin",
+      "should_translate": false,
+      "skip_reason": "skip_model_keep_origin",
+      "mixed_literal_action": "",
+      "mixed_literal_prefix": "",
+      "translation_unit_id": "__cg__:cg-001-001",
+      "translation_unit_kind": "group",
+      "translation_unit_member_ids": [
+        "p001-b017",
+        "p002-b000"
+      ],
+      "translation_unit_protected_source_text": "Geometry Optimization and Energy Calculation. The molecules and transition states were optimized at the gradient- corrected DFT level using the exchange functional of Becke27 and the correlation functional of Perdew28 (BP86). Relativistic effects were considered using the zeroth-order regular ap- proximation (ZORA).29 Uncontracted Slater-type orbitals (STOs) were used as basis functions for the SCF calculations.30 The basis functions at the metal have triple- \\xi quality, augmented with a set of 6p functions. The basis set at the other atoms has double- \\xi quality, augmented with a set of d-type polarization functions. The (1s)2 core electrons of C and O and the \\mathrm { ( 1 s 2 s 2 p 3 s 3 p 3 d 4 s 4 p 4 d ) ^ { 4 6 } } inner shells of Re were treated within the frozen-core approximation.31 An auxiliary basis set of s, p, d, f, and g STOs was utilized to fit the molecular densities and to represent the Coulomb and exchange potentials in each SCF cycle.32 This basis-set combination is denoted \\mathrm { I I I } \\sim . 22,23 Unless otherwise stated, energies reported refer to the BP86/III∼ level. The calculations were carried out using the ADF 2000 program package.34",
+      "translation_unit_formula_map": [],
+      "translation_unit_protected_map": [],
+      "translation_unit_protected_translated_text": "",
+      "translation_unit_translated_text": "",
+      "protected_translated_text": "",
+      "translated_text": "",
+      "continuation_group": "cg-001-001",
+      "continuation_prev_text": "Geometry Optimization and Energy Calculation. The molecules and transition states were optimized at the gradient- corrected DFT level using the exchange functional of Becke27 and the correlation functional of Perdew28 (BP86). Relativistic effects were considered using the zeroth-order regular ap- proximation (ZORA).29 Uncontracted Slater-type orbitals (STOs) were used as basis functions for the SCF calculations.30 The basis functions at the metal have triple- \\xi quality, augmented with a set of 6p functions. The basis set at the other atoms has double- \\xi quality, augmented with a set of d-type polarization functions. The (1s)2 core electrons of C and O and the \\mathrm { ( 1 s 2 s 2 p 3 s 3 p 3 d 4 s 4 p 4 d ) ^ { 4 6 } } inner shells of Re were treated within the frozen-core approximation.31 An auxiliary basis set of s, p, d, f, and g STOs was utilized to fit the molecular densities and",
+      "continuation_next_text": "",
+      "continuation_decision": "joined",
+      "continuation_candidate_prev_id": "",
+      "continuation_candidate_next_id": "",
+      "group_protected_source_text": "Geometry Optimization and Energy Calculation. The molecules and transition states were optimized at the gradient- corrected DFT level using the exchange functional of Becke27 and the correlation functional of Perdew28 (BP86). Relativistic effects were considered using the zeroth-order regular ap- proximation (ZORA).29 Uncontracted Slater-type orbitals (STOs) were used as basis functions for the SCF calculations.30 The basis functions at the metal have triple- \\xi quality, augmented with a set of 6p functions. The basis set at the other atoms has double- \\xi quality, augmented with a set of d-type polarization functions. The (1s)2 core electrons of C and O and the \\mathrm { ( 1 s 2 s 2 p 3 s 3 p 3 d 4 s 4 p 4 d ) ^ { 4 6 } } inner shells of Re were treated within the frozen-core approximation.31 An auxiliary basis set of s, p, d, f, and g STOs was utilized to fit the molecular densities and to represent the Coulomb and exchange potentials in each SCF cycle.32 This basis-set combination is denoted \\mathrm { I I I } \\sim . 22,23 Unless otherwise stated, energies reported refer to the BP86/III∼ level. The calculations were carried out using the ADF 2000 program package.34",
+      "group_formula_map": [],
+      "group_protected_map": [],
+      "group_protected_translated_text": "",
+      "group_translated_text": "",
+      "final_status": "kept_origin",
+      "translation_diagnostics": {},
+      "candidate_pair_prev_id": "",
+      "candidate_pair_next_id": ""
+    }
+  },
+  "replay_input": {
+    "job_root": "20260415003317-c856fe",
+    "job_id": "20260415003317-c856fe",
+    "item_id": "p002-b000",
+    "page_idx": 1,
+    "page_path": "translated/page-002-deepseek.json",
+    "spec": {
+      "mode": "sci",
+      "math_mode": "direct_typst",
+      "skip_title_translation": true,
+      "rule_profile_name": "general_sci",
+      "custom_rules_text": "",
+      "classify_batch_size": 12,
+      "workers": 100,
+      "model": "deepseek-chat",
+      "base_url": "https://api.deepseek.com/v1",
+      "glossary_entries": [],
+      "credential_ref": "env:RETAIN_TRANSLATION_API_KEY"
+    },
+    "page_payload": [
+      {
+        "item_id": "p002-b000",
+        "page_idx": 1,
+        "block_idx": 0,
+        "block_type": "text",
+        "bbox": [
+          50,
+          45,
+          295,
+          100
+        ],
+        "source_text": "to represent the Coulomb and exchange potentials in each SCF cycle.32 This basis-set combination is denoted \\mathrm { I I I } \\sim . 22,23 Unless otherwise stated, energies reported refer to the BP86/III∼ level. The calculations were carried out using the ADF 2000 program package.34",
+        "lines": [
+          {
+            "bbox": [
+              52,
+              45,
+              295,
+              56
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "to represent the Coulomb and exchange potentials in each SCF",
+                "bbox": [
+                  52,
+                  45,
+                  295,
+                  56
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              55,
+              296,
+              68
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "cycle.32 This basis-set combination is denoted",
+                "bbox": [
+                  52,
+                  55,
+                  230,
+                  68
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\mathrm { I I I } \\sim",
+                "bbox": [
+                  230,
+                  57,
+                  248,
+                  67
+                ]
+              },
+              {
+                "type": "text",
+                "content": ". 22,23 Unless",
+                "bbox": [
+                  249,
+                  55,
+                  296,
+                  68
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              67,
+              295,
+              79
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "otherwise stated, energies reported refer to the BP86/III∼ level.",
+                "bbox": [
+                  52,
+                  67,
+                  295,
+                  79
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              78,
+              294,
+              91
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "The calculations were carried out using the ADF 2000 program",
+                "bbox": [
+                  52,
+                  78,
+                  294,
+                  91
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              50,
+              89,
+              97,
+              102
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "package.34",
+                "bbox": [
+                  50,
+                  89,
+                  97,
+                  102
+                ]
+              }
+            ]
+          }
+        ],
+        "metadata": {
+          "ocr_sub_type": "body",
+          "normalized_sub_type": "body",
+          "structure_role": "body",
+          "raw_type": "text",
+          "tags": [],
+          "derived": {
+            "role": "",
+            "by": "",
+            "confidence": 0.0
+          },
+          "continuation_hint": {
+            "source": "",
+            "group_id": "",
+            "role": "",
+            "scope": "",
+            "reading_order": -1,
+            "confidence": 0.0
+          },
+          "source": {
+            "provider": "mineru",
+            "raw_page_index": 1,
+            "raw_path": "/pdf_info/1/para_blocks/0",
+            "raw_type": "text",
+            "raw_sub_type": "",
+            "raw_bbox": [
+              50,
+              45,
+              295,
+              100
+            ],
+            "raw_text_excerpt": "to represent the Coulomb and exchange potentials in each SCF cycle.32 This basis-set combination is denoted \\mathrm { I I I } \\sim . 22,23 Unless otherwise stated, energies reported refer to the BP86/"
+          },
+          "structure_group": "",
+          "pair_with": ""
+        },
+        "ocr_continuation_source": "",
+        "ocr_continuation_group_id": "",
+        "ocr_continuation_role": "",
+        "ocr_continuation_scope": "",
+        "ocr_continuation_reading_order": -1,
+        "ocr_continuation_confidence": 0.0,
+        "layout_mode": "single",
+        "layout_split_x": 0.0,
+        "layout_zone": "single_column",
+        "layout_zone_rank": 0,
+        "layout_zone_size": 5,
+        "layout_boundary_role": "head",
+        "math_mode": "direct_typst",
+        "protected_source_text": "to represent the Coulomb and exchange potentials in each SCF cycle.32 This basis-set combination is denoted \\mathrm { I I I } \\sim . 22,23 Unless otherwise stated, energies reported refer to the BP86/III∼ level. The calculations were carried out using the ADF 2000 program package.34",
+        "mixed_original_protected_source_text": "to represent the Coulomb and exchange potentials in each SCF cycle.32 This basis-set combination is denoted \\mathrm { I I I } \\sim . 22,23 Unless otherwise stated, energies reported refer to the BP86/III∼ level. The calculations were carried out using the ADF 2000 program package.34",
+        "formula_map": [],
+        "protected_map": [],
+        "classification_label": "skip_model_keep_origin",
+        "should_translate": false,
+        "skip_reason": "skip_model_keep_origin",
+        "mixed_literal_action": "",
+        "mixed_literal_prefix": "",
+        "translation_unit_id": "__cg__:cg-001-001",
+        "translation_unit_kind": "group",
+        "translation_unit_member_ids": [
+          "p001-b017",
+          "p002-b000"
+        ],
+        "translation_unit_protected_source_text": "Geometry Optimization and Energy Calculation. The molecules and transition states were optimized at the gradient- corrected DFT level using the exchange functional of Becke27 and the correlation functional of Perdew28 (BP86). Relativistic effects were considered using the zeroth-order regular ap- proximation (ZORA).29 Uncontracted Slater-type orbitals (STOs) were used as basis functions for the SCF calculations.30 The basis functions at the metal have triple- \\xi quality, augmented with a set of 6p functions. The basis set at the other atoms has double- \\xi quality, augmented with a set of d-type polarization functions. The (1s)2 core electrons of C and O and the \\mathrm { ( 1 s 2 s 2 p 3 s 3 p 3 d 4 s 4 p 4 d ) ^ { 4 6 } } inner shells of Re were treated within the frozen-core approximation.31 An auxiliary basis set of s, p, d, f, and g STOs was utilized to fit the molecular densities and to represent the Coulomb and exchange potentials in each SCF cycle.32 This basis-set combination is denoted \\mathrm { I I I } \\sim . 22,23 Unless otherwise stated, energies reported refer to the BP86/III∼ level. The calculations were carried out using the ADF 2000 program package.34",
+        "translation_unit_formula_map": [],
+        "translation_unit_protected_map": [],
+        "translation_unit_protected_translated_text": "",
+        "translation_unit_translated_text": "",
+        "protected_translated_text": "",
+        "translated_text": "",
+        "continuation_group": "cg-001-001",
+        "continuation_prev_text": "Geometry Optimization and Energy Calculation. The molecules and transition states were optimized at the gradient- corrected DFT level using the exchange functional of Becke27 and the correlation functional of Perdew28 (BP86). Relativistic effects were considered using the zeroth-order regular ap- proximation (ZORA).29 Uncontracted Slater-type orbitals (STOs) were used as basis functions for the SCF calculations.30 The basis functions at the metal have triple- \\xi quality, augmented with a set of 6p functions. The basis set at the other atoms has double- \\xi quality, augmented with a set of d-type polarization functions. The (1s)2 core electrons of C and O and the \\mathrm { ( 1 s 2 s 2 p 3 s 3 p 3 d 4 s 4 p 4 d ) ^ { 4 6 } } inner shells of Re were treated within the frozen-core approximation.31 An auxiliary basis set of s, p, d, f, and g STOs was utilized to fit the molecular densities and",
+        "continuation_next_text": "",
+        "continuation_decision": "joined",
+        "continuation_candidate_prev_id": "",
+        "continuation_candidate_next_id": "",
+        "group_protected_source_text": "Geometry Optimization and Energy Calculation. The molecules and transition states were optimized at the gradient- corrected DFT level using the exchange functional of Becke27 and the correlation functional of Perdew28 (BP86). Relativistic effects were considered using the zeroth-order regular ap- proximation (ZORA).29 Uncontracted Slater-type orbitals (STOs) were used as basis functions for the SCF calculations.30 The basis functions at the metal have triple- \\xi quality, augmented with a set of 6p functions. The basis set at the other atoms has double- \\xi quality, augmented with a set of d-type polarization functions. The (1s)2 core electrons of C and O and the \\mathrm { ( 1 s 2 s 2 p 3 s 3 p 3 d 4 s 4 p 4 d ) ^ { 4 6 } } inner shells of Re were treated within the frozen-core approximation.31 An auxiliary basis set of s, p, d, f, and g STOs was utilized to fit the molecular densities and to represent the Coulomb and exchange potentials in each SCF cycle.32 This basis-set combination is denoted \\mathrm { I I I } \\sim . 22,23 Unless otherwise stated, energies reported refer to the BP86/III∼ level. The calculations were carried out using the ADF 2000 program package.34",
+        "group_formula_map": [],
+        "group_protected_map": [],
+        "group_protected_translated_text": "",
+        "group_translated_text": "",
+        "final_status": "kept_origin",
+        "translation_diagnostics": {},
+        "candidate_pair_prev_id": "",
+        "candidate_pair_next_id": ""
+      },
+      {
+        "item_id": "p002-b001",
+        "page_idx": 1,
+        "block_idx": 1,
+        "block_type": "text",
+        "bbox": [
+          53,
+          100,
+          296,
+          563
+        ],
+        "source_text": "Electronic-Structure Analysis. For the calculation of atomic partial charges, the NPA method35 was employed. Donor -acceptor interactions in the transition states were examined using charge decomposition analysis (CDA).11 CDA was developed as a quantum-chemical interpretation of the Dewar Chatt - -Duncanson model,36 and it has mainly been applied to transition- metal complexes.37 The use of CDA for the analysis of olefin epoxidations was recently discovered.38 The Kohn Sham MOs -of a transition state are expressed as a linear combination of the MOs of the fragments ketene (denoted donor) and \\mathrm { X = Y } \\mathrm { C H } _ { 2 } { = } \\mathrm { C H } _ { 2 } , \\mathrm { C H } _ { 2 } { = } \\mathrm { O } , and \\mathrm { C p O } _ { 2 } \\mathrm { R e } { = } \\mathrm { O } , denoted acceptor) in the geometry of the TS. We define (i) the interaction among the occupied orbitals of ketene and the vacant orbitals of \\mathrm { X = Y } as donation d, (ii) the interaction among the occupied orbitals of \\mathrm { X = Y } and the vacant ketene orbitals as back-donation b , (iii) the interaction of the occupied orbitals of both fragments as repulsive polarization r, and (iv) the interaction of the vacant orbitals of both fragments as rest term \\Delta . This term will be approximately zero if the reaction is thermally symmetry- allowed. The CDA calculations were carried out with Gaussian 98 package39 and the CDA 2.1 program40 using basis set II.41 Energy decomposition of the TS was studied with the extended transition state method (ETS).12 The transition structures are again divided into the two fragments ketene and \\mathrm { X = Y } . The activation energy \\Delta E is the sum of the two contributions strain energy \\Delta E _ { \\mathrm { s t r } } and interaction energy \\Delta E _ { \\mathrm { i n t } } \\Delta E _ { \\mathrm { i n t } } \\left( \\Delta E = \\Delta E _ { \\mathrm { s t r } } + \\Delta E _ { \\mathrm { i n t } } \\right) . Strain energy \\Delta E _ { \\mathrm { s t r } } ) +is the difference between the energy of the isolated fragments in the TS geometry and their energy in the equilibrium geometry. \\Delta E _ { \\mathrm { i n t } } , , which is the energy of interaction between the fragments in the TS geometry, can in turn be partitioned into three components ( \\Delta E _ { \\mathrm { i n t } } = \\Delta E _ { \\mathrm { e l s t } } + \\Delta E _ { \\mathrm { P a u l i } } + \\Delta E _ { \\mathrm { o r b } } ) ). \\Delta E _ { \\mathrm { e l s t } } ) + +gives the electrostatic interaction energy between the fragments, which is calculated with a frozen electron-density distribution in the TS geometry. Pauli repulsion ( \\Delta E _ { \\mathrm { P a u l i } } ) considers the energy required for antisymmetrization and renormalization of the Kohn Sham orbitals of the superimpos- ing ketene and \\mathrm { X = Y } - fragments. \\Delta E _ { \\mathrm { P a u l i } } represents the repulsive interaction energy between the fragments which is caused by the fact that two electrons with the same spin cannot occupy the same region in space (Pauli principle). Finally, the stabilizing orbital-interaction term \\Delta E _ { \\mathrm { o r b } } is calculated with the Kohn Sham orbitals relaxing to their optimal form.",
+        "lines": [
+          {
+            "bbox": [
+              62,
+              102,
+              296,
+              114
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "Electronic-Structure Analysis. For the calculation of atomic",
+                "bbox": [
+                  62,
+                  102,
+                  296,
+                  114
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              50,
+              111,
+              296,
+              126
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "partial charges, the NPA method35 was employed. Donor",
+                "bbox": [
+                  50,
+                  111,
+                  296,
+                  126
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              50,
+              122,
+              296,
+              137
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "-acceptor interactions in the transition states were examined using",
+                "bbox": [
+                  50,
+                  122,
+                  296,
+                  137
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              50,
+              133,
+              296,
+              148
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "charge decomposition analysis (CDA).11 CDA was developed",
+                "bbox": [
+                  50,
+                  133,
+                  296,
+                  148
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              50,
+              145,
+              296,
+              158
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "as a quantum-chemical interpretation of the Dewar Chatt",
+                "bbox": [
+                  50,
+                  145,
+                  296,
+                  158
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              50,
+              154,
+              296,
+              170
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "- -Duncanson model,36 and it has mainly been applied to transition-",
+                "bbox": [
+                  50,
+                  154,
+                  296,
+                  170
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              166,
+              296,
+              179
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "metal complexes.37 The use of CDA for the analysis of olefin",
+                "bbox": [
+                  52,
+                  166,
+                  296,
+                  179
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              50,
+              177,
+              296,
+              190
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "epoxidations was recently discovered.38 The Kohn Sham MOs",
+                "bbox": [
+                  50,
+                  177,
+                  296,
+                  190
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              190,
+              296,
+              201
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "-of a transition state are expressed as a linear combination of",
+                "bbox": [
+                  52,
+                  190,
+                  296,
+                  201
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              200,
+              294,
+              213
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "the MOs of the fragments ketene (denoted donor) and",
+                "bbox": [
+                  52,
+                  200,
+                  271,
+                  213
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\mathrm { X = Y }",
+                "bbox": [
+                  271,
+                  200,
+                  294,
+                  210
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              56,
+              211,
+              296,
+              224
+            ],
+            "spans": [
+              {
+                "type": "inline_equation",
+                "content": "\\mathrm { C H } _ { 2 } { = } \\mathrm { C H } _ { 2 }",
+                "bbox": [
+                  56,
+                  211,
+                  97,
+                  222
+                ]
+              },
+              {
+                "type": "text",
+                "content": ",",
+                "bbox": [
+                  98,
+                  211,
+                  100,
+                  224
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\mathrm { C H } _ { 2 } { = } \\mathrm { O }",
+                "bbox": [
+                  100,
+                  212,
+                  133,
+                  222
+                ]
+              },
+              {
+                "type": "text",
+                "content": ", and",
+                "bbox": [
+                  134,
+                  211,
+                  152,
+                  224
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\mathrm { C p O } _ { 2 } \\mathrm { R e } { = } \\mathrm { O }",
+                "bbox": [
+                  152,
+                  212,
+                  199,
+                  222
+                ]
+              },
+              {
+                "type": "text",
+                "content": ", denoted acceptor) in the",
+                "bbox": [
+                  200,
+                  211,
+                  296,
+                  224
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              50,
+              221,
+              296,
+              236
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "geometry of the TS. We define (i) the interaction among the",
+                "bbox": [
+                  50,
+                  221,
+                  296,
+                  236
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              51,
+              233,
+              296,
+              246
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "occupied orbitals of ketene and the vacant orbitals of",
+                "bbox": [
+                  51,
+                  233,
+                  260,
+                  246
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\mathrm { X = Y }",
+                "bbox": [
+                  260,
+                  233,
+                  283,
+                  243
+                ]
+              },
+              {
+                "type": "text",
+                "content": "as",
+                "bbox": [
+                  284,
+                  233,
+                  296,
+                  246
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              51,
+              243,
+              296,
+              257
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "donation d, (ii) the interaction among the occupied orbitals of",
+                "bbox": [
+                  51,
+                  243,
+                  296,
+                  257
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              254,
+              296,
+              268
+            ],
+            "spans": [
+              {
+                "type": "inline_equation",
+                "content": "\\mathrm { X = Y }",
+                "bbox": [
+                  52,
+                  255,
+                  76,
+                  266
+                ]
+              },
+              {
+                "type": "text",
+                "content": "and the vacant ketene orbitals as back-donation",
+                "bbox": [
+                  77,
+                  254,
+                  268,
+                  268
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "b",
+                "bbox": [
+                  268,
+                  256,
+                  274,
+                  265
+                ]
+              },
+              {
+                "type": "text",
+                "content": ", (iii)",
+                "bbox": [
+                  274,
+                  254,
+                  296,
+                  268
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              50,
+              265,
+              297,
+              280
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "the interaction of the occupied orbitals of both fragments as",
+                "bbox": [
+                  50,
+                  265,
+                  297,
+                  280
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              51,
+              277,
+              296,
+              289
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "repulsive polarization r, and (iv) the interaction of the vacant",
+                "bbox": [
+                  51,
+                  277,
+                  296,
+                  289
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              288,
+              296,
+              300
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "orbitals of both fragments as rest term",
+                "bbox": [
+                  52,
+                  288,
+                  209,
+                  300
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\Delta",
+                "bbox": [
+                  210,
+                  289,
+                  218,
+                  297
+                ]
+              },
+              {
+                "type": "text",
+                "content": ". This term will be",
+                "bbox": [
+                  219,
+                  288,
+                  296,
+                  300
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              50,
+              298,
+              296,
+              312
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "approximately zero if the reaction is thermally symmetry-",
+                "bbox": [
+                  50,
+                  298,
+                  296,
+                  312
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              310,
+              296,
+              322
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "allowed. The CDA calculations were carried out with Gaussian",
+                "bbox": [
+                  52,
+                  310,
+                  296,
+                  322
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              50,
+              319,
+              296,
+              333
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "98 package39 and the CDA 2.1 program40 using basis set II.41",
+                "bbox": [
+                  50,
+                  319,
+                  296,
+                  333
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              331,
+              296,
+              344
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "Energy decomposition of the TS was studied with the extended",
+                "bbox": [
+                  52,
+                  331,
+                  296,
+                  344
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              50,
+              342,
+              296,
+              356
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "transition state method (ETS).12 The transition structures are",
+                "bbox": [
+                  50,
+                  342,
+                  296,
+                  356
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              50,
+              354,
+              297,
+              366
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "again divided into the two fragments ketene and",
+                "bbox": [
+                  50,
+                  354,
+                  249,
+                  366
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\mathrm { X = Y }",
+                "bbox": [
+                  250,
+                  354,
+                  272,
+                  364
+                ]
+              },
+              {
+                "type": "text",
+                "content": ". The",
+                "bbox": [
+                  273,
+                  354,
+                  297,
+                  366
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              365,
+              296,
+              376
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "activation energy",
+                "bbox": [
+                  52,
+                  365,
+                  121,
+                  376
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\Delta E",
+                "bbox": [
+                  121,
+                  365,
+                  135,
+                  375
+                ]
+              },
+              {
+                "type": "text",
+                "content": "is the sum of the two contributions strain",
+                "bbox": [
+                  136,
+                  365,
+                  296,
+                  376
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              50,
+              375,
+              296,
+              389
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "energy",
+                "bbox": [
+                  50,
+                  375,
+                  80,
+                  389
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\Delta E _ { \\mathrm { s t r } }",
+                "bbox": [
+                  81,
+                  376,
+                  101,
+                  387
+                ]
+              },
+              {
+                "type": "text",
+                "content": "and interaction energy",
+                "bbox": [
+                  102,
+                  375,
+                  188,
+                  389
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\Delta E _ { \\mathrm { i n t } }",
+                "bbox": [
+                  188,
+                  376,
+                  209,
+                  387
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\Delta E _ { \\mathrm { i n t } } \\left( \\Delta E = \\Delta E _ { \\mathrm { s t r } } + \\Delta E _ { \\mathrm { i n t } } \\right)",
+                "bbox": [
+                  190,
+                  376,
+                  291,
+                  387
+                ]
+              },
+              {
+                "type": "text",
+                "content": ".",
+                "bbox": [
+                  292,
+                  375,
+                  296,
+                  389
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              386,
+              296,
+              399
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "Strain energy",
+                "bbox": [
+                  52,
+                  386,
+                  107,
+                  399
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\Delta E _ { \\mathrm { s t r } }",
+                "bbox": [
+                  107,
+                  388,
+                  128,
+                  398
+                ]
+              },
+              {
+                "type": "text",
+                "content": ") +is the difference between the energy of the",
+                "bbox": [
+                  129,
+                  386,
+                  296,
+                  399
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              51,
+              397,
+              296,
+              411
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "isolated fragments in the TS geometry and their energy in the",
+                "bbox": [
+                  51,
+                  397,
+                  296,
+                  411
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              408,
+              296,
+              422
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "equilibrium geometry.",
+                "bbox": [
+                  52,
+                  408,
+                  140,
+                  422
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\Delta E _ { \\mathrm { i n t } } ,",
+                "bbox": [
+                  140,
+                  409,
+                  162,
+                  419
+                ]
+              },
+              {
+                "type": "text",
+                "content": ", which is the energy of interaction",
+                "bbox": [
+                  162,
+                  408,
+                  296,
+                  422
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              419,
+              296,
+              433
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "between the fragments in the TS geometry, can in turn be",
+                "bbox": [
+                  52,
+                  419,
+                  296,
+                  433
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              431,
+              294,
+              444
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "partitioned into three components",
+                "bbox": [
+                  52,
+                  431,
+                  187,
+                  444
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "( \\Delta E _ { \\mathrm { i n t } } = \\Delta E _ { \\mathrm { e l s t } } + \\Delta E _ { \\mathrm { P a u l i } } +",
+                "bbox": [
+                  187,
+                  431,
+                  294,
+                  441
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              53,
+              440,
+              297,
+              455
+            ],
+            "spans": [
+              {
+                "type": "inline_equation",
+                "content": "\\Delta E _ { \\mathrm { o r b } } )",
+                "bbox": [
+                  53,
+                  442,
+                  77,
+                  453
+                ]
+              },
+              {
+                "type": "text",
+                "content": ").",
+                "bbox": [
+                  77,
+                  440,
+                  82,
+                  455
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\Delta E _ { \\mathrm { e l s t } }",
+                "bbox": [
+                  82,
+                  442,
+                  106,
+                  453
+                ]
+              },
+              {
+                "type": "text",
+                "content": ") + +gives the electrostatic interaction energy between",
+                "bbox": [
+                  106,
+                  440,
+                  297,
+                  455
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              51,
+              452,
+              296,
+              466
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "the fragments, which is calculated with a frozen electron-density",
+                "bbox": [
+                  51,
+                  452,
+                  296,
+                  466
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              50,
+              462,
+              294,
+              478
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "distribution in the TS geometry. Pauli repulsion",
+                "bbox": [
+                  50,
+                  462,
+                  261,
+                  478
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "( \\Delta E _ { \\mathrm { P a u l i } } )",
+                "bbox": [
+                  262,
+                  464,
+                  294,
+                  475
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              475,
+              296,
+              487
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "considers the energy required for antisymmetrization and",
+                "bbox": [
+                  52,
+                  475,
+                  296,
+                  487
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              51,
+              485,
+              296,
+              498
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "renormalization of the Kohn Sham orbitals of the superimpos-",
+                "bbox": [
+                  51,
+                  485,
+                  296,
+                  498
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              496,
+              296,
+              510
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "ing ketene and",
+                "bbox": [
+                  52,
+                  496,
+                  110,
+                  510
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\mathrm { X = Y }",
+                "bbox": [
+                  110,
+                  497,
+                  133,
+                  507
+                ]
+              },
+              {
+                "type": "text",
+                "content": "- fragments.",
+                "bbox": [
+                  134,
+                  496,
+                  176,
+                  510
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\Delta E _ { \\mathrm { P a u l i } }",
+                "bbox": [
+                  176,
+                  497,
+                  204,
+                  507
+                ]
+              },
+              {
+                "type": "text",
+                "content": "represents the repulsive",
+                "bbox": [
+                  204,
+                  496,
+                  296,
+                  510
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              507,
+              296,
+              521
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "interaction energy between the fragments which is caused by",
+                "bbox": [
+                  52,
+                  507,
+                  296,
+                  521
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              51,
+              517,
+              296,
+              533
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "the fact that two electrons with the same spin cannot occupy",
+                "bbox": [
+                  51,
+                  517,
+                  296,
+                  533
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              529,
+              296,
+              543
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "the same region in space (Pauli principle). Finally, the stabilizing",
+                "bbox": [
+                  52,
+                  529,
+                  296,
+                  543
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              540,
+              296,
+              553
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "orbital-interaction term",
+                "bbox": [
+                  52,
+                  540,
+                  141,
+                  553
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\Delta E _ { \\mathrm { o r b } }",
+                "bbox": [
+                  141,
+                  541,
+                  164,
+                  551
+                ]
+              },
+              {
+                "type": "text",
+                "content": "is calculated with the Kohn Sham",
+                "bbox": [
+                  164,
+                  540,
+                  296,
+                  553
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              552,
+              205,
+              563
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "orbitals relaxing to their optimal form.",
+                "bbox": [
+                  52,
+                  552,
+                  205,
+                  563
+                ]
+              }
+            ]
+          }
+        ],
+        "metadata": {
+          "ocr_sub_type": "body",
+          "normalized_sub_type": "body",
+          "structure_role": "body",
+          "raw_type": "text",
+          "tags": [],
+          "derived": {
+            "role": "",
+            "by": "",
+            "confidence": 0.0
+          },
+          "continuation_hint": {
+            "source": "",
+            "group_id": "",
+            "role": "",
+            "scope": "",
+            "reading_order": -1,
+            "confidence": 0.0
+          },
+          "source": {
+            "provider": "mineru",
+            "raw_page_index": 1,
+            "raw_path": "/pdf_info/1/para_blocks/1",
+            "raw_type": "text",
+            "raw_sub_type": "",
+            "raw_bbox": [
+              53,
+              100,
+              296,
+              563
+            ],
+            "raw_text_excerpt": "Electronic-Structure Analysis. For the calculation of atomic partial charges, the NPA method35 was employed. Donor -acceptor interactions in the transition states were examined using charge decomposit"
+          },
+          "structure_group": "",
+          "pair_with": ""
+        },
+        "ocr_continuation_source": "",
+        "ocr_continuation_group_id": "",
+        "ocr_continuation_role": "",
+        "ocr_continuation_scope": "",
+        "ocr_continuation_reading_order": -1,
+        "ocr_continuation_confidence": 0.0,
+        "layout_mode": "single",
+        "layout_split_x": 0.0,
+        "layout_zone": "single_column",
+        "layout_zone_rank": 1,
+        "layout_zone_size": 5,
+        "layout_boundary_role": "middle",
+        "math_mode": "direct_typst",
+        "protected_source_text": "Electronic-Structure Analysis. For the calculation of atomic partial charges, the NPA method35 was employed. Donor -acceptor interactions in the transition states were examined using charge decomposition analysis (CDA).11 CDA was developed as a quantum-chemical interpretation of the Dewar Chatt - -Duncanson model,36 and it has mainly been applied to transition- metal complexes.37 The use of CDA for the analysis of olefin epoxidations was recently discovered.38 The Kohn Sham MOs -of a transition state are expressed as a linear combination of the MOs of the fragments ketene (denoted donor) and \\mathrm { X = Y } \\mathrm { C H } _ { 2 } { = } \\mathrm { C H } _ { 2 } , \\mathrm { C H } _ { 2 } { = } \\mathrm { O } , and \\mathrm { C p O } _ { 2 } \\mathrm { R e } { = } \\mathrm { O } , denoted acceptor) in the geometry of the TS. We define (i) the interaction among the occupied orbitals of ketene and the vacant orbitals of \\mathrm { X = Y } as donation d, (ii) the interaction among the occupied orbitals of \\mathrm { X = Y } and the vacant ketene orbitals as back-donation b , (iii) the interaction of the occupied orbitals of both fragments as repulsive polarization r, and (iv) the interaction of the vacant orbitals of both fragments as rest term \\Delta . This term will be approximately zero if the reaction is thermally symmetry- allowed. The CDA calculations were carried out with Gaussian 98 package39 and the CDA 2.1 program40 using basis set II.41 Energy decomposition of the TS was studied with the extended transition state method (ETS).12 The transition structures are again divided into the two fragments ketene and \\mathrm { X = Y } . The activation energy \\Delta E is the sum of the two contributions strain energy \\Delta E _ { \\mathrm { s t r } } and interaction energy \\Delta E _ { \\mathrm { i n t } } \\Delta E _ { \\mathrm { i n t } } \\left( \\Delta E = \\Delta E _ { \\mathrm { s t r } } + \\Delta E _ { \\mathrm { i n t } } \\right) . Strain energy \\Delta E _ { \\mathrm { s t r } } ) +is the difference between the energy of the isolated fragments in the TS geometry and their energy in the equilibrium geometry. \\Delta E _ { \\mathrm { i n t } } , , which is the energy of interaction between the fragments in the TS geometry, can in turn be partitioned into three components ( \\Delta E _ { \\mathrm { i n t } } = \\Delta E _ { \\mathrm { e l s t } } + \\Delta E _ { \\mathrm { P a u l i } } + \\Delta E _ { \\mathrm { o r b } } ) ). \\Delta E _ { \\mathrm { e l s t } } ) + +gives the electrostatic interaction energy between the fragments, which is calculated with a frozen electron-density distribution in the TS geometry. Pauli repulsion ( \\Delta E _ { \\mathrm { P a u l i } } ) considers the energy required for antisymmetrization and renormalization of the Kohn Sham orbitals of the superimpos- ing ketene and \\mathrm { X = Y } - fragments. \\Delta E _ { \\mathrm { P a u l i } } represents the repulsive interaction energy between the fragments which is caused by the fact that two electrons with the same spin cannot occupy the same region in space (Pauli principle). Finally, the stabilizing orbital-interaction term \\Delta E _ { \\mathrm { o r b } } is calculated with the Kohn Sham orbitals relaxing to their optimal form.",
+        "mixed_original_protected_source_text": "Electronic-Structure Analysis. For the calculation of atomic partial charges, the NPA method35 was employed. Donor -acceptor interactions in the transition states were examined using charge decomposition analysis (CDA).11 CDA was developed as a quantum-chemical interpretation of the Dewar Chatt - -Duncanson model,36 and it has mainly been applied to transition- metal complexes.37 The use of CDA for the analysis of olefin epoxidations was recently discovered.38 The Kohn Sham MOs -of a transition state are expressed as a linear combination of the MOs of the fragments ketene (denoted donor) and \\mathrm { X = Y } \\mathrm { C H } _ { 2 } { = } \\mathrm { C H } _ { 2 } , \\mathrm { C H } _ { 2 } { = } \\mathrm { O } , and \\mathrm { C p O } _ { 2 } \\mathrm { R e } { = } \\mathrm { O } , denoted acceptor) in the geometry of the TS. We define (i) the interaction among the occupied orbitals of ketene and the vacant orbitals of \\mathrm { X = Y } as donation d, (ii) the interaction among the occupied orbitals of \\mathrm { X = Y } and the vacant ketene orbitals as back-donation b , (iii) the interaction of the occupied orbitals of both fragments as repulsive polarization r, and (iv) the interaction of the vacant orbitals of both fragments as rest term \\Delta . This term will be approximately zero if the reaction is thermally symmetry- allowed. The CDA calculations were carried out with Gaussian 98 package39 and the CDA 2.1 program40 using basis set II.41 Energy decomposition of the TS was studied with the extended transition state method (ETS).12 The transition structures are again divided into the two fragments ketene and \\mathrm { X = Y } . The activation energy \\Delta E is the sum of the two contributions strain energy \\Delta E _ { \\mathrm { s t r } } and interaction energy \\Delta E _ { \\mathrm { i n t } } \\Delta E _ { \\mathrm { i n t } } \\left( \\Delta E = \\Delta E _ { \\mathrm { s t r } } + \\Delta E _ { \\mathrm { i n t } } \\right) . Strain energy \\Delta E _ { \\mathrm { s t r } } ) +is the difference between the energy of the isolated fragments in the TS geometry and their energy in the equilibrium geometry. \\Delta E _ { \\mathrm { i n t } } , , which is the energy of interaction between the fragments in the TS geometry, can in turn be partitioned into three components ( \\Delta E _ { \\mathrm { i n t } } = \\Delta E _ { \\mathrm { e l s t } } + \\Delta E _ { \\mathrm { P a u l i } } + \\Delta E _ { \\mathrm { o r b } } ) ). \\Delta E _ { \\mathrm { e l s t } } ) + +gives the electrostatic interaction energy between the fragments, which is calculated with a frozen electron-density distribution in the TS geometry. Pauli repulsion ( \\Delta E _ { \\mathrm { P a u l i } } ) considers the energy required for antisymmetrization and renormalization of the Kohn Sham orbitals of the superimpos- ing ketene and \\mathrm { X = Y } - fragments. \\Delta E _ { \\mathrm { P a u l i } } represents the repulsive interaction energy between the fragments which is caused by the fact that two electrons with the same spin cannot occupy the same region in space (Pauli principle). Finally, the stabilizing orbital-interaction term \\Delta E _ { \\mathrm { o r b } } is calculated with the Kohn Sham orbitals relaxing to their optimal form.",
+        "formula_map": [],
+        "protected_map": [],
+        "classification_label": "",
+        "should_translate": true,
+        "skip_reason": "",
+        "mixed_literal_action": "",
+        "mixed_literal_prefix": "",
+        "translation_unit_id": "p002-b001",
+        "translation_unit_kind": "single",
+        "translation_unit_member_ids": [
+          "p002-b001"
+        ],
+        "translation_unit_protected_source_text": "Electronic-Structure Analysis. For the calculation of atomic partial charges, the NPA method35 was employed. Donor -acceptor interactions in the transition states were examined using charge decomposition analysis (CDA).11 CDA was developed as a quantum-chemical interpretation of the Dewar Chatt - -Duncanson model,36 and it has mainly been applied to transition- metal complexes.37 The use of CDA for the analysis of olefin epoxidations was recently discovered.38 The Kohn Sham MOs -of a transition state are expressed as a linear combination of the MOs of the fragments ketene (denoted donor) and \\mathrm { X = Y } \\mathrm { C H } _ { 2 } { = } \\mathrm { C H } _ { 2 } , \\mathrm { C H } _ { 2 } { = } \\mathrm { O } , and \\mathrm { C p O } _ { 2 } \\mathrm { R e } { = } \\mathrm { O } , denoted acceptor) in the geometry of the TS. We define (i) the interaction among the occupied orbitals of ketene and the vacant orbitals of \\mathrm { X = Y } as donation d, (ii) the interaction among the occupied orbitals of \\mathrm { X = Y } and the vacant ketene orbitals as back-donation b , (iii) the interaction of the occupied orbitals of both fragments as repulsive polarization r, and (iv) the interaction of the vacant orbitals of both fragments as rest term \\Delta . This term will be approximately zero if the reaction is thermally symmetry- allowed. The CDA calculations were carried out with Gaussian 98 package39 and the CDA 2.1 program40 using basis set II.41 Energy decomposition of the TS was studied with the extended transition state method (ETS).12 The transition structures are again divided into the two fragments ketene and \\mathrm { X = Y } . The activation energy \\Delta E is the sum of the two contributions strain energy \\Delta E _ { \\mathrm { s t r } } and interaction energy \\Delta E _ { \\mathrm { i n t } } \\Delta E _ { \\mathrm { i n t } } \\left( \\Delta E = \\Delta E _ { \\mathrm { s t r } } + \\Delta E _ { \\mathrm { i n t } } \\right) . Strain energy \\Delta E _ { \\mathrm { s t r } } ) +is the difference between the energy of the isolated fragments in the TS geometry and their energy in the equilibrium geometry. \\Delta E _ { \\mathrm { i n t } } , , which is the energy of interaction between the fragments in the TS geometry, can in turn be partitioned into three components ( \\Delta E _ { \\mathrm { i n t } } = \\Delta E _ { \\mathrm { e l s t } } + \\Delta E _ { \\mathrm { P a u l i } } + \\Delta E _ { \\mathrm { o r b } } ) ). \\Delta E _ { \\mathrm { e l s t } } ) + +gives the electrostatic interaction energy between the fragments, which is calculated with a frozen electron-density distribution in the TS geometry. Pauli repulsion ( \\Delta E _ { \\mathrm { P a u l i } } ) considers the energy required for antisymmetrization and renormalization of the Kohn Sham orbitals of the superimpos- ing ketene and \\mathrm { X = Y } - fragments. \\Delta E _ { \\mathrm { P a u l i } } represents the repulsive interaction energy between the fragments which is caused by the fact that two electrons with the same spin cannot occupy the same region in space (Pauli principle). Finally, the stabilizing orbital-interaction term \\Delta E _ { \\mathrm { o r b } } is calculated with the Kohn Sham orbitals relaxing to their optimal form.",
+        "translation_unit_formula_map": [],
+        "translation_unit_protected_map": [],
+        "translation_unit_protected_translated_text": "电子结构分析。为计算原子部分电荷，采用了NPA方法$^{35}$。使用电荷分解分析（CDA）$^{11}$研究了过渡态中的给体-受体相互作用。CDA是作为Dewar-Chatt-Duncanson模型$^{36}$的量子化学解释而发展起来的，主要应用于过渡金属配合物$^{37}$。最近发现CDA可用于分析烯烃环氧化反应$^{38}$。过渡态的Kohn-Sham分子轨道表示为片段乙烯酮（记为给体）和$\\mathrm{X=Y}$（$\\mathrm{CH_2=CH_2}$、$\\mathrm{CH_2=O}$和$\\mathrm{CpO_2Re=O}$，记为受体）在过渡态几何结构下的分子轨道的线性组合。我们定义：(i) 乙烯酮的占据轨道与$\\mathrm{X=Y}$的空轨道之间的相互作用为给电子作用$d$；(ii) $\\mathrm{X=Y}$的占据轨道与乙烯酮的空轨道之间的相互作用为反键给电子作用$b$；(iii) 两个片段的占据轨道之间的相互作用为排斥性极化$r$；(iv) 两个片段的空轨道之间的相互作用为剩余项$\\Delta$。如果反应是热对称性允许的，此项近似为零。CDA计算使用Gaussian 98软件包$^{39}$和CDA 2.1程序$^{40}$，并采用基组II$^{41}$进行。使用扩展过渡态方法（ETS）$^{12}$研究了过渡态的能量分解。过渡结构再次被划分为乙烯酮和$\\mathrm{X=Y}$两个片段。活化能$\\Delta E$是应变能$\\Delta E_{\\mathrm{str}}$和相互作用能$\\Delta E_{\\mathrm{int}}$两项贡献之和（$\\Delta E = \\Delta E_{\\mathrm{str}} + \\Delta E_{\\mathrm{int}}$）。应变能$\\Delta E_{\\mathrm{str}}$是孤立片段在过渡态几何结构下的能量与其在平衡几何结构下的能量之差。相互作用能$\\Delta E_{\\mathrm{int}}$，即片段在过渡态几何结构下的相互作用能，又可分解为三个分量（$\\Delta E_{\\mathrm{int}} = \\Delta E_{\\mathrm{elst}} + \\Delta E_{\\mathrm{Pauli}} + \\Delta E_{\\mathrm{orb}}$）。$\\Delta E_{\\mathrm{elst}}$给出片段间的静电相互作用能，这是在过渡态几何结构下使用冻结电子密度分布计算的。Pauli排斥（$\\Delta E_{\\mathrm{Pauli}}$）考虑了叠加的乙烯酮和$\\mathrm{X=Y}$片段的Kohn-Sham轨道的反对称化和重归一化所需的能量。$\\Delta E_{\\mathrm{Pauli}}$代表片段间的排斥相互作用能，这是由于两个自旋相同的电子不能占据空间的同一区域（Pauli原理）所导致的。最后，稳定的轨道相互作用项$\\Delta E_{\\mathrm{orb}}$是通过Kohn-Sham轨道弛豫到其最优形式来计算的。",
+        "translation_unit_translated_text": "电子结构分析。为计算原子部分电荷，采用了NPA方法$^{35}$。使用电荷分解分析（CDA）$^{11}$研究了过渡态中的给体-受体相互作用。CDA是作为Dewar-Chatt-Duncanson模型$^{36}$的量子化学解释而发展起来的，主要应用于过渡金属配合物$^{37}$。最近发现CDA可用于分析烯烃环氧化反应$^{38}$。过渡态的Kohn-Sham分子轨道表示为片段乙烯酮（记为给体）和$\\mathrm{X=Y}$（$\\mathrm{CH_2=CH_2}$、$\\mathrm{CH_2=O}$和$\\mathrm{CpO_2Re=O}$，记为受体）在过渡态几何结构下的分子轨道的线性组合。我们定义：(i) 乙烯酮的占据轨道与$\\mathrm{X=Y}$的空轨道之间的相互作用为给电子作用$d$；(ii) $\\mathrm{X=Y}$的占据轨道与乙烯酮的空轨道之间的相互作用为反键给电子作用$b$；(iii) 两个片段的占据轨道之间的相互作用为排斥性极化$r$；(iv) 两个片段的空轨道之间的相互作用为剩余项$\\Delta$。如果反应是热对称性允许的，此项近似为零。CDA计算使用Gaussian 98软件包$^{39}$和CDA 2.1程序$^{40}$，并采用基组II$^{41}$进行。使用扩展过渡态方法（ETS）$^{12}$研究了过渡态的能量分解。过渡结构再次被划分为乙烯酮和$\\mathrm{X=Y}$两个片段。活化能$\\Delta E$是应变能$\\Delta E_{\\mathrm{str}}$和相互作用能$\\Delta E_{\\mathrm{int}}$两项贡献之和（$\\Delta E = \\Delta E_{\\mathrm{str}} + \\Delta E_{\\mathrm{int}}$）。应变能$\\Delta E_{\\mathrm{str}}$是孤立片段在过渡态几何结构下的能量与其在平衡几何结构下的能量之差。相互作用能$\\Delta E_{\\mathrm{int}}$，即片段在过渡态几何结构下的相互作用能，又可分解为三个分量（$\\Delta E_{\\mathrm{int}} = \\Delta E_{\\mathrm{elst}} + \\Delta E_{\\mathrm{Pauli}} + \\Delta E_{\\mathrm{orb}}$）。$\\Delta E_{\\mathrm{elst}}$给出片段间的静电相互作用能，这是在过渡态几何结构下使用冻结电子密度分布计算的。Pauli排斥（$\\Delta E_{\\mathrm{Pauli}}$）考虑了叠加的乙烯酮和$\\mathrm{X=Y}$片段的Kohn-Sham轨道的反对称化和重归一化所需的能量。$\\Delta E_{\\mathrm{Pauli}}$代表片段间的排斥相互作用能，这是由于两个自旋相同的电子不能占据空间的同一区域（Pauli原理）所导致的。最后，稳定的轨道相互作用项$\\Delta E_{\\mathrm{orb}}$是通过Kohn-Sham轨道弛豫到其最优形式来计算的。",
+        "protected_translated_text": "电子结构分析。为计算原子部分电荷，采用了NPA方法$^{35}$。使用电荷分解分析（CDA）$^{11}$研究了过渡态中的给体-受体相互作用。CDA是作为Dewar-Chatt-Duncanson模型$^{36}$的量子化学解释而发展起来的，主要应用于过渡金属配合物$^{37}$。最近发现CDA可用于分析烯烃环氧化反应$^{38}$。过渡态的Kohn-Sham分子轨道表示为片段乙烯酮（记为给体）和$\\mathrm{X=Y}$（$\\mathrm{CH_2=CH_2}$、$\\mathrm{CH_2=O}$和$\\mathrm{CpO_2Re=O}$，记为受体）在过渡态几何结构下的分子轨道的线性组合。我们定义：(i) 乙烯酮的占据轨道与$\\mathrm{X=Y}$的空轨道之间的相互作用为给电子作用$d$；(ii) $\\mathrm{X=Y}$的占据轨道与乙烯酮的空轨道之间的相互作用为反键给电子作用$b$；(iii) 两个片段的占据轨道之间的相互作用为排斥性极化$r$；(iv) 两个片段的空轨道之间的相互作用为剩余项$\\Delta$。如果反应是热对称性允许的，此项近似为零。CDA计算使用Gaussian 98软件包$^{39}$和CDA 2.1程序$^{40}$，并采用基组II$^{41}$进行。使用扩展过渡态方法（ETS）$^{12}$研究了过渡态的能量分解。过渡结构再次被划分为乙烯酮和$\\mathrm{X=Y}$两个片段。活化能$\\Delta E$是应变能$\\Delta E_{\\mathrm{str}}$和相互作用能$\\Delta E_{\\mathrm{int}}$两项贡献之和（$\\Delta E = \\Delta E_{\\mathrm{str}} + \\Delta E_{\\mathrm{int}}$）。应变能$\\Delta E_{\\mathrm{str}}$是孤立片段在过渡态几何结构下的能量与其在平衡几何结构下的能量之差。相互作用能$\\Delta E_{\\mathrm{int}}$，即片段在过渡态几何结构下的相互作用能，又可分解为三个分量（$\\Delta E_{\\mathrm{int}} = \\Delta E_{\\mathrm{elst}} + \\Delta E_{\\mathrm{Pauli}} + \\Delta E_{\\mathrm{orb}}$）。$\\Delta E_{\\mathrm{elst}}$给出片段间的静电相互作用能，这是在过渡态几何结构下使用冻结电子密度分布计算的。Pauli排斥（$\\Delta E_{\\mathrm{Pauli}}$）考虑了叠加的乙烯酮和$\\mathrm{X=Y}$片段的Kohn-Sham轨道的反对称化和重归一化所需的能量。$\\Delta E_{\\mathrm{Pauli}}$代表片段间的排斥相互作用能，这是由于两个自旋相同的电子不能占据空间的同一区域（Pauli原理）所导致的。最后，稳定的轨道相互作用项$\\Delta E_{\\mathrm{orb}}$是通过Kohn-Sham轨道弛豫到其最优形式来计算的。",
+        "translated_text": "电子结构分析。为计算原子部分电荷，采用了NPA方法$^{35}$。使用电荷分解分析（CDA）$^{11}$研究了过渡态中的给体-受体相互作用。CDA是作为Dewar-Chatt-Duncanson模型$^{36}$的量子化学解释而发展起来的，主要应用于过渡金属配合物$^{37}$。最近发现CDA可用于分析烯烃环氧化反应$^{38}$。过渡态的Kohn-Sham分子轨道表示为片段乙烯酮（记为给体）和$\\mathrm{X=Y}$（$\\mathrm{CH_2=CH_2}$、$\\mathrm{CH_2=O}$和$\\mathrm{CpO_2Re=O}$，记为受体）在过渡态几何结构下的分子轨道的线性组合。我们定义：(i) 乙烯酮的占据轨道与$\\mathrm{X=Y}$的空轨道之间的相互作用为给电子作用$d$；(ii) $\\mathrm{X=Y}$的占据轨道与乙烯酮的空轨道之间的相互作用为反键给电子作用$b$；(iii) 两个片段的占据轨道之间的相互作用为排斥性极化$r$；(iv) 两个片段的空轨道之间的相互作用为剩余项$\\Delta$。如果反应是热对称性允许的，此项近似为零。CDA计算使用Gaussian 98软件包$^{39}$和CDA 2.1程序$^{40}$，并采用基组II$^{41}$进行。使用扩展过渡态方法（ETS）$^{12}$研究了过渡态的能量分解。过渡结构再次被划分为乙烯酮和$\\mathrm{X=Y}$两个片段。活化能$\\Delta E$是应变能$\\Delta E_{\\mathrm{str}}$和相互作用能$\\Delta E_{\\mathrm{int}}$两项贡献之和（$\\Delta E = \\Delta E_{\\mathrm{str}} + \\Delta E_{\\mathrm{int}}$）。应变能$\\Delta E_{\\mathrm{str}}$是孤立片段在过渡态几何结构下的能量与其在平衡几何结构下的能量之差。相互作用能$\\Delta E_{\\mathrm{int}}$，即片段在过渡态几何结构下的相互作用能，又可分解为三个分量（$\\Delta E_{\\mathrm{int}} = \\Delta E_{\\mathrm{elst}} + \\Delta E_{\\mathrm{Pauli}} + \\Delta E_{\\mathrm{orb}}$）。$\\Delta E_{\\mathrm{elst}}$给出片段间的静电相互作用能，这是在过渡态几何结构下使用冻结电子密度分布计算的。Pauli排斥（$\\Delta E_{\\mathrm{Pauli}}$）考虑了叠加的乙烯酮和$\\mathrm{X=Y}$片段的Kohn-Sham轨道的反对称化和重归一化所需的能量。$\\Delta E_{\\mathrm{Pauli}}$代表片段间的排斥相互作用能，这是由于两个自旋相同的电子不能占据空间的同一区域（Pauli原理）所导致的。最后，稳定的轨道相互作用项$\\Delta E_{\\mathrm{orb}}$是通过Kohn-Sham轨道弛豫到其最优形式来计算的。",
+        "continuation_group": "",
+        "continuation_prev_text": "",
+        "continuation_next_text": "",
+        "continuation_decision": "",
+        "continuation_candidate_prev_id": "",
+        "continuation_candidate_next_id": "",
+        "group_protected_source_text": "",
+        "group_formula_map": [],
+        "group_protected_map": [],
+        "group_protected_translated_text": "",
+        "group_translated_text": "",
+        "final_status": "translated",
+        "translation_diagnostics": {
+          "item_id": "p002-b001",
+          "page_idx": 1,
+          "route_path": [
+            "block_level",
+            "direct_typst"
+          ],
+          "output_mode_path": [
+            "plain_text"
+          ],
+          "fallback_to": "",
+          "degradation_reason": "",
+          "final_status": "translated"
+        },
+        "candidate_pair_prev_id": "",
+        "candidate_pair_next_id": ""
+      },
+      {
+        "item_id": "p002-b002",
+        "page_idx": 1,
+        "block_idx": 2,
+        "block_type": "title",
+        "bbox": [
+          52,
+          574,
+          149,
+          586
+        ],
+        "source_text": "Results and Discussion",
+        "lines": [
+          {
+            "bbox": [
+              53,
+              574,
+              149,
+              586
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "Results and Discussion",
+                "bbox": [
+                  53,
+                  574,
+                  149,
+                  586
+                ]
+              }
+            ]
+          }
+        ],
+        "metadata": {
+          "ocr_sub_type": "title",
+          "normalized_sub_type": "title",
+          "structure_role": "title",
+          "raw_type": "title",
+          "tags": [],
+          "derived": {
+            "role": "",
+            "by": "",
+            "confidence": 0.0
+          },
+          "continuation_hint": {
+            "source": "",
+            "group_id": "",
+            "role": "",
+            "scope": "",
+            "reading_order": -1,
+            "confidence": 0.0
+          },
+          "source": {
+            "provider": "mineru",
+            "raw_page_index": 1,
+            "raw_path": "/pdf_info/1/para_blocks/2",
+            "raw_type": "title",
+            "raw_sub_type": "",
+            "raw_bbox": [
+              52,
+              574,
+              149,
+              586
+            ],
+            "raw_text_excerpt": "Results and Discussion"
+          },
+          "structure_group": "",
+          "pair_with": ""
+        },
+        "ocr_continuation_source": "",
+        "ocr_continuation_group_id": "",
+        "ocr_continuation_role": "",
+        "ocr_continuation_scope": "",
+        "ocr_continuation_reading_order": -1,
+        "ocr_continuation_confidence": 0.0,
+        "layout_mode": "single",
+        "layout_split_x": 0.0,
+        "layout_zone": "single_column",
+        "layout_zone_rank": 2,
+        "layout_zone_size": 5,
+        "layout_boundary_role": "middle",
+        "math_mode": "direct_typst",
+        "protected_source_text": "Results and Discussion",
+        "mixed_original_protected_source_text": "Results and Discussion",
+        "formula_map": [],
+        "protected_map": [],
+        "classification_label": "skip_title",
+        "should_translate": false,
+        "skip_reason": "skip_title",
+        "mixed_literal_action": "",
+        "mixed_literal_prefix": "",
+        "translation_unit_id": "p002-b002",
+        "translation_unit_kind": "single",
+        "translation_unit_member_ids": [
+          "p002-b002"
+        ],
+        "translation_unit_protected_source_text": "Results and Discussion",
+        "translation_unit_formula_map": [],
+        "translation_unit_protected_map": [],
+        "translation_unit_protected_translated_text": "Results and Discussion",
+        "translation_unit_translated_text": "Results and Discussion",
+        "protected_translated_text": "Results and Discussion",
+        "translated_text": "Results and Discussion",
+        "continuation_group": "",
+        "continuation_prev_text": "",
+        "continuation_next_text": "",
+        "continuation_decision": "",
+        "continuation_candidate_prev_id": "",
+        "continuation_candidate_next_id": "",
+        "group_protected_source_text": "",
+        "group_formula_map": [],
+        "group_protected_map": [],
+        "group_protected_translated_text": "",
+        "group_translated_text": "",
+        "final_status": "",
+        "translation_diagnostics": {},
+        "candidate_pair_prev_id": "",
+        "candidate_pair_next_id": ""
+      },
+      {
+        "item_id": "p002-b003",
+        "page_idx": 1,
+        "block_idx": 3,
+        "block_type": "text",
+        "bbox": [
+          50,
+          593,
+          295,
+          758
+        ],
+        "source_text": "Structures and Energies. The optimized geometries of the reactants and transition states for the [ 2 + 2 ] additions of \\mathrm { C H } _ { 2 } { = } \\mathrm { C H } _ { 2 } , \\mathrm { C H } _ { 2 } { = } \\mathrm { O } , and \\mathrm { C p O } _ { 2 } \\mathrm { R e } { = } \\mathrm { O } + across the \\mathrm { C } { = } \\mathrm { C } moiety of ketene are shown in Figure 2. Additional structural data are provided in Table 1. We focus on a brief comparison of the three transition structures, since the reactions were already separately studied using quantum-chemical methods, and ge- ometries in good agreement with the results of the current work were predicted.4,5,22 The transition-state geometry for the reaction of ethylene indicates a highly asynchronous reaction with the \\mathrm { C 4 { - } C 1 } bond to the central carbon of ketene being formed first. -It is interesting to note that the C1 C3 distance in the TS is -much shorter than the C2 C3 distance, although a bond will -be formed between the latter two atoms during the reaction. The C1 O1 bond is elongated compared to this distance in free",
+        "lines": [
+          {
+            "bbox": [
+              62,
+              594,
+              295,
+              604
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "Structures and Energies. The optimized geometries of the",
+                "bbox": [
+                  62,
+                  594,
+                  295,
+                  604
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              604,
+              296,
+              614
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "reactants and transition states for the",
+                "bbox": [
+                  52,
+                  604,
+                  192,
+                  614
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "[ 2 + 2 ]",
+                "bbox": [
+                  192,
+                  604,
+                  221,
+                  614
+                ]
+              },
+              {
+                "type": "text",
+                "content": "additions of",
+                "bbox": [
+                  221,
+                  604,
+                  268,
+                  614
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\mathrm { C H } _ { 2 } { = }",
+                "bbox": [
+                  269,
+                  604,
+                  296,
+                  614
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              53,
+              614,
+              296,
+              626
+            ],
+            "spans": [
+              {
+                "type": "inline_equation",
+                "content": "\\mathrm { C H } _ { 2 }",
+                "bbox": [
+                  53,
+                  615,
+                  70,
+                  625
+                ]
+              },
+              {
+                "type": "text",
+                "content": ",",
+                "bbox": [
+                  71,
+                  614,
+                  76,
+                  626
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\mathrm { C H } _ { 2 } { = } \\mathrm { O }",
+                "bbox": [
+                  76,
+                  615,
+                  109,
+                  625
+                ]
+              },
+              {
+                "type": "text",
+                "content": ", and",
+                "bbox": [
+                  109,
+                  614,
+                  132,
+                  626
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\mathrm { C p O } _ { 2 } \\mathrm { R e } { = } \\mathrm { O }",
+                "bbox": [
+                  133,
+                  615,
+                  181,
+                  626
+                ]
+              },
+              {
+                "type": "text",
+                "content": "+ across the",
+                "bbox": [
+                  182,
+                  614,
+                  228,
+                  626
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\mathrm { C } { = } \\mathrm { C }",
+                "bbox": [
+                  228,
+                  615,
+                  251,
+                  625
+                ]
+              },
+              {
+                "type": "text",
+                "content": "moiety of",
+                "bbox": [
+                  252,
+                  614,
+                  296,
+                  626
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              625,
+              295,
+              636
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "ketene are shown in Figure 2. Additional structural data are",
+                "bbox": [
+                  52,
+                  625,
+                  295,
+                  636
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              636,
+              296,
+              648
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "provided in Table 1. We focus on a brief comparison of the",
+                "bbox": [
+                  52,
+                  636,
+                  296,
+                  648
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              53,
+              648,
+              294,
+              658
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "three transition structures, since the reactions were already",
+                "bbox": [
+                  53,
+                  648,
+                  294,
+                  658
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              659,
+              295,
+              670
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "separately studied using quantum-chemical methods, and ge-",
+                "bbox": [
+                  52,
+                  659,
+                  295,
+                  670
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              670,
+              295,
+              681
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "ometries in good agreement with the results of the current work",
+                "bbox": [
+                  52,
+                  670,
+                  295,
+                  681
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              680,
+              296,
+              693
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "were predicted.4,5,22 The transition-state geometry for the reaction",
+                "bbox": [
+                  52,
+                  680,
+                  296,
+                  693
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              53,
+              692,
+              295,
+              703
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "of ethylene indicates a highly asynchronous reaction with the",
+                "bbox": [
+                  53,
+                  692,
+                  295,
+                  703
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              53,
+              702,
+              294,
+              714
+            ],
+            "spans": [
+              {
+                "type": "inline_equation",
+                "content": "\\mathrm { C 4 { - } C 1 }",
+                "bbox": [
+                  53,
+                  703,
+                  84,
+                  713
+                ]
+              },
+              {
+                "type": "text",
+                "content": "bond to the central carbon of ketene being formed first.",
+                "bbox": [
+                  84,
+                  702,
+                  294,
+                  714
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              713,
+              296,
+              725
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "-It is interesting to note that the C1 C3 distance in the TS is",
+                "bbox": [
+                  52,
+                  713,
+                  296,
+                  725
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              724,
+              295,
+              736
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "-much shorter than the C2 C3 distance, although a bond will",
+                "bbox": [
+                  52,
+                  724,
+                  295,
+                  736
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              735,
+              294,
+              746
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "-be formed between the latter two atoms during the reaction.",
+                "bbox": [
+                  52,
+                  735,
+                  294,
+                  746
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              52,
+              746,
+              295,
+              757
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "The C1 O1 bond is elongated compared to this distance in free",
+                "bbox": [
+                  52,
+                  746,
+                  295,
+                  757
+                ]
+              }
+            ]
+          }
+        ],
+        "metadata": {
+          "ocr_sub_type": "body",
+          "normalized_sub_type": "body",
+          "structure_role": "body",
+          "raw_type": "text",
+          "tags": [],
+          "derived": {
+            "role": "",
+            "by": "",
+            "confidence": 0.0
+          },
+          "continuation_hint": {
+            "source": "",
+            "group_id": "",
+            "role": "",
+            "scope": "",
+            "reading_order": -1,
+            "confidence": 0.0
+          },
+          "source": {
+            "provider": "mineru",
+            "raw_page_index": 1,
+            "raw_path": "/pdf_info/1/para_blocks/3",
+            "raw_type": "text",
+            "raw_sub_type": "",
+            "raw_bbox": [
+              50,
+              593,
+              295,
+              758
+            ],
+            "raw_text_excerpt": "Structures and Energies. The optimized geometries of the reactants and transition states for the [ 2 + 2 ] additions of \\mathrm { C H } _ { 2 } { = } \\mathrm { C H } _ { 2 } , \\mathrm { C H } _ { 2 } "
+          },
+          "structure_group": "",
+          "pair_with": ""
+        },
+        "ocr_continuation_source": "",
+        "ocr_continuation_group_id": "",
+        "ocr_continuation_role": "",
+        "ocr_continuation_scope": "",
+        "ocr_continuation_reading_order": -1,
+        "ocr_continuation_confidence": 0.0,
+        "layout_mode": "single",
+        "layout_split_x": 0.0,
+        "layout_zone": "single_column",
+        "layout_zone_rank": 4,
+        "layout_zone_size": 5,
+        "layout_boundary_role": "tail",
+        "math_mode": "direct_typst",
+        "protected_source_text": "Structures and Energies. The optimized geometries of the reactants and transition states for the [ 2 + 2 ] additions of \\mathrm { C H } _ { 2 } { = } \\mathrm { C H } _ { 2 } , \\mathrm { C H } _ { 2 } { = } \\mathrm { O } , and \\mathrm { C p O } _ { 2 } \\mathrm { R e } { = } \\mathrm { O } + across the \\mathrm { C } { = } \\mathrm { C } moiety of ketene are shown in Figure 2. Additional structural data are provided in Table 1. We focus on a brief comparison of the three transition structures, since the reactions were already separately studied using quantum-chemical methods, and ge- ometries in good agreement with the results of the current work were predicted.4,5,22 The transition-state geometry for the reaction of ethylene indicates a highly asynchronous reaction with the \\mathrm { C 4 { - } C 1 } bond to the central carbon of ketene being formed first. -It is interesting to note that the C1 C3 distance in the TS is -much shorter than the C2 C3 distance, although a bond will -be formed between the latter two atoms during the reaction. The C1 O1 bond is elongated compared to this distance in free",
+        "mixed_original_protected_source_text": "Structures and Energies. The optimized geometries of the reactants and transition states for the [ 2 + 2 ] additions of \\mathrm { C H } _ { 2 } { = } \\mathrm { C H } _ { 2 } , \\mathrm { C H } _ { 2 } { = } \\mathrm { O } , and \\mathrm { C p O } _ { 2 } \\mathrm { R e } { = } \\mathrm { O } + across the \\mathrm { C } { = } \\mathrm { C } moiety of ketene are shown in Figure 2. Additional structural data are provided in Table 1. We focus on a brief comparison of the three transition structures, since the reactions were already separately studied using quantum-chemical methods, and ge- ometries in good agreement with the results of the current work were predicted.4,5,22 The transition-state geometry for the reaction of ethylene indicates a highly asynchronous reaction with the \\mathrm { C 4 { - } C 1 } bond to the central carbon of ketene being formed first. -It is interesting to note that the C1 C3 distance in the TS is -much shorter than the C2 C3 distance, although a bond will -be formed between the latter two atoms during the reaction. The C1 O1 bond is elongated compared to this distance in free",
+        "formula_map": [],
+        "protected_map": [],
+        "classification_label": "skip_model_keep_origin",
+        "should_translate": false,
+        "skip_reason": "skip_model_keep_origin",
+        "mixed_literal_action": "",
+        "mixed_literal_prefix": "",
+        "translation_unit_id": "__cg__:cg-002-002",
+        "translation_unit_kind": "group",
+        "translation_unit_member_ids": [
+          "p002-b003",
+          "p002-b014",
+          "p003-b011"
+        ],
+        "translation_unit_protected_source_text": "Structures and Energies. The optimized geometries of the reactants and transition states for the [ 2 + 2 ] additions of \\mathrm { C H } _ { 2 } { = } \\mathrm { C H } _ { 2 } , \\mathrm { C H } _ { 2 } { = } \\mathrm { O } , and \\mathrm { C p O } _ { 2 } \\mathrm { R e } { = } \\mathrm { O } + across the \\mathrm { C } { = } \\mathrm { C } moiety of ketene are shown in Figure 2. Additional structural data are provided in Table 1. We focus on a brief comparison of the three transition structures, since the reactions were already separately studied using quantum-chemical methods, and ge- ometries in good agreement with the results of the current work were predicted.4,5,22 The transition-state geometry for the reaction of ethylene indicates a highly asynchronous reaction with the \\mathrm { C 4 { - } C 1 } bond to the central carbon of ketene being formed first. -It is interesting to note that the C1 C3 distance in the TS is -much shorter than the C2 C3 distance, although a bond will -be formed between the latter two atoms during the reaction. The C1 O1 bond is elongated compared to this distance in free ketene, in the product, and in the other TS. Ketene is strongly bent in the “carbenoid-like“4a transition structure for ethylene addition; the O1 C1 C2 angle is 1 3 5 . 8 ^ { \\circ } (Table 1), and the - -C2 and O1 atoms are significantly twisted out of the { \\bf C } 3 { - } { \\bf C } 4 - C1 plane; we calculate a { \\bf C } 3 \\mathrm { - } { \\bf C } 4 \\mathrm { - } { \\bf C } 1 \\mathrm { - } { \\bf C } 2 - - dihedral angle of 6 1 . 4 ^ { \\circ } - - -(Table 1). The transition-state geometry for the reaction of formaldehyde is similar to the TS for the ethylene addition. The ketene moiety is less deformed and the { \\mathrm { C } } 2 { \\mathrm { - } } { \\mathrm { C } } 3 distance is -shorter than that in the former reaction. The TS structure for the [ 2 + 2 ] addition of \\mathrm { C p R e O } _ { 3 } across the \\mathrm { C } { = } \\mathrm { C } moiety shown +in Figure 2 corresponds to the reaction with the lowest activation energy with regard to peri-, chemo-, stereo-, and regioselectivity. The Cp ligand changes its coordination mode from \\eta ^ { 5 } in the reactant to \\eta ^ { 1 } in the TS and in the product.42 Compared to the reaction of \\mathrm { C H } _ { 2 } \\mathrm { O } with ketene, the \\mathrm { C } 1 { - } \\mathrm { O } 2 distance is longer -(Figure 2). The ketene moiety is less bent and less twisted than in the other two reactions (Table 1). The structures of the reaction products are also given in Figure 2. In the products of the formaldehyde and \\mathrm { C p R e O } _ { 3 } addition, the C1 O2 distances -are comparably short due to conjugation with the exocyclic carbonyl group.",
+        "translation_unit_formula_map": [],
+        "translation_unit_protected_map": [],
+        "translation_unit_protected_translated_text": "",
+        "translation_unit_translated_text": "",
+        "protected_translated_text": "",
+        "translated_text": "",
+        "continuation_group": "cg-002-002",
+        "continuation_prev_text": "",
+        "continuation_next_text": "ketene, in the product, and in the other TS. Ketene is strongly bent in the “carbenoid-like“4a transition structure for ethylene addition; the O1 C1 C2 angle is 1 3 5 . 8 ^ { \\circ } (Table 1), and the - -C2 and O1 atoms are significantly twisted out of the { \\bf C } 3 { - } { \\bf C } 4 - C1 plane; we calculate a { \\bf C } 3 \\mathrm { - } { \\bf C } 4 \\mathrm { - } { \\bf C } 1 \\mathrm { - } { \\bf C } 2 - - dihedral angle of 6 1 . 4 ^ { \\circ } - - -(Table 1). The transition-state geometry for the reaction of formaldehyde is similar to the TS for the ethylene addition. The ketene moiety is less deformed and the { \\mathrm { C } } 2 { \\mathrm { - } } { \\mathrm { C } } 3 distance is -shorter than that in the former reaction. The TS structure for the [ 2 + 2 ] addition of \\mathrm { C p R e O } _ { 3 } across the \\mathrm { C } { = } \\mathrm { C } moiety shown +in Figure 2 corresponds to the reaction with the lowest activation energy with regard to peri-, chemo-, stereo-, and regioselectivity. The Cp ligand changes its coordination mode from \\eta ^ { 5 } in the reactant to \\eta ^ { 1 } in the TS and in the product.42 Compared to the reaction of \\mathrm { C H } _ { 2 } \\mathrm { O } with ketene, the \\mathrm { C } 1 { - } \\mathrm { O } 2 distance is longer -(Figure 2). The ketene moiety is less bent and less twisted than",
+        "continuation_decision": "joined",
+        "continuation_candidate_prev_id": "",
+        "continuation_candidate_next_id": "",
+        "group_protected_source_text": "Structures and Energies. The optimized geometries of the reactants and transition states for the [ 2 + 2 ] additions of \\mathrm { C H } _ { 2 } { = } \\mathrm { C H } _ { 2 } , \\mathrm { C H } _ { 2 } { = } \\mathrm { O } , and \\mathrm { C p O } _ { 2 } \\mathrm { R e } { = } \\mathrm { O } + across the \\mathrm { C } { = } \\mathrm { C } moiety of ketene are shown in Figure 2. Additional structural data are provided in Table 1. We focus on a brief comparison of the three transition structures, since the reactions were already separately studied using quantum-chemical methods, and ge- ometries in good agreement with the results of the current work were predicted.4,5,22 The transition-state geometry for the reaction of ethylene indicates a highly asynchronous reaction with the \\mathrm { C 4 { - } C 1 } bond to the central carbon of ketene being formed first. -It is interesting to note that the C1 C3 distance in the TS is -much shorter than the C2 C3 distance, although a bond will -be formed between the latter two atoms during the reaction. The C1 O1 bond is elongated compared to this distance in free ketene, in the product, and in the other TS. Ketene is strongly bent in the “carbenoid-like“4a transition structure for ethylene addition; the O1 C1 C2 angle is 1 3 5 . 8 ^ { \\circ } (Table 1), and the - -C2 and O1 atoms are significantly twisted out of the { \\bf C } 3 { - } { \\bf C } 4 - C1 plane; we calculate a { \\bf C } 3 \\mathrm { - } { \\bf C } 4 \\mathrm { - } { \\bf C } 1 \\mathrm { - } { \\bf C } 2 - - dihedral angle of 6 1 . 4 ^ { \\circ } - - -(Table 1). The transition-state geometry for the reaction of formaldehyde is similar to the TS for the ethylene addition. The ketene moiety is less deformed and the { \\mathrm { C } } 2 { \\mathrm { - } } { \\mathrm { C } } 3 distance is -shorter than that in the former reaction. The TS structure for the [ 2 + 2 ] addition of \\mathrm { C p R e O } _ { 3 } across the \\mathrm { C } { = } \\mathrm { C } moiety shown +in Figure 2 corresponds to the reaction with the lowest activation energy with regard to peri-, chemo-, stereo-, and regioselectivity. The Cp ligand changes its coordination mode from \\eta ^ { 5 } in the reactant to \\eta ^ { 1 } in the TS and in the product.42 Compared to the reaction of \\mathrm { C H } _ { 2 } \\mathrm { O } with ketene, the \\mathrm { C } 1 { - } \\mathrm { O } 2 distance is longer -(Figure 2). The ketene moiety is less bent and less twisted than in the other two reactions (Table 1). The structures of the reaction products are also given in Figure 2. In the products of the formaldehyde and \\mathrm { C p R e O } _ { 3 } addition, the C1 O2 distances -are comparably short due to conjugation with the exocyclic carbonyl group.",
+        "group_formula_map": [],
+        "group_protected_map": [],
+        "group_protected_translated_text": "",
+        "group_translated_text": "",
+        "final_status": "kept_origin",
+        "translation_diagnostics": {},
+        "candidate_pair_prev_id": "",
+        "candidate_pair_next_id": ""
+      },
+      {
+        "item_id": "p002-b006",
+        "page_idx": 1,
+        "block_idx": 6,
+        "block_type": "image_caption",
+        "bbox": [
+          405,
+          152,
+          446,
+          162
+        ],
+        "source_text": "Reactants",
+        "lines": [
+          {
+            "bbox": [
+              405,
+              150,
+              447,
+              164
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "Reactants",
+                "bbox": [
+                  405,
+                  150,
+                  447,
+                  164
+                ]
+              }
+            ]
+          }
+        ],
+        "metadata": {
+          "ocr_sub_type": "metadata",
+          "normalized_sub_type": "metadata",
+          "structure_role": "caption",
+          "raw_type": "image_caption",
+          "tags": [
+            "caption",
+            "image_caption"
+          ],
+          "derived": {
+            "role": "caption",
+            "by": "provider_rule",
+            "confidence": 0.98
+          },
+          "continuation_hint": {
+            "source": "",
+            "group_id": "",
+            "role": "",
+            "scope": "",
+            "reading_order": -1,
+            "confidence": 0.0
+          },
+          "source": {
+            "provider": "mineru",
+            "raw_page_index": 1,
+            "raw_path": "/pdf_info/1/para_blocks/4/blocks/1",
+            "raw_type": "image_caption",
+            "raw_sub_type": "",
+            "raw_bbox": [
+              405,
+              152,
+              446,
+              162
+            ],
+            "raw_text_excerpt": "Reactants"
+          },
+          "structure_group": "",
+          "pair_with": ""
+        },
+        "ocr_continuation_source": "",
+        "ocr_continuation_group_id": "",
+        "ocr_continuation_role": "",
+        "ocr_continuation_scope": "",
+        "ocr_continuation_reading_order": -1,
+        "ocr_continuation_confidence": 0.0,
+        "layout_mode": "single",
+        "layout_split_x": 0.0,
+        "layout_zone": "non_flow",
+        "layout_zone_rank": -1,
+        "layout_zone_size": 0,
+        "layout_boundary_role": "",
+        "math_mode": "direct_typst",
+        "protected_source_text": "Reactants",
+        "mixed_original_protected_source_text": "Reactants",
+        "formula_map": [],
+        "protected_map": [],
+        "classification_label": "",
+        "should_translate": true,
+        "skip_reason": "",
+        "mixed_literal_action": "",
+        "mixed_literal_prefix": "",
+        "translation_unit_id": "p002-b006",
+        "translation_unit_kind": "single",
+        "translation_unit_member_ids": [
+          "p002-b006"
+        ],
+        "translation_unit_protected_source_text": "Reactants",
+        "translation_unit_formula_map": [],
+        "translation_unit_protected_map": [],
+        "translation_unit_protected_translated_text": "反应物",
+        "translation_unit_translated_text": "反应物",
+        "protected_translated_text": "反应物",
+        "translated_text": "反应物",
+        "continuation_group": "",
+        "continuation_prev_text": "",
+        "continuation_next_text": "",
+        "continuation_decision": "",
+        "continuation_candidate_prev_id": "",
+        "continuation_candidate_next_id": "",
+        "group_protected_source_text": "",
+        "group_formula_map": [],
+        "group_protected_map": [],
+        "group_protected_translated_text": "",
+        "group_translated_text": "",
+        "final_status": "translated",
+        "translation_diagnostics": {
+          "item_id": "p002-b006",
+          "page_idx": 1,
+          "route_path": [
+            "block_level",
+            "direct_typst"
+          ],
+          "output_mode_path": [
+            "plain_text"
+          ],
+          "fallback_to": "",
+          "degradation_reason": "",
+          "final_status": "translated"
+        },
+        "candidate_pair_prev_id": "",
+        "candidate_pair_next_id": ""
+      },
+      {
+        "item_id": "p002-b009",
+        "page_idx": 1,
+        "block_idx": 9,
+        "block_type": "image_caption",
+        "bbox": [
+          399,
+          350,
+          468,
+          361
+        ],
+        "source_text": "Transition States",
+        "lines": [
+          {
+            "bbox": [
+              399,
+              349,
+              468,
+              362
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "Transition States",
+                "bbox": [
+                  399,
+                  349,
+                  468,
+                  362
+                ]
+              }
+            ]
+          }
+        ],
+        "metadata": {
+          "ocr_sub_type": "metadata",
+          "normalized_sub_type": "metadata",
+          "structure_role": "caption",
+          "raw_type": "image_caption",
+          "tags": [
+            "caption",
+            "image_caption"
+          ],
+          "derived": {
+            "role": "caption",
+            "by": "provider_rule",
+            "confidence": 0.98
+          },
+          "continuation_hint": {
+            "source": "",
+            "group_id": "",
+            "role": "",
+            "scope": "",
+            "reading_order": -1,
+            "confidence": 0.0
+          },
+          "source": {
+            "provider": "mineru",
+            "raw_page_index": 1,
+            "raw_path": "/pdf_info/1/para_blocks/5/blocks/1",
+            "raw_type": "image_caption",
+            "raw_sub_type": "",
+            "raw_bbox": [
+              399,
+              350,
+              468,
+              361
+            ],
+            "raw_text_excerpt": "Transition States"
+          },
+          "structure_group": "",
+          "pair_with": ""
+        },
+        "ocr_continuation_source": "",
+        "ocr_continuation_group_id": "",
+        "ocr_continuation_role": "",
+        "ocr_continuation_scope": "",
+        "ocr_continuation_reading_order": -1,
+        "ocr_continuation_confidence": 0.0,
+        "layout_mode": "single",
+        "layout_split_x": 0.0,
+        "layout_zone": "non_flow",
+        "layout_zone_rank": -1,
+        "layout_zone_size": 0,
+        "layout_boundary_role": "",
+        "math_mode": "direct_typst",
+        "protected_source_text": "Transition States",
+        "mixed_original_protected_source_text": "Transition States",
+        "formula_map": [],
+        "protected_map": [],
+        "classification_label": "",
+        "should_translate": true,
+        "skip_reason": "",
+        "mixed_literal_action": "",
+        "mixed_literal_prefix": "",
+        "translation_unit_id": "p002-b009",
+        "translation_unit_kind": "single",
+        "translation_unit_member_ids": [
+          "p002-b009"
+        ],
+        "translation_unit_protected_source_text": "Transition States",
+        "translation_unit_formula_map": [],
+        "translation_unit_protected_map": [],
+        "translation_unit_protected_translated_text": "过渡态",
+        "translation_unit_translated_text": "过渡态",
+        "protected_translated_text": "过渡态",
+        "translated_text": "过渡态",
+        "continuation_group": "",
+        "continuation_prev_text": "",
+        "continuation_next_text": "",
+        "continuation_decision": "",
+        "continuation_candidate_prev_id": "",
+        "continuation_candidate_next_id": "",
+        "group_protected_source_text": "",
+        "group_formula_map": [],
+        "group_protected_map": [],
+        "group_protected_translated_text": "",
+        "group_translated_text": "",
+        "final_status": "translated",
+        "translation_diagnostics": {
+          "item_id": "p002-b009",
+          "page_idx": 1,
+          "route_path": [
+            "block_level",
+            "direct_typst"
+          ],
+          "output_mode_path": [
+            "plain_text"
+          ],
+          "fallback_to": "",
+          "degradation_reason": "",
+          "final_status": "translated"
+        },
+        "candidate_pair_prev_id": "",
+        "candidate_pair_next_id": ""
+      },
+      {
+        "item_id": "p002-b012",
+        "page_idx": 1,
+        "block_idx": 12,
+        "block_type": "image_caption",
+        "bbox": [
+          408,
+          524,
+          444,
+          534
+        ],
+        "source_text": "Products",
+        "lines": [
+          {
+            "bbox": [
+              406,
+              522,
+              446,
+              536
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "Products",
+                "bbox": [
+                  406,
+                  522,
+                  446,
+                  536
+                ]
+              }
+            ]
+          }
+        ],
+        "metadata": {
+          "ocr_sub_type": "metadata",
+          "normalized_sub_type": "metadata",
+          "structure_role": "caption",
+          "raw_type": "image_caption",
+          "tags": [
+            "caption",
+            "image_caption"
+          ],
+          "derived": {
+            "role": "caption",
+            "by": "provider_rule",
+            "confidence": 0.98
+          },
+          "continuation_hint": {
+            "source": "",
+            "group_id": "",
+            "role": "",
+            "scope": "",
+            "reading_order": -1,
+            "confidence": 0.0
+          },
+          "source": {
+            "provider": "mineru",
+            "raw_page_index": 1,
+            "raw_path": "/pdf_info/1/para_blocks/6/blocks/1",
+            "raw_type": "image_caption",
+            "raw_sub_type": "",
+            "raw_bbox": [
+              408,
+              524,
+              444,
+              534
+            ],
+            "raw_text_excerpt": "Products"
+          },
+          "structure_group": "",
+          "pair_with": ""
+        },
+        "ocr_continuation_source": "",
+        "ocr_continuation_group_id": "",
+        "ocr_continuation_role": "",
+        "ocr_continuation_scope": "",
+        "ocr_continuation_reading_order": -1,
+        "ocr_continuation_confidence": 0.0,
+        "layout_mode": "single",
+        "layout_split_x": 0.0,
+        "layout_zone": "non_flow",
+        "layout_zone_rank": -1,
+        "layout_zone_size": 0,
+        "layout_boundary_role": "",
+        "math_mode": "direct_typst",
+        "protected_source_text": "Products",
+        "mixed_original_protected_source_text": "Products",
+        "formula_map": [],
+        "protected_map": [],
+        "classification_label": "",
+        "should_translate": true,
+        "skip_reason": "",
+        "mixed_literal_action": "",
+        "mixed_literal_prefix": "",
+        "translation_unit_id": "p002-b012",
+        "translation_unit_kind": "single",
+        "translation_unit_member_ids": [
+          "p002-b012"
+        ],
+        "translation_unit_protected_source_text": "Products",
+        "translation_unit_formula_map": [],
+        "translation_unit_protected_map": [],
+        "translation_unit_protected_translated_text": "产物",
+        "translation_unit_translated_text": "产物",
+        "protected_translated_text": "产物",
+        "translated_text": "产物",
+        "continuation_group": "",
+        "continuation_prev_text": "",
+        "continuation_next_text": "",
+        "continuation_decision": "",
+        "continuation_candidate_prev_id": "",
+        "continuation_candidate_next_id": "",
+        "group_protected_source_text": "",
+        "group_formula_map": [],
+        "group_protected_map": [],
+        "group_protected_translated_text": "",
+        "group_translated_text": "",
+        "final_status": "translated",
+        "translation_diagnostics": {
+          "item_id": "p002-b012",
+          "page_idx": 1,
+          "route_path": [
+            "block_level",
+            "direct_typst"
+          ],
+          "output_mode_path": [
+            "plain_text"
+          ],
+          "fallback_to": "",
+          "degradation_reason": "",
+          "final_status": "translated"
+        },
+        "candidate_pair_prev_id": "",
+        "candidate_pair_next_id": ""
+      },
+      {
+        "item_id": "p002-b013",
+        "page_idx": 1,
+        "block_idx": 13,
+        "block_type": "image_caption",
+        "bbox": [
+          314,
+          536,
+          558,
+          576
+        ],
+        "source_text": "Figure 2. Optimized geometries \\mathrm { ( B P 8 6 / I I I \\sim ) } ) of the reactants, transition states and products for the [ 2 ~ + ~ 2 ] addition of \\mathrm { X = Y } \\mathrm { C H } _ { 2 } { = } \\mathrm { C H } _ { 2 } , \\mathrm { C H } _ { 2 } { = } \\mathrm { O } , and { \\mathrm { C p O } } _ { 2 } { \\mathrm { R e } } { = } 0 ) , + across the \\mathrm { C } { = } \\mathrm { C } moiety of ketene. Calculated NPA atomic charges.",
+        "lines": [
+          {
+            "bbox": [
+              315,
+              537,
+              559,
+              548
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "Figure 2. Optimized geometries",
+                "bbox": [
+                  315,
+                  537,
+                  430,
+                  548
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\mathrm { ( B P 8 6 / I I I \\sim ) }",
+                "bbox": [
+                  430,
+                  537,
+                  468,
+                  546
+                ]
+              },
+              {
+                "type": "text",
+                "content": ") of the reactants, transition",
+                "bbox": [
+                  468,
+                  537,
+                  559,
+                  548
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              315,
+              546,
+              558,
+              558
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "states and products for the",
+                "bbox": [
+                  315,
+                  546,
+                  417,
+                  558
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "[ 2 ~ + ~ 2 ]",
+                "bbox": [
+                  417,
+                  547,
+                  447,
+                  557
+                ]
+              },
+              {
+                "type": "text",
+                "content": "addition of",
+                "bbox": [
+                  447,
+                  546,
+                  492,
+                  558
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\mathrm { X = Y }",
+                "bbox": [
+                  492,
+                  547,
+                  513,
+                  556
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\mathrm { C H } _ { 2 } { = } \\mathrm { C H } _ { 2 }",
+                "bbox": [
+                  518,
+                  547,
+                  555,
+                  556
+                ]
+              },
+              {
+                "type": "text",
+                "content": ",",
+                "bbox": [
+                  555,
+                  546,
+                  558,
+                  558
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              317,
+              556,
+              558,
+              567
+            ],
+            "spans": [
+              {
+                "type": "inline_equation",
+                "content": "\\mathrm { C H } _ { 2 } { = } \\mathrm { O }",
+                "bbox": [
+                  317,
+                  556,
+                  345,
+                  566
+                ]
+              },
+              {
+                "type": "text",
+                "content": ", and",
+                "bbox": [
+                  345,
+                  556,
+                  361,
+                  567
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "{ \\mathrm { C p O } } _ { 2 } { \\mathrm { R e } } { = } 0 ) ,",
+                "bbox": [
+                  362,
+                  556,
+                  404,
+                  566
+                ]
+              },
+              {
+                "type": "text",
+                "content": "+ across the",
+                "bbox": [
+                  405,
+                  556,
+                  441,
+                  567
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\mathrm { C } { = } \\mathrm { C }",
+                "bbox": [
+                  441,
+                  557,
+                  461,
+                  566
+                ]
+              },
+              {
+                "type": "text",
+                "content": "moiety of ketene. Calculated",
+                "bbox": [
+                  462,
+                  556,
+                  558,
+                  567
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              315,
+              565,
+              392,
+              577
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "NPA atomic charges.",
+                "bbox": [
+                  315,
+                  565,
+                  392,
+                  577
+                ]
+              }
+            ]
+          }
+        ],
+        "metadata": {
+          "ocr_sub_type": "metadata",
+          "normalized_sub_type": "metadata",
+          "structure_role": "caption",
+          "raw_type": "image_caption",
+          "tags": [
+            "caption",
+            "image_caption"
+          ],
+          "derived": {
+            "role": "caption",
+            "by": "provider_rule",
+            "confidence": 0.98
+          },
+          "continuation_hint": {
+            "source": "",
+            "group_id": "",
+            "role": "",
+            "scope": "",
+            "reading_order": -1,
+            "confidence": 0.0
+          },
+          "source": {
+            "provider": "mineru",
+            "raw_page_index": 1,
+            "raw_path": "/pdf_info/1/para_blocks/6/blocks/2",
+            "raw_type": "image_caption",
+            "raw_sub_type": "",
+            "raw_bbox": [
+              314,
+              536,
+              558,
+              576
+            ],
+            "raw_text_excerpt": "Figure 2. Optimized geometries \\mathrm { ( B P 8 6 / I I I \\sim ) } ) of the reactants, transition states and products for the [ 2 ~ + ~ 2 ] addition of \\mathrm { X = Y } \\mathrm { C H } _ { 2 } { = }"
+          },
+          "structure_group": "",
+          "pair_with": ""
+        },
+        "ocr_continuation_source": "",
+        "ocr_continuation_group_id": "",
+        "ocr_continuation_role": "",
+        "ocr_continuation_scope": "",
+        "ocr_continuation_reading_order": -1,
+        "ocr_continuation_confidence": 0.0,
+        "layout_mode": "single",
+        "layout_split_x": 0.0,
+        "layout_zone": "non_flow",
+        "layout_zone_rank": -1,
+        "layout_zone_size": 0,
+        "layout_boundary_role": "",
+        "math_mode": "direct_typst",
+        "protected_source_text": "Figure 2. Optimized geometries \\mathrm { ( B P 8 6 / I I I \\sim ) } ) of the reactants, transition states and products for the [ 2 ~ + ~ 2 ] addition of \\mathrm { X = Y } \\mathrm { C H } _ { 2 } { = } \\mathrm { C H } _ { 2 } , \\mathrm { C H } _ { 2 } { = } \\mathrm { O } , and { \\mathrm { C p O } } _ { 2 } { \\mathrm { R e } } { = } 0 ) , + across the \\mathrm { C } { = } \\mathrm { C } moiety of ketene. Calculated NPA atomic charges.",
+        "mixed_original_protected_source_text": "Figure 2. Optimized geometries \\mathrm { ( B P 8 6 / I I I \\sim ) } ) of the reactants, transition states and products for the [ 2 ~ + ~ 2 ] addition of \\mathrm { X = Y } \\mathrm { C H } _ { 2 } { = } \\mathrm { C H } _ { 2 } , \\mathrm { C H } _ { 2 } { = } \\mathrm { O } , and { \\mathrm { C p O } } _ { 2 } { \\mathrm { R e } } { = } 0 ) , + across the \\mathrm { C } { = } \\mathrm { C } moiety of ketene. Calculated NPA atomic charges.",
+        "formula_map": [],
+        "protected_map": [],
+        "classification_label": "",
+        "should_translate": true,
+        "skip_reason": "",
+        "mixed_literal_action": "",
+        "mixed_literal_prefix": "",
+        "translation_unit_id": "p002-b013",
+        "translation_unit_kind": "single",
+        "translation_unit_member_ids": [
+          "p002-b013"
+        ],
+        "translation_unit_protected_source_text": "Figure 2. Optimized geometries \\mathrm { ( B P 8 6 / I I I \\sim ) } ) of the reactants, transition states and products for the [ 2 ~ + ~ 2 ] addition of \\mathrm { X = Y } \\mathrm { C H } _ { 2 } { = } \\mathrm { C H } _ { 2 } , \\mathrm { C H } _ { 2 } { = } \\mathrm { O } , and { \\mathrm { C p O } } _ { 2 } { \\mathrm { R e } } { = } 0 ) , + across the \\mathrm { C } { = } \\mathrm { C } moiety of ketene. Calculated NPA atomic charges.",
+        "translation_unit_formula_map": [],
+        "translation_unit_protected_map": [],
+        "translation_unit_protected_translated_text": "图2. 反应物、过渡态和产物在乙烯酮$\\mathrm{C=C}$单元上进行$[2+2]$加成（$\\mathrm{X=Y}$分别为$\\mathrm{CH_2=CH_2}$、$\\mathrm{CH_2=O}$和$\\mathrm{Cp_2Re=O}$）的优化几何结构（$\\mathrm{BP86/III\\sim}$）。计算了NPA原子电荷。",
+        "translation_unit_translated_text": "图2. 反应物、过渡态和产物在乙烯酮$\\mathrm{C=C}$单元上进行$[2+2]$加成（$\\mathrm{X=Y}$分别为$\\mathrm{CH_2=CH_2}$、$\\mathrm{CH_2=O}$和$\\mathrm{Cp_2Re=O}$）的优化几何结构（$\\mathrm{BP86/III\\sim}$）。计算了NPA原子电荷。",
+        "protected_translated_text": "图2. 反应物、过渡态和产物在乙烯酮$\\mathrm{C=C}$单元上进行$[2+2]$加成（$\\mathrm{X=Y}$分别为$\\mathrm{CH_2=CH_2}$、$\\mathrm{CH_2=O}$和$\\mathrm{Cp_2Re=O}$）的优化几何结构（$\\mathrm{BP86/III\\sim}$）。计算了NPA原子电荷。",
+        "translated_text": "图2. 反应物、过渡态和产物在乙烯酮$\\mathrm{C=C}$单元上进行$[2+2]$加成（$\\mathrm{X=Y}$分别为$\\mathrm{CH_2=CH_2}$、$\\mathrm{CH_2=O}$和$\\mathrm{Cp_2Re=O}$）的优化几何结构（$\\mathrm{BP86/III\\sim}$）。计算了NPA原子电荷。",
+        "continuation_group": "",
+        "continuation_prev_text": "",
+        "continuation_next_text": "",
+        "continuation_decision": "",
+        "continuation_candidate_prev_id": "",
+        "continuation_candidate_next_id": "",
+        "group_protected_source_text": "",
+        "group_formula_map": [],
+        "group_protected_map": [],
+        "group_protected_translated_text": "",
+        "group_translated_text": "",
+        "final_status": "translated",
+        "translation_diagnostics": {
+          "item_id": "p002-b013",
+          "page_idx": 1,
+          "route_path": [
+            "block_level",
+            "direct_typst"
+          ],
+          "output_mode_path": [
+            "plain_text"
+          ],
+          "fallback_to": "",
+          "degradation_reason": "",
+          "final_status": "translated"
+        },
+        "candidate_pair_prev_id": "",
+        "candidate_pair_next_id": ""
+      },
+      {
+        "item_id": "p002-b014",
+        "page_idx": 1,
+        "block_idx": 14,
+        "block_type": "text",
+        "bbox": [
+          313,
+          582,
+          559,
+          758
+        ],
+        "source_text": "ketene, in the product, and in the other TS. Ketene is strongly bent in the “carbenoid-like“4a transition structure for ethylene addition; the O1 C1 C2 angle is 1 3 5 . 8 ^ { \\circ } (Table 1), and the - -C2 and O1 atoms are significantly twisted out of the { \\bf C } 3 { - } { \\bf C } 4 - C1 plane; we calculate a { \\bf C } 3 \\mathrm { - } { \\bf C } 4 \\mathrm { - } { \\bf C } 1 \\mathrm { - } { \\bf C } 2 - - dihedral angle of 6 1 . 4 ^ { \\circ } - - -(Table 1). The transition-state geometry for the reaction of formaldehyde is similar to the TS for the ethylene addition. The ketene moiety is less deformed and the { \\mathrm { C } } 2 { \\mathrm { - } } { \\mathrm { C } } 3 distance is -shorter than that in the former reaction. The TS structure for the [ 2 + 2 ] addition of \\mathrm { C p R e O } _ { 3 } across the \\mathrm { C } { = } \\mathrm { C } moiety shown +in Figure 2 corresponds to the reaction with the lowest activation energy with regard to peri-, chemo-, stereo-, and regioselectivity. The Cp ligand changes its coordination mode from \\eta ^ { 5 } in the reactant to \\eta ^ { 1 } in the TS and in the product.42 Compared to the reaction of \\mathrm { C H } _ { 2 } \\mathrm { O } with ketene, the \\mathrm { C } 1 { - } \\mathrm { O } 2 distance is longer -(Figure 2). The ketene moiety is less bent and less twisted than",
+        "lines": [
+          {
+            "bbox": [
+              315,
+              579,
+              559,
+              594
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "ketene, in the product, and in the other TS. Ketene is strongly",
+                "bbox": [
+                  315,
+                  579,
+                  559,
+                  594
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              315,
+              591,
+              559,
+              605
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "bent in the “carbenoid-like“4a transition structure for ethylene",
+                "bbox": [
+                  315,
+                  591,
+                  559,
+                  605
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              316,
+              604,
+              558,
+              615
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "addition; the O1 C1 C2 angle is",
+                "bbox": [
+                  316,
+                  604,
+                  455,
+                  615
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "1 3 5 . 8 ^ { \\circ }",
+                "bbox": [
+                  456,
+                  604,
+                  482,
+                  614
+                ]
+              },
+              {
+                "type": "text",
+                "content": "(Table 1), and the",
+                "bbox": [
+                  483,
+                  604,
+                  558,
+                  615
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              315,
+              613,
+              558,
+              627
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "- -C2 and O1 atoms are significantly twisted out of the",
+                "bbox": [
+                  315,
+                  613,
+                  518,
+                  627
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "{ \\bf C } 3 { - } { \\bf C } 4 -",
+                "bbox": [
+                  519,
+                  615,
+                  558,
+                  625
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              316,
+              625,
+              559,
+              637
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "C1 plane; we calculate a",
+                "bbox": [
+                  316,
+                  625,
+                  418,
+                  637
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "{ \\bf C } 3 \\mathrm { - } { \\bf C } 4 \\mathrm { - } { \\bf C } 1 \\mathrm { - } { \\bf C } 2",
+                "bbox": [
+                  419,
+                  625,
+                  487,
+                  636
+                ]
+              },
+              {
+                "type": "text",
+                "content": "- - dihedral angle of",
+                "bbox": [
+                  487,
+                  625,
+                  559,
+                  637
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              317,
+              636,
+              558,
+              649
+            ],
+            "spans": [
+              {
+                "type": "inline_equation",
+                "content": "6 1 . 4 ^ { \\circ }",
+                "bbox": [
+                  317,
+                  637,
+                  339,
+                  647
+                ]
+              },
+              {
+                "type": "text",
+                "content": "- - -(Table 1). The transition-state geometry for the reaction",
+                "bbox": [
+                  339,
+                  636,
+                  558,
+                  649
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              316,
+              648,
+              558,
+              658
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "of formaldehyde is similar to the TS for the ethylene addition.",
+                "bbox": [
+                  316,
+                  648,
+                  558,
+                  658
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              315,
+              658,
+              559,
+              670
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "The ketene moiety is less deformed and the",
+                "bbox": [
+                  315,
+                  658,
+                  484,
+                  670
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "{ \\mathrm { C } } 2 { \\mathrm { - } } { \\mathrm { C } } 3",
+                "bbox": [
+                  484,
+                  658,
+                  515,
+                  669
+                ]
+              },
+              {
+                "type": "text",
+                "content": "distance is",
+                "bbox": [
+                  516,
+                  658,
+                  559,
+                  670
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              315,
+              669,
+              559,
+              681
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "-shorter than that in the former reaction. The TS structure for",
+                "bbox": [
+                  315,
+                  669,
+                  559,
+                  681
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              316,
+              681,
+              559,
+              693
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "the",
+                "bbox": [
+                  316,
+                  681,
+                  331,
+                  693
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "[ 2 + 2 ]",
+                "bbox": [
+                  331,
+                  681,
+                  360,
+                  692
+                ]
+              },
+              {
+                "type": "text",
+                "content": "addition of",
+                "bbox": [
+                  360,
+                  681,
+                  405,
+                  693
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\mathrm { C p R e O } _ { 3 }",
+                "bbox": [
+                  405,
+                  681,
+                  438,
+                  692
+                ]
+              },
+              {
+                "type": "text",
+                "content": "across the",
+                "bbox": [
+                  439,
+                  681,
+                  479,
+                  693
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\mathrm { C } { = } \\mathrm { C }",
+                "bbox": [
+                  479,
+                  681,
+                  502,
+                  691
+                ]
+              },
+              {
+                "type": "text",
+                "content": "moiety shown",
+                "bbox": [
+                  502,
+                  681,
+                  559,
+                  693
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              316,
+              692,
+              559,
+              703
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "+in Figure 2 corresponds to the reaction with the lowest activation",
+                "bbox": [
+                  316,
+                  692,
+                  559,
+                  703
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              316,
+              703,
+              558,
+              715
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "energy with regard to peri-, chemo-, stereo-, and regioselectivity.",
+                "bbox": [
+                  316,
+                  703,
+                  558,
+                  715
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              315,
+              713,
+              558,
+              725
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "The Cp ligand changes its coordination mode from",
+                "bbox": [
+                  315,
+                  713,
+                  521,
+                  725
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\eta ^ { 5 }",
+                "bbox": [
+                  521,
+                  713,
+                  531,
+                  725
+                ]
+              },
+              {
+                "type": "text",
+                "content": "in the",
+                "bbox": [
+                  532,
+                  713,
+                  558,
+                  725
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              315,
+              724,
+              559,
+              736
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "reactant to",
+                "bbox": [
+                  315,
+                  724,
+                  359,
+                  736
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\eta ^ { 1 }",
+                "bbox": [
+                  359,
+                  724,
+                  370,
+                  736
+                ]
+              },
+              {
+                "type": "text",
+                "content": "in the TS and in the product.42 Compared to the",
+                "bbox": [
+                  370,
+                  724,
+                  559,
+                  736
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              315,
+              734,
+              559,
+              747
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "reaction of",
+                "bbox": [
+                  315,
+                  734,
+                  361,
+                  747
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\mathrm { C H } _ { 2 } \\mathrm { O }",
+                "bbox": [
+                  362,
+                  736,
+                  386,
+                  746
+                ]
+              },
+              {
+                "type": "text",
+                "content": "with ketene, the",
+                "bbox": [
+                  387,
+                  734,
+                  454,
+                  747
+                ]
+              },
+              {
+                "type": "inline_equation",
+                "content": "\\mathrm { C } 1 { - } \\mathrm { O } 2",
+                "bbox": [
+                  454,
+                  735,
+                  486,
+                  746
+                ]
+              },
+              {
+                "type": "text",
+                "content": "distance is longer",
+                "bbox": [
+                  486,
+                  734,
+                  559,
+                  747
+                ]
+              }
+            ]
+          },
+          {
+            "bbox": [
+              316,
+              746,
+              558,
+              757
+            ],
+            "spans": [
+              {
+                "type": "text",
+                "content": "-(Figure 2). The ketene moiety is less bent and less twisted than",
+                "bbox": [
+                  316,
+                  746,
+                  558,
+                  757
+                ]
+              }
+            ]
+          }
+        ],
+        "metadata": {
+          "ocr_sub_type": "body",
+          "normalized_sub_type": "body",
+          "structure_role": "body",
+          "raw_type": "text",
+          "tags": [],
+          "derived": {
+            "role": "",
+            "by": "",
+            "confidence": 0.0
+          },
+          "continuation_hint": {
+            "source": "",
+            "group_id": "",
+            "role": "",
+            "scope": "",
+            "reading_order": -1,
+            "confidence": 0.0
+          },
+          "source": {
+            "provider": "mineru",
+            "raw_page_index": 1,
+            "raw_path": "/pdf_info/1/para_blocks/7",
+            "raw_type": "text",
+            "raw_sub_type": "",
+            "raw_bbox": [
+              313,
+              582,
+              559,
+              758
+            ],
+            "raw_text_excerpt": "ketene, in the product, and in the other TS. Ketene is strongly bent in the “carbenoid-like“4a transition structure for ethylene addition; the O1 C1 C2 angle is 1 3 5 . 8 ^ { \\circ } (Table 1), and th"
+          },
+          "structure_group": "",
+          "pair_with": ""
+        },
+        "ocr_continuation_source": "",
+        "ocr_continuation_group_id": "",
+        "ocr_continuation_role": "",
+        "ocr_continuation_scope": "",
+        "ocr_continuation_reading_order": -1,
+        "ocr_continuation_confidence": 0.0,
+        "layout_mode": "single",
+        "layout_split_x": 0.0,
+        "layout_zone": "single_column",
+        "layout_zone_rank": 3,
+        "layout_zone_size": 5,
+        "layout_boundary_role": "middle",
+        "math_mode": "direct_typst",
+        "protected_source_text": "ketene, in the product, and in the other TS. Ketene is strongly bent in the “carbenoid-like“4a transition structure for ethylene addition; the O1 C1 C2 angle is 1 3 5 . 8 ^ { \\circ } (Table 1), and the - -C2 and O1 atoms are significantly twisted out of the { \\bf C } 3 { - } { \\bf C } 4 - C1 plane; we calculate a { \\bf C } 3 \\mathrm { - } { \\bf C } 4 \\mathrm { - } { \\bf C } 1 \\mathrm { - } { \\bf C } 2 - - dihedral angle of 6 1 . 4 ^ { \\circ } - - -(Table 1). The transition-state geometry for the reaction of formaldehyde is similar to the TS for the ethylene addition. The ketene moiety is less deformed and the { \\mathrm { C } } 2 { \\mathrm { - } } { \\mathrm { C } } 3 distance is -shorter than that in the former reaction. The TS structure for the [ 2 + 2 ] addition of \\mathrm { C p R e O } _ { 3 } across the \\mathrm { C } { = } \\mathrm { C } moiety shown +in Figure 2 corresponds to the reaction with the lowest activation energy with regard to peri-, chemo-, stereo-, and regioselectivity. The Cp ligand changes its coordination mode from \\eta ^ { 5 } in the reactant to \\eta ^ { 1 } in the TS and in the product.42 Compared to the reaction of \\mathrm { C H } _ { 2 } \\mathrm { O } with ketene, the \\mathrm { C } 1 { - } \\mathrm { O } 2 distance is longer -(Figure 2). The ketene moiety is less bent and less twisted than",
+        "mixed_original_protected_source_text": "ketene, in the product, and in the other TS. Ketene is strongly bent in the “carbenoid-like“4a transition structure for ethylene addition; the O1 C1 C2 angle is 1 3 5 . 8 ^ { \\circ } (Table 1), and the - -C2 and O1 atoms are significantly twisted out of the { \\bf C } 3 { - } { \\bf C } 4 - C1 plane; we calculate a { \\bf C } 3 \\mathrm { - } { \\bf C } 4 \\mathrm { - } { \\bf C } 1 \\mathrm { - } { \\bf C } 2 - - dihedral angle of 6 1 . 4 ^ { \\circ } - - -(Table 1). The transition-state geometry for the reaction of formaldehyde is similar to the TS for the ethylene addition. The ketene moiety is less deformed and the { \\mathrm { C } } 2 { \\mathrm { - } } { \\mathrm { C } } 3 distance is -shorter than that in the former reaction. The TS structure for the [ 2 + 2 ] addition of \\mathrm { C p R e O } _ { 3 } across the \\mathrm { C } { = } \\mathrm { C } moiety shown +in Figure 2 corresponds to the reaction with the lowest activation energy with regard to peri-, chemo-, stereo-, and regioselectivity. The Cp ligand changes its coordination mode from \\eta ^ { 5 } in the reactant to \\eta ^ { 1 } in the TS and in the product.42 Compared to the reaction of \\mathrm { C H } _ { 2 } \\mathrm { O } with ketene, the \\mathrm { C } 1 { - } \\mathrm { O } 2 distance is longer -(Figure 2). The ketene moiety is less bent and less twisted than",
+        "formula_map": [],
+        "protected_map": [],
+        "classification_label": "skip_model_keep_origin",
+        "should_translate": false,
+        "skip_reason": "skip_model_keep_origin",
+        "mixed_literal_action": "",
+        "mixed_literal_prefix": "",
+        "translation_unit_id": "__cg__:cg-002-002",
+        "translation_unit_kind": "group",
+        "translation_unit_member_ids": [
+          "p002-b003",
+          "p002-b014",
+          "p003-b011"
+        ],
+        "translation_unit_protected_source_text": "Structures and Energies. The optimized geometries of the reactants and transition states for the [ 2 + 2 ] additions of \\mathrm { C H } _ { 2 } { = } \\mathrm { C H } _ { 2 } , \\mathrm { C H } _ { 2 } { = } \\mathrm { O } , and \\mathrm { C p O } _ { 2 } \\mathrm { R e } { = } \\mathrm { O } + across the \\mathrm { C } { = } \\mathrm { C } moiety of ketene are shown in Figure 2. Additional structural data are provided in Table 1. We focus on a brief comparison of the three transition structures, since the reactions were already separately studied using quantum-chemical methods, and ge- ometries in good agreement with the results of the current work were predicted.4,5,22 The transition-state geometry for the reaction of ethylene indicates a highly asynchronous reaction with the \\mathrm { C 4 { - } C 1 } bond to the central carbon of ketene being formed first. -It is interesting to note that the C1 C3 distance in the TS is -much shorter than the C2 C3 distance, although a bond will -be formed between the latter two atoms during the reaction. The C1 O1 bond is elongated compared to this distance in free ketene, in the product, and in the other TS. Ketene is strongly bent in the “carbenoid-like“4a transition structure for ethylene addition; the O1 C1 C2 angle is 1 3 5 . 8 ^ { \\circ } (Table 1), and the - -C2 and O1 atoms are significantly twisted out of the { \\bf C } 3 { - } { \\bf C } 4 - C1 plane; we calculate a { \\bf C } 3 \\mathrm { - } { \\bf C } 4 \\mathrm { - } { \\bf C } 1 \\mathrm { - } { \\bf C } 2 - - dihedral angle of 6 1 . 4 ^ { \\circ } - - -(Table 1). The transition-state geometry for the reaction of formaldehyde is similar to the TS for the ethylene addition. The ketene moiety is less deformed and the { \\mathrm { C } } 2 { \\mathrm { - } } { \\mathrm { C } } 3 distance is -shorter than that in the former reaction. The TS structure for the [ 2 + 2 ] addition of \\mathrm { C p R e O } _ { 3 } across the \\mathrm { C } { = } \\mathrm { C } moiety shown +in Figure 2 corresponds to the reaction with the lowest activation energy with regard to peri-, chemo-, stereo-, and regioselectivity. The Cp ligand changes its coordination mode from \\eta ^ { 5 } in the reactant to \\eta ^ { 1 } in the TS and in the product.42 Compared to the reaction of \\mathrm { C H } _ { 2 } \\mathrm { O } with ketene, the \\mathrm { C } 1 { - } \\mathrm { O } 2 distance is longer -(Figure 2). The ketene moiety is less bent and less twisted than in the other two reactions (Table 1). The structures of the reaction products are also given in Figure 2. In the products of the formaldehyde and \\mathrm { C p R e O } _ { 3 } addition, the C1 O2 distances -are comparably short due to conjugation with the exocyclic carbonyl group.",
+        "translation_unit_formula_map": [],
+        "translation_unit_protected_map": [],
+        "translation_unit_protected_translated_text": "",
+        "translation_unit_translated_text": "",
+        "protected_translated_text": "",
+        "translated_text": "",
+        "continuation_group": "cg-002-002",
+        "continuation_prev_text": "Structures and Energies. The optimized geometries of the reactants and transition states for the [ 2 + 2 ] additions of \\mathrm { C H } _ { 2 } { = } \\mathrm { C H } _ { 2 } , \\mathrm { C H } _ { 2 } { = } \\mathrm { O } , and \\mathrm { C p O } _ { 2 } \\mathrm { R e } { = } \\mathrm { O } + across the \\mathrm { C } { = } \\mathrm { C } moiety of ketene are shown in Figure 2. Additional structural data are provided in Table 1. We focus on a brief comparison of the three transition structures, since the reactions were already separately studied using quantum-chemical methods, and ge- ometries in good agreement with the results of the current work were predicted.4,5,22 The transition-state geometry for the reaction of ethylene indicates a highly asynchronous reaction with the \\mathrm { C 4 { - } C 1 } bond to the central carbon of ketene being formed first. -It is interesting to note that the C1 C3 distance in the TS is -much shorter than the C2 C3 distance, although a bond will -be formed between the latter two atoms during the reaction. The C1 O1 bond is elongated compared to this distance in free",
+        "continuation_next_text": "in the other two reactions (Table 1). The structures of the reaction products are also given in Figure 2. In the products of the formaldehyde and \\mathrm { C p R e O } _ { 3 } addition, the C1 O2 distances -are comparably short due to conjugation with the exocyclic carbonyl group.",
+        "continuation_decision": "joined",
+        "continuation_candidate_prev_id": "",
+        "continuation_candidate_next_id": "",
+        "group_protected_source_text": "Structures and Energies. The optimized geometries of the reactants and transition states for the [ 2 + 2 ] additions of \\mathrm { C H } _ { 2 } { = } \\mathrm { C H } _ { 2 } , \\mathrm { C H } _ { 2 } { = } \\mathrm { O } , and \\mathrm { C p O } _ { 2 } \\mathrm { R e } { = } \\mathrm { O } + across the \\mathrm { C } { = } \\mathrm { C } moiety of ketene are shown in Figure 2. Additional structural data are provided in Table 1. We focus on a brief comparison of the three transition structures, since the reactions were already separately studied using quantum-chemical methods, and ge- ometries in good agreement with the results of the current work were predicted.4,5,22 The transition-state geometry for the reaction of ethylene indicates a highly asynchronous reaction with the \\mathrm { C 4 { - } C 1 } bond to the central carbon of ketene being formed first. -It is interesting to note that the C1 C3 distance in the TS is -much shorter than the C2 C3 distance, although a bond will -be formed between the latter two atoms during the reaction. The C1 O1 bond is elongated compared to this distance in free ketene, in the product, and in the other TS. Ketene is strongly bent in the “carbenoid-like“4a transition structure for ethylene addition; the O1 C1 C2 angle is 1 3 5 . 8 ^ { \\circ } (Table 1), and the - -C2 and O1 atoms are significantly twisted out of the { \\bf C } 3 { - } { \\bf C } 4 - C1 plane; we calculate a { \\bf C } 3 \\mathrm { - } { \\bf C } 4 \\mathrm { - } { \\bf C } 1 \\mathrm { - } { \\bf C } 2 - - dihedral angle of 6 1 . 4 ^ { \\circ } - - -(Table 1). The transition-state geometry for the reaction of formaldehyde is similar to the TS for the ethylene addition. The ketene moiety is less deformed and the { \\mathrm { C } } 2 { \\mathrm { - } } { \\mathrm { C } } 3 distance is -shorter than that in the former reaction. The TS structure for the [ 2 + 2 ] addition of \\mathrm { C p R e O } _ { 3 } across the \\mathrm { C } { = } \\mathrm { C } moiety shown +in Figure 2 corresponds to the reaction with the lowest activation energy with regard to peri-, chemo-, stereo-, and regioselectivity. The Cp ligand changes its coordination mode from \\eta ^ { 5 } in the reactant to \\eta ^ { 1 } in the TS and in the product.42 Compared to the reaction of \\mathrm { C H } _ { 2 } \\mathrm { O } with ketene, the \\mathrm { C } 1 { - } \\mathrm { O } 2 distance is longer -(Figure 2). The ketene moiety is less bent and less twisted than in the other two reactions (Table 1). The structures of the reaction products are also given in Figure 2. In the products of the formaldehyde and \\mathrm { C p R e O } _ { 3 } addition, the C1 O2 distances -are comparably short due to conjugation with the exocyclic carbonyl group.",
+        "group_formula_map": [],
+        "group_protected_map": [],
+        "group_protected_translated_text": "",
+        "group_translated_text": "",
+        "final_status": "kept_origin",
+        "translation_diagnostics": {},
+        "candidate_pair_prev_id": "",
+        "candidate_pair_next_id": ""
+      }
+    ]
+  },
+  "replay": null,
+  "drift": {
+    "saved_final_status": "kept_origin",
+    "replay_policy_final_status": "",
+    "replay_result_final_status": "",
+    "saved_should_translate": false,
+    "replay_should_translate": null,
+    "saved_skip_reason": "skip_model_keep_origin",
+    "replay_skip_reason": "",
+    "saved_classification_label": "skip_model_keep_origin",
+    "replay_classification_label": "",
+    "saved_has_translation": false,
+    "replay_has_translation": false,
+    "replay_error_type": "",
+    "policy_changed": false,
+    "drifted": false,
+    "reason_tags": []
+  }
+}

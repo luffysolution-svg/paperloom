@@ -1,0 +1,115 @@
+name: Publish Current Web Image
+
+"on":
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: "目标平台（逗号分隔）"
+        required: false
+        default: "linux/amd64,linux/arm64"
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - ".github/workflows/publish-current-web.yml"
+      - ".dockerignore"
+      - "package.json"
+      - "package-lock.json"
+      - "frontend/web/scripts/build-workspace-packages.mjs"
+      - "ops/deployment/docker/Dockerfile.web"
+      - "ops/deployment/docker/entrypoint-web.sh"
+      - "ops/deployment/docker/nginx-mjs.types.conf"
+      - "ops/deployment/docker/nginx.conf.template"
+      - "frontend/desktop/package.json"
+      - "frontend/web/**"
+      - "frontend/packages/api/**"
+      - "frontend/packages/domain/**"
+      - "frontend/packages/reader/**"
+      - "contracts/**"
+      - "frontend/packages/ui/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-current-web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-gate:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/tests.yml
+
+  publish-web:
+    needs: quality-gate
+    permissions:
+      contents: read
+      packages: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Resolve GHCR namespace
+        id: hub
+        shell: bash
+        run: |
+          user="ghcr.io/$(printf '%s' "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+          echo "user=${user}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ steps.hub.outputs.user }}/paperloom-web
+          tags: |
+            type=raw,value=edge
+            type=sha,prefix=current-
+
+      - name: Resolve frontend version
+        id: frontend-version
+        shell: bash
+        run: |
+          version="$(git describe --tags --always --dirty 2>/dev/null || git rev-parse --short HEAD)"
+          version="${version#v}"
+          if [[ "$version" =~ ^([0-9]+\.[0-9]+\.[0-9]+[^-]*)-([0-9]+)-g([0-9a-f]+)(-dirty)?$ ]]; then
+            suffix=""
+            if [ -n "${BASH_REMATCH[4]:-}" ]; then
+              suffix=".dirty"
+            fi
+            version="${BASH_REMATCH[1]}+${BASH_REMATCH[2]}.g${BASH_REMATCH[3]}${suffix}"
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push current frontend
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ops/deployment/docker/Dockerfile.web
+          platforms: ${{ inputs.platforms || 'linux/amd64,linux/arm64' }}
+          push: true
+          build-args: |
+            RETAIN_PDF_VERSION=${{ steps.frontend-version.outputs.version }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=current-web
+          cache-to: type=gha,mode=max,scope=current-web

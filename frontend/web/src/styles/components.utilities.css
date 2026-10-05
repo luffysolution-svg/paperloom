@@ -1,0 +1,146 @@
+/* 跨页共享 UI 工具类（home + detail 均 import；reader 不引）
+ *
+ * 仅保留两侧实际用到的通用控件：button-link / secondary / disabled / mono / label。
+ * 主页领域（status-card、凭据、inline-error、app-button 等）见
+ * pages/home/components.utilities.css。
+ */
+
+
+@utility button-link {
+  .translation-items-pagination & {
+    min-height: 34px;
+    padding-inline: 12px;
+    font-size: 12px;
+  }
+  font: inherit;
+  @apply inline-flex min-h-12 items-center justify-center rounded-full px-5 text-[15px] font-semibold no-underline transition;
+  border: 1px solid transparent;
+  background: var(--accent);
+  color: var(--paper);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 18%, transparent);
+
+  &:hover {
+    filter: brightness(1.05);
+  }
+
+  &.secondary {
+    background: var(--paper);
+    color: var(--ink);
+    border-color: var(--line);
+    box-shadow: none;
+  }
+
+  &.secondary:hover {
+    border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
+    color: var(--accent);
+    filter: none;
+  }
+
+  &.disabled {
+    opacity: 0.5;
+    box-shadow: none;
+  }
+
+  &.disabled {
+    @apply pointer-events-none;
+  }
+
+  .status-card &.secondary {
+    background: var(--paper);
+    color: var(--ink);
+    border-color: var(--line);
+  }
+}
+
+
+@utility secondary {
+  &.app-button {
+    background: var(--paper);
+    color: var(--ink);
+    border-color: var(--line);
+  }
+
+  & .button-link {
+    background: var(--paper);
+    color: var(--ink);
+    border-color: var(--line);
+  }
+
+  .status-card &button {
+    background: var(--paper);
+    color: var(--ink);
+    border-color: var(--line);
+  }
+
+  .status-card &.button-link {
+    background: var(--paper);
+    color: var(--ink);
+    border-color: var(--line);
+  }
+}
+
+
+@utility disabled {
+  & .button-link {
+    opacity: 0.5;
+    box-shadow: none;
+  }
+
+  &.button-link {
+    @apply pointer-events-none;
+  }
+}
+
+
+/*
+  危险区修复(Tailwind v4 迁移):v3 的 `text-sm` 编译成绝对值
+  `font-size:.875rem;line-height:1.25rem`,下面三处 `.xxx & { font-size:12px;
+  ... }` 覆盖只重写了 font-size,v3 下 line-height 仍是基类那个固定 20px,
+  不受 font-size 变小影响。v4 把 `text-sm` 的行高改成了无单位比例
+  `calc(1.25/.875)`(约 1.4286,随元素自身 font-size 动态计算),同样的源码
+  结构下,font-size 被子规则压到 12px 后,行高跟着按比例缩到约 17.14px——
+  类名和覆盖结构完全没变,数值却因为 Tailwind 自身 line-height 语义改变而
+  静默变了(detail-item/failure-hero-card/info-row 三处 label 行高变矮,
+  status-dialog-failed/status-dialog-translation 视觉基线的行间距累积偏移
+  即源于此)。这里显式把三处覆盖的 line-height 钉死成 v3 的固定值 1.25rem,
+  不再随 font-size 缩放。
+  detail 页 MetaRow 也用 .label；嵌套覆盖（detail-item / failure-hero 等）
+  主要服务主页 status-detail，留在 shared 以免 detail 丢基类样式。
+*/
+@utility label {
+  .status-card & {
+    color: var(--muted);
+  }
+
+  .detail-item & {
+    font-size: 12px;
+    line-height: 1.25rem;
+    letter-spacing: 0.01em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+  @apply text-sm;
+  color: var(--muted);
+
+  .failure-hero-card & {
+    font-size: 12px;
+    line-height: 1.25rem;
+    letter-spacing: 0.01em;
+    color: var(--danger);
+    text-transform: uppercase;
+  }
+
+  .info-row & {
+    font-size: 12px;
+    line-height: 1.25rem;
+    letter-spacing: 0.01em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+}
+
+
+@utility mono {
+  font-family: 'SF Mono', 'JetBrains Mono', monospace;
+  word-break: break-all;
+}

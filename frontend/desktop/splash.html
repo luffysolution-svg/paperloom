@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PaperLoom</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f5f5f7;
+        --card: rgba(255, 255, 255, 0.88);
+        --line: #e5e5ea;
+        --ink: #1d1d1f;
+        --muted: #6e6e73;
+        --accent: #0071e3;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "SF Pro Display", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+        background:
+          radial-gradient(circle at top left, rgba(0, 113, 227, 0.08), transparent 34%),
+          linear-gradient(180deg, #fbfbfd 0%, var(--bg) 100%);
+        color: var(--ink);
+        display: grid;
+        place-items: center;
+      }
+
+      .shell {
+        width: min(440px, calc(100vw - 32px));
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        background: var(--card);
+        box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
+        backdrop-filter: blur(18px);
+        padding: 28px 28px 24px;
+      }
+
+      .logo {
+        width: 72px;
+        height: 72px;
+        object-fit: contain;
+      }
+
+      h1 {
+        margin: 16px 0 6px;
+        font-size: 28px;
+        line-height: 1.1;
+        letter-spacing: -0.04em;
+      }
+
+      p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      .status {
+        margin-top: 28px;
+      }
+
+      .status-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+      }
+
+      .status-title {
+        font-size: 16px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+
+      .status-value {
+        font-variant-numeric: tabular-nums;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .track {
+        height: 10px;
+        border-radius: 999px;
+        background: #e5e7eb;
+        overflow: hidden;
+      }
+
+      .bar {
+        width: 0%;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #41a1ff 0%, var(--accent) 100%);
+        transition: width 180ms ease;
+      }
+
+      .detail {
+        margin-top: 12px;
+        min-height: 24px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <img class="logo" src="./assets/RetainPDF-logo.png" alt="PaperLoom Logo" />
+      <h1>PaperLoom</h1>
+      <p>正在启动桌面环境。首次启动或大文件环境准备会稍慢一些。</p>
+
+      <section class="status" aria-live="polite">
+        <div class="status-head">
+          <div id="status-title" class="status-title">正在准备运行环境</div>
+          <div id="status-value" class="status-value">0%</div>
+        </div>
+        <div class="track">
+          <div id="status-bar" class="bar"></div>
+        </div>
+        <div id="status-detail" class="detail">正在加载启动组件</div>
+      </section>
+    </main>
+
+    <script>
+      const titleEl = document.getElementById("status-title");
+      const valueEl = document.getElementById("status-value");
+      const detailEl = document.getElementById("status-detail");
+      const barEl = document.getElementById("status-bar");
+
+      function applyProgress(payload = {}) {
+        const progress = Math.max(0, Math.min(100, Number(payload.progress || 0)));
+        titleEl.textContent = payload.title || "正在启动";
+        detailEl.textContent = payload.detail || "";
+        valueEl.textContent = `${Math.round(progress)}%`;
+        barEl.style.width = `${progress}%`;
+      }
+
+      if (window.retainPdfDesktop && typeof window.retainPdfDesktop.onStartupProgress === "function") {
+        window.retainPdfDesktop.onStartupProgress(applyProgress);
+      }
+    </script>
+  </body>
+</html>

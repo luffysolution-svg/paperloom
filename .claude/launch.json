@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "python3 -m http.server \"${PORT:-40001}\" --bind 127.0.0.1 --directory frontend"],
+      "port": 40001,
+      "autoPort": true
+    }
+  ]
+}

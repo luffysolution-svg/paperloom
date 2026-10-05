@@ -1,0 +1,8 @@
+对每一对文本，判断 `prev_text` 和 `next_text` 在翻译前是否应该合并成一个连续段落。
+返回 JSON：
+{
+  "decisions": [
+    {"pair_id": "...", "decision": "join" | "break"}
+  ]
+}
+不要附加任何解释。

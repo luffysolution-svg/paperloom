@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 420" fill="none">
+  <!-- distant mountains -->
+  <path d="M-10 312 C 70 276 140 262 210 276 C 290 292 350 244 430 252 C 510 260 560 292 640 284 C 720 276 800 296 910 280 L910 420 L-10 420 Z" fill="#8a9a8c" opacity="0.20"/>
+  <!-- mid ridge -->
+  <path d="M-10 344 C 90 316 190 306 290 322 C 390 338 470 300 580 308 C 690 316 780 340 910 324 L910 420 L-10 420 Z" fill="#5a6b5c" opacity="0.22"/>
+  <!-- mist layers -->
+  <ellipse cx="330" cy="312" rx="260" ry="7" fill="#8a9a8c" opacity="0.16"/>
+  <ellipse cx="700" cy="330" rx="200" ry="6" fill="#8a9a8c" opacity="0.14"/>
+  <ellipse cx="180" cy="352" rx="180" ry="5" fill="#c4a484" opacity="0.12"/>
+  <!-- near hill, right -->
+  <path d="M470 420 C 545 358 625 338 705 342 C 785 346 845 368 910 360 L910 420 Z" fill="#2f6f5e" opacity="0.26"/>
+  <!-- pavilion silhouette -->
+  <g fill="#2f6f5e" opacity="0.78">
+    <circle cx="703" cy="290" r="1.6"/>
+    <path d="M683 303 Q703 290 723 303 Q703 297 683 303 Z"/>
+    <path d="M696 303 L696 312 L710 312 L710 303 Z"/>
+    <path d="M676 322 Q703 307 730 322 Q703 314 676 322 Z"/>
+    <path d="M692 322 L694.5 322 L694.5 337 L692 337 Z"/>
+    <path d="M711.5 322 L714 322 L714 337 L711.5 337 Z"/>
+    <path d="M684 339 L722 339 L719 343 L687 343 Z"/>
+  </g>
+  <!-- water ripples -->
+  <g stroke="#8a9a8c" stroke-width="1.2" stroke-linecap="round" fill="none" opacity="0.5">
+    <path d="M120 388 C 160 385 200 385 240 388"/>
+    <path d="M280 398 C 310 396 340 396 370 398"/>
+  </g>
+  <!-- distant birds -->
+  <g stroke="#5a6b5c" stroke-width="1.4" stroke-linecap="round" fill="none" opacity="0.6">
+    <path d="M148 128 Q154 121 160 127 Q166 121 172 127"/>
+    <path d="M196 110 Q200 105 204 109 Q208 105 212 109"/>
+  </g>
+</svg>

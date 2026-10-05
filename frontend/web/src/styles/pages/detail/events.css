@@ -1,0 +1,45 @@
+.detail-page .detail-list {
+  display: grid;
+  gap: 10px;
+}
+
+.detail-page .detail-stage-item,
+.detail-page .detail-event-item {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--paper);
+}
+
+.detail-page .detail-stage-top,
+.detail-page .detail-event-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.detail-page .detail-stage-title,
+.detail-page .detail-event-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.detail-page .detail-stage-meta,
+.detail-page .detail-event-meta {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.detail-page .detail-event-payload {
+  margin: 10px 0 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

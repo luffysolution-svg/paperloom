@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMax slice">
+  <!-- 江南雾山（正式稿，backdrop 全幅背景）：上部约六成留白雾色，山影三层由浅入深
+       收在下部三分之一；最深处不超过 #93aa9d，基调明度高于 #dde2dd，
+       垫在 ~88% 不透明纸面板之下不显脏。 -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fbfaf8"/>
+      <stop offset="0.55" stop-color="#f4f4ef"/>
+      <stop offset="0.8" stop-color="#edf0ea"/>
+      <stop offset="1" stop-color="#e9eee8"/>
+    </linearGradient>
+    <!-- 山影统一向下消隐进雾里：objectBoundingBox 渐变，顶=山脊、底=雾 -->
+    <linearGradient id="far" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#c2cfc4" stop-opacity="0.8"/>
+      <stop offset="1" stop-color="#c2cfc4" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="mid" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#aabdae" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#aabdae" stop-opacity="0.1"/>
+    </linearGradient>
+    <linearGradient id="near" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#93aa9d" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#9db1a3" stop-opacity="0.4"/>
+    </linearGradient>
+    <linearGradient id="veil" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fbfaf8" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#fbfaf8" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#fbfaf8" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="melt" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#eff0ea" stop-opacity="0"/>
+      <stop offset="1" stop-color="#eff0ea" stop-opacity="0.85"/>
+    </linearGradient>
+    <filter id="grain" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" stitchTiles="stitch"/>
+      <feColorMatrix type="saturate" values="0"/>
+    </filter>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#sky)"/>
+
+  <!-- 远山（最浅，山脊 y≈578-628） -->
+  <path d="M0 624 C120 604 190 582 310 592 C410 600 480 578 600 578 C710 578 790 606 910 610
+           C1020 614 1100 586 1220 584 C1330 582 1420 606 1510 614 C1555 618 1582 610 1600 606
+           L1600 900 L0 900 Z" fill="url(#far)"/>
+  <rect x="0" y="596" width="1600" height="130" fill="url(#veil)"/>
+
+  <!-- 中山（山脊 y≈640-700） -->
+  <path d="M0 700 C130 668 230 648 360 660 C470 670 560 640 700 644 C830 648 900 682 1030 686
+           C1150 690 1240 658 1370 660 C1470 662 1545 686 1600 690 L1600 900 L0 900 Z" fill="url(#mid)"/>
+  <rect x="0" y="676" width="1600" height="120" fill="url(#veil)" opacity="0.8"/>
+
+  <!-- 近山（最深 #93aa9d，山脊 y≈722-790，压在下部三分之一） -->
+  <path d="M0 790 C140 742 260 726 400 742 C520 756 640 722 780 730 C910 738 1000 776 1140 780
+           C1270 784 1380 748 1500 756 C1550 760 1580 772 1600 774 L1600 900 L0 900 Z" fill="url(#near)"/>
+
+  <!-- 山脚化进雾里，面板区更干净 -->
+  <rect x="0" y="790" width="1600" height="110" fill="url(#melt)"/>
+
+  <!-- 素纸纸纹，极轻 -->
+  <rect width="1600" height="900" filter="url(#grain)" opacity="0.035"/>
+</svg>

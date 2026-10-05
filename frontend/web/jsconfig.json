@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "checkJs": false
+  },
+  "exclude": ["node_modules", "dist"],
+  "comment": "Legacy editor map; prefer tsconfig.json. Kept so older tooling still resolves @/*."
+}

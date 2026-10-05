@@ -1,0 +1,18 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Literal documentation placeholders and the public local desktop development key"
+regexTarget = "secret"
+regexes = [
+  '''^your-rust-api-key$''',
+  '''^dev-local-key$''',
+  '''^retain-pdf-desktop$''',
+]
+
+[[allowlists]]
+description = "Python output directory fallback incorrectly recognized as an API key"
+condition = "AND"
+paths = ['''(^|/)foundation/config/paths\.py$''']
+regexTarget = "match"
+regexes = ['''^RUST_API_OUTPUT_ROOT["'],\s*default=ROOT_DIR\s*$''']

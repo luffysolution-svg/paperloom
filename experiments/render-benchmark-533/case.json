@@ -1,0 +1,26 @@
+{
+  "schema_version": "retainpdf.render_benchmark_case.v1",
+  "case_id": "quantum_chem_533",
+  "source_job_id": "20260514183142-dec42e",
+  "source_job_root": "data/jobs/20260514183142-dec42e",
+  "description": "533-page scientific book render benchmark with dense formulas and real translated JSON artifacts.",
+  "page_count": 533,
+  "expected_render_mode": "overlay",
+  "inputs": {
+    "source_pdf": "source/Quantum-Chemistry-&-Spectroscopy-by-Thomas-Engel.pdf",
+    "render_spec": "specs/render.spec.json",
+    "translations_dir": "translated",
+    "ocr_normalized": "ocr/normalized/document.v1.json",
+    "render_prewarm_dir": "artifacts/render_prewarm"
+  },
+  "known_hashes": {
+    "source_pdf_sha256": "5ba77e01cd22647bd2d118db9e841d25943cb6a12fd7da11ee003f4948de5bb3",
+    "render_spec_sha256": "ca0627d63cd26ce8a8b5ab3c89f9cfeaa6d79c2ebd30bede541b4f59605dce41",
+    "ocr_normalized_sha256": "118e9da9f6f5c9eb36dbf75dad062cf5d2b255334ecfd05bd369a81822195d7e"
+  },
+  "baseline": {
+    "original_total_seconds_approx": 583.0,
+    "optimized_before_capacity_cache_seconds_approx": 37.1,
+    "optimized_after_capacity_cache_seconds_approx": 20.9
+  }
+}

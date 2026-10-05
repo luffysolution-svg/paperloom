@@ -1,0 +1,36 @@
+/* 阅读器正文区：markdown 表面 token / 源文档只读态。 */
+
+.reader-markdown {
+  background: var(--reader-markdown-bg);
+  color: var(--ink);
+}
+
+.reader-markdown blockquote {
+  border-left-color: var(--reader-markdown-border);
+  color: var(--muted);
+  background: var(--bg);
+}
+
+.reader-markdown pre,
+.reader-markdown-raw {
+  background: var(--reader-markdown-raw-bg);
+  color: var(--paper);
+}
+
+.reader-pdf-frame {
+  background: var(--paper);
+}
+
+.reader-markdown,
+.reader-markdown-raw {
+  color: var(--ink);
+}
+
+/* 馆藏文档"读原文"只读态(F4):没有 job,译文/对照入口不该出现。
+   根节点 documentElement 的 .reader-source-only 由
+   src/hooks/reader-session/reader-mode.ts 打上;React 侧把不可用工作区
+   tab 标为 disabled(见 isReaderWorkspaceDisabled),这里兜底隐藏。
+   旧的 .reader-topbar-actions / .reader-tab[data-reader-mode] 已无写入者。 */
+.reader-source-only .reader-workspace-tab:disabled {
+  display: none;
+}

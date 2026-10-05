@@ -1,0 +1,1 @@
+{"version":3,"file":"pdf.d.ts","sourceRoot":"","sources":["../../src/contracts/pdf.ts"],"names":[],"mappings":"AAAA,qEAAqE;AACrE,MAAM,MAAM,aAAa,GAAG;IAC1B,cAAc,EAAE,OAAO,KAAK,CAAC;IAC7B,qBAAqB,EAAE,CAAC,YAAY,CAAC,EAAE,MAAM,KAAK,MAAM,CAAC;CAC1D,CAAC"}

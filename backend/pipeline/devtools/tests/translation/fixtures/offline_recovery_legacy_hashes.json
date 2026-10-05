@@ -1,0 +1,35 @@
+{
+  "result": {
+    "job_id": "offline-recovery-fixture",
+    "block_count": 2,
+    "reused_translation_count": 2,
+    "moves": [
+      {
+        "old_item_id": "p001-b001",
+        "new_item_id": "p002-b000",
+        "from_page": 1,
+        "to_page": 2
+      }
+    ],
+    "producer_generation": 8,
+    "provider_calls": 0
+  },
+  "hashes": {
+    "artifacts/mineru-cross-page-repair.json": "8936c14e6aa73fc714fe6218f694b1b913b17f3e7b5f2c2f98925979db56df84",
+    "artifacts/translation_diagnostics.json": "0f43eb169d2e4b53a6e15adc95a4d60d4d02811a5962cf334b1636474c18e6b9",
+    "artifacts/unchanged.dat": "41cb7c4083045f39221d40a91172d6c105ad032de44a7c6faf8ecbc139924497",
+    "artifacts/translation_review.json": "0f43eb169d2e4b53a6e15adc95a4d60d4d02811a5962cf334b1636474c18e6b9",
+    "artifacts/translation_debug_index.json": "0f43eb169d2e4b53a6e15adc95a4d60d4d02811a5962cf334b1636474c18e6b9",
+    "ocr/normalized/document.v1.json": "091923c7cbf31fe52f4b634488906cdf17cbd9b70ff3a2f61518a0ae739fa5a2",
+    "ocr/normalized/document.v1.report.json": "064ad7b0cc3f6bda59e020eaaeb7840c6085a77274e596db8da8b4b0e0be5d93",
+    "ocr/unpacked/layout.json": "97ba6f30cc2dadd6f89c982fe5484b4a9676b1f31f841e97ccccf4716ce80d4c",
+    "translated/translation-manifest.json": "c7d797b05edecc7097a3e46a9874c0355c470fb1f90b34b9f3bdf187490513f2",
+    "translated/translation-checkpoint.v1.json": "aec1be52d37f863142480cda334a41903434e0476bce1e3e6f4101ac2a4406a9",
+    "translated/page-002.json": "ee71a53d6dcf75d2cbba5571ed3574a4559cf2a4c6ecc1464d3e93a978162090",
+    "translated/.translation-checkpoint.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "translated/page-001.json": "e5668fc863578e9c3e6a3dc8dc32ab9556d3f59c6b46558299998e814bfd6c70",
+    "translated/.translation-checkpoints/generation-7/page-001.json": "9beec5b3ff9af7d60f6014a0ea132164df426e106b84555fadb207d77f14d341",
+    "translated/.translation-checkpoints/generation-8/page-002.json": "ee71a53d6dcf75d2cbba5571ed3574a4559cf2a4c6ecc1464d3e93a978162090",
+    "translated/.translation-checkpoints/generation-8/page-001.json": "e5668fc863578e9c3e6a3dc8dc32ab9556d3f59c6b46558299998e814bfd6c70"
+  }
+}

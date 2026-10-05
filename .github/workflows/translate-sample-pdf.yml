@@ -1,0 +1,312 @@
+name: Translate Sample PDF
+
+run-name: >-
+  Translate Sample PDF (${{ inputs.mode }}:${{ inputs.translation_mode }}:${{ inputs.render_mode }})
+
+"on":
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "book = PDF + document.v1.json; mineru = PDF only"
+        required: true
+        default: "book"
+        type: choice
+        options:
+          - book
+          - mineru
+      source_pdf:
+        description: "Public URL or repo-relative/local path to the source PDF"
+        required: true
+        type: string
+      source_json:
+        description: "For book mode: public URL or repo-relative/local path to document.v1.json"
+        required: false
+        default: ""
+        type: string
+      translation_mode:
+        description: "Translation mode"
+        required: true
+        default: "sci"
+        type: choice
+        options:
+          - fast
+          - sci
+          - precise
+      math_mode:
+        description: "Math translation mode"
+        required: true
+        default: "direct_typst"
+        type: choice
+        options:
+          - direct_typst
+          - placeholder
+      render_mode:
+        description: "Rendered PDF mode"
+        required: true
+        default: "typst"
+        type: choice
+        options:
+          - typst
+          - overlay
+          - dual
+      model:
+        description: "OpenAI-compatible model name"
+        required: true
+        default: "deepseek-v4-flash"
+        type: string
+      base_url:
+        description: "OpenAI-compatible API base URL"
+        required: true
+        default: "https://api.deepseek.com/v1"
+        type: string
+      start_page:
+        description: "Zero-based start page"
+        required: true
+        default: "0"
+        type: string
+      end_page:
+        description: "Zero-based inclusive end page, -1 means last page"
+        required: true
+        default: "-1"
+        type: string
+      translated_pdf_name:
+        description: "Optional output PDF file name"
+        required: false
+        default: ""
+        type: string
+      workers:
+        description: "Translation request concurrency"
+        required: true
+        default: "8"
+        type: string
+      batch_size:
+        description: "Translation batch size"
+        required: true
+        default: "1"
+        type: string
+      pdf_compress_dpi:
+        description: "Final PDF compression DPI, 0 disables compression"
+        required: true
+        default: "200"
+        type: string
+      mineru_language:
+        description: "For mineru mode only"
+        required: true
+        default: "ch"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: translate-sample-pdf-${{ github.ref }}-${{ inputs.mode }}
+  cancel-in-progress: false
+
+env:
+  RETAIN_TRANSLATION_API_KEY: ${{ secrets.RETAIN_TRANSLATION_API_KEY }}
+  MINERU_API_TOKEN: ${{ secrets.MINERU_API_TOKEN }}
+  TYPST_VERSION: "0.15.1"
+  CMARKER_VERSION: "0.1.10"
+  MITEX_VERSION: "0.2.7"
+  RETAIN_PDF_TYPST_FONT_FAMILY: "Source Han Serif SC"
+
+jobs:
+  translate-sample:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Prepare embedded backend package
+        id: backend
+        uses: ./.github/actions/prepare-backend-source
+
+      - name: Configure backend runtime paths
+        shell: bash
+        run: |
+          echo "PYTHONPATH=$RETAIN_PDF_SERVICES_ROOT/pipeline" >> "$GITHUB_ENV"
+          echo "RETAIN_PDF_TYPST_FONT_DIRS=$RETAIN_PDF_SERVICES_ROOT/fonts" >> "$GITHUB_ENV"
+
+      - name: Validate required secrets
+        shell: bash
+        run: |
+          if [ -z "$RETAIN_TRANSLATION_API_KEY" ]; then
+            echo "RETAIN_TRANSLATION_API_KEY secret is required." >&2
+            exit 1
+          fi
+          if [ "${{ inputs.mode }}" = "mineru" ] && [ -z "$MINERU_API_TOKEN" ]; then
+            echo "MINERU_API_TOKEN secret is required when mode=mineru." >&2
+            exit 1
+          fi
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python .github/scripts/sync_backend_python_requirements.py --repo-root . --services-root "$RETAIN_PDF_SERVICES_ROOT" --check
+          python -m pip install -r ops/deployment/docker/requirements-app.txt
+          python -m pip install --no-deps "$RETAIN_PDF_SERVICES_ROOT/pipeline"
+
+      - name: Setup Typst runtime
+        shell: bash
+        run: |
+          typst_url="https://github.com/typst/typst/releases/download/v${TYPST_VERSION}/typst-x86_64-unknown-linux-musl.tar.xz"
+          download_tar="$RUNNER_TEMP/typst-linux.tar.xz"
+          extract_root="$RUNNER_TEMP/typst-linux"
+          curl -L "$typst_url" -o "$download_tar"
+          rm -rf "$extract_root"
+          mkdir -p "$extract_root"
+          tar -xJf "$download_tar" -C "$extract_root"
+          typst_bin="$(find "$extract_root" -type f -name typst | head -n 1)"
+          if [ -z "$typst_bin" ]; then
+            echo "typst binary not found" >&2
+            exit 1
+          fi
+          echo "TYPST_BIN=$typst_bin" >> "$GITHUB_ENV"
+          "$typst_bin" --version
+
+      - name: Setup Typst packages
+        shell: bash
+        run: |
+          package_root="$RUNNER_TEMP/typst-packages"
+          rm -rf "$package_root"
+          mkdir -p "$package_root/preview"
+          for package_spec in "cmarker:${CMARKER_VERSION}" "mitex:${MITEX_VERSION}"; do
+            package_name="${package_spec%%:*}"
+            package_version="${package_spec##*:}"
+            package_url="https://packages.typst.org/preview/${package_name}-${package_version}.tar.gz"
+            download_tar="$RUNNER_TEMP/${package_name}-${package_version}.tar.gz"
+            extract_root="$RUNNER_TEMP/${package_name}-${package_version}"
+            target_dir="$package_root/preview/${package_name}/${package_version}"
+            curl -L "$package_url" -o "$download_tar"
+            rm -rf "$extract_root"
+            mkdir -p "$extract_root" "$target_dir"
+            tar -xzf "$download_tar" -C "$extract_root"
+            cp -R "$extract_root"/. "$target_dir"/
+          done
+          echo "TYPST_PACKAGE_PATH=$package_root" >> "$GITHUB_ENV"
+          echo "TYPST_PACKAGE_CACHE_PATH=$RUNNER_TEMP/typst-package-cache" >> "$GITHUB_ENV"
+
+      - name: Prepare sample job and stage spec
+        id: prepare
+        shell: bash
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_SOURCE_PDF: ${{ inputs.source_pdf }}
+          INPUT_SOURCE_JSON: ${{ inputs.source_json }}
+          INPUT_TRANSLATION_MODE: ${{ inputs.translation_mode }}
+          INPUT_MATH_MODE: ${{ inputs.math_mode }}
+          INPUT_RENDER_MODE: ${{ inputs.render_mode }}
+          INPUT_MODEL: ${{ inputs.model }}
+          INPUT_BASE_URL: ${{ inputs.base_url }}
+          INPUT_START_PAGE: ${{ inputs.start_page }}
+          INPUT_END_PAGE: ${{ inputs.end_page }}
+          INPUT_TRANSLATED_PDF_NAME: ${{ inputs.translated_pdf_name }}
+          INPUT_WORKERS: ${{ inputs.workers }}
+          INPUT_BATCH_SIZE: ${{ inputs.batch_size }}
+          INPUT_PDF_COMPRESS_DPI: ${{ inputs.pdf_compress_dpi }}
+          INPUT_MINERU_LANGUAGE: ${{ inputs.mineru_language }}
+        run: |
+          metadata_path="$RUNNER_TEMP/translate-sample-metadata.json"
+          cmd=(
+            python .github/scripts/prepare_sample_pdf_job.py
+            --mode "$INPUT_MODE"
+            --source-pdf "$INPUT_SOURCE_PDF"
+            --output-root "$GITHUB_WORKSPACE/data/github-actions"
+            --metadata-path "$metadata_path"
+            --model "$INPUT_MODEL"
+            --base-url "$INPUT_BASE_URL"
+            --translation-mode "$INPUT_TRANSLATION_MODE"
+            --math-mode "$INPUT_MATH_MODE"
+            --render-mode "$INPUT_RENDER_MODE"
+            --start-page "$INPUT_START_PAGE"
+            --end-page "$INPUT_END_PAGE"
+            --batch-size "$INPUT_BATCH_SIZE"
+            --workers "$INPUT_WORKERS"
+            --pdf-compress-dpi "$INPUT_PDF_COMPRESS_DPI"
+            --mineru-language "$INPUT_MINERU_LANGUAGE"
+          )
+          if [ -n "$INPUT_SOURCE_JSON" ]; then
+            cmd+=(--source-json "$INPUT_SOURCE_JSON")
+          fi
+          if [ -n "$INPUT_TRANSLATED_PDF_NAME" ]; then
+            cmd+=(--translated-pdf-name "$INPUT_TRANSLATED_PDF_NAME")
+          fi
+          "${cmd[@]}"
+          METADATA_PATH="$metadata_path" GITHUB_OUTPUT="$GITHUB_OUTPUT" python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          metadata_path = Path(os.environ["METADATA_PATH"])
+          payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+          outputs = {
+              "metadata_path": str(metadata_path),
+              "mode": payload["mode"],
+              "job_id": payload["job_id"],
+              "job_root": payload["job_root"],
+              "spec_path": payload["spec_path"],
+              "expected_output_pdf": payload["expected_output_pdf"],
+              "artifacts_dir": payload["job_dirs"]["artifacts_dir"],
+              "translated_dir": payload["job_dirs"]["translated_dir"],
+              "rendered_dir": payload["job_dirs"]["rendered_dir"],
+              "logs_dir": payload["job_dirs"]["logs_dir"],
+          }
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as handle:
+              for key, value in outputs.items():
+                  print(f"{key}={value}", file=handle)
+          PY
+
+      - name: Run translation pipeline
+        shell: bash
+        run: |
+          if [ "${{ steps.prepare.outputs.mode }}" = "book" ]; then
+            retainpdf-pipeline book --spec "${{ steps.prepare.outputs.spec_path }}"
+          else
+            retainpdf-pipeline provider-case --spec "${{ steps.prepare.outputs.spec_path }}"
+          fi
+
+      - name: Publish run summary
+        if: always() && steps.prepare.outputs.metadata_path != ''
+        shell: bash
+        env:
+          METADATA_PATH: ${{ steps.prepare.outputs.metadata_path }}
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          import os
+          from pathlib import Path
+
+          metadata = json.loads(Path(os.environ["METADATA_PATH"]).read_text(encoding="utf-8"))
+          output_pdf = Path(metadata["expected_output_pdf"])
+          print("## Translate Sample PDF")
+          print(f"- mode: `{metadata['mode']}`")
+          print(f"- job_id: `{metadata['job_id']}`")
+          print(f"- source_pdf: `{metadata['source_pdf_path']}`")
+          if metadata.get("source_json_path"):
+              print(f"- source_json: `{metadata['source_json_path']}`")
+          print(f"- spec_path: `{metadata['spec_path']}`")
+          print(f"- expected_output_pdf: `{metadata['expected_output_pdf']}`")
+          print(f"- output_pdf_exists: `{output_pdf.exists()}`")
+          PY
+
+      - name: Upload translated PDF and job artifacts
+        if: always() && steps.prepare.outputs.job_id != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: translated-sample-${{ steps.prepare.outputs.job_id }}
+          if-no-files-found: warn
+          path: |
+            ${{ steps.prepare.outputs.expected_output_pdf }}
+            ${{ steps.prepare.outputs.metadata_path }}
+            ${{ steps.prepare.outputs.spec_path }}
+            ${{ steps.prepare.outputs.artifacts_dir }}/**
+            ${{ steps.prepare.outputs.translated_dir }}/translation-manifest.json
+            ${{ steps.prepare.outputs.logs_dir }}/**

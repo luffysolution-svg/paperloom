@@ -1,0 +1,1036 @@
+ecosystem,component,version,license,scope
+npm,backend/packages/retainpdf2doc,0.1.0,MIT,runtime/workspace
+npm,@xmldom/xmldom,0.9.12,MIT,runtime/workspace
+npm,contracts,0.1.0,UNKNOWN,runtime/workspace
+npm,typescript,7.0.2,Apache-2.0,development/build
+npm,frontend/desktop,0.1.2,UNKNOWN,runtime/workspace
+npm,frontend/packages/api,0.1.0,UNKNOWN,runtime/workspace
+npm,typescript,7.0.2,Apache-2.0,development/build
+npm,frontend/packages/domain,0.1.0,UNKNOWN,runtime/workspace
+npm,typescript,7.0.2,Apache-2.0,development/build
+npm,frontend/packages/reader,0.1.0,UNKNOWN,runtime/workspace
+npm,@ai-sdk/gateway,3.0.179,Apache-2.0,runtime/workspace
+npm,@ai-sdk/provider,3.0.15,Apache-2.0,runtime/workspace
+npm,@ai-sdk/provider-utils,4.0.46,Apache-2.0,runtime/workspace
+npm,@ai-sdk/react,3.0.267,Apache-2.0,runtime/workspace
+npm,@esbuild/aix-ppc64,0.25.12,MIT,development/build
+npm,@esbuild/android-arm,0.25.12,MIT,development/build
+npm,@esbuild/android-arm64,0.25.12,MIT,development/build
+npm,@esbuild/android-x64,0.25.12,MIT,development/build
+npm,@esbuild/darwin-arm64,0.25.12,MIT,development/build
+npm,@esbuild/darwin-x64,0.25.12,MIT,development/build
+npm,@esbuild/freebsd-arm64,0.25.12,MIT,development/build
+npm,@esbuild/freebsd-x64,0.25.12,MIT,development/build
+npm,@esbuild/linux-arm,0.25.12,MIT,development/build
+npm,@esbuild/linux-arm64,0.25.12,MIT,development/build
+npm,@esbuild/linux-ia32,0.25.12,MIT,development/build
+npm,@esbuild/linux-loong64,0.25.12,MIT,development/build
+npm,@esbuild/linux-mips64el,0.25.12,MIT,development/build
+npm,@esbuild/linux-ppc64,0.25.12,MIT,development/build
+npm,@esbuild/linux-riscv64,0.25.12,MIT,development/build
+npm,@esbuild/linux-s390x,0.25.12,MIT,development/build
+npm,@esbuild/linux-x64,0.25.12,MIT,development/build
+npm,@esbuild/netbsd-arm64,0.25.12,MIT,development/build
+npm,@esbuild/netbsd-x64,0.25.12,MIT,development/build
+npm,@esbuild/openbsd-arm64,0.25.12,MIT,development/build
+npm,@esbuild/openbsd-x64,0.25.12,MIT,development/build
+npm,@esbuild/openharmony-arm64,0.25.12,MIT,development/build
+npm,@esbuild/sunos-x64,0.25.12,MIT,development/build
+npm,@esbuild/win32-arm64,0.25.12,MIT,development/build
+npm,@esbuild/win32-ia32,0.25.12,MIT,development/build
+npm,@esbuild/win32-x64,0.25.12,MIT,development/build
+npm,ai,6.0.264,Apache-2.0,runtime/workspace
+npm,esbuild,0.25.12,MIT,development/build
+npm,fdir,6.5.0,MIT,development/build
+npm,pdfjs-dist,4.10.38,Apache-2.0,runtime/workspace
+npm,picomatch,4.0.5,MIT,development/build
+npm,tailwindcss,4.3.3,MIT,development/build
+npm,typescript,7.0.2,Apache-2.0,development/build
+npm,undici,6.28.0,MIT,runtime/workspace
+npm,vite,6.4.3,MIT,development/build
+npm,frontend/packages/ui,0.1.0,UNKNOWN,runtime/workspace
+npm,lucide-react,1.33.0,ISC,runtime/workspace
+npm,tailwindcss,4.3.3,MIT,development/build
+npm,typescript,7.0.2,Apache-2.0,development/build
+npm,frontend/web,1.0.0,UNKNOWN,runtime/workspace
+npm,@asamuzakjp/css-color,5.1.11,MIT,development/build
+npm,@asamuzakjp/dom-selector,7.1.1,MIT,development/build
+npm,@asamuzakjp/generational-cache,1.0.1,MIT,development/build
+npm,@asamuzakjp/nwsapi,2.3.9,MIT,development/build
+npm,@bramus/specificity,2.4.2,MIT,development/build
+npm,@csstools/color-helpers,6.1.0,MIT-0,development/build
+npm,@csstools/css-calc,3.2.1,MIT,development/build
+npm,@csstools/css-color-parser,4.1.9,MIT,development/build
+npm,@csstools/css-parser-algorithms,4.0.0,MIT,development/build
+npm,@csstools/css-syntax-patches-for-csstree,1.1.6,MIT-0,development/build
+npm,@csstools/css-tokenizer,4.0.0,MIT,development/build
+npm,@exodus/bytes,1.15.1,MIT,development/build
+npm,@pdf-lib/standard-fonts,1.0.0,MIT,runtime/workspace
+npm,@pdf-lib/upng,1.0.1,MIT,runtime/workspace
+npm,@types/node,26.1.1,MIT,development/build
+npm,bidi-js,1.0.3,MIT,development/build
+npm,css-tree,3.2.1,MIT,development/build
+npm,data-urls,7.0.0,MIT,development/build
+npm,decimal.js,10.6.0,MIT,development/build
+npm,html-encoding-sniffer,6.0.0,MIT,development/build
+npm,is-potential-custom-element-name,1.0.1,MIT,development/build
+npm,jsdom,29.1.1,MIT,development/build
+npm,lottie-web,5.13.0,MIT,runtime/workspace
+npm,lru-cache,11.5.2,BlueOak-1.0.0,development/build
+npm,lucide-react,1.33.0,ISC,runtime/workspace
+npm,mdn-data,2.27.1,CC0-1.0,development/build
+npm,pako,1.0.11,(MIT AND Zlib),runtime/workspace
+npm,parse5,8.0.1,MIT,development/build
+npm,pdf-lib,1.17.1,MIT,runtime/workspace
+npm,pdfjs-dist,4.8.69,Apache-2.0,runtime/workspace
+npm,pixelmatch,7.2.0,ISC,development/build
+npm,playwright,1.61.1,Apache-2.0,development/build
+npm,playwright-core,1.61.1,Apache-2.0,development/build
+npm,fsevents,2.3.2,MIT,development/build
+npm,pngjs,7.0.0,MIT,development/build
+npm,saxes,6.0.0,ISC,development/build
+npm,symbol-tree,3.2.4,MIT,development/build
+npm,tailwindcss,4.3.2,MIT,development/build
+npm,tldts,7.4.7,MIT,development/build
+npm,tldts-core,7.4.7,MIT,development/build
+npm,tough-cookie,6.0.2,BSD-3-Clause,development/build
+npm,tr46,6.0.0,MIT,development/build
+npm,tslib,1.14.1,0BSD,runtime/workspace
+npm,typescript,7.0.2,Apache-2.0,development/build
+npm,undici-types,8.3.0,MIT,development/build
+npm,w3c-xmlserializer,5.0.0,MIT,development/build
+npm,webidl-conversions,8.0.1,BSD-2-Clause,development/build
+npm,whatwg-mimetype,5.0.0,MIT,development/build
+npm,whatwg-url,16.0.1,MIT,development/build
+npm,xml-name-validator,5.0.0,Apache-2.0,development/build
+npm,xmlchars,2.2.0,MIT,development/build
+npm,@apidevtools/json-schema-ref-parser,11.9.3,MIT,development/build
+npm,@assistant-ui/core,0.3.15,MIT,runtime/workspace
+npm,nanoid,6.0.1,MIT,runtime/workspace
+npm,@assistant-ui/react,0.15.16,MIT,runtime/workspace
+npm,zod,4.4.3,MIT,runtime/workspace
+npm,@assistant-ui/store,0.3.10,MIT,runtime/workspace
+npm,@assistant-ui/tap,0.9.14,MIT,runtime/workspace
+npm,@babel/runtime,7.29.7,MIT,runtime/workspace
+npm,@electron-internal/extract-zip,1.0.5,BSD-2-Clause,development/build
+npm,@electron/asar,3.4.1,MIT,development/build
+npm,balanced-match,1.0.2,MIT,development/build
+npm,brace-expansion,1.1.18,MIT,development/build
+npm,minimatch,3.1.5,ISC,development/build
+npm,@electron/fuses,1.8.0,MIT,development/build
+npm,fs-extra,9.1.0,MIT,development/build
+npm,@electron/get,5.1.0,MIT,development/build
+npm,@electron/notarize,2.5.0,MIT,development/build
+npm,fs-extra,9.1.0,MIT,development/build
+npm,@electron/osx-sign,1.3.3,BSD-2-Clause,development/build
+npm,isbinaryfile,4.0.10,MIT,development/build
+npm,@electron/rebuild,4.2.0,MIT,development/build
+npm,node-abi,4.35.0,MIT,development/build
+npm,@electron/universal,2.0.3,MIT,development/build
+npm,balanced-match,1.0.2,MIT,development/build
+npm,brace-expansion,2.1.7,MIT,development/build
+npm,fs-extra,11.4.0,MIT,development/build
+npm,minimatch,9.0.9,ISC,development/build
+npm,@electron/windows-sign,1.2.2,BSD-2-Clause,development/build
+npm,fs-extra,11.4.0,MIT,development/build
+npm,@esbuild/aix-ppc64,0.28.2,MIT,development/build
+npm,@esbuild/android-arm,0.28.2,MIT,development/build
+npm,@esbuild/android-arm64,0.28.2,MIT,development/build
+npm,@esbuild/android-x64,0.28.2,MIT,development/build
+npm,@esbuild/darwin-arm64,0.28.2,MIT,development/build
+npm,@esbuild/darwin-x64,0.28.2,MIT,development/build
+npm,@esbuild/freebsd-arm64,0.28.2,MIT,development/build
+npm,@esbuild/freebsd-x64,0.28.2,MIT,development/build
+npm,@esbuild/linux-arm,0.28.2,MIT,development/build
+npm,@esbuild/linux-arm64,0.28.2,MIT,development/build
+npm,@esbuild/linux-ia32,0.28.2,MIT,development/build
+npm,@esbuild/linux-loong64,0.28.2,MIT,development/build
+npm,@esbuild/linux-mips64el,0.28.2,MIT,development/build
+npm,@esbuild/linux-ppc64,0.28.2,MIT,development/build
+npm,@esbuild/linux-riscv64,0.28.2,MIT,development/build
+npm,@esbuild/linux-s390x,0.28.2,MIT,development/build
+npm,@esbuild/linux-x64,0.28.2,MIT,development/build
+npm,@esbuild/netbsd-arm64,0.28.2,MIT,development/build
+npm,@esbuild/netbsd-x64,0.28.2,MIT,development/build
+npm,@esbuild/openbsd-arm64,0.28.2,MIT,development/build
+npm,@esbuild/openbsd-x64,0.28.2,MIT,development/build
+npm,@esbuild/openharmony-arm64,0.28.2,MIT,development/build
+npm,@esbuild/sunos-x64,0.28.2,MIT,development/build
+npm,@esbuild/win32-arm64,0.28.2,MIT,development/build
+npm,@esbuild/win32-ia32,0.28.2,MIT,development/build
+npm,@esbuild/win32-x64,0.28.2,MIT,development/build
+npm,@eslint-community/eslint-utils,4.10.1,MIT,development/build
+npm,eslint-visitor-keys,3.4.3,Apache-2.0,development/build
+npm,@eslint-community/regexpp,4.12.2,MIT,development/build
+npm,@eslint/config-array,0.23.5,Apache-2.0,development/build
+npm,@eslint/config-helpers,0.7.0,Apache-2.0,development/build
+npm,@eslint/core,1.2.1,Apache-2.0,development/build
+npm,@eslint/object-schema,3.0.5,Apache-2.0,development/build
+npm,@eslint/plugin-kit,0.7.3,Apache-2.0,development/build
+npm,@floating-ui/core,1.8.0,MIT,runtime/workspace
+npm,@floating-ui/dom,1.8.0,MIT,runtime/workspace
+npm,@floating-ui/react-dom,2.1.9,MIT,runtime/workspace
+npm,@floating-ui/utils,0.2.12,MIT,runtime/workspace
+npm,@humanfs/core,0.19.2,Apache-2.0,development/build
+npm,@humanfs/node,0.16.8,Apache-2.0,development/build
+npm,@humanfs/types,0.15.0,Apache-2.0,development/build
+npm,@humanwhocodes/module-importer,1.0.1,Apache-2.0,development/build
+npm,@humanwhocodes/retry,0.4.3,Apache-2.0,development/build
+npm,@isaacs/fs-minipass,4.0.1,ISC,development/build
+npm,@jridgewell/gen-mapping,0.3.13,MIT,development/build
+npm,@jridgewell/remapping,2.3.5,MIT,development/build
+npm,@jridgewell/resolve-uri,3.1.2,MIT,development/build
+npm,@jridgewell/sourcemap-codec,1.5.5,MIT,development/build
+npm,@jridgewell/trace-mapping,0.3.31,MIT,development/build
+npm,@jsdevtools/ono,7.1.3,MIT,development/build
+npm,@malept/cross-spawn-promise,2.0.0,Apache-2.0,development/build
+npm,@malept/flatpak-bundler,0.4.0,MIT,development/build
+npm,fs-extra,9.1.0,MIT,development/build
+npm,@napi-rs/canvas,0.1.100,MIT,runtime/workspace
+npm,@napi-rs/canvas-android-arm64,0.1.100,MIT,runtime/workspace
+npm,@napi-rs/canvas-darwin-arm64,0.1.100,MIT,runtime/workspace
+npm,@napi-rs/canvas-darwin-x64,0.1.100,MIT,runtime/workspace
+npm,@napi-rs/canvas-linux-arm-gnueabihf,0.1.100,MIT,runtime/workspace
+npm,@napi-rs/canvas-linux-arm64-gnu,0.1.100,MIT,runtime/workspace
+npm,@napi-rs/canvas-linux-arm64-musl,0.1.100,MIT,runtime/workspace
+npm,@napi-rs/canvas-linux-riscv64-gnu,0.1.100,MIT,runtime/workspace
+npm,@napi-rs/canvas-linux-x64-gnu,0.1.100,MIT,runtime/workspace
+npm,@napi-rs/canvas-linux-x64-musl,0.1.100,MIT,runtime/workspace
+npm,@napi-rs/canvas-win32-arm64-msvc,0.1.100,MIT,runtime/workspace
+npm,@napi-rs/canvas-win32-x64-msvc,0.1.100,MIT,runtime/workspace
+npm,@napi-rs/lzma-linux-x64-gnu,1.5.1,MIT,development/build
+npm,@noble/hashes,2.4.0,MIT,development/build
+npm,@opentelemetry/api,1.9.1,Apache-2.0,runtime/workspace
+npm,@parcel/watcher,2.5.1,MIT,development/build
+npm,@parcel/watcher-android-arm64,2.5.1,MIT,development/build
+npm,@parcel/watcher-darwin-arm64,2.5.1,MIT,development/build
+npm,@parcel/watcher-darwin-x64,2.5.1,MIT,development/build
+npm,@parcel/watcher-freebsd-x64,2.5.1,MIT,development/build
+npm,@parcel/watcher-linux-arm-glibc,2.5.1,MIT,development/build
+npm,@parcel/watcher-linux-arm-musl,2.5.1,MIT,development/build
+npm,@parcel/watcher-linux-arm64-glibc,2.5.1,MIT,development/build
+npm,@parcel/watcher-linux-arm64-musl,2.5.1,MIT,development/build
+npm,@parcel/watcher-linux-x64-glibc,2.5.1,MIT,development/build
+npm,@parcel/watcher-linux-x64-musl,2.5.1,MIT,development/build
+npm,@parcel/watcher-win32-arm64,2.5.1,MIT,development/build
+npm,@parcel/watcher-win32-ia32,2.5.1,MIT,development/build
+npm,@parcel/watcher-win32-x64,2.5.1,MIT,development/build
+npm,detect-libc,1.0.3,Apache-2.0,development/build
+npm,node-addon-api,7.1.1,MIT,development/build
+npm,@peculiar/asn1-schema,2.9.4,MIT,development/build
+npm,@peculiar/json-schema,1.1.12,MIT,development/build
+npm,@peculiar/utils,2.0.3,MIT,development/build
+npm,@peculiar/webcrypto,1.7.1,MIT,development/build
+npm,@radix-ui/number,1.1.3,MIT,runtime/workspace
+npm,@radix-ui/primitive,1.1.7,MIT,runtime/workspace
+npm,@radix-ui/react-accessible-icon,1.1.15,MIT,runtime/workspace
+npm,@radix-ui/react-accordion,1.2.20,MIT,runtime/workspace
+npm,@radix-ui/react-alert-dialog,1.1.23,MIT,runtime/workspace
+npm,@radix-ui/react-arrow,1.1.15,MIT,runtime/workspace
+npm,@radix-ui/react-aspect-ratio,1.1.15,MIT,runtime/workspace
+npm,@radix-ui/react-avatar,1.2.6,MIT,runtime/workspace
+npm,@radix-ui/react-checkbox,1.3.11,MIT,runtime/workspace
+npm,@radix-ui/react-collapsible,1.1.20,MIT,runtime/workspace
+npm,@radix-ui/react-collection,1.1.15,MIT,runtime/workspace
+npm,@radix-ui/react-compose-refs,1.1.5,MIT,runtime/workspace
+npm,@radix-ui/react-context,1.2.2,MIT,runtime/workspace
+npm,@radix-ui/react-context-menu,2.3.7,MIT,runtime/workspace
+npm,@radix-ui/react-dialog,1.1.23,MIT,runtime/workspace
+npm,@radix-ui/react-direction,1.1.4,MIT,runtime/workspace
+npm,@radix-ui/react-dismissable-layer,1.1.19,MIT,runtime/workspace
+npm,@radix-ui/react-dropdown-menu,2.1.24,MIT,runtime/workspace
+npm,@radix-ui/react-focus-guards,1.1.6,MIT,runtime/workspace
+npm,@radix-ui/react-focus-scope,1.1.16,MIT,runtime/workspace
+npm,@radix-ui/react-form,0.1.16,MIT,runtime/workspace
+npm,@radix-ui/react-hover-card,1.1.23,MIT,runtime/workspace
+npm,@radix-ui/react-id,1.1.4,MIT,runtime/workspace
+npm,@radix-ui/react-label,2.1.15,MIT,runtime/workspace
+npm,@radix-ui/react-menu,2.1.24,MIT,runtime/workspace
+npm,@radix-ui/react-menubar,1.1.24,MIT,runtime/workspace
+npm,@radix-ui/react-navigation-menu,1.2.22,MIT,runtime/workspace
+npm,@radix-ui/react-one-time-password-field,0.1.16,MIT,runtime/workspace
+npm,@radix-ui/react-password-toggle-field,0.1.11,MIT,runtime/workspace
+npm,@radix-ui/react-popover,1.1.23,MIT,runtime/workspace
+npm,@radix-ui/react-popper,1.3.7,MIT,runtime/workspace
+npm,@radix-ui/react-portal,1.1.17,MIT,runtime/workspace
+npm,@radix-ui/react-presence,1.1.10,MIT,runtime/workspace
+npm,@radix-ui/react-primitive,2.1.10,MIT,runtime/workspace
+npm,@radix-ui/react-progress,1.1.16,MIT,runtime/workspace
+npm,@radix-ui/react-radio-group,1.4.7,MIT,runtime/workspace
+npm,@radix-ui/react-roving-focus,1.1.19,MIT,runtime/workspace
+npm,@radix-ui/react-scroll-area,1.2.18,MIT,runtime/workspace
+npm,@radix-ui/react-select,2.3.7,MIT,runtime/workspace
+npm,@radix-ui/react-separator,1.1.15,MIT,runtime/workspace
+npm,@radix-ui/react-slider,1.4.7,MIT,runtime/workspace
+npm,@radix-ui/react-slot,1.3.3,MIT,runtime/workspace
+npm,@radix-ui/react-switch,1.3.7,MIT,runtime/workspace
+npm,@radix-ui/react-tabs,1.1.21,MIT,runtime/workspace
+npm,@radix-ui/react-toast,1.2.23,MIT,runtime/workspace
+npm,@radix-ui/react-toggle,1.1.18,MIT,runtime/workspace
+npm,@radix-ui/react-toggle-group,1.1.19,MIT,runtime/workspace
+npm,@radix-ui/react-toolbar,1.1.19,MIT,runtime/workspace
+npm,@radix-ui/react-tooltip,1.2.16,MIT,runtime/workspace
+npm,@radix-ui/react-use-callback-ref,1.1.4,MIT,runtime/workspace
+npm,@radix-ui/react-use-controllable-state,1.2.6,MIT,runtime/workspace
+npm,@radix-ui/react-use-effect-event,0.0.5,MIT,runtime/workspace
+npm,@radix-ui/react-use-escape-keydown,1.1.5,MIT,runtime/workspace
+npm,@radix-ui/react-use-is-hydrated,0.1.3,MIT,runtime/workspace
+npm,@radix-ui/react-use-layout-effect,1.1.4,MIT,runtime/workspace
+npm,@radix-ui/react-use-previous,1.1.4,MIT,runtime/workspace
+npm,@radix-ui/react-use-rect,1.1.4,MIT,runtime/workspace
+npm,@radix-ui/react-use-size,1.1.4,MIT,runtime/workspace
+npm,@radix-ui/react-visually-hidden,1.2.11,MIT,runtime/workspace
+npm,@radix-ui/rect,1.1.3,MIT,runtime/workspace
+npm,@retainpdf/api,,UNKNOWN,runtime/workspace
+npm,@retainpdf/contracts,,UNKNOWN,runtime/workspace
+npm,@retainpdf/domain,,UNKNOWN,runtime/workspace
+npm,@retainpdf/reader,,UNKNOWN,runtime/workspace
+npm,@retainpdf/ui,,UNKNOWN,runtime/workspace
+npm,@rollup/rollup-android-arm-eabi,4.62.4,MIT,development/build
+npm,@rollup/rollup-android-arm64,4.62.4,MIT,development/build
+npm,@rollup/rollup-darwin-arm64,4.62.4,MIT,development/build
+npm,@rollup/rollup-darwin-x64,4.62.4,MIT,development/build
+npm,@rollup/rollup-freebsd-arm64,4.62.4,MIT,development/build
+npm,@rollup/rollup-freebsd-x64,4.62.4,MIT,development/build
+npm,@rollup/rollup-linux-arm-gnueabihf,4.62.4,MIT,development/build
+npm,@rollup/rollup-linux-arm-musleabihf,4.62.4,MIT,development/build
+npm,@rollup/rollup-linux-arm64-gnu,4.62.4,MIT,development/build
+npm,@rollup/rollup-linux-arm64-musl,4.62.4,MIT,development/build
+npm,@rollup/rollup-linux-loong64-gnu,4.62.4,MIT,development/build
+npm,@rollup/rollup-linux-loong64-musl,4.62.4,MIT,development/build
+npm,@rollup/rollup-linux-ppc64-gnu,4.62.4,MIT,development/build
+npm,@rollup/rollup-linux-ppc64-musl,4.62.4,MIT,development/build
+npm,@rollup/rollup-linux-riscv64-gnu,4.62.4,MIT,development/build
+npm,@rollup/rollup-linux-riscv64-musl,4.62.4,MIT,development/build
+npm,@rollup/rollup-linux-s390x-gnu,4.62.4,MIT,development/build
+npm,@rollup/rollup-linux-x64-gnu,4.62.4,MIT,development/build
+npm,@rollup/rollup-linux-x64-musl,4.62.4,MIT,development/build
+npm,@rollup/rollup-openbsd-x64,4.62.4,MIT,development/build
+npm,@rollup/rollup-openharmony-arm64,4.62.4,MIT,development/build
+npm,@rollup/rollup-win32-arm64-msvc,4.62.4,MIT,development/build
+npm,@rollup/rollup-win32-ia32-msvc,4.62.4,MIT,development/build
+npm,@rollup/rollup-win32-x64-gnu,4.62.4,MIT,development/build
+npm,@rollup/rollup-win32-x64-msvc,4.62.4,MIT,development/build
+npm,@sindresorhus/is,4.6.0,MIT,development/build
+npm,@standard-schema/spec,1.1.0,MIT,runtime/workspace
+npm,@szmarczak/http-timer,4.0.6,MIT,development/build
+npm,@tailwindcss/cli,4.3.3,MIT,development/build
+npm,tailwindcss,4.3.3,MIT,development/build
+npm,@tailwindcss/node,4.3.3,MIT,development/build
+npm,lightningcss,1.32.0,MPL-2.0,development/build
+npm,lightningcss-android-arm64,1.32.0,MPL-2.0,development/build
+npm,lightningcss-darwin-arm64,1.32.0,MPL-2.0,development/build
+npm,lightningcss-darwin-x64,1.32.0,MPL-2.0,development/build
+npm,lightningcss-freebsd-x64,1.32.0,MPL-2.0,development/build
+npm,lightningcss-linux-arm-gnueabihf,1.32.0,MPL-2.0,development/build
+npm,lightningcss-linux-arm64-gnu,1.32.0,MPL-2.0,development/build
+npm,lightningcss-linux-arm64-musl,1.32.0,MPL-2.0,development/build
+npm,lightningcss-linux-x64-gnu,1.32.0,MPL-2.0,development/build
+npm,lightningcss-linux-x64-musl,1.32.0,MPL-2.0,development/build
+npm,lightningcss-win32-arm64-msvc,1.32.0,MPL-2.0,development/build
+npm,lightningcss-win32-x64-msvc,1.32.0,MPL-2.0,development/build
+npm,tailwindcss,4.3.3,MIT,development/build
+npm,@tailwindcss/oxide,4.3.3,MIT,development/build
+npm,@tailwindcss/oxide-android-arm64,4.3.3,MIT,development/build
+npm,@tailwindcss/oxide-darwin-arm64,4.3.3,MIT,development/build
+npm,@tailwindcss/oxide-darwin-x64,4.3.3,MIT,development/build
+npm,@tailwindcss/oxide-freebsd-x64,4.3.3,MIT,development/build
+npm,@tailwindcss/oxide-linux-arm-gnueabihf,4.3.3,MIT,development/build
+npm,@tailwindcss/oxide-linux-arm64-gnu,4.3.3,MIT,development/build
+npm,@tailwindcss/oxide-linux-arm64-musl,4.3.3,MIT,development/build
+npm,@tailwindcss/oxide-linux-x64-gnu,4.3.3,MIT,development/build
+npm,@tailwindcss/oxide-linux-x64-musl,4.3.3,MIT,development/build
+npm,@tailwindcss/oxide-wasm32-wasi,4.3.3,MIT,development/build
+npm,@tailwindcss/oxide-win32-arm64-msvc,4.3.3,MIT,development/build
+npm,@tailwindcss/oxide-win32-x64-msvc,4.3.3,MIT,development/build
+npm,@types/cacheable-request,6.0.3,MIT,development/build
+npm,@types/debug,4.1.13,MIT,development/build
+npm,@types/esrecurse,4.3.1,MIT,development/build
+npm,@types/estree,1.0.9,MIT,development/build
+npm,@types/fs-extra,9.0.13,MIT,development/build
+npm,@types/http-cache-semantics,4.2.0,MIT,development/build
+npm,@types/json-schema,7.0.15,MIT,development/build
+npm,@types/keyv,3.1.4,MIT,development/build
+npm,@types/lodash,4.17.25,MIT,development/build
+npm,@types/ms,2.1.0,MIT,development/build
+npm,@types/node,24.13.3,MIT,development/build
+npm,@types/react,19.2.18,MIT,runtime/workspace
+npm,@types/react-dom,19.2.4,MIT,runtime/workspace
+npm,@types/responselike,1.0.3,MIT,development/build
+npm,@typescript/typescript-aix-ppc64,7.0.2,Apache-2.0,development/build
+npm,@typescript/typescript-darwin-arm64,7.0.2,Apache-2.0,development/build
+npm,@typescript/typescript-darwin-x64,7.0.2,Apache-2.0,development/build
+npm,@typescript/typescript-freebsd-arm64,7.0.2,Apache-2.0,development/build
+npm,@typescript/typescript-freebsd-x64,7.0.2,Apache-2.0,development/build
+npm,@typescript/typescript-linux-arm,7.0.2,Apache-2.0,development/build
+npm,@typescript/typescript-linux-arm64,7.0.2,Apache-2.0,development/build
+npm,@typescript/typescript-linux-loong64,7.0.2,Apache-2.0,development/build
+npm,@typescript/typescript-linux-mips64el,7.0.2,Apache-2.0,development/build
+npm,@typescript/typescript-linux-ppc64,7.0.2,Apache-2.0,development/build
+npm,@typescript/typescript-linux-riscv64,7.0.2,Apache-2.0,development/build
+npm,@typescript/typescript-linux-s390x,7.0.2,Apache-2.0,development/build
+npm,@typescript/typescript-linux-x64,7.0.2,Apache-2.0,development/build
+npm,@typescript/typescript-netbsd-arm64,7.0.2,Apache-2.0,development/build
+npm,@typescript/typescript-netbsd-x64,7.0.2,Apache-2.0,development/build
+npm,@typescript/typescript-openbsd-arm64,7.0.2,Apache-2.0,development/build
+npm,@typescript/typescript-openbsd-x64,7.0.2,Apache-2.0,development/build
+npm,@typescript/typescript-sunos-x64,7.0.2,Apache-2.0,development/build
+npm,@typescript/typescript-win32-arm64,7.0.2,Apache-2.0,development/build
+npm,@typescript/typescript-win32-x64,7.0.2,Apache-2.0,development/build
+npm,@vercel/oidc,3.2.0,Apache-2.0,runtime/workspace
+npm,@xmldom/xmldom,0.8.15,MIT,development/build
+npm,abbrev,4.0.0,ISC,development/build
+npm,acorn,8.18.0,MIT,development/build
+npm,acorn-jsx,5.3.2,MIT,development/build
+npm,agent-base,7.1.4,MIT,development/build
+npm,ajv,6.15.0,MIT,development/build
+npm,ansi-regex,5.0.1,MIT,development/build
+npm,ansi-styles,4.3.0,MIT,development/build
+npm,app-builder-lib,26.15.3,MIT,development/build
+npm,@electron/get,3.1.0,MIT,development/build
+npm,fs-extra,8.1.0,MIT,development/build
+npm,semver,6.3.1,ISC,development/build
+npm,ajv,8.20.0,MIT,development/build
+npm,ci-info,4.3.1,MIT,development/build
+npm,env-paths,2.2.1,MIT,development/build
+npm,isexe,3.1.5,BlueOak-1.0.0,development/build
+npm,json-schema-traverse,1.0.0,MIT,development/build
+npm,jsonfile,4.0.0,MIT,development/build
+npm,semver,7.7.4,ISC,development/build
+npm,universalify,0.1.2,MIT,development/build
+npm,which,5.0.0,ISC,development/build
+npm,argparse,2.0.1,Python-2.0,development/build
+npm,aria-hidden,1.2.6,MIT,runtime/workspace
+npm,asn1js,3.0.10,BSD-3-Clause,development/build
+npm,assistant-cloud,0.1.41,MIT,runtime/workspace
+npm,assistant-stream,0.3.39,MIT,runtime/workspace
+npm,nanoid,6.0.1,MIT,runtime/workspace
+npm,async,3.2.6,MIT,development/build
+npm,async-exit-hook,2.0.1,MIT,development/build
+npm,asynckit,0.4.0,MIT,development/build
+npm,at-least-node,1.0.0,ISC,development/build
+npm,aws4,1.13.2,MIT,development/build
+npm,balanced-match,4.0.4,MIT,development/build
+npm,base64-js,1.5.1,MIT,runtime/workspace
+npm,bl,4.1.0,MIT,runtime/workspace
+npm,bluebird,3.7.2,MIT,development/build
+npm,boolean,3.2.0,MIT,development/build
+npm,brace-expansion,5.0.9,MIT,development/build
+npm,braces,3.0.3,MIT,development/build
+npm,buffer,5.7.1,MIT,runtime/workspace
+npm,buffer-from,1.1.2,MIT,development/build
+npm,builder-util,26.15.3,MIT,development/build
+npm,builder-util-runtime,9.7.0,MIT,development/build
+npm,bytestreamjs,2.0.1,BSD-3-Clause,development/build
+npm,cacheable-lookup,5.0.4,MIT,development/build
+npm,cacheable-request,7.0.4,MIT,development/build
+npm,call-bind-apply-helpers,1.0.2,MIT,development/build
+npm,canvas,3.2.3,MIT,runtime/workspace
+npm,node-addon-api,7.1.1,MIT,runtime/workspace
+npm,chalk,4.1.2,MIT,development/build
+npm,chownr,3.0.0,BlueOak-1.0.0,development/build
+npm,chromium-pickle-js,0.2.0,MIT,development/build
+npm,ci-info,4.4.0,MIT,development/build
+npm,class-variance-authority,0.7.1,Apache-2.0,runtime/workspace
+npm,cliui,8.0.1,ISC,development/build
+npm,clone-response,1.0.3,MIT,development/build
+npm,clsx,2.1.1,MIT,runtime/workspace
+npm,color-convert,2.0.1,MIT,development/build
+npm,color-name,1.1.4,MIT,development/build
+npm,combined-stream,1.0.8,MIT,development/build
+npm,commander,5.1.0,MIT,development/build
+npm,compare-version,0.1.2,MIT,development/build
+npm,concat-map,0.0.1,MIT,development/build
+npm,core-util-is,1.0.3,MIT,development/build
+npm,cross-dirname,0.1.0,MIT,development/build
+npm,cross-spawn,7.0.6,MIT,development/build
+npm,csstype,3.2.3,MIT,runtime/workspace
+npm,debug,4.4.3,MIT,development/build
+npm,decompress-response,6.0.0,MIT,runtime/workspace
+npm,mimic-response,3.1.0,MIT,runtime/workspace
+npm,deep-extend,0.6.0,MIT,runtime/workspace
+npm,deep-is,0.1.4,MIT,development/build
+npm,defer-to-connect,2.0.1,MIT,development/build
+npm,define-data-property,1.1.4,MIT,development/build
+npm,define-properties,1.2.1,MIT,development/build
+npm,delayed-stream,1.0.0,MIT,development/build
+npm,dequal,2.0.3,MIT,runtime/workspace
+npm,detect-libc,2.1.2,Apache-2.0,runtime/workspace
+npm,detect-node,2.1.0,MIT,development/build
+npm,detect-node-es,1.1.0,MIT,runtime/workspace
+npm,dir-compare,4.2.0,MIT,development/build
+npm,balanced-match,1.0.2,MIT,development/build
+npm,brace-expansion,1.1.21,MIT,development/build
+npm,minimatch,3.1.5,ISC,development/build
+npm,dmg-builder,26.15.3,MIT,development/build
+npm,dotenv,16.6.1,BSD-2-Clause,development/build
+npm,dotenv-expand,11.0.7,BSD-2-Clause,development/build
+npm,dunder-proto,1.0.1,MIT,development/build
+npm,duplexer2,0.1.4,BSD-3-Clause,development/build
+npm,readable-stream,2.3.8,MIT,development/build
+npm,safe-buffer,5.1.2,MIT,development/build
+npm,string_decoder,1.1.1,MIT,development/build
+npm,ejs,3.1.10,Apache-2.0,development/build
+npm,electron,44.4.3,MIT,development/build
+npm,electron-builder,26.15.3,MIT,development/build
+npm,electron-builder-squirrel-windows,26.15.3,MIT,development/build
+npm,electron-publish,26.15.3,MIT,development/build
+npm,electron-winstaller,5.4.0,MIT,development/build
+npm,fs-extra,7.0.1,MIT,development/build
+npm,jsonfile,4.0.0,MIT,development/build
+npm,universalify,0.1.2,MIT,development/build
+npm,emoji-regex,8.0.0,MIT,development/build
+npm,end-of-stream,1.4.5,MIT,runtime/workspace
+npm,enhanced-resolve,5.24.5,MIT,development/build
+npm,entities,8.0.0,BSD-2-Clause,runtime/workspace
+npm,env-paths,3.0.0,MIT,development/build
+npm,err-code,2.0.3,MIT,development/build
+npm,es-define-property,1.0.1,MIT,development/build
+npm,es-errors,1.3.0,MIT,development/build
+npm,es-object-atoms,1.1.2,MIT,development/build
+npm,es-set-tostringtag,2.1.0,MIT,development/build
+npm,es6-error,4.1.1,MIT,development/build
+npm,esbuild,0.28.2,MIT,development/build
+npm,escalade,3.2.0,MIT,development/build
+npm,escape-string-regexp,4.0.0,MIT,development/build
+npm,eslint,10.8.1,MIT,development/build
+npm,eslint-scope,9.1.2,BSD-2-Clause,development/build
+npm,eslint-visitor-keys,5.0.1,Apache-2.0,development/build
+npm,esm,3.2.25,MIT,runtime/workspace
+npm,espree,11.2.0,BSD-2-Clause,development/build
+npm,esquery,1.7.0,BSD-3-Clause,development/build
+npm,esrecurse,4.3.0,BSD-2-Clause,development/build
+npm,estraverse,5.3.0,BSD-2-Clause,development/build
+npm,esutils,2.0.3,BSD-2-Clause,development/build
+npm,eventsource-parser,3.1.1,MIT,runtime/workspace
+npm,expand-template,2.0.3,(MIT OR WTFPL),runtime/workspace
+npm,exponential-backoff,3.1.3,Apache-2.0,development/build
+npm,fast-deep-equal,3.1.3,MIT,development/build
+npm,fast-json-stable-stringify,2.1.0,MIT,development/build
+npm,fast-levenshtein,2.0.6,MIT,development/build
+npm,fast-uri,3.1.8,BSD-3-Clause,development/build
+npm,fflate,0.8.3,MIT,runtime/workspace
+npm,file-entry-cache,8.0.0,MIT,development/build
+npm,filelist,1.0.6,Apache-2.0,development/build
+npm,balanced-match,1.0.2,MIT,development/build
+npm,brace-expansion,2.1.7,MIT,development/build
+npm,minimatch,5.1.9,ISC,development/build
+npm,fill-range,7.1.1,MIT,development/build
+npm,find-up,5.0.0,MIT,development/build
+npm,flat-cache,4.0.1,MIT,development/build
+npm,flatted,3.4.4,ISC,development/build
+npm,form-data,4.0.6,MIT,development/build
+npm,front-tailwind-ui,,UNKNOWN,runtime/workspace
+npm,fs-constants,1.0.0,MIT,runtime/workspace
+npm,fs-extra,10.1.0,MIT,development/build
+npm,fs.realpath,1.0.0,ISC,development/build
+npm,fsevents,2.3.3,MIT,development/build
+npm,function-bind,1.1.2,MIT,development/build
+npm,get-caller-file,2.0.5,ISC,development/build
+npm,get-intrinsic,1.3.0,MIT,development/build
+npm,get-nonce,1.0.1,MIT,runtime/workspace
+npm,get-proto,1.0.1,MIT,development/build
+npm,get-stream,5.2.0,MIT,development/build
+npm,github-from-package,0.0.0,MIT,runtime/workspace
+npm,glob,7.2.3,ISC,development/build
+npm,glob-parent,6.0.2,ISC,development/build
+npm,balanced-match,1.0.2,MIT,development/build
+npm,brace-expansion,1.1.18,MIT,development/build
+npm,minimatch,3.1.5,ISC,development/build
+npm,global-agent,3.0.0,BSD-3-Clause,development/build
+npm,globalthis,1.0.4,MIT,development/build
+npm,gopd,1.2.0,MIT,development/build
+npm,got,11.8.6,MIT,development/build
+npm,graceful-fs,4.2.11,ISC,development/build
+npm,has-flag,4.0.0,MIT,development/build
+npm,has-property-descriptors,1.0.2,MIT,development/build
+npm,has-symbols,1.1.0,MIT,development/build
+npm,has-tostringtag,1.0.2,MIT,development/build
+npm,hasown,2.0.4,MIT,development/build
+npm,hosted-git-info,4.1.0,ISC,development/build
+npm,http-cache-semantics,4.2.0,BSD-2-Clause,development/build
+npm,http-proxy-agent,7.0.2,MIT,development/build
+npm,http2-wrapper,1.0.3,MIT,development/build
+npm,https-proxy-agent,7.0.6,MIT,development/build
+npm,ieee754,1.2.1,BSD-3-Clause,runtime/workspace
+npm,ignore,5.3.2,MIT,development/build
+npm,imurmurhash,0.1.4,MIT,development/build
+npm,inflight,1.0.6,ISC,development/build
+npm,inherits,2.0.4,ISC,runtime/workspace
+npm,ini,1.3.8,ISC,runtime/workspace
+npm,is-extglob,2.1.1,MIT,development/build
+npm,is-fullwidth-code-point,3.0.0,MIT,development/build
+npm,is-glob,4.0.3,MIT,development/build
+npm,is-number,7.0.0,MIT,development/build
+npm,isarray,1.0.0,MIT,development/build
+npm,isbinaryfile,5.0.7,MIT,development/build
+npm,isexe,2.0.0,ISC,development/build
+npm,jake,10.9.4,Apache-2.0,development/build
+npm,jiti,2.7.0,MIT,development/build
+npm,js-tokens,4.0.0,MIT,runtime/workspace
+npm,js-yaml,4.3.1,MIT,development/build
+npm,json-buffer,3.0.1,MIT,development/build
+npm,json-schema,0.4.0,(AFL-2.1 OR BSD-3-Clause),runtime/workspace
+npm,json-schema-to-typescript,15.0.4,MIT,development/build
+npm,json-schema-traverse,0.4.1,MIT,development/build
+npm,json-stable-stringify-without-jsonify,1.0.1,MIT,development/build
+npm,json-stringify-safe,5.0.1,ISC,development/build
+npm,json5,2.2.3,MIT,development/build
+npm,jsonfile,6.2.1,MIT,development/build
+npm,katex,0.16.47,MIT,runtime/workspace
+npm,commander,8.3.0,MIT,runtime/workspace
+npm,keyv,4.5.4,MIT,development/build
+npm,lazy-val,1.0.5,MIT,development/build
+npm,levn,0.4.1,MIT,development/build
+npm,linkify-it,6.1.0,MIT,runtime/workspace
+npm,locate-path,6.0.0,MIT,development/build
+npm,lodash,4.18.1,MIT,development/build
+npm,loose-envify,1.4.0,MIT,runtime/workspace
+npm,lowercase-keys,2.0.0,MIT,development/build
+npm,lru-cache,6.0.0,ISC,development/build
+npm,lucide-react,0.400.0,ISC,runtime/workspace
+npm,magic-string,0.30.21,MIT,development/build
+npm,make-cancellable-promise,1.3.2,MIT,runtime/workspace
+npm,make-event-props,1.6.2,MIT,runtime/workspace
+npm,markdown-it-container,4.0.0,MIT,runtime/workspace
+npm,markdown-it-footnote,4.0.0,MIT,runtime/workspace
+npm,markdown-it-ins,4.0.0,MIT,runtime/workspace
+npm,markdown-it-mark,4.0.0,MIT,runtime/workspace
+npm,markdown-it-sup,2.0.0,MIT,runtime/workspace
+npm,markdown-it-task-checkbox,1.0.6,ISC,runtime/workspace
+npm,markdown-it-ts,1.1.0,MIT,runtime/workspace
+npm,marked,18.0.10,MIT,runtime/workspace
+npm,markstream-core,2.0.2,MIT,runtime/workspace
+npm,markstream-react,2.0.3,MIT,runtime/workspace
+npm,matcher,3.0.0,MIT,development/build
+npm,math-intrinsics,1.1.0,MIT,development/build
+npm,mathjax-full,3.2.2,Apache-2.0,runtime/workspace
+npm,mdurl,2.1.0,MIT,runtime/workspace
+npm,merge-refs,1.3.0,MIT,runtime/workspace
+npm,mhchemparser,4.2.1,Apache-2.0,runtime/workspace
+npm,micromatch,4.0.8,MIT,development/build
+npm,mime,2.6.0,MIT,development/build
+npm,mime-db,1.52.0,MIT,development/build
+npm,mime-types,2.1.35,MIT,development/build
+npm,mimic-response,1.0.1,MIT,development/build
+npm,minimatch,10.2.6,BlueOak-1.0.0,development/build
+npm,minimist,1.2.8,MIT,runtime/workspace
+npm,minipass,7.1.3,BlueOak-1.0.0,development/build
+npm,minizlib,3.1.0,MIT,development/build
+npm,mj-context-menu,0.6.1,Apache-2.0,runtime/workspace
+npm,mkdirp,0.5.6,MIT,development/build
+npm,mkdirp-classic,0.5.3,MIT,runtime/workspace
+npm,mri,1.2.0,MIT,development/build
+npm,ms,2.1.3,MIT,development/build
+npm,nanoid,3.3.18,MIT,development/build
+npm,napi-build-utils,2.0.0,MIT,runtime/workspace
+npm,natural-compare,1.4.0,MIT,development/build
+npm,node-abi,3.94.0,MIT,runtime/workspace
+npm,node-api-version,0.2.1,MIT,development/build
+npm,node-gyp,12.4.0,MIT,development/build
+npm,env-paths,2.2.1,MIT,development/build
+npm,isexe,4.0.0,BlueOak-1.0.0,development/build
+npm,undici,6.28.1,MIT,development/build
+npm,which,6.0.1,ISC,development/build
+npm,node-int64,0.4.0,MIT,development/build
+npm,nopt,9.0.0,ISC,development/build
+npm,normalize-url,6.1.0,MIT,development/build
+npm,object-keys,1.1.1,MIT,development/build
+npm,once,1.4.0,ISC,runtime/workspace
+npm,optionator,0.9.4,MIT,development/build
+npm,p-cancelable,2.1.1,MIT,development/build
+npm,p-limit,3.1.0,MIT,development/build
+npm,p-locate,5.0.0,MIT,development/build
+npm,path-exists,4.0.0,MIT,development/build
+npm,path-is-absolute,1.0.1,MIT,development/build
+npm,path-key,3.1.1,MIT,development/build
+npm,path2d,0.2.2,MIT,runtime/workspace
+npm,pe-library,0.4.1,MIT,development/build
+npm,picocolors,1.1.1,ISC,development/build
+npm,picomatch,2.3.2,MIT,development/build
+npm,pkijs,3.4.0,BSD-3-Clause,development/build
+npm,@noble/hashes,1.4.0,MIT,development/build
+npm,plist,3.1.0,MIT,development/build
+npm,postcss,8.5.26,MIT,development/build
+npm,postject,1.0.0-alpha.6,MIT,development/build
+npm,commander,9.5.0,MIT,development/build
+npm,prebuild-install,7.1.3,MIT,runtime/workspace
+npm,prelude-ls,1.2.1,MIT,development/build
+npm,prettier,3.9.6,MIT,development/build
+npm,proc-log,6.1.0,ISC,development/build
+npm,process-nextick-args,2.0.1,MIT,development/build
+npm,progress,2.0.3,MIT,development/build
+npm,promise-retry,2.0.1,MIT,development/build
+npm,proper-lockfile,4.1.2,MIT,development/build
+npm,pump,3.0.4,MIT,runtime/workspace
+npm,punycode,2.3.1,MIT,development/build
+npm,punycode.js,2.3.1,MIT,runtime/workspace
+npm,pvtsutils,1.3.6,MIT,development/build
+npm,pvutils,1.2.0,MIT,development/build
+npm,quick-lru,5.1.1,MIT,development/build
+npm,radix-ui,1.6.7,MIT,runtime/workspace
+npm,rc,1.2.8,(BSD-2-Clause OR MIT OR Apache-2.0),runtime/workspace
+npm,react,19.2.8,MIT,runtime/workspace
+npm,react-dom,19.2.8,MIT,runtime/workspace
+npm,react-pdf,9.2.1,MIT,runtime/workspace
+npm,pdfjs-dist,4.8.69,Apache-2.0,runtime/workspace
+npm,react-remove-scroll,2.7.2,MIT,runtime/workspace
+npm,react-remove-scroll-bar,2.3.8,MIT,runtime/workspace
+npm,react-resizable-panels,4.12.1,MIT,runtime/workspace
+npm,react-style-singleton,2.2.3,MIT,runtime/workspace
+npm,react-textarea-autosize,8.5.9,MIT,runtime/workspace
+npm,read-binary-file-arch,1.0.6,MIT,development/build
+npm,readable-stream,3.6.2,MIT,runtime/workspace
+npm,require-directory,2.1.1,MIT,development/build
+npm,require-from-string,2.0.2,MIT,development/build
+npm,resedit,1.7.2,MIT,development/build
+npm,resolve-alpn,1.2.1,MIT,development/build
+npm,responselike,2.0.1,MIT,development/build
+npm,retain-pdf-desktop,,UNKNOWN,runtime/workspace
+npm,retainpdf2doc,,UNKNOWN,runtime/workspace
+npm,retry,0.12.0,MIT,development/build
+npm,rimraf,2.6.3,ISC,development/build
+npm,roarr,2.15.4,BSD-3-Clause,development/build
+npm,rollup,4.62.4,MIT,development/build
+npm,safe-buffer,5.2.1,MIT,runtime/workspace
+npm,safe-content-frame,0.0.27,MIT,runtime/workspace
+npm,sanitize-filename,1.6.4,WTFPL OR ISC,development/build
+npm,sax,1.6.1,BlueOak-1.0.0,development/build
+npm,scheduler,0.27.0,MIT,runtime/workspace
+npm,secure-json-parse,4.1.0,BSD-3-Clause,runtime/workspace
+npm,semver,7.8.5,ISC,runtime/workspace
+npm,semver-compare,1.0.0,MIT,development/build
+npm,serialize-error,7.0.1,MIT,development/build
+npm,shebang-command,2.0.0,MIT,development/build
+npm,shebang-regex,3.0.0,MIT,development/build
+npm,signal-exit,3.0.7,ISC,development/build
+npm,simple-concat,1.0.1,MIT,runtime/workspace
+npm,simple-get,4.0.1,MIT,runtime/workspace
+npm,simple-update-notifier,2.0.0,MIT,development/build
+npm,sonner,2.0.8,MIT,runtime/workspace
+npm,source-map,0.6.1,BSD-3-Clause,development/build
+npm,source-map-js,1.2.1,BSD-3-Clause,development/build
+npm,source-map-support,0.5.21,MIT,development/build
+npm,speech-rule-engine,4.1.4,Apache-2.0,runtime/workspace
+npm,@xmldom/xmldom,0.9.10,MIT,runtime/workspace
+npm,commander,13.1.0,MIT,runtime/workspace
+npm,sprintf-js,1.1.3,BSD-3-Clause,development/build
+npm,stat-mode,1.0.0,MIT,development/build
+npm,stream-markdown-parser,1.2.10,MIT,runtime/workspace
+npm,string_decoder,1.3.0,MIT,runtime/workspace
+npm,string-width,4.2.3,MIT,development/build
+npm,strip-ansi,6.0.1,MIT,development/build
+npm,strip-json-comments,2.0.1,MIT,runtime/workspace
+npm,sumchecker,3.0.1,Apache-2.0,development/build
+npm,supports-color,7.2.0,MIT,development/build
+npm,swr,2.5.1,MIT,runtime/workspace
+npm,tailwind-merge,3.6.0,MIT,runtime/workspace
+npm,tapable,2.3.3,MIT,development/build
+npm,tar,7.5.22,BlueOak-1.0.0,development/build
+npm,tar-fs,2.1.5,MIT,runtime/workspace
+npm,chownr,1.1.4,ISC,runtime/workspace
+npm,tar-stream,2.2.0,MIT,runtime/workspace
+npm,yallist,5.0.0,BlueOak-1.0.0,development/build
+npm,temp,0.9.4,MIT,development/build
+npm,temp-file,3.4.0,MIT,development/build
+npm,throttleit,2.1.0,MIT,runtime/workspace
+npm,tiny-async-pool,1.3.0,MIT,development/build
+npm,semver,5.7.2,ISC,development/build
+npm,tiny-invariant,1.3.3,MIT,runtime/workspace
+npm,tinyglobby,0.2.17,MIT,development/build
+npm,fdir,6.5.0,MIT,development/build
+npm,picomatch,4.0.5,MIT,development/build
+npm,tmp,0.2.7,MIT,development/build
+npm,tmp-promise,3.0.3,MIT,development/build
+npm,to-regex-range,5.0.1,MIT,development/build
+npm,truncate-utf8-bytes,1.0.2,WTFPL,development/build
+npm,tslib,2.8.1,0BSD,runtime/workspace
+npm,tunnel-agent,0.6.0,Apache-2.0,runtime/workspace
+npm,type-check,0.4.0,MIT,development/build
+npm,type-fest,0.13.1,(MIT OR CC0-1.0),development/build
+npm,uc.micro,3.0.0,MIT,runtime/workspace
+npm,undici,7.29.0,MIT,development/build
+npm,undici-types,7.18.2,MIT,development/build
+npm,universalify,2.0.1,MIT,development/build
+npm,unzipper,0.12.5,MIT,development/build
+npm,fs-extra,11.3.1,MIT,development/build
+npm,uri-js,4.4.1,BSD-2-Clause,development/build
+npm,use-callback-ref,1.3.3,MIT,runtime/workspace
+npm,use-composed-ref,1.4.0,MIT,runtime/workspace
+npm,use-isomorphic-layout-effect,1.2.1,MIT,runtime/workspace
+npm,use-latest,1.3.0,MIT,runtime/workspace
+npm,use-sidecar,1.1.3,MIT,runtime/workspace
+npm,use-sync-external-store,1.6.0,MIT,runtime/workspace
+npm,utf8-byte-length,1.0.5,(WTFPL OR MIT),development/build
+npm,util-deprecate,1.0.2,MIT,runtime/workspace
+npm,warning,4.0.3,MIT,runtime/workspace
+npm,webcrypto-core,1.9.2,MIT,development/build
+npm,which,2.0.2,ISC,development/build
+npm,wicked-good-xpath,1.3.0,MIT,runtime/workspace
+npm,word-wrap,1.2.5,MIT,development/build
+npm,wrap-ansi,7.0.0,MIT,development/build
+npm,wrappy,1.0.2,ISC,runtime/workspace
+npm,xmlbuilder,15.1.1,MIT,development/build
+npm,y18n,5.0.8,ISC,development/build
+npm,yallist,4.0.0,ISC,development/build
+npm,yargs,17.7.3,MIT,development/build
+npm,yargs-parser,21.1.1,ISC,development/build
+npm,yocto-queue,0.1.0,MIT,development/build
+npm,zod,3.25.76,MIT,runtime/workspace
+npm,zustand,5.0.15,MIT,runtime/workspace
+rust,adler2,2.0.1,0BSD OR MIT OR Apache-2.0,Windows target metadata
+rust,ahash,0.8.12,MIT OR Apache-2.0,Windows target metadata
+rust,aho-corasick,1.1.4,Unlicense OR MIT,Windows target metadata
+rust,anyhow,1.0.102,MIT OR Apache-2.0,Windows target metadata
+rust,async-trait,0.1.89,MIT OR Apache-2.0,Windows target metadata
+rust,atomic-waker,1.1.2,Apache-2.0 OR MIT,Windows target metadata
+rust,autocfg,1.5.0,Apache-2.0 OR MIT,Windows target metadata
+rust,axum,0.7.9,MIT,Windows target metadata
+rust,axum-core,0.4.5,MIT,Windows target metadata
+rust,axum-macros,0.4.2,MIT,Windows target metadata
+rust,base64,0.22.1,MIT OR Apache-2.0,Windows target metadata
+rust,bitflags,2.11.0,MIT OR Apache-2.0,Windows target metadata
+rust,block-buffer,0.12.1,MIT OR Apache-2.0,Windows target metadata
+rust,byteorder,1.5.0,Unlicense OR MIT,Windows target metadata
+rust,bytes,1.11.1,MIT,Windows target metadata
+rust,cc,1.2.58,MIT OR Apache-2.0,Windows target metadata
+rust,cfg-if,1.0.4,MIT OR Apache-2.0,Windows target metadata
+rust,cfg_aliases,0.2.1,MIT,Windows target metadata
+rust,chrono,0.4.44,MIT OR Apache-2.0,Windows target metadata
+rust,cmov,0.5.4,Apache-2.0 OR MIT,Windows target metadata
+rust,const-oid,0.10.2,Apache-2.0 OR MIT,Windows target metadata
+rust,cpufeatures,0.3.0,MIT OR Apache-2.0,Windows target metadata
+rust,crc32fast,1.5.0,MIT OR Apache-2.0,Windows target metadata
+rust,crossbeam-deque,0.8.6,MIT OR Apache-2.0,Windows target metadata
+rust,crossbeam-epoch,0.9.18,MIT OR Apache-2.0,Windows target metadata
+rust,crossbeam-utils,0.8.21,MIT OR Apache-2.0,Windows target metadata
+rust,crypto-common,0.2.2,MIT OR Apache-2.0,Windows target metadata
+rust,csv,1.4.0,Unlicense/MIT,Windows target metadata
+rust,csv-core,0.1.13,Unlicense/MIT,Windows target metadata
+rust,ctutils,0.4.2,Apache-2.0 OR MIT,Windows target metadata
+rust,deranged,0.5.8,MIT OR Apache-2.0,Windows target metadata
+rust,digest,0.11.3,MIT OR Apache-2.0,Windows target metadata
+rust,displaydoc,0.2.5,MIT OR Apache-2.0,Windows target metadata
+rust,either,1.15.0,MIT OR Apache-2.0,Windows target metadata
+rust,encoding_rs,0.8.35,(Apache-2.0 OR MIT) AND BSD-3-Clause,Windows target metadata
+rust,fallible-iterator,0.3.0,MIT/Apache-2.0,Windows target metadata
+rust,fallible-streaming-iterator,0.1.9,MIT/Apache-2.0,Windows target metadata
+rust,fastrand,2.3.0,Apache-2.0 OR MIT,Windows target metadata
+rust,find-msvc-tools,0.1.9,MIT OR Apache-2.0,Windows target metadata
+rust,flate2,1.1.9,MIT OR Apache-2.0,Windows target metadata
+rust,form_urlencoded,1.2.2,MIT OR Apache-2.0,Windows target metadata
+rust,futures-channel,0.3.32,MIT OR Apache-2.0,Windows target metadata
+rust,futures-core,0.3.32,MIT OR Apache-2.0,Windows target metadata
+rust,futures-io,0.3.32,MIT OR Apache-2.0,Windows target metadata
+rust,futures-macro,0.3.32,MIT OR Apache-2.0,Windows target metadata
+rust,futures-sink,0.3.32,MIT OR Apache-2.0,Windows target metadata
+rust,futures-task,0.3.32,MIT OR Apache-2.0,Windows target metadata
+rust,futures-util,0.3.32,MIT OR Apache-2.0,Windows target metadata
+rust,getrandom,0.2.17,MIT OR Apache-2.0,Windows target metadata
+rust,getrandom,0.3.4,MIT OR Apache-2.0,Windows target metadata
+rust,hashbrown,0.14.5,MIT OR Apache-2.0,Windows target metadata
+rust,hashlink,0.9.1,MIT OR Apache-2.0,Windows target metadata
+rust,hmac,0.13.0,MIT OR Apache-2.0,Windows target metadata
+rust,htmd,0.5.5,Apache-2.0,Windows target metadata
+rust,html5ever,0.38.0,MIT OR Apache-2.0,Windows target metadata
+rust,http,1.4.0,MIT OR Apache-2.0,Windows target metadata
+rust,http-body,1.0.1,MIT,Windows target metadata
+rust,http-body-util,0.1.3,MIT,Windows target metadata
+rust,httparse,1.10.1,MIT OR Apache-2.0,Windows target metadata
+rust,httpdate,1.0.3,MIT OR Apache-2.0,Windows target metadata
+rust,hybrid-array,0.4.13,MIT OR Apache-2.0,Windows target metadata
+rust,hyper,1.8.1,MIT,Windows target metadata
+rust,hyper-rustls,0.27.7,Apache-2.0 OR ISC OR MIT,Windows target metadata
+rust,hyper-util,0.1.20,MIT,Windows target metadata
+rust,icu_collections,2.1.1,Unicode-3.0,Windows target metadata
+rust,icu_locale_core,2.1.1,Unicode-3.0,Windows target metadata
+rust,icu_normalizer,2.1.1,Unicode-3.0,Windows target metadata
+rust,icu_normalizer_data,2.1.1,Unicode-3.0,Windows target metadata
+rust,icu_properties,2.1.2,Unicode-3.0,Windows target metadata
+rust,icu_properties_data,2.1.2,Unicode-3.0,Windows target metadata
+rust,icu_provider,2.1.1,Unicode-3.0,Windows target metadata
+rust,idna,1.1.0,MIT OR Apache-2.0,Windows target metadata
+rust,idna_adapter,1.2.1,Apache-2.0 OR MIT,Windows target metadata
+rust,ipnet,2.12.0,MIT OR Apache-2.0,Windows target metadata
+rust,iri-string,0.7.12,MIT OR Apache-2.0,Windows target metadata
+rust,itoa,1.0.18,MIT OR Apache-2.0,Windows target metadata
+rust,lazy_static,1.5.0,MIT OR Apache-2.0,Windows target metadata
+rust,libc,0.2.183,MIT OR Apache-2.0,Windows target metadata
+rust,libsqlite3-sys,0.28.0,MIT,Windows target metadata
+rust,linked-hash-map,0.5.6,MIT/Apache-2.0,Windows target metadata
+rust,litemap,0.8.1,Unicode-3.0,Windows target metadata
+rust,lock_api,0.4.14,MIT OR Apache-2.0,Windows target metadata
+rust,log,0.4.29,MIT OR Apache-2.0,Windows target metadata
+rust,lopdf,0.32.0,MIT,Windows target metadata
+rust,lru-slab,0.1.2,MIT OR Apache-2.0 OR Zlib,Windows target metadata
+rust,markup5ever,0.38.0,MIT OR Apache-2.0,Windows target metadata
+rust,markup5ever_rcdom,0.38.0+unofficial,MIT OR Apache-2.0,Windows target metadata
+rust,matchers,0.2.0,MIT,Windows target metadata
+rust,matchit,0.7.3,MIT AND BSD-3-Clause,Windows target metadata
+rust,md5,0.7.0,Apache-2.0/MIT,Windows target metadata
+rust,memchr,2.8.0,Unlicense OR MIT,Windows target metadata
+rust,mime,0.3.17,MIT OR Apache-2.0,Windows target metadata
+rust,mime_guess,2.0.5,MIT,Windows target metadata
+rust,minimal-lexical,0.2.1,MIT/Apache-2.0,Windows target metadata
+rust,miniz_oxide,0.8.9,MIT OR Zlib OR Apache-2.0,Windows target metadata
+rust,mio,1.1.1,MIT,Windows target metadata
+rust,multer,3.1.0,MIT,Windows target metadata
+rust,new_debug_unreachable,1.0.6,MIT,Windows target metadata
+rust,nom,7.1.3,MIT,Windows target metadata
+rust,nu-ansi-term,0.50.3,MIT,Windows target metadata
+rust,num-conv,0.2.1,MIT OR Apache-2.0,Windows target metadata
+rust,num-traits,0.2.19,MIT OR Apache-2.0,Windows target metadata
+rust,once_cell,1.21.4,MIT OR Apache-2.0,Windows target metadata
+rust,parking_lot,0.12.5,MIT OR Apache-2.0,Windows target metadata
+rust,parking_lot_core,0.9.12,MIT OR Apache-2.0,Windows target metadata
+rust,percent-encoding,2.3.2,MIT OR Apache-2.0,Windows target metadata
+rust,phf,0.13.1,MIT,Windows target metadata
+rust,phf_codegen,0.13.1,MIT,Windows target metadata
+rust,phf_generator,0.13.1,MIT,Windows target metadata
+rust,phf_macros,0.13.1,MIT,Windows target metadata
+rust,phf_shared,0.13.1,MIT,Windows target metadata
+rust,pin-project-lite,0.2.17,Apache-2.0 OR MIT,Windows target metadata
+rust,pin-utils,0.1.0,MIT OR Apache-2.0,Windows target metadata
+rust,pkg-config,0.3.32,MIT OR Apache-2.0,Windows target metadata
+rust,potential_utf,0.1.4,Unicode-3.0,Windows target metadata
+rust,powerfmt,0.2.0,MIT OR Apache-2.0,Windows target metadata
+rust,ppv-lite86,0.2.21,MIT OR Apache-2.0,Windows target metadata
+rust,precomputed-hash,0.1.1,MIT,Windows target metadata
+rust,proc-macro2,1.0.106,MIT OR Apache-2.0,Windows target metadata
+rust,quinn,0.11.9,MIT OR Apache-2.0,Windows target metadata
+rust,quinn-proto,0.11.14,MIT OR Apache-2.0,Windows target metadata
+rust,quinn-udp,0.5.14,MIT OR Apache-2.0,Windows target metadata
+rust,quote,1.0.45,MIT OR Apache-2.0,Windows target metadata
+rust,rand,0.9.2,MIT OR Apache-2.0,Windows target metadata
+rust,rand_chacha,0.9.0,MIT OR Apache-2.0,Windows target metadata
+rust,rand_core,0.9.5,MIT OR Apache-2.0,Windows target metadata
+rust,rayon,1.11.0,MIT OR Apache-2.0,Windows target metadata
+rust,rayon-core,1.13.0,MIT OR Apache-2.0,Windows target metadata
+rust,regex,1.12.3,MIT OR Apache-2.0,Windows target metadata
+rust,regex-automata,0.4.14,MIT OR Apache-2.0,Windows target metadata
+rust,regex-syntax,0.8.10,MIT OR Apache-2.0,Windows target metadata
+rust,reqwest,0.12.28,MIT OR Apache-2.0,Windows target metadata
+rust,retain-core,0.1.0,unknown,Windows target metadata
+rust,retain-data,0.1.0,unknown,Windows target metadata
+rust,retain-db,0.1.0,unknown,Windows target metadata
+rust,retain-jobs,0.1.0,unknown,Windows target metadata
+rust,retain-jobsd,0.1.0,unknown,Windows target metadata
+rust,retain-proc,0.1.0,unknown,Windows target metadata
+rust,ring,0.17.14,Apache-2.0 AND ISC,Windows target metadata
+rust,rusqlite,0.31.0,MIT,Windows target metadata
+rust,rust_api,0.1.0,unknown,Windows target metadata
+rust,rustc-hash,2.1.2,Apache-2.0 OR MIT,Windows target metadata
+rust,rustls,0.23.37,Apache-2.0 OR ISC OR MIT,Windows target metadata
+rust,rustls-pki-types,1.14.0,MIT OR Apache-2.0,Windows target metadata
+rust,rustls-webpki,0.103.10,ISC,Windows target metadata
+rust,rustversion,1.0.22,MIT OR Apache-2.0,Windows target metadata
+rust,ryu,1.0.23,Apache-2.0 OR BSL-1.0,Windows target metadata
+rust,same-file,1.0.6,Unlicense/MIT,Windows target metadata
+rust,scopeguard,1.2.0,MIT OR Apache-2.0,Windows target metadata
+rust,serde,1.0.228,MIT OR Apache-2.0,Windows target metadata
+rust,serde_core,1.0.228,MIT OR Apache-2.0,Windows target metadata
+rust,serde_derive,1.0.228,MIT OR Apache-2.0,Windows target metadata
+rust,serde_json,1.0.149,MIT OR Apache-2.0,Windows target metadata
+rust,serde_path_to_error,0.1.20,MIT OR Apache-2.0,Windows target metadata
+rust,serde_urlencoded,0.7.1,MIT/Apache-2.0,Windows target metadata
+rust,sha2,0.11.0,MIT OR Apache-2.0,Windows target metadata
+rust,sharded-slab,0.1.7,MIT,Windows target metadata
+rust,shlex,1.3.0,MIT OR Apache-2.0,Windows target metadata
+rust,simd-adler32,0.3.9,MIT,Windows target metadata
+rust,siphasher,1.0.4,MIT OR Apache-2.0,Windows target metadata
+rust,slab,0.4.12,MIT,Windows target metadata
+rust,smallvec,1.15.1,MIT OR Apache-2.0,Windows target metadata
+rust,socket2,0.6.3,MIT OR Apache-2.0,Windows target metadata
+rust,spin,0.9.8,MIT,Windows target metadata
+rust,stable_deref_trait,1.2.1,MIT OR Apache-2.0,Windows target metadata
+rust,string_cache,0.9.0,MIT OR Apache-2.0,Windows target metadata
+rust,string_cache_codegen,0.6.1,MIT OR Apache-2.0,Windows target metadata
+rust,subtle,2.6.1,BSD-3-Clause,Windows target metadata
+rust,syn,2.0.117,MIT OR Apache-2.0,Windows target metadata
+rust,sync_wrapper,1.0.2,Apache-2.0,Windows target metadata
+rust,synstructure,0.13.2,MIT,Windows target metadata
+rust,tendril,0.5.1,MIT OR Apache-2.0,Windows target metadata
+rust,thiserror,1.0.69,MIT OR Apache-2.0,Windows target metadata
+rust,thiserror,2.0.18,MIT OR Apache-2.0,Windows target metadata
+rust,thiserror-impl,1.0.69,MIT OR Apache-2.0,Windows target metadata
+rust,thiserror-impl,2.0.18,MIT OR Apache-2.0,Windows target metadata
+rust,thread_local,1.1.9,MIT OR Apache-2.0,Windows target metadata
+rust,time,0.3.47,MIT OR Apache-2.0,Windows target metadata
+rust,time-core,0.1.8,MIT OR Apache-2.0,Windows target metadata
+rust,time-macros,0.2.27,MIT OR Apache-2.0,Windows target metadata
+rust,tinystr,0.8.2,Unicode-3.0,Windows target metadata
+rust,tinyvec,1.11.0,Zlib OR Apache-2.0 OR MIT,Windows target metadata
+rust,tinyvec_macros,0.1.1,MIT OR Apache-2.0 OR Zlib,Windows target metadata
+rust,tokio,1.50.0,MIT,Windows target metadata
+rust,tokio-macros,2.6.1,MIT,Windows target metadata
+rust,tokio-rustls,0.26.4,MIT OR Apache-2.0,Windows target metadata
+rust,tokio-util,0.7.18,MIT,Windows target metadata
+rust,tower,0.5.3,MIT,Windows target metadata
+rust,tower-http,0.5.2,MIT,Windows target metadata
+rust,tower-http,0.6.8,MIT,Windows target metadata
+rust,tower-layer,0.3.3,MIT,Windows target metadata
+rust,tower-service,0.3.3,MIT,Windows target metadata
+rust,tracing,0.1.44,MIT,Windows target metadata
+rust,tracing-attributes,0.1.31,MIT,Windows target metadata
+rust,tracing-core,0.1.36,MIT,Windows target metadata
+rust,tracing-log,0.2.0,MIT,Windows target metadata
+rust,tracing-subscriber,0.3.23,MIT,Windows target metadata
+rust,try-lock,0.2.5,MIT,Windows target metadata
+rust,typenum,1.20.1,MIT OR Apache-2.0,Windows target metadata
+rust,unicase,2.9.0,MIT OR Apache-2.0,Windows target metadata
+rust,unicode-ident,1.0.24,(MIT OR Apache-2.0) AND Unicode-3.0,Windows target metadata
+rust,untrusted,0.9.0,ISC,Windows target metadata
+rust,url,2.5.8,MIT OR Apache-2.0,Windows target metadata
+rust,utf8_iter,1.0.4,Apache-2.0 OR MIT,Windows target metadata
+rust,vcpkg,0.2.15,MIT/Apache-2.0,Windows target metadata
+rust,version_check,0.9.5,MIT/Apache-2.0,Windows target metadata
+rust,walkdir,2.5.0,Unlicense/MIT,Windows target metadata
+rust,want,0.3.1,MIT,Windows target metadata
+rust,web_atoms,0.2.6,MIT OR Apache-2.0,Windows target metadata
+rust,webpki-roots,1.0.6,CDLA-Permissive-2.0,Windows target metadata
+rust,weezl,0.1.12,MIT OR Apache-2.0,Windows target metadata
+rust,winapi-util,0.1.11,Unlicense OR MIT,Windows target metadata
+rust,windows-link,0.2.1,MIT OR Apache-2.0,Windows target metadata
+rust,windows-sys,0.60.2,MIT OR Apache-2.0,Windows target metadata
+rust,windows-sys,0.61.2,MIT OR Apache-2.0,Windows target metadata
+rust,windows-targets,0.53.5,MIT OR Apache-2.0,Windows target metadata
+rust,windows_x86_64_msvc,0.53.1,MIT OR Apache-2.0,Windows target metadata
+rust,writeable,0.6.2,Unicode-3.0,Windows target metadata
+rust,xml5ever,0.38.0,MIT OR Apache-2.0,Windows target metadata
+rust,yoke,0.8.1,Unicode-3.0,Windows target metadata
+rust,yoke-derive,0.8.1,Unicode-3.0,Windows target metadata
+rust,zerocopy,0.8.47,BSD-2-Clause OR Apache-2.0 OR MIT,Windows target metadata
+rust,zerofrom,0.1.6,Unicode-3.0,Windows target metadata
+rust,zerofrom-derive,0.1.6,Unicode-3.0,Windows target metadata
+rust,zeroize,1.8.2,Apache-2.0 OR MIT,Windows target metadata
+rust,zerotrie,0.2.3,Unicode-3.0,Windows target metadata
+rust,zerovec,0.11.5,Unicode-3.0,Windows target metadata
+rust,zerovec-derive,0.11.2,Unicode-3.0,Windows target metadata
+rust,zip,0.6.6,MIT,Windows target metadata
+rust,zmij,1.0.21,MIT,Windows target metadata
+python,annotated-doc,0.0.5,MIT,bundled Python runtime
+python,annotated-types,0.8.0,MIT,bundled Python runtime
+python,anyio,4.15.1,MIT,bundled Python runtime
+python,certifi,2026.7.22,MPL-2.0,bundled Python runtime
+python,charset-normalizer,3.5.2,MIT,bundled Python runtime
+python,click,8.5.0,BSD-3-Clause,bundled Python runtime
+python,deprecation,2.1.0,Apache 2,bundled Python runtime
+python,fastapi,0.142.2,MIT,bundled Python runtime
+python,h11,0.16.0,MIT,bundled Python runtime
+python,httpcore,1.0.9,BSD-3-Clause,bundled Python runtime
+python,httpx,0.28.1,BSD-3-Clause,bundled Python runtime
+python,idna,3.20,BSD-3-Clause,bundled Python runtime
+python,lxml,6.1.3,BSD-3-Clause,bundled Python runtime
+python,opentelemetry-api,1.45.0,Apache-2.0,bundled Python runtime
+python,packaging,26.3,Apache-2.0 OR BSD-2-Clause,bundled Python runtime
+python,pikepdf,7.2.0,MPL-2.0,bundled Python runtime
+python,pillow,10.4.0,HPND,bundled Python runtime
+python,pydantic,2.13.5,MIT,bundled Python runtime
+python,pydantic_core,2.46.5,MIT,bundled Python runtime
+python,PyMuPDF,1.26.5,Dual Licensed - GNU AFFERO GPL 3.0 or Artifex Commercial License,bundled Python runtime
+python,requests,2.32.5,Apache-2.0,bundled Python runtime
+python,starlette,1.7.0,BSD-3-Clause,bundled Python runtime
+python,typing_extensions,4.16.0,PSF-2.0,bundled Python runtime
+python,typing-inspection,0.4.4,MIT,bundled Python runtime
+python,urllib3,2.5.0,MIT,bundled Python runtime
+python,uvicorn,0.54.0,BSD-3-Clause,bundled Python runtime

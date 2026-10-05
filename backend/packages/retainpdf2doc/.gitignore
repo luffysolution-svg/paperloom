@@ -1,0 +1,4 @@
+# 构建产物。Python 侧找不到它时会直接报出构建命令，不会静默失败。
+dist/
+# workspace 包不留自己的 lockfile，统一用仓库根的那份（架构门禁盯着这条）。
+package-lock.json

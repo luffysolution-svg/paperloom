@@ -1,0 +1,207 @@
+/* 从 Zotero 导入弹窗（features/zotero/ui/ZoteroImportDialog.tsx）。 */
+
+.home-zotero-layout {
+  display: grid;
+  grid-template-columns: minmax(150px, 210px) minmax(0, 1fr);
+  gap: 14px;
+  min-height: 360px;
+  max-height: min(62vh, 620px);
+}
+
+.home-zotero-collections {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  padding-right: 6px;
+  border-right: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.home-zotero-collections select {
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  border: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: 13px;
+  background: var(--paper);
+}
+
+.home-zotero-collections > button {
+  padding: 6px 10px;
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: 13px;
+  text-align: left;
+  background: transparent;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-zotero-collections > button.is-active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .home-zotero-collections > button:hover:not(.is-active) {
+    background: color-mix(in srgb, var(--line) 35%, transparent);
+  }
+}
+
+.home-zotero-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.home-zotero-items > ul {
+  display: grid;
+  gap: 6px;
+}
+
+.home-zotero-search {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  border: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+.home-zotero-search > svg {
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+}
+
+.home-zotero-search > input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  color: var(--ink);
+  font-size: 13px;
+  background: transparent;
+}
+
+.home-zotero-item {
+  display: grid;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+  border-radius: 10px;
+}
+
+.home-zotero-item-title {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.home-zotero-item-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.home-zotero-attachment {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.home-zotero-attachment > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-zotero-attachment > em {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  background: color-mix(in srgb, var(--line) 40%, transparent);
+}
+
+.home-zotero-attachment.is-unavailable {
+  color: var(--muted);
+}
+
+.home-zotero-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.home-zotero-error {
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.home-zotero-summary {
+  display: grid;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.home-zotero-summary li {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.home-zotero-translate {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .home-zotero-layout {
+    grid-template-columns: minmax(0, 1fr);
+    max-height: none;
+  }
+
+  .home-zotero-collections {
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 0 0 6px;
+    border-right: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  }
+}
+
+.home-zotero-status > svg,
+#home-zotero-dialog .app-dialog-footer svg {
+  width: 14px;
+  height: 14px;
+}
+
+#home-zotero-dialog svg.is-spinning {
+  animation: spin 850ms linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #home-zotero-dialog svg.is-spinning {
+    animation: none;
+  }
+}
