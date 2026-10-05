@@ -416,10 +416,7 @@ jobs:
               jq \
                 --arg revision "$GITHUB_SHA" \
                 --arg version "$EXPECTED_VERSION" \
-                '[to_entries[] | select(
-                  .value.config.Labels["org.opencontainers.image.revision"] != $revision or
-                  .value.config.Labels["org.opencontainers.image.version"] != $version
-                )] | length' \
+                'if .config.Labels["org.opencontainers.image.revision"] == $revision and .config.Labels["org.opencontainers.image.version"] == $version then 0 else 1 end' \
                 "docker-candidates/${target}-image.json"
             )"
             if [ "$label_mismatches" != "0" ]; then
@@ -451,8 +448,32 @@ jobs:
           else
             case "$RELEASE_TAG" in
               dev|dev-*|manual-*) ;;
+              v[0-9]*.[0-9]*.[0-9]*|[0-9]*.[0-9]*.[0-9]*)
+                if [[ "$RELEASE_TAG" == v* ]]; then
+                  source_tag="$RELEASE_TAG"
+                else
+                  source_tag="v$RELEASE_TAG"
+                fi
+                source_sha="$(git ls-remote origin "refs/tags/${source_tag}^{}" | awk 'NR == 1 { print $1 }')"
+                if [ -z "$source_sha" ]; then
+                  source_sha="$(git ls-remote origin "refs/tags/${source_tag}" | awk 'NR == 1 { print $1 }')"
+                fi
+                if [ -z "$source_sha" ] || ! git merge-base --is-ancestor "$source_sha" "$GITHUB_SHA"; then
+                  echo "Manual stable Docker publishing requires the current revision to descend from ${source_tag}" >&2
+                  exit 1
+                fi
+                while IFS= read -r changed_path; do
+                  case "$changed_path" in
+                    .github/workflows/release-docker.yml|ops/release/tests/test_source_archive.py) ;;
+                    *)
+                      echo "Manual stable Docker publishing cannot include source changes: $changed_path" >&2
+                      exit 1
+                      ;;
+                  esac
+                done < <(git diff --name-only "$source_sha" "$GITHUB_SHA")
+                ;;
               *)
-                echo "Manual Docker publishing only accepts dev, dev-*, or manual-* labels" >&2
+                echo "Manual Docker publishing only accepts dev, dev-*, manual-*, or a stable version descended from its existing v-tag" >&2
                 exit 1
                 ;;
             esac

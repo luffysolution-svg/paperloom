@@ -122,4 +122,6 @@ def test_docker_release_separates_manifest_platforms_from_image_config() -> None
     assert 'docker-candidates/${target}-manifest.json' in workflow
     assert 'docker-candidates/${target}-image.json' in workflow
     assert '.manifests[]' in workflow
+    assert '.config.Labels["org.opencontainers.image.revision"]' in workflow
+    assert 'git merge-base --is-ancestor' in workflow
     assert "jq -r 'keys[]'" not in workflow
