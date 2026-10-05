@@ -234,7 +234,7 @@ PaperLoom 以 [GNU AGPL-3.0](LICENSE) 发布。每个正式版本都会同时提
 
 <table>
   <tr>
-    <th width="50%"></th>
+    <th width="50%">交流群二维码</th>
     <th width="50%">如果群聊二维码失效，请<br />添加我个人微信拉你入群</th>
   </tr>
   <tr>
