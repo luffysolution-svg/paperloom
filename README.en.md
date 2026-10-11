@@ -153,7 +153,7 @@ Select several documents in the library and click Save to Zotero to see creation
 
 ## Quick start
 
-Visit [GitHub Releases](https://github.com/luffysolution-svg/paperloom/releases) to download PaperLoom. v0.1.3 provides a Windows x64 installer and portable package; macOS and Linux desktop packages will be listed on their release pages when available.
+Download the latest PaperLoom release from [GitHub Releases](https://github.com/luffysolution-svg/paperloom/releases/latest): a Windows x64 installer and portable package, a macOS ARM64 DMG, and a Linux x64 DEB.
 
 1. Open PaperLoom and enter your OCR-service and translation-model API credentials in Settings. You can use MinerU, PaddleOCR, and supported translation models.
 2. Click Add PDF, or select local papers through Import from Zotero. Zotero PDF attachments must be downloaded to your computer first.
@@ -231,6 +231,8 @@ Thank you again to the original author and contributors of [RetainPDF](https://g
 PaperLoom is released under the [GNU AGPL-3.0](LICENSE). Every official release also provides the complete [corresponding source](CORRESPONDING_SOURCE.md), including the PyMuPDF/MuPDF source matching the installers and app image. The RetainPDF foundation retains its original [MIT copyright and permission notice](LICENSE-MIT); other dependencies and assets remain under their respective licenses as documented in the [third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## PaperLoom community
+
+The current community QR code expires on **October 18, 2026**. If it has expired, contact the maintainer through the personal WeChat code on the right.
 
 <table>
   <tr>

@@ -153,7 +153,7 @@ PaperLoom 是目前唯一面向图片型 / 扫描版 PDF、支持保留排版翻
 
 ## 快速开始
 
-前往 [GitHub Releases](https://github.com/luffysolution-svg/paperloom/releases) 下载 PaperLoom。v0.1.3 提供 Windows x64 安装版和便携版；macOS、Linux 桌面版将在相应版本页面提供。
+前往 [GitHub Releases](https://github.com/luffysolution-svg/paperloom/releases/latest) 下载 PaperLoom 最新发行版，提供 Windows x64 安装版和便携版、macOS ARM64 DMG 和 Linux x64 DEB。
 
 1. 打开 PaperLoom，在“设置”中填写 OCR 服务和翻译模型的 API 凭据。你可以使用 MinerU、PaddleOCR 以及支持的翻译模型。
 2. 点击“添加 PDF”，或“从 Zotero 导入”选择本机文献。Zotero 的 PDF 需要先下载到本地。
@@ -231,6 +231,8 @@ MinerU 和 PaddleOCR 都可以使用，但复杂表格和图像裁剪的结果�
 PaperLoom 以 [GNU AGPL-3.0](LICENSE) 发布。每个正式版本都会同时提供完整的 [对应源码](CORRESPONDING_SOURCE.md)，包括与安装包及 app 镜像匹配的 PyMuPDF／MuPDF 源码。RetainPDF 基础代码保留原 [MIT 版权与许可声明](LICENSE-MIT)，其他依赖与素材继续遵循各自许可，详见 [第三方通知](THIRD_PARTY_NOTICES.md)。
 
 ## PaperLoom 交流群
+
+当前交流群二维码在 **2026 年 10 月 18 日前** 有效。如二维码已过期，可通过右侧个人微信联系维护者。
 
 <table>
   <tr>

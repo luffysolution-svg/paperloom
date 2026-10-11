@@ -153,7 +153,7 @@ Chọn nhiều tài liệu trong thư viện rồi nhấn Lưu về Zotero để
 
 ## Bắt đầu nhanh
 
-Truy cập [GitHub Releases](https://github.com/luffysolution-svg/paperloom/releases) để tải PaperLoom. v0.1.3 cung cấp bộ cài Windows x64 và bản portable; các gói desktop cho macOS và Linux sẽ xuất hiện trên trang phát hành tương ứng khi có sẵn.
+Tải bản phát hành PaperLoom mới nhất từ [GitHub Releases](https://github.com/luffysolution-svg/paperloom/releases/latest): bộ cài và bản portable cho Windows x64, DMG cho macOS ARM64 và DEB cho Linux x64.
 
 1. Mở PaperLoom và nhập thông tin xác thực API của dịch vụ OCR và mô hình dịch trong Cài đặt. Bạn có thể dùng MinerU, PaddleOCR và các mô hình dịch được hỗ trợ.
 2. Nhấn Thêm PDF hoặc chọn tài liệu trên máy qua Nhập từ Zotero. Tệp PDF trong Zotero cần được tải về máy trước.
@@ -231,6 +231,8 @@ Xin cảm ơn tác giả và những người đóng góp cho [RetainPDF](https:
 PaperLoom được phát hành theo [GNU AGPL-3.0](LICENSE). Mỗi bản phát hành chính thức cũng cung cấp đầy đủ [mã nguồn tương ứng](CORRESPONDING_SOURCE.md), gồm mã nguồn PyMuPDF/MuPDF khớp với bộ cài đặt và image app. Phần nền tảng RetainPDF giữ nguyên [thông báo bản quyền và giấy phép MIT](LICENSE-MIT); các phần phụ thuộc và tài nguyên khác tiếp tục tuân theo giấy phép riêng như ghi trong [thông báo bên thứ ba](THIRD_PARTY_NOTICES.md).
 
 ## Cộng đồng PaperLoom
+
+Mã QR nhóm hiện tại hết hạn vào **ngày 18 tháng 10 năm 2026**. Nếu mã đã hết hạn, hãy liên hệ người duy trì qua mã WeChat cá nhân ở bên phải.
 
 <table>
   <tr>
