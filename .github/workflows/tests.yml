@@ -138,6 +138,10 @@ jobs:
         # prepare:workspace rebuild (and its duplicate prepare:workspace run).
         run: npm --prefix frontend/web run typecheck --ignore-scripts
 
+      - name: Install browser for Zotero layout regression
+        working-directory: frontend/web
+        run: npx playwright install --with-deps chromium
+
       - name: Frontend Tests
         working-directory: frontend/web
         run: npm test

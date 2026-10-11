@@ -202,11 +202,21 @@ export async function runDeepSeekConnectivityCheck({
     return result;
   } catch (err) {
     const timedOut = timeoutSummary(err);
-    const summary = timedOut || TRANSLATION_PROVIDER_DEFINITION.validationNetworkMessage;
+    const message = `${(err as { message?: string })?.message || ""}`.trim();
+    const privateUrlBlocked = message.includes("base_url host is not allowed");
+    const httpStatus = Number((err as { status?: number })?.status || 0);
+    const clientError = httpStatus >= 400 && httpStatus < 500;
+    const summary = timedOut || (privateUrlBlocked
+      ? "本机或内网 API 默认被禁止访问。桌面版请开启“允许本机和内网 API”后重启 PaperLoom；网页版请联系部署管理员。"
+      : clientError ? message : TRANSLATION_PROVIDER_DEFINITION.validationNetworkMessage);
     if (showResult) {
       setDeepSeekValidationMessage(summary, "error");
     }
-    return { ok: false, status: timedOut ? "timeout" : 0, summary };
+    return {
+      ok: false,
+      status: timedOut ? "timeout" : privateUrlBlocked ? "private_url_blocked" : clientError ? httpStatus : 0,
+      summary,
+    };
   }
 }
 

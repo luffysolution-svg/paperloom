@@ -32,6 +32,14 @@ test("passes a relocated AI port to both Rust proxy and supervised Python child"
   assert.equal(env.RETAIN_AI_PORT, "41101");
 });
 
+test("explicit desktop consent enables private provider URLs in the child process", () => {
+  assert.equal(buildBackendEnv({
+    apiPort: 41001, backendRoot: "C:\\PaperLoom", pythonRuntime: { command: "python" },
+    typstPackagePath: "C:\\nonexistent-paperloom-cache", typstBin: "C:\\nonexistent-paperloom-typst",
+    bundledPythonImportPaths: [], allowPrivateProviderUrls: true,
+  }).RUST_API_ALLOW_PRIVATE_PROVIDER_URLS, "true");
+});
+
 test("passes a resolved system proxy to backend provider traffic", () => {
   const env = buildBackendEnv({
     apiPort: 41001,

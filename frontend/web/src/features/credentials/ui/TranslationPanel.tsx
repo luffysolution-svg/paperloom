@@ -9,6 +9,7 @@ import { validationIcon } from "../domain/validation-icon.js";
 import { Check, ChevronDown, Code2, ExternalLink, Languages, PlugZap, TriangleAlert } from "lucide-react";
 import { Select as SelectPrimitive } from "radix-ui";
 import { SecretInput } from "./SecretInput.js";
+import { DesktopPrivateApiAccess } from "./DesktopPrivateApiAccess.js";
 
 const { browser: BROWSER_IDS } = CREDENTIAL_DOM_IDS;
 
@@ -171,6 +172,7 @@ export function TranslationPanel({ footerAction = null }: { footerAction?: React
           自定义 API 建议并发不超过 5，过高可能导致接口异常。
         </p>
       ) : null}
+      {providerDefinition.id === "custom" ? <DesktopPrivateApiAccess /> : null}
       <div className="credential-card-footer">
         <div className="credential-card-actions">
           <button
@@ -221,6 +223,9 @@ export function TranslationPanel({ footerAction = null }: { footerAction?: React
         </div>
         {footerAction}
       </div>
+      {validation.tone === "error" && content ? (
+        <p className="credential-validation-error" role="alert">{content}</p>
+      ) : null}
     </section>
   );
 }

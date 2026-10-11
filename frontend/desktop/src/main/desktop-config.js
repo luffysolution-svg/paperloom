@@ -34,6 +34,7 @@ function createDesktopConfigStore(app, options = {}) {
       baseUrl: DEFAULT_BASE_URL,
       developerConfig: {},
       closeToTrayHintShown: false,
+      allowPrivateProviderUrls: false,
     };
   }
 
@@ -78,6 +79,7 @@ function createDesktopConfigStore(app, options = {}) {
     return {
       firstRunCompleted: config.firstRunCompleted,
       closeToTrayHintShown: config.closeToTrayHintShown,
+      allowPrivateProviderUrls: config.allowPrivateProviderUrls === true,
       browserConfig: buildResolvedBrowserConfig(config),
       developerConfig: config.developerConfig || {},
       runtimeConfig: buildDesktopRuntimeConfig(config),
@@ -181,6 +183,7 @@ function normalizeDesktopConfig(raw = {}) {
       ? { ...raw.developerConfig }
       : {},
     closeToTrayHintShown: !!raw.closeToTrayHintShown,
+    allowPrivateProviderUrls: raw.allowPrivateProviderUrls === true,
   };
 }
 
@@ -199,6 +202,7 @@ function mergeDesktopConfig(currentConfig, payload = {}) {
     "model",
     "baseUrl",
     "closeToTrayHintShown",
+    "allowPrivateProviderUrls",
   ];
   for (const key of keys) {
     if (hasOwn(payload, key)) {

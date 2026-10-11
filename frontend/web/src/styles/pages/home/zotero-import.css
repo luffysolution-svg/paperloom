@@ -27,6 +27,11 @@
   background: var(--paper);
 }
 
+.home-zotero-collections > select,
+.home-zotero-collections > button {
+  flex-shrink: 0;
+}
+
 .home-zotero-collections > button {
   padding: 6px 10px;
   border-radius: 8px;

@@ -53,6 +53,9 @@ function buildBackendEnv(options = {}) {
     RUST_API_PORT: String(apiPort),
     RUST_API_SIMPLE_PORT: String(simplePort),
     RUST_API_KEYS: desktopApiKey,
+    ...(options.allowPrivateProviderUrls === true
+      ? { RUST_API_ALLOW_PRIVATE_PROVIDER_URLS: "true" }
+      : {}),
     RUST_API_DATA_ROOT: dataRoot,
     RUST_API_ROOT: rustApiRoot,
     RUST_API_NORMAL_MAX_BYTES: String(200 * 1024 * 1024),

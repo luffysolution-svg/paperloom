@@ -428,6 +428,7 @@ async function startBundledBackend() {
       process.env.RUST_API_AI_SUPERVISE || (app.isPackaged ? "1" : "");
     const env = buildBackendEnv({
       apiPort,
+      allowPrivateProviderUrls: loadDesktopConfig().allowPrivateProviderUrls,
       aiServicePort,
       aiServiceRoot,
       backendRoot,

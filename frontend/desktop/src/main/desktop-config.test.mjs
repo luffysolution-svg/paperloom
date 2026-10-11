@@ -8,6 +8,18 @@ import test from "node:test";
 const require = createRequire(import.meta.url);
 const { createDesktopConfigStore } = require("./desktop-config.js");
 
+test("private provider access is opt-in, persists across reloads and survives credential saves", (t) => {
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), "paperloom-private-api-"));
+  t.after(() => fs.rmSync(userData, { recursive: true, force: true }));
+  const store = createDesktopConfigStore({ getPath: () => userData });
+  assert.equal(store.loadDesktopConfig().allowPrivateProviderUrls, false);
+  store.saveDesktopConfig({ allowPrivateProviderUrls: true });
+  store.saveDesktopConfig({ model: "local-model" });
+  assert.equal(store.loadDesktopConfig().allowPrivateProviderUrls, true);
+  assert.equal(store.buildDesktopConfigResponse(store.loadDesktopConfig()).allowPrivateProviderUrls, true);
+  assert.equal(store.saveDesktopConfig({ allowPrivateProviderUrls: false }).allowPrivateProviderUrls, false);
+});
+
 test("builds the complete runtime config for the active backend port", () => {
   const app = {
     getPath() {
