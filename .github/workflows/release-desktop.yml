@@ -180,6 +180,10 @@ jobs:
         shell: pwsh
         run: npm ci
 
+      - name: Test Windows desktop update helpers
+        shell: pwsh
+        run: npm run test:desktop
+
       - name: Verify native frontend dependency
         working-directory: frontend/web
         shell: pwsh

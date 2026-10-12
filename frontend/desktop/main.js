@@ -3,6 +3,7 @@ const {
   BrowserWindow,
   dialog,
   ipcMain,
+  net,
   session,
   shell,
 } = require("electron");
@@ -26,6 +27,8 @@ const { createBackendRuntime } = require("./src/main/backend-runtime");
 const { createDesktopConfigStore } = require("./src/main/desktop-config");
 const { createDesktopLogger } = require("./src/main/desktop-logging");
 const { createDesktopWindows } = require("./src/main/desktop-windows");
+const { createDesktopUpdater } = require("./src/main/app-update");
+const { launchPortableUpdate } = require("./src/main/portable-update");
 const {
   findDeepLink,
   readerQueryFromDeepLink,
@@ -87,6 +90,28 @@ let suppressBackendCrashDialog = false;
 let splashWindow = null;
 let usingExternalBackend = false;
 let isQuitting = false;
+const desktopUpdater = createDesktopUpdater({
+  app,
+  fetchImpl: (url, options) => net.fetch(url, options),
+  openPath: (file) => shell.openPath(file),
+  launchPortable: launchPortableUpdate,
+  hasActiveJobs: async () => {
+    const { apiBase } = buildDesktopRuntimeConfig(loadDesktopConfig());
+    for (const status of ["running", "queued"]) {
+      const result = await backendHttp.requestJson(`${apiBase}/api/v1/jobs?status=${status}&limit=1&offset=0`, {
+        "x-api-key": DESKTOP_API_KEY,
+      }, 3000);
+      if (!Array.isArray(result?.data?.items)) throw new Error("无法确认任务状态，请稍后再安装");
+      if (result.data.items.length) return true;
+    }
+    return false;
+  },
+  onState: (state) => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) window.webContents.send("app-update-state", state);
+    }
+  },
+});
 const AI_SERVICE_PORT = 46100;
 
 function updateSplashProgress(progress, title, detail) {
@@ -737,7 +762,22 @@ app.on("before-quit", () => {
   }
 });
 
-ipcMain.handle("desktop:invoke", async (_event, command, args = {}) => {
+ipcMain.handle("desktop:invoke", async (event, command, args = {}) => {
+  const updateCommands = {
+    get_app_update_state: desktopUpdater.getState,
+    check_app_update: desktopUpdater.check,
+    download_app_update: desktopUpdater.download,
+    cancel_app_update: desktopUpdater.cancel,
+    install_app_update: desktopUpdater.install,
+  };
+  if (Object.hasOwn(updateCommands, command)) {
+    const frame = event.senderFrame;
+    const url = frame?.url || "";
+    const isLocalPage = frontendGatewayBaseUrl && url.startsWith(`${frontendGatewayBaseUrl}/`);
+    const isFilePage = url.startsWith(require("url").pathToFileURL(resolveFrontendRoot() + path.sep).href);
+    if (frame !== event.sender.mainFrame || (!isLocalPage && !isFilePage)) throw new Error("更新命令只允许软件主页面调用");
+    return updateCommands[command]();
+  }
   switch (command) {
     case "load_desktop_config": {
       const config = loadDesktopConfig();

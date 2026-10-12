@@ -83,6 +83,8 @@ export function AppUpdateBanner({ view, handlersRef }: AppUpdateBannerProps) {
     ? `当前 ${panel.currentVersion} · 最新 ${panel.latestVersion}`
     : `当前 ${panel.currentVersion}`;
   const statusText = `${state.statusText || ""}`;
+  const update = state.desktop;
+  const busy = update && ["checking", "downloading", "installing"].includes(update.status);
 
   return (
     <>
@@ -117,15 +119,41 @@ export function AppUpdateBanner({ view, handlersRef }: AppUpdateBannerProps) {
               <DialogBody className="app-update-body">
                 <div id={APP_UPDATE_IDS.status} className={`app-update-status${statusText ? "" : " hidden"}`}>{statusText}</div>
                 <div className="app-update-notes">{notesText}</div>
+                {update?.status === "downloading" ? (
+                  <progress className="mt-4 h-2 w-full" role="progressbar" max={100}
+                    value={update.percent || 0} aria-label="更新下载进度"
+                    aria-valuenow={update.percent || 0} aria-valuemin={0} aria-valuemax={100} />
+                ) : null}
+                {update ? <p className="mt-4 text-sm text-muted-foreground">
+                  {update.mode === "mac" ? "Mac 安装包打开后，请退出软件，将新版拖入 Applications 替换。"
+                    : update.mode === "linux" ? "使用系统安装程序更新，可能需要管理员密码。完成后重新启动软件。"
+                      : update.mode === "portable" ? "更新将退出软件，替换便携版程序并重新启动。"
+                        : "更新将打开 Windows 安装程序并退出软件，完成后重新启动。"}
+                </p> : null}
               </DialogBody>
               <DialogFooter className="app-update-foot">
                 <Button
                   id={APP_UPDATE_IDS.checkButton}
                   className="home-action-btn secondary"
                   onClick={() => handlersRef.current?.onCheck?.()}
+                  disabled={Boolean(busy)}
                 >
                   重新检查
                 </Button>
+                {update && (update.status === "available" || (update.status === "error" && update.canDownload)) ? (
+                  <Button id="app-update-download-btn" className="home-action-btn"
+                    onClick={() => handlersRef.current?.onDownload?.()}>下载更新</Button>
+                ) : null}
+                {update?.status === "downloading" ? (
+                  <Button id="app-update-cancel-btn" className="home-action-btn secondary"
+                    onClick={() => handlersRef.current?.onCancel?.()}>取消下载</Button>
+                ) : null}
+                {update?.status === "downloaded" ? (
+                  <Button id="app-update-install-btn" className="home-action-btn"
+                    onClick={() => handlersRef.current?.onInstall?.()}>
+                    {update.mode === "portable" ? "重启并更新" : update.mode === "installer" ? "退出并安装" : "打开安装包"}
+                  </Button>
+                ) : null}
                 <a
                   className={`app-update-link${panel.htmlUrl ? "" : " hidden"}`}
                   href={panel.htmlUrl || "#"}

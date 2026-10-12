@@ -51,6 +51,7 @@ export type BrowserCredentialsFeature = {
 
 export type AppUpdateFeature = {
   checkForUpdates: (options?: { manual?: boolean }) => Promise<unknown> | unknown;
+  dispose?: () => void;
 };
 
 export type AppActionsFeature = {
