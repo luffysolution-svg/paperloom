@@ -28,7 +28,7 @@ test("portable helper waits for the old process, replaces only the executable, a
   }
   const source = path.join(cache, "new.exe"), target = path.join(targetRoot, "PaperLoom.exe");
   const cs = path.join(root, "fixture.cs");
-  await fs.writeFile(cs, 'using System; using System.IO; class App { static void Main() { File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "restarted.txt"), "new"); } }');
+  await fs.writeFile(cs, 'using System; using System.IO; class App { static void Main() { File.WriteAllLines(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "args.txt"), Environment.GetCommandLineArgs()); File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "restarted.txt"), "new"); } }');
   const compiler = path.join(process.env.SystemRoot, "Microsoft.NET", "Framework64", "v4.0.30319", "csc.exe");
   execFileSync(compiler, ["/nologo", "/target:winexe", `/out:${source}`, cs]);
   await fs.writeFile(cs, 'using System.Threading; class App { static void Main() { Thread.Sleep(5000); } }');
@@ -38,7 +38,8 @@ test("portable helper waits for the old process, replaces only the executable, a
   const parent = spawn(target, [], { windowsHide: true });
   t.after(() => parent.kill());
   const content = await fs.readFile(source);
-  const plan = await launchPortableUpdate({ source, target, sha256: createHash("sha256").update(content).digest("hex"), parentPid: parent.pid });
+  const userData = path.join(targetRoot, "custom 书库 ' $ `");
+  const plan = await launchPortableUpdate({ source, target, userData, sha256: createHash("sha256").update(content).digest("hex"), parentPid: parent.pid });
   assert.deepEqual(await fs.readFile(target), original, "must not replace a running version");
   const deadline = Date.now() + 20000;
   while (Date.now() < deadline) {
@@ -47,8 +48,25 @@ test("portable helper waits for the old process, replaces only the executable, a
   }
   assert.deepEqual(await fs.readFile(target), content);
   assert.equal(await fs.readFile(path.join(targetRoot, "notes.json"), "utf8"), "keep notes");
+  const args = (await fs.readFile(path.join(targetRoot, "args.txt"), "utf8")).split(/\r?\n/);
+  assert.equal(args[1], `--user-data-dir=${userData}`, "the restarted app must use the same profile");
   const result = JSON.parse(await fs.readFile(`${plan}.result.json`, "utf8"));
   assert.equal(result.ok, true);
+});
+
+test("checksum validation works without the optional Get-FileHash command", { skip: process.platform !== "win32" }, async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperloom-no-hash-command-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const source = path.join(root, "new.exe"), target = path.join(root, "old.exe"), planFile = path.join(root, "attempt.json");
+  await fs.writeFile(source, "corrupted"); await fs.writeFile(target, "original");
+  await fs.writeFile(planFile, JSON.stringify({ source, target, parentPid: process.pid, sha256: "0".repeat(64) }));
+  const quote = (value) => `'${value.replaceAll("'", "''")}'`;
+  const bootstrap = path.join(root, "bootstrap.ps1");
+  await fs.writeFile(bootstrap, `\uFEFFImport-Module Microsoft.PowerShell.Utility\nfunction Get-FileHash { throw 'Get-FileHash unavailable' }\n& ${quote(require.resolve("./portable-update.ps1"))} -PlanFile ${quote(planFile)}`);
+  execFileSync(path.join(process.env.SystemRoot, "System32/WindowsPowerShell/v1.0/powershell.exe"), ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", bootstrap], { windowsHide: true });
+  const result = JSON.parse(await fs.readFile(`${planFile}.result.json`, "utf8"));
+  assert.match(result.error, /checksum/);
+  assert.equal(await fs.readFile(target, "utf8"), "original");
 });
 
 test("portable helper rejects a corrupted source before waiting or changing the original", { skip: process.platform !== "win32" }, async (t) => {
