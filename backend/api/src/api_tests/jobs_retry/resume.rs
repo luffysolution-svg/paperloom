@@ -285,6 +285,12 @@ async fn resume_and_rerun_can_replace_inline_key_with_current_reference() {
         fs::create_dir_all(&vault_dir).unwrap();
         fs::write(vault_dir.join("credentials.json"), json!({"schema":"retainpdf_credential_vault_v1","revision":1,
             "credentials":{"cred_current_ref":{"kind":"translation_api_key","provider":"deepseek","label":"synthetic", "secret":"synthetic-reference-secret","created_at":"now","updated_at":"now"}}}).to_string()).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&vault_dir, fs::Permissions::from_mode(0o700)).unwrap();
+            fs::set_permissions(vault_dir.join("credentials.json"), fs::Permissions::from_mode(0o600)).unwrap();
+        }
         state.db.save_job(&source).unwrap();
         let response = build_app(state.clone())
             .oneshot(
