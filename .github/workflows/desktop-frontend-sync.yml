@@ -74,6 +74,13 @@ jobs:
           RETAIN_PDF_SKIP_BUNDLED_RUNTIME_VERIFICATION: "1"
         run: npm run verify:desktop
 
+      - name: Retain generated CSS for platform comparison
+        uses: actions/upload-artifact@v7
+        with:
+          name: generated-css-platform-check
+          path: frontend/web/styles.css
+          retention-days: 1
+
       - name: Check tracked generated files are up to date
         run: |
           git diff --exit-code -- \
