@@ -5,6 +5,12 @@ import {
 import {
   defaultUpdateCachePort,
 } from "./state.js";
+import { getDesktopHost } from "@/platform/desktop/host.js";
+
+function desktopUpdatePort() {
+  const host = getDesktopHost();
+  return host?.updaterAvailable ? { invoke: host.invoke, subscribe: host.onUpdateState } : null;
+}
 
 export function mountAppUpdateFeature({
   enabled = true,
@@ -12,7 +18,36 @@ export function mountAppUpdateFeature({
   fetchLatestRelease = fetchLatestGithubRelease,
   normalizeRelease = normalizeReleaseInfo,
   viewPort,
+  desktopUpdater = desktopUpdatePort(),
 }: any = {}) {
+  if (desktopUpdater) {
+    let disposed = false, events = 0, status = "idle";
+    const apply = (state) => { if (!disposed) { status = state.status; viewPort.setDesktopState(state); } };
+    const unsubscribe = desktopUpdater.subscribe((state) => { events += 1; apply(state); });
+    async function invoke(command) {
+      const before = events;
+      try {
+        const state = await desktopUpdater.invoke(command);
+        if (events === before) apply(state);
+      } catch (error) {
+        if (events === before) apply({ status: "error", error: error.message });
+      }
+    }
+    viewPort.bindButton({
+      onCheck: () => invoke("check_app_update"),
+      onDownload: () => invoke("download_app_update"),
+      onCancel: () => invoke("cancel_app_update"),
+      onInstall: () => invoke("install_app_update"),
+    });
+    void invoke("get_app_update_state");
+    const timer = enabled ? window.setTimeout(() => {
+      if (status === "idle") void invoke("check_app_update");
+    }, 1200) : null;
+    return {
+      checkForUpdates: () => invoke("check_app_update"),
+      dispose: () => { disposed = true; if (timer !== null) window.clearTimeout(timer); unsubscribe(); },
+    };
+  }
   function applyUpdateInfo(info) {
     if (!info) {
       viewPort.setReady();

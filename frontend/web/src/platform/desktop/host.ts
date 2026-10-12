@@ -55,6 +55,8 @@ export interface DesktopHost {
   openOutputDirectory(): DesktopIpcResult;
   onStartupProgress(callback: (event: unknown) => void): () => void;
   platform: string;
+  updaterAvailable: boolean;
+  onUpdateState(callback: (event: unknown) => void): () => void;
 }
 
 declare global {
@@ -121,6 +123,13 @@ function resolveDesktopHost(): DesktopHost | null {
       return () => {};
     },
     platform: preferredBridge?.platform || "",
+    updaterAvailable: preferredBridge?.updaterAvailable === true,
+    onUpdateState(callback) {
+      if (typeof preferredBridge?.onUpdateState === "function") {
+        return preferredBridge.onUpdateState(callback) as () => void;
+      }
+      return () => {};
+    },
   };
 }
 

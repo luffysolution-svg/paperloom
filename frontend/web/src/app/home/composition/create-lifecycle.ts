@@ -123,6 +123,7 @@ export function createLifecycle({
       ["documentEvents", disposeDocumentEvents],
       ["recentJobsEvents", features.recentJobsFeature?.disposeFeatureEvents],
       ["artifactDownloadsEvents", disposeArtifactDownloadsEvents],
+      ["appUpdateEvents", features.appUpdateFeature?.dispose],
       ["jobRuntimePolling", features.jobRuntimeFeature?.stopPolling],
     ];
   }

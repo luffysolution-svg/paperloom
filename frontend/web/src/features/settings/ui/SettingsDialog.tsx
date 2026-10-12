@@ -92,7 +92,7 @@ const PANE_HEADS = {
   api: { title: "接口设置", desc: "" },
   glossary: { title: "术语表", desc: "维护术语偏好，翻译时优先使用你的术语。" },
   appearance: { title: "外观", desc: "选择界面配色，立即生效并记住本机选择。" },
-  update: { title: "更新", desc: "查看当前版本，并从 GitHub Releases 重新检查更新。" },
+  update: { title: "更新", desc: "查看当前版本、检查更新，并在桌面版中下载和安装新版。" },
 };
 
 function PaneHead({ tab, subtitle = null }: { tab: keyof typeof PANE_HEADS; subtitle?: React.ReactNode }) {

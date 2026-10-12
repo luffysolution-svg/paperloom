@@ -22,6 +22,13 @@ window.addEventListener("unhandledrejection", (event) => {
 
 contextBridge.exposeInMainWorld("retainPdfDesktop", {
   platform: process.platform,
+  updaterAvailable: true,
+  onUpdateState(callback) {
+    if (typeof callback !== "function") return () => {};
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("app-update-state", listener);
+    return () => ipcRenderer.removeListener("app-update-state", listener);
+  },
   invoke(command, args = {}) {
     return ipcRenderer.invoke("desktop:invoke", command, args);
   },
