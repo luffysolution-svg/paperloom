@@ -147,6 +147,20 @@ impl Db {
         Ok(jobs)
     }
 
+    /// A new worker snapshot may not have a row yet; only persisted terminal
+    /// rows stop startup. Read status without loading its artifacts or request.
+    pub fn job_is_terminal(&self, job_id: &str) -> Result<bool> {
+        let conn = self.connect()?;
+        Ok(conn.query_row(
+            r#"
+            SELECT EXISTS(SELECT 1 FROM jobs WHERE job_id = ?1
+                AND status_json NOT IN ('"queued"', '"running"', 'queued', 'running'))
+        "#,
+            params![job_id],
+            |row| row.get::<_, bool>(0),
+        )?)
+    }
+
     pub fn get_job(&self, job_id: &str) -> Result<JobSnapshot> {
         let conn = self.connect()?;
         let job = conn

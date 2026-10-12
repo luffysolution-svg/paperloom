@@ -10,6 +10,8 @@ use super::{cached_output_is_fresh, job_artifacts_dir, DerivedArtifactDeps};
 const BUILD_TIMEOUT: Duration = Duration::from_secs(600);
 
 pub(crate) const DEFAULT_BACKGROUND_DPI: u32 = 180;
+// Bump when layout/OOXML changes so old downloads remain on disk but are not reused.
+const WORD_RENDERER_VERSION: u32 = 2;
 
 #[derive(Clone, Copy)]
 pub(crate) struct LayoutDocxOptions {
@@ -25,9 +27,9 @@ impl Default for LayoutDocxOptions {
 }
 
 impl LayoutDocxOptions {
-    /// 缓存键的一部分：换了 DPI 就是另一份产物，不能命中上一份。
+    /// 渲染器或 DPI 改变时使用另一份产物，保留旧文件但不再命中。
     pub(crate) fn cache_suffix(&self) -> String {
-        format!("dpi{}", self.dpi)
+        format!("v{}-dpi{}", WORD_RENDERER_VERSION, self.dpi)
     }
 }
 

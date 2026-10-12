@@ -1,4 +1,5 @@
 import sys
+import copy
 from pathlib import Path
 
 
@@ -12,6 +13,8 @@ from retainpdf_pipeline.render.layout.payload.block_seed_payload_factory import 
 from retainpdf_pipeline.render.layout.payload import block_seed_payload_factory
 from retainpdf_pipeline.render.layout.typography_memory.store import TypographyMemory
 from retainpdf_pipeline.render.layout.typography_memory.store import TypographyMemoryDecision
+from retainpdf_pipeline.render.layout.typography_memory import store
+from retainpdf_pipeline.render.layout.payload.blocks import build_render_blocks
 
 
 def _item() -> dict:
@@ -30,6 +33,47 @@ def _item() -> dict:
             {"bbox": [40.0, 98.0, 300.0, 112.0]},
         ],
     }
+
+
+def test_default_typography_does_not_learn_or_shrink_over_repeated_renders(tmp_path, monkeypatch):
+    monkeypatch.delenv("RETAIN_RENDER_TYPOGRAPHY_MEMORY", raising=False)
+    monkeypatch.setattr(store.typography_memory, "db_path", tmp_path / "memory.sqlite3")
+    monkeypatch.setattr(store.typography_memory, "_ready", False)
+    items = []
+    top = 72.0
+    for index, (words, chars) in enumerate(((60, 150), (45, 160), (70, 120), (40, 170), (55, 200), (80, 140))):
+        source = " ".join(f"word{i}" for i in range(words))
+        count = max(2, words // 9)
+        item = {
+            "item_id": f"fixture-{index}", "block_type": "text", "block_kind": "text",
+            "layout_role": "paragraph", "semantic_role": "body", "structure_role": "body",
+            "source_text": source, "protected_source_text": source,
+            "protected_translated_text": ("用于检验重复渲染排版字号的正文段落。" * 30)[:chars],
+            "bbox": [56.0, top, 540.0, top + count * 13.0],
+            "lines": [{"bbox": [56.0, top + i * 13.0, 540.0, top + i * 13.0 + 11.0],
+                       "spans": [{"type": "text", "content": source[:60]}]} for i in range(count)],
+        }
+        items.append(item)
+        top = item["bbox"][3] + 10.0
+    runs = [[(b.block_id, b.font_size_pt, b.leading_em)
+             for b in build_render_blocks(copy.deepcopy(items), page_width=595.0, page_height=842.0)]
+            for _ in range(7)]
+    assert all(run == runs[0] for run in runs)
+    assert store.typography_memory.enabled is False
+    assert not store.typography_memory.db_path.exists()
+
+
+def test_old_typography_statistics_are_ignored_without_deleting_history(tmp_path, monkeypatch):
+    monkeypatch.setenv("RETAIN_RENDER_TYPOGRAPHY_MEMORY", "1")
+    memory = TypographyMemory(tmp_path / "memory.sqlite3")
+    with monkeypatch.context() as old:
+        old.setattr(store, "TYPOGRAPHY_MEMORY_ALGORITHM_VERSION", "font_leading_stats_v1")
+        for _ in range(3):
+            memory.observe(feature_key="fixture", font_size_pt=8.0, leading_em=0.6)
+        assert memory.lookup("fixture") is not None
+    assert memory.lookup("fixture") is None
+    with memory._connect() as conn:
+        assert conn.execute("select observations from typography_stats where algorithm_version = 'font_leading_stats_v1'").fetchone() == (3,)
 
 
 def test_typography_memory_learns_after_min_observations(tmp_path, monkeypatch) -> None:

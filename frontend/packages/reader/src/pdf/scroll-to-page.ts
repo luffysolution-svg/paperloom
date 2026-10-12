@@ -53,7 +53,7 @@ export function pickPageAtFocus(
       const r = el.getBoundingClientRect();
       return r.height >= 8 && r.width >= 8;
     });
-    best = first ?? pages[0] ?? null;
+    best = first ?? null;
     if (best) {
       const lastVisible = [...pages].reverse().find((el) => {
         const r = el.getBoundingClientRect();

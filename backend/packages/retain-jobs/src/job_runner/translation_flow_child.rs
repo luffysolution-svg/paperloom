@@ -139,6 +139,12 @@ pub(super) fn create_ocr_child_job(
         &["queued", "running"],
     )?;
     if !updated {
+        super::super::lifecycle::settle_ocr_child_for_parent(
+            &deps.db,
+            &deps.persist.data_root,
+            &deps.persist.output_root,
+            &parent_job.job_id,
+        )?;
         // 取消恰好卡在建子任务的这个窗口里。子任务行虽然已经落库，但调用方就此
         // 停下、不会去驱动它，也就不会产生 OCR 调用；下一次重试会原地覆盖它。
         anyhow::bail!("parent job became terminal while creating the OCR child job");

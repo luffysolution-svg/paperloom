@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 use crate::config::WorkerProcessRuntimeConfig;
-use crate::job_runner::cancel_registry::is_cancel_requested_any;
+use crate::job_runner::cancel_registry::should_stop_job;
 use crate::job_runner::process_contract::validate_successful_worker_outputs;
 use crate::job_runner::ProcessRuntimeDeps;
 use crate::models::domain::JobRuntimeState;
@@ -32,12 +32,13 @@ pub(super) async fn finalize_completed_process(
     );
 
     let mut completion = classify_process_completion(
-        is_cancel_requested_any(
+        should_stop_job(
+            &deps.db,
             &deps.canceled_jobs,
             &latest_job.job_id,
             extra_cancel_job_ids,
         )
-        .await,
+        .await?,
         completed.status.success(),
         should_treat_shutdown_noise_as_success(&latest_job, &completed.stderr_text),
     );

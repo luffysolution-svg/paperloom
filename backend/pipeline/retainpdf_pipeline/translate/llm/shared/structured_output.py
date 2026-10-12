@@ -5,6 +5,7 @@ import re
 from typing import Any
 
 from retainpdf_pipeline.translate.llm.shared.response_parsing import extract_json_text
+from retainpdf_pipeline.translate.llm.shared.json_math_escapes import repair_json_math_escapes
 
 
 _TRAILING_COMMA_RE = re.compile(r",(\s*[}\]])")
@@ -97,7 +98,7 @@ def _extract_string_field(content: str, key: str) -> str:
             continue
         if idx == 0:
             try:
-                return json.loads(f'"{value}"').strip()
+                return json.loads(repair_json_math_escapes(f'"{value}"')).strip()
             except Exception:
                 return value.strip()
         if idx == 1:

@@ -161,6 +161,66 @@ pub(super) mod tests {
         fs::remove_dir_all(&deps.config.project_root).unwrap();
     }
 
+    #[test]
+    fn cancellation_worker_helper() {
+        if std::env::var("RETAIN_TRANSLATION_API_KEY").as_deref() != Ok("cancel-worker-synthetic") {
+            return;
+        }
+        let root = std::env::var("RUST_API_DATA_ROOT").unwrap();
+        fs::write(
+            std::path::Path::new(&root).join("worker-started"),
+            b"started",
+        )
+        .unwrap();
+        std::thread::sleep(Duration::from_secs(4));
+        fs::write(
+            std::path::Path::new(&root).join("worker-paid-step"),
+            b"should-not-run",
+        )
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn canceled_parent_stops_a_silent_worker_after_registry_cleared() {
+        let deps = test_runtime_deps(1);
+        let parent = JobSnapshot::new("worker-parent".into(), CreateJobInput::default(), vec![]);
+        deps.db.save_job(&parent).unwrap();
+        let mut input = CreateJobInput::default();
+        input.translation.api_key = "cancel-worker-synthetic".into();
+        let child = JobSnapshot::new(
+            "worker-parent-ocr".into(),
+            input,
+            vec![
+                std::env::current_exe()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned(),
+                "--exact".into(),
+                "job_runner::process_runner::tests::cancellation_worker_helper".into(),
+                "--nocapture".into(),
+            ],
+        );
+        deps.db.save_job(&child).unwrap();
+        let runner_deps = deps.clone();
+        let runner = tokio::spawn(async move {
+            execute_process_job(runner_deps, child.into_runtime(), &["worker-parent".into()]).await
+        });
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while !deps.persist.data_root.join("worker-started").exists() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        let mut parent = deps.db.get_job("worker-parent").unwrap();
+        parent.status = JobStatusKind::Canceled;
+        deps.db.save_job(&parent).unwrap();
+        let result = runner.await.unwrap().unwrap();
+        assert_eq!(result.status, JobStatusKind::Canceled);
+        assert!(!deps.persist.data_root.join("worker-paid-step").exists());
+        fs::remove_dir_all(&deps.config.project_root).unwrap();
+    }
+
     fn test_state(test_name: &str) -> TestState {
         let root = std::env::temp_dir().join(format!(
             "rust-api-process-runner-{test_name}-{}-{}",

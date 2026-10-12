@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import re
 
+from retainpdf_pipeline.translate.llm.shared.json_math_escapes import repair_json_math_escapes
+
 
 _JSON_QUOTE_TRANSLATION = str.maketrans(
     {
@@ -39,12 +41,24 @@ def extract_json_text(content: str) -> str:
         if lines and lines[-1].startswith("```"):
             lines = lines[:-1]
         text = "\n".join(lines).strip()
+    if _JSON_KEY_PREFIX_RE.match(text):
+        text = "{" + text + "}"
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end >= start:
+        candidate = repair_json_math_escapes(text[start : end + 1])
+        try:
+            json.loads(candidate)
+        except ValueError:
+            pass
+        else:
+            return candidate
     text = _normalize_loose_json_text(text)
     start = text.find("{")
     end = text.rfind("}")
     if start == -1 or end == -1 or end < start:
         raise ValueError("Model response does not contain a JSON object.")
-    return text[start : end + 1]
+    return repair_json_math_escapes(text[start : end + 1])
 
 
 def extract_single_item_translation_text(content: str, item_id: str) -> str:

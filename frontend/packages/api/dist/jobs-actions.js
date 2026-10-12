@@ -19,8 +19,8 @@ export async function fetchResumePlan(jobId, apiPrefix) {
     }
     return unwrapEnvelope(await resp.json());
 }
-export async function resumeJob(jobId, apiPrefix) {
-    return submitJson(`${buildJobDetailEndpoint(jobId, apiPrefix)}/resume`, {});
+export async function resumeJob(jobId, apiPrefix, body = {}) {
+    return submitJson(`${buildJobDetailEndpoint(jobId, apiPrefix)}/resume`, body);
 }
 export async function cancelJob(jobId, apiPrefix) {
     return submitJson(`${buildJobDetailEndpoint(jobId, apiPrefix)}/cancel`, {});
@@ -62,6 +62,6 @@ export async function retryJobStage(jobId, apiPrefix, stage, payload = {}) {
         active_job_id: nextJobId,
     };
 }
-export async function rerunJob(actionUrl) {
-    return submitJson(actionUrl, {});
+export async function rerunJob(actionUrl, body = {}) {
+    return submitJson(actionUrl, body);
 }

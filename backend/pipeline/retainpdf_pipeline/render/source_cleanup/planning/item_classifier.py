@@ -24,6 +24,7 @@ TEXT_STRIP_ROLE_ALLOWLIST = frozenset(
     {
         "caption",
         "figure_caption",
+        "code_caption",
         "image_caption",
         "table_caption",
         "footnote",

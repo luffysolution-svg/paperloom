@@ -197,6 +197,14 @@ async fn run_job_with_ocr(
             deps.db.get_job(&ocr_finished.job_id)?.into_runtime()
         }
     };
+    let terminal_status = match ocr_finished.status {
+        JobStatusKind::Succeeded => "succeeded",
+        JobStatusKind::Failed => "failed",
+        JobStatusKind::Canceled => "canceled",
+        _ => anyhow::bail!("OCR child returned without a terminal status"),
+    };
+    deps.db
+        .finish_latest_pipeline_attempt(&ocr_finished.job_id, terminal_status)?;
     sync_parent_with_ocr_child(&mut parent_job, &ocr_finished);
     record_ocr_child_finished(&deps, &parent_job, &ocr_finished);
 

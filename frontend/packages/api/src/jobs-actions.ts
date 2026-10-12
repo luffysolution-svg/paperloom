@@ -94,8 +94,8 @@ export async function fetchResumePlan(jobId: string, apiPrefix?: string): Promis
   return unwrapEnvelope(await resp.json());
 }
 
-export async function resumeJob(jobId: string, apiPrefix?: string): Promise<any> {
-  return submitJson(`${buildJobDetailEndpoint(jobId, apiPrefix)}/resume`, {});
+export async function resumeJob(jobId: string, apiPrefix?: string, body: Record<string, unknown> = {}): Promise<any> {
+  return submitJson(`${buildJobDetailEndpoint(jobId, apiPrefix)}/resume`, body);
 }
 
 export async function cancelJob(jobId: string, apiPrefix?: string): Promise<any> {
@@ -148,6 +148,6 @@ export async function retryJobStage(jobId: string, apiPrefix: string | undefined
   };
 }
 
-export async function rerunJob(actionUrl: string): Promise<any> {
-  return submitJson(actionUrl, {});
+export async function rerunJob(actionUrl: string, body: Record<string, unknown> = {}): Promise<any> {
+  return submitJson(actionUrl, body);
 }

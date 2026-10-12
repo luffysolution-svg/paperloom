@@ -98,6 +98,17 @@ pub(crate) fn read_events(
     for row in rows {
         let mut event: JobEventRecord = serde_json::from_value(row.payload)
             .map_err(|_| AppError::internal("invalid stored event projection"))?;
+        // Existing feeds also contain child terminal records projected with the
+        // owner's ID. They must never terminate the owner's SSE workflow.
+        if event.event_type.as_deref() == Some("terminal")
+            && event
+                .raw
+                .as_ref()
+                .and_then(|raw| raw.source_kind.as_deref())
+                == Some("ocr_child")
+        {
+            continue;
+        }
         event.seq = row.seq;
         event.user_stage = event.display_stage.clone();
         ids.push(row.event_id);

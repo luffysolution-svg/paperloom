@@ -11,6 +11,19 @@ import {
   createStore,
 } from "../../src/platform/store/store.js";
 
+test("createResource releases a synchronous loader failure so a later load can recover", async () => {
+  let calls = 0;
+  const resource = createResource({
+    loader: () => {
+      if (++calls === 1) throw new Error("temporary failure");
+      return "recovered";
+    },
+  });
+  assert.equal((await resource.load()).status, "error");
+  assert.equal((await resource.load()).data, "recovered");
+  assert.equal(calls, 2);
+});
+
 test("createStore owns immutable snapshots and action updates", () => {
   const store = createStore({
     name: "library",

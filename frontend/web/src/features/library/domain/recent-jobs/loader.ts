@@ -52,6 +52,7 @@ export interface LibraryBooksResourcePort {
     options?: { cache?: boolean },
   ) => Promise<LibraryBooksResourceSnapshot>;
   invalidate?: () => void;
+  reset?: (options?: { keepCache?: boolean }) => unknown;
 }
 
 export interface CreateRecentJobsLoaderOptions {
@@ -113,6 +114,10 @@ export function createRecentJobsLoader({
   let loading = false;
   let pendingLoad: LoadRecentJobsOptions | null = null;
   let disposed = false;
+  let loadGeneration = 0;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let loadTimer: ReturnType<typeof setTimeout> | null = null;
+  let cancelLoad: (() => void) | null = null;
 
   function isLoading() {
     return loading;
@@ -122,6 +127,12 @@ export function createRecentJobsLoader({
   function dispose() {
     disposed = true;
     pendingLoad = null;
+    cancelLoad?.();
+    cancelLoad = null;
+    if (retryTimer != null) clearTimeout(retryTimer);
+    if (loadTimer != null) clearTimeout(loadTimer);
+    retryTimer = null;
+    loadTimer = null;
   }
 
   async function loadLibraryBooksPage(params: {
@@ -136,10 +147,26 @@ export function createRecentJobsLoader({
     latestInvocationSummary: RecentJobsInvocationSummary;
     nextOffset: number;
   }> {
-    const snapshot = await libraryBooksResource.load(params, {
-      cache: false,
-    });
+    let snapshot: LibraryBooksResourceSnapshot;
+    try {
+      snapshot = await Promise.race([
+        libraryBooksResource.load(params, { cache: false }),
+        new Promise<never>((_, reject) => {
+          cancelLoad = () => reject(new Error("读取书库已停止。"));
+          loadTimer = setTimeout(() => {
+            loadGeneration += 1;
+            libraryBooksResource.reset?.({ keepCache: true });
+            reject(new Error("读取书库超时，请稍后重试。"));
+          }, 20_000);
+        }),
+      ]);
+    } finally {
+      if (loadTimer != null) clearTimeout(loadTimer);
+      loadTimer = null;
+      cancelLoad = null;
+    }
     if (snapshot.status === "error") {
+      if ((snapshot.error as Error)?.name === "TimeoutError") throw new Error("读取书库超时，请稍后重试。");
       throw snapshot.error || new Error("读取最近任务失败");
     }
     return (snapshot.data || {
@@ -174,6 +201,9 @@ export function createRecentJobsLoader({
     if (!viewPort.hasView()) {
       return;
     }
+    if (retryTimer != null) clearTimeout(retryTimer);
+    retryTimer = null;
+    const generation = ++loadGeneration;
     loading = true;
     if (!silent) {
       homeStatePort.setRecentJobsLoadingState(RECENT_JOBS_LOADING_STATES.LOADING);
@@ -205,7 +235,7 @@ export function createRecentJobsLoader({
         existingJobIds,
         query,
         onPreview: ({ collected = [] }) => {
-          if (disposed || pendingLoad?.reset || !collected.length) return;
+          if (disposed || generation !== loadGeneration || pendingLoad?.reset || !collected.length) return;
           // Initial empty view only: refreshes retain already hydrated cards.
           if (recentJobsStatePort.getSnapshot().items.length) return;
           const items = runtimePatches.applyExisting?.(collected) || collected;
@@ -263,6 +293,7 @@ export function createRecentJobsLoader({
       });
       homeStatePort.setRecentJobsLoadingState(RECENT_JOBS_LOADING_STATES.READY);
     } catch (err) {
+      if (disposed || pendingLoad?.reset) return;
       commitRecentJobsError({
         error: err as { message?: string } | Error | null,
         reset,
@@ -271,6 +302,10 @@ export function createRecentJobsLoader({
         storeDrivenRendering,
         viewPort,
       });
+      retryTimer = setTimeout(() => {
+        retryTimer = null;
+        void load({ reset: true, silent: true, query: getQuery?.() || query });
+      }, 3_000);
     } finally {
       loading = false;
       if (!disposed && pendingLoad) {

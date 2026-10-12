@@ -1,3 +1,4 @@
+use axum::body::Bytes;
 use axum::extract::State;
 use axum::http::HeaderMap;
 use axum::Json;
@@ -27,16 +28,28 @@ pub async fn resume_job(
     State(state): State<AppState>,
     ApiPath(job_id): ApiPath<String>,
     headers: HeaderMap,
+    body: Bytes,
 ) -> Result<Json<ApiResponse<JobSubmissionView>>, AppError> {
-    resume_job_response(build_jobs_route_deps(&state), &headers, &job_id)
+    resume_job_response(
+        build_jobs_route_deps(&state),
+        &headers,
+        &job_id,
+        parse_rerun_overrides(&body)?,
+    )
 }
 
 pub async fn rerun_job(
     State(state): State<AppState>,
     ApiPath(job_id): ApiPath<String>,
     headers: HeaderMap,
+    body: Bytes,
 ) -> Result<Json<ApiResponse<JobSubmissionView>>, AppError> {
-    rerun_job_response(build_jobs_route_deps(&state), &headers, &job_id)
+    rerun_job_response(
+        build_jobs_route_deps(&state),
+        &headers,
+        &job_id,
+        parse_rerun_overrides(&body)?,
+    )
 }
 
 pub async fn retry_stage(
@@ -55,4 +68,20 @@ pub async fn resolve_ocr_ambiguity(
     ApiJson(request): ApiJson<OcrAmbiguityResolutionRequest>,
 ) -> Result<Json<ApiResponse<OcrAmbiguityResolutionView>>, AppError> {
     resolve_ocr_ambiguity_response(build_jobs_route_deps(&state), &headers, &job_id, request)
+}
+
+#[derive(serde::Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+struct RerunRequest {
+    #[serde(default)]
+    overrides: serde_json::Value,
+}
+
+fn parse_rerun_overrides(body: &[u8]) -> Result<serde_json::Value, AppError> {
+    if body.is_empty() {
+        return Ok(serde_json::Value::Null);
+    }
+    let request: RerunRequest = serde_json::from_slice(body)
+        .map_err(|_| AppError::bad_request("invalid resume/rerun JSON request"))?;
+    Ok(request.overrides)
 }

@@ -103,9 +103,10 @@ export function createResource({
     }
     const requestId = state.requestId + 1;
     setState({ status: "loading", error: null, requestId });
+    const request = new Promise((resolve) => resolve(loader(params, { resource: name, requestId })));
     const pending = (async () => {
       try {
-        const data = await loader(params, { resource: name, requestId });
+        const data = await request;
         if (state.requestId !== requestId) {
           return snapshot();
         }

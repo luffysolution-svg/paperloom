@@ -97,6 +97,9 @@ def _effective_formula_segment_count(source_text: str) -> int:
 def _reset_group_item_to_single(item: dict, *, reason: str) -> None:
     item_id = str(item.get("item_id", "") or "")
     item["continuation_group"] = ""
+    item["translation_group_id"] = ""
+    item["translation_group_kind"] = ""
+    item["translation_group_strategy"] = ""
     item["translation_unit_id"] = item_id
     item["translation_unit_kind"] = "single"
     item["translation_unit_member_ids"] = [item_id]

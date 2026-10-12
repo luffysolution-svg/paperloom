@@ -32,7 +32,7 @@ where
     let runtime = deps.mineru_runtime();
     let mut attempt = 0usize;
     loop {
-        if super::polling::should_stop_polling(&deps.canceled_jobs, &job.job_id).await {
+        if super::polling::should_stop_polling(deps, &job.job_id, parent_job_id).await? {
             return Ok(None);
         }
         let remaining = deadline.saturating_duration_since(Instant::now());
@@ -92,7 +92,13 @@ where
                         })),
                     );
                     save_ocr_job(deps, job, parent_job_id).await?;
-                    wait_retry_delay(deps, &job.job_id, Duration::from_secs(delay_secs)).await;
+                    wait_retry_delay(
+                        deps,
+                        &job.job_id,
+                        parent_job_id,
+                        Duration::from_secs(delay_secs),
+                    )
+                    .await?;
                     return Ok(None);
                 }
                 job.append_log(&format!(
@@ -125,21 +131,32 @@ where
                     })),
                 );
                 save_ocr_job(deps, job, parent_job_id).await?;
-                wait_retry_delay(deps, &job.job_id, Duration::from_secs(delay_secs)).await;
+                wait_retry_delay(
+                    deps,
+                    &job.job_id,
+                    parent_job_id,
+                    Duration::from_secs(delay_secs),
+                )
+                .await?;
             }
         }
     }
 }
 
-async fn wait_retry_delay(deps: &ProcessRuntimeDeps, job_id: &str, delay: Duration) {
+async fn wait_retry_delay(
+    deps: &ProcessRuntimeDeps,
+    job_id: &str,
+    parent_job_id: Option<&str>,
+    delay: Duration,
+) -> Result<()> {
     let until = Instant::now() + delay;
     loop {
-        if super::polling::should_stop_polling(&deps.canceled_jobs, job_id).await {
-            return;
+        if super::polling::should_stop_polling(deps, job_id, parent_job_id).await? {
+            return Ok(());
         }
         let remaining = until.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
-            return;
+            return Ok(());
         }
         sleep(remaining.min(Duration::from_millis(250))).await;
     }

@@ -147,7 +147,7 @@ def test_formula_source_is_not_measured_as_body_text():
     assert "当量等于" in rendered and "时" in rendered, f"正文被吃掉了:{rendered}"
 
     # 框要窄到两者折出的行数不同，否则都是一行、高度相等，这条就分辨不出对错。
-    narrow = 60.0
+    narrow = 80.0
     assert (
         measure(rendered, 10.0, narrow)[1] < measure(raw, 10.0, narrow)[1]
     ), "换掉公式源码之后高度没有下降"
@@ -179,10 +179,10 @@ def test_line_height_uses_the_measured_ratio():
     assert fitted_typography(FakeBlock(**{**block.__dict__, "leading_em": 0.30}))[1] == pytest.approx(step, abs=0.01)
 
 
-def test_cjk_wraps_per_character_and_latin_wraps_at_spaces():
+def test_cjk_and_latin_can_wrap_at_character_boundaries():
     # 中文逐字可断:一个窄框里应该折成多行而不是一行冲出去。
     assert len(wrap_lines("中文中文中文中文中文", 10.0, 35.0)) > 1
-    # 拉丁不能从单词中间断开:一个放不下整词的框里，每行至多一个词。
+    # 西文按字断行，空格仍计入宽度，符合导出的 w:wordWrap=0。
     lines = wrap_lines("alpha beta gamma", 10.0, 45.0)
     assert len(lines) >= 3, f"英文没有按空格折行:{lines}"
 

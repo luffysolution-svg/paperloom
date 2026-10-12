@@ -33,3 +33,11 @@ fn different_dpi_is_a_different_artifact() {
         "默认 DPI 变了的话,老缓存会全部失效并重建一遍"
     );
 }
+
+#[test]
+fn renderer_changes_do_not_reuse_legacy_word_downloads() {
+    let options = LayoutDocxOptions::default();
+    assert_eq!(options.cache_suffix(), "v2-dpi180");
+    assert_ne!(options.cache_suffix(), format!("dpi{}", options.dpi));
+    assert_eq!(LayoutDocxOptions { dpi: 96 }.cache_suffix(), "v2-dpi96");
+}

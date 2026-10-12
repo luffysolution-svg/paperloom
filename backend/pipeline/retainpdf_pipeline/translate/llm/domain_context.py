@@ -17,6 +17,7 @@ from retainpdf_pipeline.services.pipeline_shared.events import emit_stage_transi
 from retainpdf_pipeline.translate.llm.shared.provider_runtime import request_chat_content
 from retainpdf_pipeline.translate.llm.shared.structured_models import DOMAIN_CONTEXT_RESPONSE_SCHEMA
 from retainpdf_pipeline.translate.llm.shared.structured_parsers import parse_domain_context_response
+from retainpdf_pipeline.translate.llm.shared.json_math_escapes import has_corrupted_math_controls
 
 
 DOMAIN_CONTEXT_FILE_NAME = "domain-context.json"
@@ -114,6 +115,8 @@ def load_cached_domain_context(output_dir: Path | None) -> dict[str, str] | None
         return None
     if not isinstance(payload, dict):
         return None
+    if has_corrupted_math_controls(str(payload.get("translation_guidance", "") or "")):
+        return None
     return {
         "domain": str(payload.get("domain", "")).strip(),
         "summary": str(payload.get("summary", "")).strip(),
@@ -142,6 +145,8 @@ def _load_shared_domain_context(preview_text: str, *, model: str) -> dict[str, s
     except Exception:
         return None
     if not isinstance(payload, dict):
+        return None
+    if has_corrupted_math_controls(str(payload.get("translation_guidance", "") or "")):
         return None
     result = {
         "domain": str(payload.get("domain", "")).strip(),

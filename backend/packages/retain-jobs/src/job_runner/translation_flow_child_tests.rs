@@ -173,3 +173,30 @@ fn canceled_parent_is_not_revived_when_creating_the_ocr_child() {
         "回写 artifacts.ocr_job_id 时把 canceled 覆盖成了 running"
     );
 }
+
+#[test]
+fn canceled_parent_does_not_leave_a_queued_child() {
+    let deps = crate::job_runner::process_runner::tests::test_runtime_deps(1);
+    seed_upload(&deps, "upload-stop-child", "doc-stop-child");
+    let mut parent = JobSnapshot::new("stop-create".into(), CreateJobInput::default(), vec![]);
+    parent.upload_id = Some("upload-stop-child".into());
+    let mut stopped = parent.clone();
+    stopped.status = JobStatusKind::Canceled;
+    deps.db.save_job(&stopped).unwrap();
+    let mut parent = parent.into_runtime();
+    let paths = JobPaths::for_job(&deps.persist.data_root, &parent.job_id);
+    assert!(create_ocr_child_job(
+        &deps,
+        &mut parent,
+        &paths,
+        &TranslationUploadSource {
+            upload_id: "upload-stop-child".into()
+        }
+    )
+    .is_err());
+    assert_eq!(
+        deps.db.get_job("stop-create-ocr").unwrap().status,
+        JobStatusKind::Canceled
+    );
+    std::fs::remove_dir_all(&deps.config.project_root).unwrap();
+}

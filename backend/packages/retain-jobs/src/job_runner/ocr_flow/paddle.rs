@@ -47,6 +47,9 @@ pub(super) async fn run_local_ocr_transport_paddle(
     let created =
         match begin_ocr_dispatch(deps, job, "paddle", "submit_local_file", &request_identity)? {
             OcrDispatchDecision::Send { cursor } => {
+                if super::polling::should_stop_polling(deps, &job.job_id, parent_job_id).await? {
+                    return Ok(());
+                }
                 let created = client
                     .submit_local_file(upload_path, &model_name, &optional_payload)
                     .await
@@ -102,6 +105,9 @@ pub(super) async fn run_remote_ocr_transport_paddle(
     let created =
         match begin_ocr_dispatch(deps, job, "paddle", "submit_remote_url", &request_identity)? {
             OcrDispatchDecision::Send { cursor } => {
+                if super::polling::should_stop_polling(deps, &job.job_id, parent_job_id).await? {
+                    return Ok(());
+                }
                 let created = client
                     .submit_remote_url(
                         &job.request_payload.source.source_url,
@@ -162,7 +168,7 @@ async fn run_paddle_poll_loop(
 
     let started = std::time::Instant::now();
     loop {
-        if should_stop_polling(&deps.canceled_jobs, &job.job_id).await {
+        if should_stop_polling(deps, &job.job_id, parent_job_id).await? {
             return Ok(());
         }
         let task = client
@@ -259,5 +265,59 @@ fn log_paddle_unsupported_options(job: &mut JobRuntimeState) {
     }
     if !job.request_payload.ocr.extra_formats.trim().is_empty() {
         job.append_log("paddle provider note: extra_formats is not supported and will be ignored");
+    }
+}
+
+#[cfg(test)]
+mod cancellation_tests {
+    use super::*;
+    use crate::models::domain::{JobSnapshot, JobStatusKind};
+    use crate::models::request::CreateJobInput;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    #[tokio::test]
+    async fn canceled_parent_does_not_submit_a_paid_paddle_request() {
+        let deps = crate::job_runner::process_runner::tests::test_runtime_deps(1);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = calls.clone();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            observed.fetch_add(1, Ordering::SeqCst);
+            let mut bytes = [0; 8192];
+            let _ = stream.read(&mut bytes).await;
+            stream.write_all(b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await.unwrap();
+        });
+        let mut parent = JobSnapshot::new("paid-parent".into(), CreateJobInput::default(), vec![]);
+        parent.status = JobStatusKind::Canceled;
+        deps.db.save_job(&parent).unwrap();
+        let mut input = CreateJobInput::default();
+        input.ocr.provider = "paddle".into();
+        input.source.source_url = "https://example.invalid/synthetic.pdf".into();
+        let mut job = JobSnapshot::new("paid-parent-ocr".into(), input, vec![]).into_runtime();
+        deps.db.save_job(&job.snapshot()).unwrap();
+        let client =
+            PaddleClient::with_runtime(url, "synthetic-token", deps.paddle_runtime().clone());
+        let result = run_remote_ocr_transport_paddle(
+            &deps,
+            &mut job,
+            &client,
+            &deps.config.project_root.join("provider.json"),
+            &deps.config.project_root,
+            Some("paid-parent"),
+        )
+        .await;
+        server.abort();
+        assert!(
+            result.is_ok(),
+            "canceled request should return before transport: {result:?}"
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        std::fs::remove_dir_all(&deps.config.project_root).unwrap();
     }
 }

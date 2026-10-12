@@ -53,6 +53,7 @@ pub(super) enum TimeoutKind {
 enum WaitOutcome {
     Exited(ExitStatus),
     TimedOut(TimeoutKind),
+    Canceled,
 }
 
 /// 同时盯总时长与空闲时长。轮询而不是 select,因为空闲的截止时刻会随每一行
@@ -65,12 +66,23 @@ async fn wait_with_limits(
     no_output_secs: i64,
     last_output_at: &Mutex<Instant>,
     started: Instant,
+    persist: &JobPersistDeps,
+    canceled_jobs: &RwLock<HashSet<String>>,
+    job_id: &str,
+    extra_cancel_job_ids: &[String],
 ) -> Result<WaitOutcome> {
-    if total_secs <= 0 && no_output_secs <= 0 {
-        return Ok(WaitOutcome::Exited(child.wait().await?));
-    }
     let poll = Duration::from_millis(250);
     loop {
+        if super::super::cancel_registry::should_stop_job(
+            &persist.db,
+            canceled_jobs,
+            job_id,
+            extra_cancel_job_ids,
+        )
+        .await?
+        {
+            return Ok(WaitOutcome::Canceled);
+        }
         if let Ok(status) = timeout(poll, child.wait()).await {
             return Ok(WaitOutcome::Exited(status?));
         }
@@ -122,10 +134,27 @@ pub(super) async fn collect_process_execution(
             no_output_secs,
             &last_output_at,
             started,
+            persist,
+            canceled_jobs,
+            &job_id,
+            extra_cancel_job_ids,
         )
         .await?
         {
             WaitOutcome::Exited(status) => status,
+            WaitOutcome::Canceled => {
+                if let Some(pid) = child_pid {
+                    terminate_job_process_tree(
+                        pid,
+                        worker_runtime.worker_terminate_grace_secs,
+                        worker_runtime.worker_terminate_poll_ms,
+                    )
+                    .await?;
+                }
+                timeout(Duration::from_secs(5), child.wait())
+                    .await
+                    .context("timed out reaping canceled worker")??
+            }
             WaitOutcome::TimedOut(kind) => {
                 if let Some(pid) = child_pid {
                     let _ = terminate_job_process_tree(

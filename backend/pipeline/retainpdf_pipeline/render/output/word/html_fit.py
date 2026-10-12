@@ -39,7 +39,6 @@ from retainpdf_pipeline.render.layout.payload.formula_cost import approx_formula
 
 # Typst 侧同名常量（render/output/typst/block_config.py）。两边必须一致，
 # 否则这里算的可用空间和 Typst 当初用的不是同一个。
-MIN_BLOCK_SIZE_PT = 8.0
 MIN_FIT_FONT_SIZE_PT = 1.0
 MIN_FIT_LEADING_EM = 0.1
 
@@ -61,7 +60,6 @@ LINE_STEP_RATIO = 1.289
 # 字体文件就在仓库的 resources/fonts 下，需要精确还原的话装上即可。
 MEASURED_FONT_FAMILY = "Source Han Serif SC"
 
-_CJK_RE = re.compile(r"[　-〿㐀-䶿一-鿿豈-﫿＀-￯]")
 _MATH_RE = re.compile(r"\$[^$]*\$")
 
 
@@ -95,34 +93,12 @@ def renderable_text(plain_text: str, math_map: list[dict] | None) -> str:
 
 
 def wrap_lines(text: str, font_size_pt: float, available_width_pt: float) -> list[float]:
-    """贪心折行，返回每行的宽度。CJK 逐字可断、拉丁按空格断，和浏览器默认规则一致。"""
+    """贪心按字折行，匹配 Word 文本框的 w:wordWrap=0。"""
     font = _font()
-    tokens: list[str] = []
-    buffer = ""
-    for char in text or "":
-        if char == "\n":
-            if buffer:
-                tokens.append(buffer)
-                buffer = ""
-            tokens.append("\n")
-        elif _CJK_RE.match(char):
-            if buffer:
-                tokens.append(buffer)
-                buffer = ""
-            tokens.append(char)
-        elif char == " ":
-            buffer += char
-            tokens.append(buffer)
-            buffer = ""
-        else:
-            buffer += char
-    if buffer:
-        tokens.append(buffer)
-
     widths: list[float] = []
     current = 0.0
     started = False
-    for token in tokens:
+    for token in text or "":
         if token == "\n":
             widths.append(current)
             current, started = 0.0, False
@@ -195,7 +171,7 @@ def compute_fit(
     return max(min_pt, fitted)
 
 
-def fitted_typography(block) -> tuple[float, float]:
+def fitted_typography(block, observed=None) -> tuple[float, float]:
     """这个块该用的字号和行距(pt)。"""
     # fit_to_box 为假时排版层压根不收敛——Typst 直接按上界排、`clip: false` 允许溢出。
     # 这些块的框高常常连一行都装不下（见过框高 8pt 而一行需要 12.5pt 的），所以绝不能
@@ -206,15 +182,15 @@ def fitted_typography(block) -> tuple[float, float]:
     # 就空转。留着是因为那个不变量没有任何地方写明，而一旦它不成立，这里会把正常字号
     # 砸到下界。想删的话先去 emit.py / page_collision.py 确认。
     if not block.fit_to_box:
-        return block.font_size_pt, block.font_size_pt * LINE_STEP_RATIO
+        size = observed.font_size_pt if observed else block.font_size_pt
+        step = observed.line_step_pt if observed and observed.line_step_pt > 0 else size * LINE_STEP_RATIO
+        return size, max(size, step)
 
     x0, y0, x1, y1 = block.content_rect
-    available_width = max(MIN_BLOCK_SIZE_PT, x1 - x0)
-    box_height = max(MIN_BLOCK_SIZE_PT, y1 - y0)
-    # 和 Typst 的 `allowed-height = min(size.height, fit_height)` 对齐。
-    available_height = max(
-        MIN_BLOCK_SIZE_PT, min(box_height, block.fit_max_height_pt or box_height)
-    )
+    # Word 写出的文本框至少 1pt；不能用 Typst 的 8pt 最小框验证更小的实际框。
+    available_width = max(1.0, x1 - x0)
+    box_height = max(1.0, y1 - y0)
+    available_height = min(box_height, block.fit_max_height_pt or box_height)
     # 坑 ①:下界要和 Typst 的 `fit_dimensions` 一致——排版层没给下界时用**字号本身**，
     # 不是阅读器那个 `|| 5.5`。阅读器那个默认值是给没有排版数据的块兜底的；照搬过来，
     # 真实数据里三成没有下界的块会被一路砸到 5.5pt。
@@ -223,6 +199,19 @@ def fitted_typography(block) -> tuple[float, float]:
         min(block.fit_min_font_size_pt or block.font_size_pt, block.font_size_pt),
     )
     text = renderable_text(block.plain_text, list(getattr(block, "math_map", None) or []))
+
+    def coherent_step(size, requested_step):
+        line_count = len(wrap_lines(text, size, available_width))
+        # 精确行距不能小于字形字号，无法满足的下界保留为显式溢出。
+        return max(size, min(max(size, requested_step), available_height / line_count))
+
+    if observed:
+        size = observed.font_size_pt
+        requested_step = observed.line_step_pt if observed.line_step_pt > 0 else size * LINE_STEP_RATIO
+        step = coherent_step(size, requested_step)
+        widths = wrap_lines(text, size, available_width)
+        if max(widths) <= available_width + 0.5 and len(widths) * step <= available_height + 0.5:
+            return size, step
 
     fitted = compute_fit(
         lambda size: measure(text, size, available_width),
@@ -233,4 +222,4 @@ def fitted_typography(block) -> tuple[float, float]:
         block.font_size_pt,
         exact=True,
     )
-    return fitted, fitted * LINE_STEP_RATIO
+    return fitted, coherent_step(fitted, fitted * LINE_STEP_RATIO)

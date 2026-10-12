@@ -32,7 +32,7 @@ const MATH_RE = /\$\$([\s\S]+?)\$\$|(?<!\\)\$((?:\\.|[^$\n])+?)\$/g;
 
 const emu = (pt) => Math.round(pt * EMU_PER_POINT);
 const twips = (pt) => Math.round(pt * TWIPS_PER_POINT);
-const halfPoints = (pt) => Math.max(1, Math.round(pt * 2));
+const halfPoints = (pt) => Math.max(1, Math.floor(pt * 2));
 
 function runProperties(block, fontFamily) {
   return xml("w:rPr", {}, [
@@ -46,6 +46,7 @@ function runProperties(block, fontFamily) {
     block.bold ? rawXml(xml("w:bCs")) : undefined,
     rawXml(xml("w:sz", { "w:val": halfPoints(block.fontSizePt) })),
     rawXml(xml("w:szCs", { "w:val": halfPoints(block.fontSizePt) })),
+    block.superscript ? rawXml(xml("w:vertAlign", { "w:val": "superscript" })) : undefined,
   ]);
 }
 
@@ -66,32 +67,63 @@ function textRun(text, block, fontFamily) {
  */
 function inlineRuns(line, block, fontFamily, errors) {
   const runs = [];
+  const tokens = [];
   let cursor = 0;
   MATH_RE.lastIndex = 0;
   for (let match = MATH_RE.exec(line); match; match = MATH_RE.exec(line)) {
     if (match.index > cursor) {
-      runs.push(rawXml(textRun(line.slice(cursor, match.index), block, fontFamily)));
+      tokens.push({ text: line.slice(cursor, match.index) });
     }
+    tokens.push({ math: match });
+    cursor = match.index + match[0].length;
+  }
+  if (cursor < line.length) tokens.push({ text: line.slice(cursor) });
+
+  // Only paired delimiters outside formulas are markup; unmatched/single stars stay literal.
+  const strongRe = /(?<![\\*])\*\*(?!\*)/g;
+  const delimiterCount = tokens.reduce((count, token) => count + (token.text?.match(strongRe) || []).length, 0);
+  let remaining = delimiterCount - delimiterCount % 2;
+  let strong = false;
+  for (const token of tokens) {
+    const styled = () => ({ ...block, bold: block.bold || strong });
+    if (token.text !== undefined) {
+      let start = 0;
+      for (const delimiter of token.text.matchAll(strongRe)) {
+        if (!remaining) break;
+        if (delimiter.index > start) {
+          runs.push(rawXml(textRun(token.text.slice(start, delimiter.index), styled(), fontFamily)));
+        }
+        strong = !strong;
+        remaining -= 1;
+        start = delimiter.index + 2;
+      }
+      if (start < token.text.length) runs.push(rawXml(textRun(token.text.slice(start), styled(), fontFamily)));
+      continue;
+    }
+    const match = token.math;
     // `$$...$$` 和 `$...$` 产出一样的 OMML（见 formula.mjs）。正则要分开两支只是
     // 为了让 `$$a$$` 被当成**一个**公式吃掉，否则会解析成两个空的行内公式。
     const latex = match[1] !== undefined ? match[1] : match[2];
+    const citation = /^(?:\{\})?\s*\^\s*\{(\[\d+(?:\s*[,;\-–—]\s*\d+)*\])\}\s*$/.exec(latex);
+    if (citation) {
+      runs.push(rawXml(textRun(citation[1], { ...styled(), superscript: true }, fontFamily)));
+      continue;
+    }
     try {
       const omml = latexToOmml(latex);
       runs.push(rawXml(omml));
     } catch (error) {
       errors.push({ blockId: block.id, latex, message: error.message });
-      runs.push(rawXml(textRun(match[0], block, fontFamily)));
+      runs.push(rawXml(textRun(match[0], styled(), fontFamily)));
     }
-    cursor = match.index + match[0].length;
-  }
-  if (cursor < line.length) {
-    runs.push(rawXml(textRun(line.slice(cursor), block, fontFamily)));
   }
   return runs;
 }
 
 function paragraph(line, block, fontFamily, errors) {
   const properties = [
+    // OOXML uses off/0 to allow character-level breaks in western words.
+    rawXml(xml("w:wordWrap", { "w:val": 0 })),
     rawXml(xml("w:spacing", {
       "w:before": 0,
       "w:after": 0,
@@ -169,7 +201,7 @@ function blockTextbox(block, pageIndex, blockIndex, fontFamily, errors) {
                 wrap: "square",
                 lIns: 0, tIns: 0, rIns: 0, bIns: 0,
                 anchor: "t",
-              }, [rawXml(xml("a:noAutofit"))])),
+              }, [rawXml(xml("a:normAutofit"))])),
             ])),
           ])),
         ])),

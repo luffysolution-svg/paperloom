@@ -16,6 +16,7 @@ export async function fetchLibraryBookList(apiPrefix, { limit = 40, offset = 0, 
     }
     const resp = await fetch(`${buildApiEndpoint(apiPrefix, "library/books")}?${params.toString()}`, {
         headers: buildApiHeaders(),
+        signal: AbortSignal.timeout(20_000),
     });
     if (!resp.ok)
         throw new Error(`读取图书馆失败，请稍后重试。(${resp.status})`);

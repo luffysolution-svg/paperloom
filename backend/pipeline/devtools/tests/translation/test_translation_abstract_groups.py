@@ -10,6 +10,7 @@ from retainpdf_pipeline.render.layout.payload.prepare import prepare_render_payl
 from retainpdf_pipeline.translate.core.orchestration.units import finalize_payload_orchestration_metadata
 from retainpdf_pipeline.translate.core.payload.parts.apply import apply_translated_text_map
 from retainpdf_pipeline.translate.core.payload.parts.units import pending_translation_items
+from retainpdf_pipeline.translate.core.payload.parts.translation_units import refresh_payload_translation_units
 from retainpdf_pipeline.translate.services.finalization import recover_blocking_untranslated_items
 from retainpdf_pipeline.translate.services.postprocess import garbled_reconstruction
 
@@ -75,6 +76,30 @@ def test_abstract_slots_form_one_aggregate_translation_unit_without_merging_bbox
     assert [item["bbox"] for item in payload] == original_bboxes
     assert payload[0]["protected_source_text"] in unit["protected_source_text"]
     assert payload[1]["protected_source_text"] in unit["protected_source_text"]
+
+
+def test_formula_heavy_abstract_split_preserves_each_member_after_refresh_and_render() -> None:
+    payload = _two_slot_abstract()
+    for item in payload:
+        source = " ".join(f"Substantial explanation before formula <f{j + 1}-abc/>" for j in range(6))
+        item["source_text"] = item["protected_source_text"] = source
+    original_bboxes = [list(item["bbox"]) for item in payload]
+    finalize_payload_orchestration_metadata(payload)
+    pending = pending_translation_items(payload)
+    assert [item["item_id"] for item in pending] == [item["item_id"] for item in payload]
+    assert all(item["group_split_reason"] == "formula_windowed_group" for item in payload)
+    expected = ["这是成员零自己的摘要内容。", "这是成员一自己的摘要内容。"]
+    apply_translated_text_map(payload, {
+        item["item_id"]: {"translated_text": text, "decision": "translate"}
+        for item, text in zip(pending, expected)
+    })
+    for _ in range(3):
+        refresh_payload_translation_units(payload)
+        assert [item["translation_unit_kind"] for item in payload] == ["single", "single"]
+        assert all(not item.get("translation_group_id") for item in payload)
+    prepared = prepare_render_payloads_by_page({0: payload})[0]
+    assert [item["render_protected_text"] for item in prepared] == expected
+    assert [item["bbox"] for item in prepared] == original_bboxes
 
 
 def test_completed_legacy_abstract_slots_remain_independent() -> None:

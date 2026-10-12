@@ -35,7 +35,7 @@ mod support;
 mod transport;
 mod workspace;
 
-use super::cancel_registry::is_cancel_requested_any;
+use super::cancel_registry::should_stop_job;
 use provider_transport::execute_provider_transport;
 pub use support::sync_parent_with_ocr_child;
 use support::{fail_missing_source_pdf, fail_ocr_transport, save_ocr_job};
@@ -52,6 +52,17 @@ pub async fn execute_ocr_job(
     output_job_id_override: Option<String>,
     parent_job_id: Option<String>,
 ) -> Result<JobRuntimeState> {
+    let parent_cancel_ids: Vec<String> = parent_job_id.iter().cloned().collect();
+    if stop_canceled_ocr(
+        &deps,
+        &mut job,
+        parent_job_id.as_deref(),
+        &parent_cancel_ids,
+    )
+    .await?
+    {
+        return Ok(job);
+    }
     let is_command_provider = is_configured_command_provider(&job.request_payload.ocr.provider);
     let run_provider_worker = uses_provider_worker(&job.request_payload.ocr);
     let provider_kind = if is_command_provider {
@@ -86,7 +97,7 @@ pub async fn execute_ocr_job(
     save_ocr_job(&deps, &job, parent_job_id.as_deref()).await?;
 
     if run_provider_worker {
-        return execute_process_job(deps, job, &[]).await;
+        return execute_process_job(deps, job, &parent_cancel_ids).await;
     }
 
     let source_pdf_path = match execute_provider_transport(
@@ -100,27 +111,29 @@ pub async fn execute_ocr_job(
     {
         Ok(path) => path,
         Err(err) => {
+            if stop_canceled_ocr(
+                &deps,
+                &mut job,
+                parent_job_id.as_deref(),
+                &parent_cancel_ids,
+            )
+            .await?
+            {
+                return Ok(job);
+            }
             fail_ocr_transport(&mut job, &err);
             return Ok(job);
         }
     };
 
-    // 也认父任务的取消。
-    //
-    // 取消只登记被点的那个 id,而 book 任务里用户点的是父任务——子任务永远
-    // 看不到信号,于是 OCR 跑到底,结果被丢弃。`extra_cancel_job_ids` 这套机制
-    // 本来就是为此设计的,只是此前所有调用点都传 `&[]`,成了死代码。
-    let parent_cancel_ids: Vec<String> = parent_job_id.iter().cloned().collect();
-    if is_cancel_requested_any(deps.canceled_jobs.as_ref(), &job.job_id, &parent_cancel_ids).await {
-        job.status = JobStatusKind::Canceled;
-        job.stage = Some("canceled".to_string());
-        job.stage_detail = Some("OCR 任务已取消".to_string());
-        job.updated_at = now_iso();
-        job.finished_at = Some(now_iso());
-        clear_canceled_runtime_artifacts(&mut job);
-        clear_job_failure(&mut job);
-        sync_runtime_state(&mut job);
-        save_ocr_job(&deps, &job, parent_job_id.as_deref()).await?;
+    if stop_canceled_ocr(
+        &deps,
+        &mut job,
+        parent_job_id.as_deref(),
+        &parent_cancel_ids,
+    )
+    .await?
+    {
         return Ok(job);
     }
 
@@ -151,7 +164,63 @@ pub async fn execute_ocr_job(
     sync_runtime_state(&mut job);
     save_ocr_job(&deps, &job, parent_job_id.as_deref()).await?;
 
-    execute_process_job(deps, job, &[]).await
+    execute_process_job(deps, job, &parent_cancel_ids).await
+}
+
+async fn stop_canceled_ocr(
+    deps: &ProcessRuntimeDeps,
+    job: &mut JobRuntimeState,
+    parent_job_id: Option<&str>,
+    parent_cancel_ids: &[String],
+) -> Result<bool> {
+    if !should_stop_job(
+        &deps.db,
+        &deps.canceled_jobs,
+        &job.job_id,
+        parent_cancel_ids,
+    )
+    .await?
+    {
+        return Ok(false);
+    }
+    let persisted = deps.db.get_job(&job.job_id)?;
+    if !matches!(
+        persisted.status,
+        JobStatusKind::Queued | JobStatusKind::Running
+    ) {
+        *job = persisted.into_runtime();
+        return Ok(true);
+    }
+    job.status = if parent_job_id
+        .map(|id| deps.db.get_job(id))
+        .transpose()?
+        .is_some_and(|parent| {
+            matches!(
+                parent.status,
+                JobStatusKind::Failed | JobStatusKind::Succeeded
+            )
+        }) {
+        JobStatusKind::Failed
+    } else {
+        JobStatusKind::Canceled
+    };
+    job.stage = Some(
+        if job.status == JobStatusKind::Canceled {
+            "canceled"
+        } else {
+            "failed"
+        }
+        .into(),
+    );
+    job.stage_detail = Some("OCR stopped because its job or parent is no longer active".into());
+    job.updated_at = now_iso();
+    job.finished_at = Some(now_iso());
+    job.pid = None;
+    clear_canceled_runtime_artifacts(job);
+    clear_job_failure(job);
+    sync_runtime_state(job);
+    save_ocr_job(deps, job, parent_job_id).await?;
+    Ok(true)
 }
 
 #[cfg(test)]
@@ -203,6 +272,35 @@ mod tests {
         assert_eq!(failure.summary, "源 PDF 缺失");
         assert!(!failure.retryable);
     }
+
+    #[tokio::test]
+    async fn canceled_parent_prevents_ocr_preparation_without_registry() {
+        let deps = crate::job_runner::process_runner::tests::test_runtime_deps(1);
+        let mut parent =
+            JobSnapshot::new("stopped-parent".into(), CreateJobInput::default(), vec![]);
+        parent.status = JobStatusKind::Canceled;
+        deps.db.save_job(&parent).unwrap();
+        let child = JobSnapshot::new(
+            "stopped-parent-ocr".into(),
+            CreateJobInput::default(),
+            vec![],
+        );
+        deps.db.save_job(&child).unwrap();
+        let result = execute_ocr_job(
+            deps.clone(),
+            child.into_runtime(),
+            None,
+            Some(parent.job_id.clone()),
+        )
+        .await;
+        let finished = result.expect("cancellation must stop before missing upload/worker setup");
+        assert_eq!(finished.status, JobStatusKind::Canceled);
+        assert_eq!(
+            deps.db.get_job(&finished.job_id).unwrap().status,
+            JobStatusKind::Canceled
+        );
+        std::fs::remove_dir_all(&deps.config.project_root).unwrap();
+    }
 }
 
 #[cfg(test)]
@@ -225,10 +323,10 @@ mod parent_cancel_contract {
             ),
         ] {
             let call = source
-                .find("is_cancel_requested_any(")
+                .find("should_stop_job(")
                 .unwrap_or_else(|| panic!("{file}: 取消检查必须走 is_cancel_requested_any"));
             let tail = &source[call..];
-            let end = tail.find(").await").expect("调用应当被 await");
+            let end = tail.find(".await").expect("调用应当被 await");
             let args = &tail[..end];
             assert!(
                 args.contains("parent_cancel_ids"),

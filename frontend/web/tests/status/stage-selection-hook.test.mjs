@@ -13,12 +13,8 @@ function installDom() {
       configurable: true,
     });
   }
-  globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   return dom;
-}
-
-function wait(ms = 25) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 test("阶段选择对 null / undefined / 空串等价输入不追加状态更新", async () => {
@@ -37,15 +33,13 @@ test("阶段选择对 null / undefined / 空串等价输入不追加状态更新
   }
 
   const root = createRoot(dom.window.document.getElementById("root"));
-  root.render(React.createElement(Harness, { jobId: null, currentStageKey: null }));
-  await wait();
+  await React.act(async () => root.render(React.createElement(Harness, { jobId: null, currentStageKey: null })));
   const beforeEquivalentUpdate = renderCount;
 
-  root.render(React.createElement(Harness, {
+  await React.act(async () => root.render(React.createElement(Harness, {
     jobId: undefined,
     currentStageKey: undefined,
-  }));
-  await wait();
+  })));
 
   assert.equal(
     renderCount,
@@ -53,5 +47,5 @@ test("阶段选择对 null / undefined / 空串等价输入不追加状态更新
     "等价输入只能产生父级请求的一次 render，effect 不得再写一轮 state",
   );
 
-  root.unmount();
+  await React.act(async () => root.unmount());
 });
