@@ -165,7 +165,7 @@ function createDesktopUpdater({ app, fetchImpl, openPath, launchPortable, hasAct
         }
         if (mode === "portable") {
           publish({ status: "installing" });
-          await launchPortable({ source: downloadedFile, target: portableFile, sha256: expectedHash, parentPid: process.pid }, async () => {
+          await launchPortable({ source: downloadedFile, target: portableFile, userData: app.getPath("userData"), sha256: expectedHash, parentPid: process.pid }, async () => {
             if (await hasActiveJobs()) throw new Error("准备更新期间有新任务启动，请先完成或取消任务再安装");
           });
         } else {

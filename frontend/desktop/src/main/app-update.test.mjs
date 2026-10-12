@@ -68,6 +68,7 @@ for (const [platform, arch, portableFile, expectedName, expectedMode] of [
     await f.updater.install();
     if (expectedMode === "portable") {
       assert.equal(f.opened[0].target, portableFile);
+      assert.equal(f.opened[0].userData, f.root, "portable restart preserves the effective profile path");
       assert.equal(f.opened[1], "quit");
     } else {
       assert.equal(path.basename(f.opened[0]), expectedName);

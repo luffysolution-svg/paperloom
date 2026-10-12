@@ -9,6 +9,12 @@ if ($Launch) {
     )
     exit
 }
+function Get-PortableSha256([string]$File) {
+    $stream = [IO.File]::OpenRead($File)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
+    finally { $stream.Dispose(); $sha.Dispose() }
+}
 $stage = $null
 $backup = $null
 $replaced = $false
@@ -24,14 +30,14 @@ try {
         [IO.Path]::GetExtension($target) -ne '.exe' -or !(Test-Path -LiteralPath $target -PathType Leaf)) {
         throw 'Invalid portable update paths'
     }
-    if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ne $plan.sha256) {
+    if ((Get-PortableSha256 $source) -ne $plan.sha256) {
         throw 'Portable update checksum failed'
     }
     # Copy to the destination volume before replacing, so a C: cache can update an F: app.
     $stage = Join-Path ([IO.Path]::GetDirectoryName($target)) ('.paperloom-update-' + [Guid]::NewGuid().ToString() + '.exe')
     $backup = $stage + '.backup'
     Copy-Item -LiteralPath $source -Destination $stage
-    if ((Get-FileHash -LiteralPath $stage -Algorithm SHA256).Hash -ne $plan.sha256) {
+    if ((Get-PortableSha256 $stage) -ne $plan.sha256) {
         throw 'Staged portable update checksum failed'
     }
     [IO.File]::WriteAllText($PlanFile + '.ready', 'ready')
@@ -59,7 +65,11 @@ try {
             Start-Sleep -Milliseconds 250
         }
     }
-    Start-Process -FilePath $target -WorkingDirectory ([IO.Path]::GetDirectoryName($target))
+    $restartOptions = @{ FilePath = $target; WorkingDirectory = [IO.Path]::GetDirectoryName($target) }
+    if ($plan.userData) {
+        $restartOptions.ArgumentList = '--user-data-dir="' + ($plan.userData -replace '(\\+)$', '$1$1') + '"'
+    }
+    Start-Process @restartOptions
     $installed = $true
     [IO.File]::WriteAllText($PlanFile + '.result.json', '{"ok":true}')
     [IO.File]::WriteAllText((Join-Path $cache 'portable-update-result.json'), '{"ok":true}')
