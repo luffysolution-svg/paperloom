@@ -32,18 +32,15 @@ export type ReaderNotesDocKey = {
   documentId?: string;
 };
 
-// 本地注记的存储键：jobId 优先，其次 documentId。
-// 注意生命周期不一致（已知、暂不改）：本键以 job 为第一身份，而服务端收藏按
-// document_id 去重（见 shared/state/server-favorites-port.ts 的 dedupeServerFavorites）；
-// 同文档换 run/job 时会命中不同 notes 键。UI/导出里的页码已统一为 1-based 展示。
+// 文档身份在重译后保持不变；尚未取得 documentId 时才使用任务身份。
 export function notesStorageKey(doc: ReaderNotesDocKey): string {
   const job = `${doc.jobId || ""}`.trim();
   const documentId = `${doc.documentId || ""}`.trim();
-  if (job) {
-    return `retainpdf.reader.notes.v1:job:${job}`;
-  }
   if (documentId) {
     return `retainpdf.reader.notes.v1:doc:${documentId}`;
+  }
+  if (job) {
+    return `retainpdf.reader.notes.v1:job:${job}`;
   }
   return "retainpdf.reader.notes.v1:anonymous";
 }

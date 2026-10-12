@@ -162,6 +162,16 @@ pub fn reconcile_stale_running_jobs(config: &AppConfig, db: &Db) -> Result<usize
             job_record.job_id
         );
     }
+    for parent_id in db.list_terminal_parents_with_unsettled_ocr_children()? {
+        if super::lifecycle::settle_ocr_child_for_parent(
+            db,
+            &config.data_root,
+            &config.output_root,
+            &parent_id,
+        )? {
+            reconciled += 1;
+        }
+    }
     if reconciled > 0 {
         warn!("runtime startup reconciliation recovered {reconciled} stale running job(s)");
     }

@@ -54,6 +54,23 @@ impl Db {
         .map_err(Into::into)
     }
 
+    /// Parent IDs whose inline child cannot be resumed by a standalone driver.
+    pub fn list_terminal_parents_with_unsettled_ocr_children(&self) -> Result<Vec<String>> {
+        let conn = self.connect()?;
+        let mut stmt = conn.prepare(r#"
+            SELECT parent.job_id FROM jobs parent
+            JOIN jobs child ON child.job_id = parent.job_id || '-ocr'
+            WHERE parent.status_json IN ('"succeeded"', '"failed"', '"canceled"')
+              AND (child.status_json IN ('"queued"', '"running"') OR EXISTS (
+                SELECT 1 FROM pipeline_attempts a WHERE a.job_id = child.job_id AND a.status = 'running'
+              ))
+            ORDER BY parent.job_id
+        "#)?;
+        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
     pub fn list_resumable_pipeline_job_ids(&self) -> Result<Vec<String>> {
         let conn = self.connect()?;
         let queued = serde_json::to_string(&crate::models::domain::JobStatusKind::Queued)?;

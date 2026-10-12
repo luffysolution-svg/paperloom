@@ -9,7 +9,7 @@ use crate::models::domain::{
     job_stage_detail, job_stage_str, now_iso, JobRuntimeState, JobStage, JobStatusKind,
 };
 
-use super::super::cancel_registry::is_cancel_requested_any;
+use super::super::cancel_registry::should_stop_job;
 use super::super::{
     sync_runtime_state, terminate_job_process_tree,
     worker_process::{prepare_model_worker_binding, spawn_worker_process},
@@ -40,7 +40,13 @@ pub(super) async fn spawn_started_process(
     prepare_job_for_spawn(&mut job);
 
     // Do not let a stale driver revive a terminal task before spawning.
-    if is_cancel_requested_any(canceled_jobs, &job.job_id, extra_cancel_job_ids).await
+    if should_stop_job(
+        &persist.db,
+        canceled_jobs,
+        &job.job_id,
+        extra_cancel_job_ids,
+    )
+    .await?
         || !cas_persist_job_with_resources(
             persist.db.as_ref(),
             &persist.data_root,
@@ -81,7 +87,14 @@ pub(super) async fn spawn_started_process(
     }
     info!("started job {} pid={:?}", job.job_id, job.pid);
 
-    if is_cancel_requested_any(canceled_jobs, &job.job_id, extra_cancel_job_ids).await {
+    if should_stop_job(
+        &persist.db,
+        canceled_jobs,
+        &job.job_id,
+        extra_cancel_job_ids,
+    )
+    .await?
+    {
         if let Some(pid) = job.pid {
             terminate_job_process_tree(
                 pid,

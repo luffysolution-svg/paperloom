@@ -332,3 +332,36 @@ fn task_document_and_library_lists_keep_live_progress_and_background_stage_parit
         assert!(fs.fast("owner"));
     }
 }
+
+#[test]
+fn child_terminal_event_is_not_a_parent_terminal_event() {
+    let fs = Fixture::new("parent-child-terminal-feed");
+    fs.job("parent", Some("parent-ocr"));
+    fs.job("parent-ocr", None);
+    let conn = Connection::open(&fs.root.join("jobs.db")).unwrap();
+    conn.execute("INSERT INTO events(job_id,seq,ts,level,stage,event,message,payload_json) VALUES(?1,1,?2,'info','finished','job_terminal','OCR child completed',?3)",
+        params!["parent-ocr", Utc::now().to_rfc3339(), json!({"status":"succeeded"}).to_string()]).unwrap();
+    let query = serde_json::from_value(json!({"limit":100,"start":"head"})).unwrap();
+    fs.db_progress("parent-ocr", 2);
+    let parent = read_events(&fs.db, &fs.root, "parent", &query, false).unwrap();
+    assert!(!parent
+        .items
+        .iter()
+        .any(|item| item.event.event_type.as_deref() == Some("terminal")));
+    assert!(parent
+        .items
+        .iter()
+        .any(|item| item.event.event == "stage_progress"));
+    let child = read_events(&fs.db, &fs.root, "parent-ocr", &query, false).unwrap();
+    assert!(child
+        .items
+        .iter()
+        .any(|item| item.event.event_type.as_deref() == Some("terminal")));
+    conn.execute("INSERT INTO events(job_id,seq,ts,level,stage,event,message,payload_json) VALUES('parent',1,?1,'info','finished','job_terminal','parent completed',?2)",
+        params![Utc::now().to_rfc3339(), json!({"status":"succeeded"}).to_string()]).unwrap();
+    let finished = read_events(&fs.db, &fs.root, "parent", &query, false).unwrap();
+    assert!(finished
+        .items
+        .iter()
+        .any(|item| item.event.event_type.as_deref() == Some("terminal")));
+}

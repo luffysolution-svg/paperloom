@@ -16,7 +16,7 @@ use crate::models::domain::{job_user_stage, now_iso, JobRuntimeState};
 
 use crate::job_runner::JobPersistDeps;
 
-use super::super::cancel_registry::is_cancel_requested_any;
+use super::super::cancel_registry::should_stop_job;
 use super::super::runtime_state::apply_job_stdout_line;
 use super::super::stdout_parser::{
     parse_artifact_published_line, parse_pipeline_checkpoint_line,
@@ -69,7 +69,14 @@ pub(super) async fn read_stdout(
         // 收到任何一行就算"还在动"。放在所有 break 之前:进程有没有活着,
         // 与这行内容是什么、要不要继续处理它无关。
         *last_output_at.lock().await = Instant::now();
-        if is_cancel_requested_any(&canceled_jobs, &job.job_id, &extra_cancel_job_ids).await {
+        if should_stop_job(
+            &persist.db,
+            &canceled_jobs,
+            &job.job_id,
+            &extra_cancel_job_ids,
+        )
+        .await?
+        {
             break;
         }
         out.push_str(&line);
@@ -93,7 +100,14 @@ pub(super) async fn read_stdout(
         if let Some(artifact) = parse_artifact_published_line(&line) {
             apply_durable_artifact_commit(persist.db.as_ref(), &mut pipeline_cursor, artifact)?;
         }
-        if is_cancel_requested_any(&canceled_jobs, &job.job_id, &extra_cancel_job_ids).await {
+        if should_stop_job(
+            &persist.db,
+            &canceled_jobs,
+            &job.job_id,
+            &extra_cancel_job_ids,
+        )
+        .await?
+        {
             break;
         }
         job.updated_at = now_iso();

@@ -37,6 +37,24 @@ pub(super) async fn is_cancel_requested_any(
         .any(|value| canceled_jobs.contains(value))
 }
 
+/// Registry entries are transient; durable terminal state must still stop a stale driver.
+pub(super) async fn should_stop_job(
+    db: &crate::db::Db,
+    canceled_jobs: &RwLock<HashSet<String>>,
+    job_id: &str,
+    extra_cancel_job_ids: &[String],
+) -> anyhow::Result<bool> {
+    if is_cancel_requested_any(canceled_jobs, job_id, extra_cancel_job_ids).await {
+        return Ok(true);
+    }
+    for id in std::iter::once(job_id).chain(extra_cancel_job_ids.iter().map(String::as_str)) {
+        if db.job_is_terminal(id)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

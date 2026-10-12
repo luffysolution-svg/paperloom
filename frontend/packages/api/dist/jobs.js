@@ -45,9 +45,10 @@ export async function fetchJobPayload(a, b) {
         throw new Error("读取任务失败: 缺少 job_id");
     // Try generic endpoint first (covers both translation and OCR; OCR also readable via generic).
     // If 404, retry OCR-specific endpoint to handle strict OCR-only routing.
-    let resp = await fetch(buildJobDetailEndpoint(normalizedJobId, apiPrefix), { headers: buildApiHeaders() });
+    const signal = (b && typeof b === "object" ? b.signal : undefined) || AbortSignal.timeout(20_000);
+    let resp = await fetch(buildJobDetailEndpoint(normalizedJobId, apiPrefix), { headers: buildApiHeaders(), signal });
     if (resp.status === 404) {
-        const ocrResp = await fetch(buildOcrJobDetailEndpoint(normalizedJobId, apiPrefix), { headers: buildApiHeaders() });
+        const ocrResp = await fetch(buildOcrJobDetailEndpoint(normalizedJobId, apiPrefix), { headers: buildApiHeaders(), signal });
         if (ocrResp.ok)
             return unwrapEnvelope(await ocrResp.json());
         // keep original 404 semantics if both miss
@@ -78,7 +79,7 @@ export async function fetchJobList(apiPrefix = API_PREFIX, { limit = 20, offset 
     if (!includeLiveStage)
         params.set("include_live_stage", "false");
     const endpoint = buildJobsEndpoint(apiPrefix, scope);
-    const resp = await fetch(`${endpoint}?${params.toString()}`, { headers: buildApiHeaders() });
+    const resp = await fetch(`${endpoint}?${params.toString()}`, { headers: buildApiHeaders(), signal: AbortSignal.timeout(20_000) });
     if (!resp.ok)
         throw new Error(`读取最近任务失败，请稍后重试。(${resp.status})`);
     return unwrapEnvelope(await resp.json());

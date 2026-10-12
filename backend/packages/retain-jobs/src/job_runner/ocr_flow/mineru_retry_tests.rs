@@ -106,7 +106,7 @@ async fn polling_deadline_bounds_a_stalled_http_request() {
         &mut job,
         "batch",
         "original-batch",
-        Instant::now() + Duration::from_millis(10),
+        Instant::now() + Duration::from_millis(500),
         None,
         std::future::pending,
     )
@@ -149,9 +149,10 @@ async fn canceled_job_does_not_wait_retry_after_or_issue_another_query() {
         .insert(job.job_id.clone());
     tokio::time::timeout(
         Duration::from_millis(100),
-        wait_retry_delay(&fixture.0, &job.job_id, Duration::from_secs(60)),
+        wait_retry_delay(&fixture.0, &job.job_id, None, Duration::from_secs(60)),
     )
     .await
+    .unwrap()
     .unwrap();
     let result = query_with_retry::<(), _, _>(
         &fixture.0,
@@ -169,4 +170,30 @@ async fn canceled_job_does_not_wait_retry_after_or_issue_another_query() {
     .await
     .unwrap();
     assert!(result.is_none());
+}
+
+#[tokio::test]
+async fn canceled_parent_prevents_poll_fetch_after_registry_cleared() {
+    let fixture = Fixture::new();
+    let mut job = fixture.job();
+    let mut parent = JobSnapshot::new("poll-parent".into(), CreateJobInput::default(), vec![]);
+    parent.status = crate::models::domain::JobStatusKind::Canceled;
+    fixture.0.db.save_job(&parent).unwrap();
+    let mut calls = 0;
+    let result = query_with_retry(
+        &fixture.0,
+        &mut job,
+        "batch",
+        "original-batch",
+        Instant::now() + Duration::from_secs(1),
+        Some("poll-parent"),
+        || {
+            calls += 1;
+            std::future::ready(Ok("paid-fetch"))
+        },
+    )
+    .await
+    .unwrap();
+    assert!(result.is_none());
+    assert_eq!(calls, 0);
 }

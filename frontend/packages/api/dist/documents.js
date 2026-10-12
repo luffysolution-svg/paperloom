@@ -47,7 +47,7 @@ export async function fetchDocumentList(apiPrefix, { limit = 50, offset = 0, rea
         params.set("collection_id", `${collectionId}`.trim());
     if (`${q || ""}`.trim())
         params.set("q", `${q}`.trim());
-    const resp = await fetch(`${buildApiEndpoint(apiPrefix, "documents")}?${params.toString()}`, { headers: buildApiHeaders() });
+    const resp = await fetch(`${buildApiEndpoint(apiPrefix, "documents")}?${params.toString()}`, { headers: buildApiHeaders(), signal: AbortSignal.timeout(20_000) });
     if (!resp.ok)
         throw new Error(`读取文档库失败，请稍后重试。(${resp.status})`);
     return unwrapEnvelope(await resp.json());

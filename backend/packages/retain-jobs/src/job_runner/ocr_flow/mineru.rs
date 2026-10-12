@@ -46,6 +46,9 @@ pub(super) async fn run_local_ocr_transport_mineru(
     let upload_target =
         match begin_ocr_dispatch(deps, job, "mineru", "apply_upload_url", &request_identity)? {
             OcrDispatchDecision::Send { cursor } => {
+                if super::polling::should_stop_polling(deps, &job.job_id, parent_job_id).await? {
+                    return Ok(());
+                }
                 let target = client
                     .apply_upload_url(
                         upload_file_name,
@@ -94,6 +97,9 @@ pub(super) async fn run_local_ocr_transport_mineru(
     job.updated_at = now_iso();
     save_ocr_job(deps, job, parent_job_id).await?;
 
+    if super::polling::should_stop_polling(deps, &job.job_id, parent_job_id).await? {
+        return Ok(());
+    }
     client
         .upload_file(&upload_target.upload_url, upload_path)
         .await
@@ -151,6 +157,9 @@ pub(super) async fn run_remote_ocr_transport_mineru(
         &request_identity,
     )? {
         OcrDispatchDecision::Send { cursor } => {
+            if super::polling::should_stop_polling(deps, &job.job_id, parent_job_id).await? {
+                return Ok(());
+            }
             let created = client
                 .create_extract_task(
                     &job.request_payload.source.source_url,

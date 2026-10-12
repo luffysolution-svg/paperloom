@@ -12,6 +12,22 @@ def build_side_by_side_pdf(source_pdf: Path, translated_pdf: Path, output_pdf: P
             raise RuntimeError(f"source pdf has no pages: {source_pdf}")
         if translated_doc.page_count < 1:
             raise RuntimeError(f"translated pdf has no pages: {translated_pdf}")
+        # show_pdf_page copies unrotated contents. Bake display rotation into
+        # these opened documents before measuring/copying either pane.
+        for document in (source_doc, translated_doc):
+            for page in document:
+                if page.rotation:
+                    # remove_rotation uses the mediabox and resets the cropbox
+                    # for quarter turns. Normalize against the full page, then
+                    # restore its rotated visible crop.
+                    cropbox = page.cropbox
+                    mediabox = page.mediabox
+                    page.set_cropbox(fitz.Rect(mediabox.x0, 0, mediabox.x1, mediabox.height))
+                    origin = page.cropbox_position
+                    visible_crop = cropbox * fitz.Matrix(1, 0, 0, 1, -origin.x, -origin.y) * page.rotation_matrix
+                    page.remove_rotation()
+                    origin = page.cropbox_position
+                    page.set_cropbox(visible_crop * fitz.Matrix(1, 0, 0, 1, origin.x, origin.y))
         page_count = max(source_doc.page_count, translated_doc.page_count)
         output_pdf.parent.mkdir(parents=True, exist_ok=True)
         with fitz.open() as out_doc:

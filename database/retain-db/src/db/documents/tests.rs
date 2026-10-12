@@ -584,3 +584,71 @@ fn document_text_search_ignores_blank_query() {
     assert_eq!(none.len(), 2);
     assert_eq!(blank.len(), none.len(), "空白查询应等价于不过滤");
 }
+
+#[test]
+fn stale_terminal_job_cannot_replace_new_active_task() {
+    let fs = TestDbFs::new("stale-active-task");
+    let db = fs.db();
+    let upload = upload_with_hash("upload-stale-task", "doc-stale-task");
+    db.save_upload_with_document(&upload).unwrap();
+    for status in [
+        JobStatusKind::Succeeded,
+        JobStatusKind::Failed,
+        JobStatusKind::Canceled,
+    ] {
+        let mut old = crate::models::domain::JobSnapshot::new(
+            "old-task".into(),
+            crate::models::domain::CreateJobInput::default(),
+            vec![],
+        );
+        old.created_at = "2026-01-01T00:00:00Z".into();
+        old.status = status;
+        db.save_job(&old).unwrap();
+        let mut new = crate::models::domain::JobSnapshot::new(
+            "new-task".into(),
+            crate::models::domain::CreateJobInput::default(),
+            vec![],
+        );
+        new.created_at = "2026-01-02T00:00:00Z".into();
+        db.save_job(&new).unwrap();
+        db.set_document_active_job(&upload.content_hash, &new.job_id, None)
+            .unwrap();
+        db.set_document_active_job(&upload.content_hash, &old.job_id, Some(99))
+            .unwrap();
+        let doc = db.get_document(&upload.content_hash).unwrap();
+        assert_eq!(doc.active_job_id.as_deref(), Some("new-task"));
+        assert_eq!(doc.page_count, 3);
+        assert!(db
+            .job_ids_for_document(&upload.content_hash)
+            .unwrap()
+            .contains(&old.job_id));
+    }
+}
+
+#[test]
+fn same_second_completion_keeps_the_already_claimed_active_job() {
+    let fs = TestDbFs::new("same-second-active-task");
+    let db = fs.db();
+    let upload = upload_with_hash("upload-same-second", "doc-same-second");
+    db.save_upload_with_document(&upload).unwrap();
+    for status in [JobStatusKind::Succeeded, JobStatusKind::Failed, JobStatusKind::Canceled] {
+        let mut old = crate::models::domain::JobSnapshot::new(
+            "old-same-second".into(), crate::models::domain::CreateJobInput::default(), vec![],
+        );
+        old.created_at = "2026-10-12T00:00:00Z".into();
+        old.status = JobStatusKind::Succeeded;
+        db.save_job(&old).unwrap();
+        let mut new = crate::models::domain::JobSnapshot::new(
+            "new-same-second".into(), crate::models::domain::CreateJobInput::default(), vec![],
+        );
+        new.created_at = old.created_at.clone();
+        db.save_job(&new).unwrap();
+        db.set_document_active_job(&upload.content_hash, &new.job_id, None).unwrap();
+        new.status = status;
+        db.save_job(&new).unwrap();
+        assert!(!db.set_document_active_job(&upload.content_hash, &old.job_id, Some(99)).unwrap());
+        let doc = db.get_document(&upload.content_hash).unwrap();
+        assert_eq!(doc.active_job_id.as_deref(), Some("new-same-second"));
+        assert_eq!(doc.page_count, 3);
+    }
+}

@@ -218,3 +218,131 @@ async fn resume_route_reuses_rerun_submission_contract() {
     assert_eq!(resumed_job.workflow, crate::models::WorkflowKind::Render);
     assert_eq!(resumed_job.status, JobStatusKind::Queued);
 }
+
+#[tokio::test]
+async fn resume_and_rerun_use_current_translation_credentials() {
+    for action in ["resume", "rerun"] {
+        let state = test_state(&format!("current-key-{action}"));
+        let mut source = source_job_with_artifacts(
+            "job-current-key",
+            JobArtifacts {
+                source_pdf: Some("jobs/source/source/input.pdf".into()),
+                normalized_document_json: Some("jobs/source/ocr/document.v1.json".into()),
+                ..Default::default()
+            },
+        );
+        source.status = JobStatusKind::Failed;
+        source.request_payload.translation.api_key.clear();
+        source.request_payload.translation.credential_ref = "cred_historical_expired".into();
+        super::common::seed_ocr_checkpoint_files(&state, &source);
+        state.db.save_job(&source).unwrap();
+        let response = build_app(state.clone())
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/jobs/{}/{action}", source.job_id))
+                    .header("X-API-Key", "test-key")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({"overrides":{"translation":{"api_key":"synthetic-current-key"}}})
+                            .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = response.status();
+        let payload = read_json(response).await;
+        assert_eq!(status, StatusCode::OK, "{payload}");
+        let id = payload["data"]["job_id"].as_str().unwrap();
+        let job = state.db.get_job(id).unwrap();
+        let credential = retain_data::credentials::resolve_credential(
+            &state.config.data_root,
+            &job.request_payload.translation.credential_ref,
+            "translation_api_key",
+        )
+        .unwrap();
+        assert_eq!(credential.secret, "synthetic-current-key");
+        assert!(job.request_payload.translation.api_key.is_empty());
+    }
+}
+
+#[tokio::test]
+async fn resume_and_rerun_can_replace_inline_key_with_current_reference() {
+    for action in ["resume", "rerun"] {
+        let state = test_state(&format!("current-ref-{action}"));
+        let mut source = source_job_with_artifacts(
+            "job-current-ref",
+            JobArtifacts {
+                source_pdf: Some("jobs/source/source/input.pdf".into()),
+                normalized_document_json: Some("jobs/source/ocr/document.v1.json".into()),
+                ..Default::default()
+            },
+        );
+        source.status = JobStatusKind::Failed;
+        super::common::seed_ocr_checkpoint_files(&state, &source);
+        let vault_dir = state.config.data_root.join("secrets");
+        fs::create_dir_all(&vault_dir).unwrap();
+        fs::write(vault_dir.join("credentials.json"), json!({"schema":"retainpdf_credential_vault_v1","revision":1,
+            "credentials":{"cred_current_ref":{"kind":"translation_api_key","provider":"deepseek","label":"synthetic", "secret":"synthetic-reference-secret","created_at":"now","updated_at":"now"}}}).to_string()).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&vault_dir, fs::Permissions::from_mode(0o700)).unwrap();
+            fs::set_permissions(vault_dir.join("credentials.json"), fs::Permissions::from_mode(0o600)).unwrap();
+        }
+        state.db.save_job(&source).unwrap();
+        let response = build_app(state.clone())
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/jobs/{}/{action}", source.job_id))
+                    .header("X-API-Key", "test-key")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({"overrides":{"translation":{"credential_ref":"cred_current_ref"}}})
+                            .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = response.status();
+        let payload = read_json(response).await;
+        assert_eq!(status, StatusCode::OK, "{payload}");
+        let job = state
+            .db
+            .get_job(payload["data"]["job_id"].as_str().unwrap())
+            .unwrap();
+        assert_eq!(
+            job.request_payload.translation.credential_ref,
+            "cred_current_ref"
+        );
+        assert!(job.request_payload.translation.api_key.is_empty());
+        assert!(!payload.to_string().contains("synthetic-reference-secret"));
+    }
+}
+
+#[tokio::test]
+async fn resume_rejects_malformed_or_out_of_scope_overrides() {
+    for body in [
+        "{",
+        r#"{"overrides":{"runtime":{"job_id":"unsafe"}}}"#,
+        r#"{"overrides":{"translation":{"custom_rules_text":"not-a-credential"}}}"#,
+    ] {
+        let state = test_state("resume-invalid-overrides");
+        let response = build_app(state)
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/jobs/missing-job/resume")
+                    .header("X-API-Key", "test-key")
+                    .header("content-type", "application/json")
+                    .body(Body::from(body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+}

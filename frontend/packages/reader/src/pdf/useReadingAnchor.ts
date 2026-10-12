@@ -68,7 +68,7 @@ export function useReadingAnchor(
   /** 本次恢复锁定的锚点（不被中间 scroll 事件污染） */
   const pendingRestoreRef = useRef<PageScrollProgress | null>(null);
   /** 恢复中：禁止 scroll 写回 anchor */
-  const restoringRef = useRef(false);
+  const restoringRef = useRef(Boolean(persistenceKey));
   const prevModeRef = useRef(mode);
   const cancelRestoreRef = useRef<(() => void) | null>(null);
   const safetyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -128,6 +128,23 @@ export function useReadingAnchor(
     let root: HTMLElement | null = null;
     let onScroll: (() => void) | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    const onUserScroll = () => {
+      // 首次对齐成功后仍有布局重试；用户接手时必须连剩余重试一起取消。
+      clearRestoreTimers();
+      if (unfreezeTimerRef.current != null) {
+        clearTimeout(unfreezeTimerRef.current);
+        unfreezeTimerRef.current = null;
+      }
+      restoringRef.current = false;
+      pendingRestoreRef.current = null;
+      restoredPersistenceKeyRef.current = persistenceKeyRef.current;
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName || "")) return;
+      if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)) onUserScroll();
+    };
 
     const attach = () => {
       if (cancelled) return;
@@ -148,6 +165,9 @@ export function useReadingAnchor(
         }
       };
       root.addEventListener("scroll", onScroll, { passive: true });
+      root.addEventListener("wheel", onUserScroll, { passive: true });
+      root.addEventListener("touchmove", onUserScroll, { passive: true });
+      window.addEventListener("keydown", onKeyDown);
       if (!restoringRef.current) {
         onScroll();
       }
@@ -161,9 +181,12 @@ export function useReadingAnchor(
       }
       if (root && onScroll) {
         root.removeEventListener("scroll", onScroll);
+        root.removeEventListener("wheel", onUserScroll);
+        root.removeEventListener("touchmove", onUserScroll);
       }
+      window.removeEventListener("keydown", onKeyDown);
     };
-  }, [enabled, mode, primaryPane, shellRef, persistAnchor]);
+  }, [enabled, mode, primaryPane, shellRef, persistAnchor, clearRestoreTimers]);
 
   // 文档切换后装载该文档自己的阅读锚点；避免沿用上一份 PDF 的页码。
   useLayoutEffect(() => {

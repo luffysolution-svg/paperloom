@@ -22,20 +22,17 @@ for (const key of ["window", "document", "HTMLElement", "Event", "Node", "Mutati
   });
 }
 globalThis.window = dom.window;
-globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const { createRoot } = await import("react-dom/client");
 const React = await import("react");
 const { ProgressBlock } = await import("../../src/features/jobs/ui/ProgressBlock.jsx");
 
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 async function renderProgress(renderOptions) {
   const host = dom.window.document.createElement("div");
   dom.window.document.body.appendChild(host);
   const root = createRoot(host);
-  root.render(React.createElement(ProgressBlock, { renderOptions }));
-  await wait(30);
+  await React.act(async () => root.render(React.createElement(ProgressBlock, { renderOptions })));
   const view = {
     ringText: host.querySelector(".status-progress-ring-text")?.textContent ?? null,
     footPercent: host.querySelector(".status-progress-percent")?.textContent ?? null,
@@ -44,7 +41,7 @@ async function renderProgress(renderOptions) {
     ringHidden: host.querySelector(".status-progress-ring-wrap")?.getAttribute("aria-hidden"),
     progressbarCount: host.querySelectorAll('[role="progressbar"]').length,
   };
-  root.unmount();
+  await React.act(async () => root.unmount());
   host.remove();
   return view;
 }

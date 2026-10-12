@@ -5,6 +5,7 @@ import {
   buildNotesMarkdown,
   createNoteId,
   groupNotesByPage,
+  notesStorageKey,
   sortNotes,
   type ReaderNote,
   type ReaderNotePane,
@@ -39,17 +40,27 @@ export function useReaderAnnotations(
     [doc.jobId, doc.documentId],
   );
 
-  const [notes, setNotes] = useState<ReaderNote[]>(() => loadNotes(docKey));
+  const storageKey = notesStorageKey(docKey);
+  const [state, setState] = useState<{ key: string; notes: ReaderNote[] }>(() => ({
+    key: storageKey, notes: loadNotes(docKey),
+  }));
+  const notes = state.key === storageKey ? state.notes : [];
+  const setNotes = useCallback((update: ReaderNote[] | ((prev: ReaderNote[]) => ReaderNote[])) => {
+    setState((prev) => ({
+      key: prev.key,
+      notes: typeof update === "function" ? update(prev.notes) : update,
+    }));
+  }, []);
   const onAfterAdd = options.onAfterAdd;
 
   // 文档切换时重载
   useEffect(() => {
-    setNotes(loadNotes(docKey));
-  }, [docKey.jobId, docKey.documentId]);
+    setState({ key: storageKey, notes: loadNotes(docKey) });
+  }, [docKey, storageKey]);
 
   useEffect(() => {
-    saveNotes(docKey, notes);
-  }, [docKey, notes]);
+    if (state.key === storageKey) saveNotes(docKey, state.notes);
+  }, [docKey, storageKey, state]);
 
   const addFromQuote = useCallback((input: {
     page: number;

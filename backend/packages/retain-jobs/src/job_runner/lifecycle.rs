@@ -47,6 +47,14 @@ where
                     let _ = persist_failed_job(&deps, job, &err);
                 }
             }
+            if let Err(error) = settle_ocr_child_for_parent(
+                &deps.db,
+                &deps.persist.data_root,
+                &deps.persist.output_root,
+                &job_id,
+            ) {
+                error!("failed to settle OCR child for {job_id}: {error:#}");
+            }
             clear_job_cancel_request(&deps, &job_id).await;
         }
     }))
@@ -150,6 +158,12 @@ fn persist_failed_job(
             .db
             .finish_latest_pipeline_attempt(&job.job_id, "failed")?;
     }
+    settle_ocr_child_for_parent(
+        &deps.db,
+        &deps.persist.data_root,
+        &deps.persist.output_root,
+        &job.job_id,
+    )?;
     Ok(())
 }
 
@@ -167,10 +181,13 @@ fn persist_failed_job(
 /// 那种情况下应当尊重它们写的结果,而不是覆盖。
 fn persist_canceled_job(deps: &ProcessRuntimeDeps, job_id: &str) -> Result<()> {
     let mut job = deps.db.get_job(job_id)?;
-    if !matches!(
-        job.status,
-        JobStatusKind::Queued | JobStatusKind::Running
-    ) {
+    if !matches!(job.status, JobStatusKind::Queued | JobStatusKind::Running) {
+        settle_ocr_child_for_parent(
+            &deps.db,
+            &deps.persist.data_root,
+            &deps.persist.output_root,
+            job_id,
+        )?;
         return Ok(());
     }
     job.status = JobStatusKind::Canceled;
@@ -193,7 +210,69 @@ fn persist_canceled_job(deps: &ProcessRuntimeDeps, job_id: &str) -> Result<()> {
             .db
             .finish_latest_pipeline_attempt(&job.job_id, "canceled")?;
     }
+    settle_ocr_child_for_parent(
+        &deps.db,
+        &deps.persist.data_root,
+        &deps.persist.output_root,
+        job_id,
+    )?;
     Ok(())
+}
+
+/// Inline OCR children have no top-level driver to close their state/attempt.
+pub(super) fn settle_ocr_child_for_parent(
+    db: &crate::db::Db,
+    data_root: &std::path::Path,
+    output_root: &std::path::Path,
+    parent_id: &str,
+) -> Result<bool> {
+    let parent = db.get_job(parent_id)?;
+    if matches!(
+        parent.status,
+        JobStatusKind::Queued | JobStatusKind::Running
+    ) {
+        return Ok(false);
+    }
+    let child_id = format!("{parent_id}-ocr");
+    let Ok(mut child) = db.get_job(&child_id) else {
+        return Ok(false);
+    };
+    if matches!(child.status, JobStatusKind::Queued | JobStatusKind::Running) {
+        child.status = if parent.status == JobStatusKind::Canceled {
+            JobStatusKind::Canceled
+        } else {
+            JobStatusKind::Failed
+        };
+        child.stage = Some(
+            if child.status == JobStatusKind::Canceled {
+                "canceled"
+            } else {
+                "failed"
+            }
+            .into(),
+        );
+        child.stage_detail = Some("OCR child stopped after its parent became terminal".into());
+        child.error = if child.status == JobStatusKind::Failed {
+            child.stage_detail.clone()
+        } else {
+            None
+        };
+        child.pid = None;
+        child.updated_at = now_iso();
+        child.finished_at = Some(now_iso());
+        child.sync_runtime_state();
+        child.replace_failure_info(crate::job_failure::classify_job_failure(&child));
+        cas_persist_job_with_resources(db, data_root, output_root, &child, &["queued", "running"])?;
+    }
+    let status = db.get_job(&child_id)?.status.clone();
+    let terminal = match status {
+        JobStatusKind::Succeeded => "succeeded",
+        JobStatusKind::Failed => "failed",
+        JobStatusKind::Canceled => "canceled",
+        _ => return Ok(false),
+    };
+    db.finish_latest_pipeline_attempt(&child_id, terminal)?;
+    Ok(true)
 }
 
 async fn run_job<F, Fut>(deps: ProcessRuntimeDeps, job_id: String, workflow: F) -> Result<()>
@@ -232,6 +311,7 @@ where
     };
 
     if should_skip_job_execution(&deps, &job_id).await? {
+        persist_canceled_job(&deps, &job_id)?;
         return Ok(());
     }
     let finished_job = workflow(deps.clone(), deps.db.get_job(&job_id)?.into_runtime()).await?;
@@ -243,6 +323,12 @@ where
         &["queued", "running"],
     )?;
     if !updated {
+        settle_ocr_child_for_parent(
+            &deps.db,
+            &deps.persist.data_root,
+            &deps.persist.output_root,
+            &job_id,
+        )?;
         // Already terminal (e.g., canceled), do not overwrite with Succeeded/Failed
         clear_job_cancel_request(&deps, &job_id).await;
         return Ok(());
@@ -256,6 +342,12 @@ where
     let _ = deps
         .db
         .finish_latest_pipeline_attempt(&job_id, terminal_status)?;
+    settle_ocr_child_for_parent(
+        &deps.db,
+        &deps.persist.data_root,
+        &deps.persist.output_root,
+        &job_id,
+    )?;
     update_document_after_job(&deps, &finished_job);
     clear_job_cancel_request(&deps, &job_id).await;
     Ok(())
@@ -265,15 +357,27 @@ where
 /// 该文档的 FTS 全文索引。全部尽力而为——FTS 是可重建的派生索引,
 /// 这里失败只记日志,绝不影响任务状态。
 fn update_document_after_job(deps: &ProcessRuntimeDeps, job: &JobRuntimeState) {
-    let Some(upload_id) = job.upload_id.as_deref().filter(|id| !id.is_empty()) else {
-        return;
-    };
-    let document_id = match deps.db.link_job_to_document(&job.job_id, upload_id) {
-        Ok(Some(document_id)) => document_id,
-        Ok(None) => return,
+    let document_id = match deps.db.get_document_by_job_id(&job.job_id) {
+        Ok(Some(document)) => document.document_id,
+        Ok(None) => {
+            let Some(upload_id) = job.upload_id.as_deref().filter(|id| !id.is_empty()) else {
+                return;
+            };
+            match deps.db.link_job_to_document(&job.job_id, upload_id) {
+                Ok(Some(document_id)) => document_id,
+                Ok(None) => return,
+                Err(error) => {
+                    error!(
+                        "library: link job {} to document failed: {error}",
+                        job.job_id
+                    );
+                    return;
+                }
+            }
+        }
         Err(error) => {
             error!(
-                "library: link job {} to document failed: {error}",
+                "library: resolve document for {} failed: {error}",
                 job.job_id
             );
             return;
@@ -284,11 +388,16 @@ fn update_document_after_job(deps: &ProcessRuntimeDeps, job: &JobRuntimeState) {
     }
     // OCR-only 吸怪：允许 OCR 任务在无其他成功任务时成为 active_job，避免“OCR 后刷新消失”
     // 非 OCR 仍优先，但 OCR 也不再直接 return
-    if let Err(error) = deps
+    match deps
         .db
         .set_document_active_job(&document_id, &job.job_id, None)
     {
-        error!("library: set active job for {document_id} failed: {error}");
+        Ok(true) => {}
+        Ok(false) => return,
+        Err(error) => {
+            error!("library: set active job for {document_id} failed: {error}");
+            return;
+        }
     }
     let job_root = deps.persist.output_root.join(&job.job_id);
     match crate::db::documents::build_fts_rows_from_job_dir(&job_root) {

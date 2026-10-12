@@ -313,3 +313,182 @@ async fn cancel_while_waiting_for_a_slot_still_lands_a_terminal_state() {
         after.status
     );
 }
+
+#[tokio::test]
+async fn parent_driver_error_settles_its_active_ocr_child() {
+    let fixture = Fixture::new(1);
+    fixture.job("error-parent", JobStatusKind::Running);
+    fixture.job("error-parent-ocr", JobStatusKind::Running);
+    fixture
+        .deps
+        .db
+        .acquire_pipeline_attempt("error-parent-ocr", "test", "ocr", 0)
+        .unwrap();
+    spawn_job_with_workflow(fixture.deps.clone(), "error-parent".into(), |_, _| async {
+        anyhow::bail!("controlled OCR setup failure")
+    })
+    .unwrap()
+    .await
+    .unwrap();
+    assert_eq!(
+        fixture.deps.db.get_job("error-parent-ocr").unwrap().status,
+        JobStatusKind::Failed
+    );
+    assert!(!fixture
+        .deps
+        .db
+        .has_running_pipeline_attempt("error-parent-ocr")
+        .unwrap());
+}
+
+#[test]
+fn startup_closes_children_of_terminal_parents_but_preserves_active_and_standalone_ocr() {
+    let fixture = Fixture::new(1);
+    for (id, status) in [
+        ("cancel-parent", JobStatusKind::Canceled),
+        ("failed-parent", JobStatusKind::Failed),
+        ("done-parent", JobStatusKind::Succeeded),
+        ("active-parent", JobStatusKind::Queued),
+    ] {
+        fixture.job(id, status);
+        let child_id = format!("{id}-ocr");
+        fixture.job(&child_id, JobStatusKind::Running);
+        fixture
+            .deps
+            .db
+            .acquire_pipeline_attempt(&child_id, "test", "ocr", 0)
+            .unwrap();
+    }
+    fixture.job("complete-parent", JobStatusKind::Canceled);
+    fixture.job("complete-parent-ocr", JobStatusKind::Running);
+    fixture
+        .deps
+        .db
+        .acquire_pipeline_attempt("complete-parent-ocr", "test", "ocr", 0)
+        .unwrap();
+    let mut complete = fixture.deps.db.get_job("complete-parent-ocr").unwrap();
+    complete.status = JobStatusKind::Succeeded;
+    fixture.deps.db.save_job(&complete).unwrap();
+    fixture.job("standalone-ocr", JobStatusKind::Queued);
+    super::super::startup_recovery::reconcile_stale_running_jobs(
+        &fixture.deps.config,
+        &fixture.deps.db,
+    )
+    .unwrap();
+    for (id, status) in [
+        ("cancel-parent-ocr", JobStatusKind::Canceled),
+        ("failed-parent-ocr", JobStatusKind::Failed),
+        ("done-parent-ocr", JobStatusKind::Failed),
+    ] {
+        assert_eq!(fixture.deps.db.get_job(id).unwrap().status, status);
+        assert!(!fixture.deps.db.has_running_pipeline_attempt(id).unwrap());
+    }
+    assert_eq!(
+        fixture
+            .deps
+            .db
+            .get_job("complete-parent-ocr")
+            .unwrap()
+            .status,
+        JobStatusKind::Succeeded
+    );
+    assert!(!fixture
+        .deps
+        .db
+        .has_running_pipeline_attempt("complete-parent-ocr")
+        .unwrap());
+    assert_eq!(
+        fixture.deps.db.get_job("active-parent-ocr").unwrap().status,
+        JobStatusKind::Queued
+    );
+    assert!(fixture
+        .deps
+        .db
+        .has_running_pipeline_attempt("active-parent-ocr")
+        .unwrap());
+    assert_eq!(
+        fixture.deps.db.get_job("standalone-ocr").unwrap().status,
+        JobStatusKind::Queued
+    );
+}
+
+#[test]
+fn artifact_recovery_completion_updates_document_without_upload_id() {
+    let fixture = Fixture::new(1);
+    let upload = crate::models::domain::UploadRecord {
+        upload_id: "recovery-upload".into(),
+        content_hash: "recovery-document".into(),
+        filename: "synthetic.pdf".into(),
+        stored_path: "synthetic.pdf".into(),
+        bytes: 1,
+        page_count: 1,
+        uploaded_at: crate::models::domain::now_iso(),
+        developer_mode: false,
+    };
+    fixture.deps.db.save_upload_with_document(&upload).unwrap();
+    let mut previous = fixture.job("previous-success", JobStatusKind::Succeeded);
+    previous.created_at = "2026-01-01T00:00:00Z".into();
+    fixture.deps.db.save_job(&previous).unwrap();
+    fixture
+        .deps
+        .db
+        .set_document_active_job(&upload.content_hash, &previous.job_id, None)
+        .unwrap();
+    let mut recovered = fixture.job("artifact-recovery", JobStatusKind::Succeeded);
+    recovered.created_at = "2026-01-02T00:00:00Z".into();
+    fixture.deps.db.save_job(&recovered).unwrap();
+    fixture
+        .deps
+        .db
+        .link_job_to_document(&recovered.job_id, &upload.upload_id)
+        .unwrap();
+    update_document_after_job(&fixture.deps, &recovered.into_runtime());
+    assert_eq!(
+        fixture
+            .deps
+            .db
+            .get_document(&upload.content_hash)
+            .unwrap()
+            .active_job_id
+            .as_deref(),
+        Some("artifact-recovery")
+    );
+}
+
+#[tokio::test]
+async fn driver_error_after_parent_cancel_still_settles_child() {
+    let fixture = Fixture::new(1);
+    fixture.job("cancel-error-parent", JobStatusKind::Running);
+    fixture.job("cancel-error-parent-ocr", JobStatusKind::Running);
+    fixture
+        .deps
+        .db
+        .acquire_pipeline_attempt("cancel-error-parent-ocr", "test", "ocr", 0)
+        .unwrap();
+    spawn_job_with_workflow(
+        fixture.deps.clone(),
+        "cancel-error-parent".into(),
+        |deps, mut job| async move {
+            job.status = JobStatusKind::Canceled;
+            deps.db.save_job(&job.snapshot()).unwrap();
+            anyhow::bail!("controlled transport error after cancel")
+        },
+    )
+    .unwrap()
+    .await
+    .unwrap();
+    assert_eq!(
+        fixture
+            .deps
+            .db
+            .get_job("cancel-error-parent-ocr")
+            .unwrap()
+            .status,
+        JobStatusKind::Canceled
+    );
+    assert!(!fixture
+        .deps
+        .db
+        .has_running_pipeline_attempt("cancel-error-parent-ocr")
+        .unwrap());
+}

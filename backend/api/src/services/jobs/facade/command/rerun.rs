@@ -11,7 +11,7 @@ use super::super::super::query::load_job_or_404;
 use super::super::JobsFacade;
 use super::ocr_ambiguity::ambiguous_ocr_dispatch;
 use super::stage_retry_overrides::{
-    discard_ocr_secret_sources, discard_translation_secret_sources,
+    apply_retry_overrides, discard_ocr_secret_sources, discard_translation_secret_sources,
 };
 use crate::services::job_launcher::start_job_execution;
 
@@ -20,7 +20,9 @@ impl<'a> JobsFacade<'a> {
         &self,
         base_url: &str,
         source_job_id: &str,
+        overrides: &serde_json::Value,
     ) -> Result<JobSubmissionView, AppError> {
+        validate_rerun_overrides(overrides)?;
         let source_job = load_job_or_404(self.command.db, source_job_id)?;
         let plan = resume_plan(&source_job, self.command.control.data_root);
         if plan.resume_workflow == Some(WorkflowKind::Render) {
@@ -81,7 +83,8 @@ impl<'a> JobsFacade<'a> {
                 "translation request outcome is ambiguous; generic rerun is paused. Use retry-stage with stage=translation and ambiguous_request_policy=accept_duplicate_risk",
             ));
         }
-        let request = build_rerun_request(&source_job, self.command.control.data_root)?;
+        let mut request = build_rerun_request(&source_job, self.command.control.data_root)?;
+        apply_retry_overrides(&mut request, overrides)?;
         let workflow = request.workflow.clone();
         let job = create_translation_job(&self.command.submit, &request)?;
         // 重跑即链文档（同 retry）：新任务无 upload_id，走源任务反查文档。
@@ -107,6 +110,33 @@ impl<'a> JobsFacade<'a> {
         }
         Ok(self.build_submission_view(base_url, &job, JobStatusKind::Queued, workflow))
     }
+}
+
+fn validate_rerun_overrides(overrides: &serde_json::Value) -> Result<(), AppError> {
+    if overrides.is_null() {
+        return Ok(());
+    }
+    let object = overrides
+        .as_object()
+        .ok_or_else(|| AppError::bad_request("overrides must be a JSON object"))?;
+    for (section, patch) in object {
+        if section != "translation" {
+            return Err(AppError::bad_request(
+                "resume/rerun only accepts translation overrides",
+            ));
+        }
+        let patch = patch
+            .as_object()
+            .ok_or_else(|| AppError::bad_request("translation overrides must be a JSON object"))?;
+        for field in patch.keys() {
+            if !["api_key", "credential_ref", "base_url", "model"].contains(&field.as_str()) {
+                return Err(AppError::bad_request(
+                    "unsupported resume/rerun translation override",
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 pub(super) fn prepare_in_place_render_job(mut job: JobSnapshot) -> Result<JobSnapshot, AppError> {

@@ -11,7 +11,7 @@ from retainpdf_pipeline.foundation.config import RENDER_TYPOGRAPHY_MEMORY_DIR
 
 
 TYPOGRAPHY_MEMORY_SCHEMA_VERSION = "typography_memory_v1"
-TYPOGRAPHY_MEMORY_ALGORITHM_VERSION = "font_leading_stats_v1"
+TYPOGRAPHY_MEMORY_ALGORITHM_VERSION = "font_leading_stats_v2_opt_in"
 MIN_OBSERVATIONS = 3
 MAX_FONT_STD_PT = 0.45
 MAX_LEADING_STD_EM = 0.12
@@ -33,7 +33,7 @@ class TypographyMemory:
 
     @property
     def enabled(self) -> bool:
-        value = os.environ.get("RETAIN_RENDER_TYPOGRAPHY_MEMORY", "1").strip().lower()
+        value = os.environ.get("RETAIN_RENDER_TYPOGRAPHY_MEMORY", "0").strip().lower()
         return value not in {"0", "false", "no", "off"}
 
     def lookup(self, feature_key: str) -> TypographyMemoryDecision | None:

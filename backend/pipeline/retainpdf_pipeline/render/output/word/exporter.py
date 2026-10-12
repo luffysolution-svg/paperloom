@@ -137,13 +137,7 @@ def build_layout_spec(
                 # 拿得到译文 PDF 就读回真值（最准）；读不到就走阅读器那套字号收敛。
                 # 绝不退回 spec 的上界——实测照上界排有 44.6% 的字符会顶出框外。
                 observed = converged_typography(rendered_lines, block.content_rect, len(text))
-                if observed:
-                    font_size_pt, line_step_pt = observed.font_size_pt, observed.line_step_pt
-                if not observed or line_step_pt <= 0:
-                    fitted_size, fitted_step = fitted_typography(block)
-                    if not observed:
-                        font_size_pt = fitted_size
-                    line_step_pt = fitted_step
+                font_size_pt, line_step_pt = fitted_typography(block, observed)
                 x0, y0, x1, y1 = block.content_rect
                 blocks.append({
                     "id": block.block_id,

@@ -1,18 +1,18 @@
-use std::collections::HashSet;
-use std::sync::Arc;
-use std::time::Instant;
-
+use crate::job_runner::{cancel_registry::should_stop_job, ProcessRuntimeDeps};
 use anyhow::{anyhow, Result};
-use tokio::sync::RwLock;
+use std::time::Instant;
 use tokio::time::{sleep, Duration};
 
-use super::super::cancel_registry::is_cancel_requested_with_registry;
-
 pub(super) async fn should_stop_polling(
-    canceled_jobs: &Arc<RwLock<HashSet<String>>>,
+    deps: &ProcessRuntimeDeps,
     job_id: &str,
-) -> bool {
-    is_cancel_requested_with_registry(canceled_jobs.as_ref(), job_id).await
+    parent_job_id: Option<&str>,
+) -> Result<bool> {
+    let parent_ids = parent_job_id
+        .into_iter()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    should_stop_job(&deps.db, &deps.canceled_jobs, job_id, &parent_ids).await
 }
 
 pub(super) async fn wait_next_poll_or_timeout<M>(

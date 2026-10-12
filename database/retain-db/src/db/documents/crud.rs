@@ -550,27 +550,36 @@ impl Db {
         document_id: &str,
         job_id: &str,
         page_count: Option<u32>,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         let mut conn = self.connect()?;
         let tx = conn.transaction()?;
-        let changed = tx.execute(
-            "UPDATE documents SET active_job_id = ?1, updated_at = ?2 WHERE document_id = ?3",
-            params![job_id, now_iso(), document_id],
-        )?;
+        // Link history even when this completion loses the active-pointer race.
+        tx.execute("UPDATE jobs SET document_id = ?1 WHERE job_id = ?2 AND EXISTS (SELECT 1 FROM documents WHERE document_id = ?1)",
+            params![document_id, job_id])?;
+        let changed = tx.execute(r#"
+            UPDATE documents SET active_job_id = ?1, updated_at = ?2 WHERE document_id = ?3
+              AND (NOT EXISTS (SELECT 1 FROM jobs candidate WHERE candidate.job_id = ?1)
+                   OR EXISTS (SELECT 1 FROM jobs candidate WHERE candidate.job_id = ?1 AND (
+                  candidate.status_json IN ('"queued"', '"running"')
+                  OR documents.active_job_id IS NULL OR documents.active_job_id = ?1
+                  OR NOT EXISTS (SELECT 1 FROM jobs current WHERE current.job_id = documents.active_job_id)
+                  OR (candidate.status_json = '"succeeded"' AND EXISTS (
+                      SELECT 1 FROM jobs current WHERE current.job_id = documents.active_job_id
+                        AND current.status_json NOT IN ('"queued"', '"running"')
+                        AND candidate.created_at > current.created_at
+                  ))
+              )))
+        "#, params![job_id, now_iso(), document_id])?;
         if changed > 0 {
-            tx.execute(
-                "UPDATE jobs SET document_id = ?1 WHERE job_id = ?2",
-                params![document_id, job_id],
-            )?;
-        }
-        if let Some(page_count) = page_count {
-            tx.execute(
-                "UPDATE documents SET page_count = ?1 WHERE document_id = ?2 AND ?1 > 0",
-                params![page_count as i64, document_id],
-            )?;
+            if let Some(page_count) = page_count {
+                tx.execute(
+                    "UPDATE documents SET page_count = ?1 WHERE document_id = ?2 AND ?1 > 0",
+                    params![page_count as i64, document_id],
+                )?;
+            }
         }
         tx.commit()?;
-        Ok(())
+        Ok(changed > 0)
     }
 }
 

@@ -190,7 +190,7 @@ async function mountHome(services) {
   return { host, root };
 }
 
-test("Agent Key：读取 Python 接口后明文回填，保存和重新挂载后保留", async () => {
+test("Agent Key：读取后遮蔽回填，保存和重新挂载后保留", async () => {
   const previousFetch = globalThis.fetch;
   let saved = {
     schema: "retainpdf_ai_runtime_config_view_v1",
@@ -213,7 +213,7 @@ test("Agent Key：读取 Python 接口后明文回填，保存和重新挂载后
   try {
     root.render(React.createElement(AgentRuntimeSettingsCard));
     await waitFor(() => input("模型 API Key")?.value === "saved-agent-key", "Agent Key 回填");
-    assert.equal(input("模型 API Key").type, "text");
+    assert.equal(input("模型 API Key").type, "password");
     typeInput(input("模型 API Key"), "edited-agent-key");
     click(host.querySelector(".credential-agent-save-button"));
     await waitFor(() => host.textContent.includes("已保存在本机"), "Agent 保存完成");
@@ -227,7 +227,7 @@ test("Agent Key：读取 Python 接口后明文回填，保存和重新挂载后
     mode.value = "fx";
     mode.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
     await waitFor(() => input("FX Gateway Key")?.value === "saved-fx-key", "FX Key 回填");
-    assert.equal(input("FX Gateway Key").type, "text");
+    assert.equal(input("FX Gateway Key").type, "password");
   } finally {
     root.unmount();
     host.remove();
@@ -235,7 +235,7 @@ test("Agent Key：读取 Python 接口后明文回填，保存和重新挂载后
   }
 });
 
-test("MinerU：Token 本机保存、明文回填，切回 Paddle 保留各自 Token", async () => {
+test("MinerU：Token 本机保存、遮蔽回填，切回 Paddle 保留各自 Token", async () => {
   const services = createServices();
   const { host, root } = await mountHome(services);
   try {
@@ -254,7 +254,7 @@ test("MinerU：Token 本机保存、明文回填，切回 Paddle 保留各自 To
     select.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
     await waitFor(() => !byId("browser-mineru-token").closest("section").hidden, "显示 MinerU 面板");
     assert.equal(byId("browser-paddle-token").closest("section").hidden, true);
-    assert.equal(byId("browser-mineru-token").type, "text");
+    assert.equal(byId("browser-mineru-token").type, "password");
     assert.ok(byId("browser-mineru-validate-btn"), "显示 MinerU 独立检测按钮");
     assert.doesNotMatch(byId("browser-mineru-token").closest("section").textContent, /暂不支持单独检测|提交 OCR 任务时校验/);
     assert.equal(byId("browser-mineru-token").placeholder, "MinerU API Token");
@@ -335,7 +335,7 @@ test("MinerU：独立检测接入真实 API transport，显示缺失、过期、
     await waitFor(() => statusMessage().includes("Token 可用"), "Token 检测成功");
     assert.ok(status.classList.contains("is-valid"));
     assert.equal(button.disabled, false);
-    assert.equal(input.type, "text");
+    assert.equal(input.type, "password");
     assert.equal(input.value.trim(), "mineru-transport-fixture");
     assert.equal(calls.length, 3, "只调用检测接口，不提交 OCR 任务");
   } finally {
@@ -485,23 +485,21 @@ test("凭据入口：设置 API 区内嵌工作台；#credential-gate-action 也
   assert.equal(byId("browser-credentials-save-btn").textContent, "保存接口");
   assert.equal(byId("browser-job-math-mode"), null, "API 页面不再展示公式处理方式");
   const translationKeyInput = byId("browser-api-key");
-  const hideTranslationKey = dom.window.document.querySelector('[aria-label="隐藏翻译 API Key"]');
-  assert.ok(hideTranslationKey, "翻译 Key 默认可见，可手动隐藏");
+  const showTranslationKey = dom.window.document.querySelector('[aria-label="显示翻译 API Key"]');
+  assert.ok(showTranslationKey, "翻译 Key 默认遮蔽，可主动显示");
   assert.equal(
     translationKeyInput.nextElementSibling,
-    hideTranslationKey,
+    showTranslationKey,
     "小眼睛按钮应紧跟输入框并显示在右侧",
   );
-  assert.equal(translationKeyInput.type, "text");
+  assert.equal(translationKeyInput.type, "password");
   typeInput(translationKeyInput, "visibility-check");
-  assert.equal(hideTranslationKey.getAttribute("aria-pressed"), "true");
-  click(hideTranslationKey);
-  await waitFor(() => translationKeyInput.type === "password", "手动隐藏翻译 Key");
-  const showTranslationKey = dom.window.document.querySelector('[aria-label="显示翻译 API Key"]');
-  assert.ok(showTranslationKey);
+  assert.equal(showTranslationKey.getAttribute("aria-pressed"), "false");
   click(showTranslationKey);
-  await waitFor(() => translationKeyInput.type === "text", "重新显示翻译 Key");
+  await waitFor(() => translationKeyInput.type === "text", "主动显示翻译 Key");
   assert.equal(translationKeyInput.value, "visibility-check", "切换可见性不能清空用户输入");
+  click(dom.window.document.querySelector('[aria-label="隐藏翻译 API Key"]'));
+  await waitFor(() => translationKeyInput.type === "password", "重新隐藏翻译 Key");
   const apiCards = [...dom.window.document.querySelectorAll(".credential-api-grid > .credential-card")];
   assert.deepEqual(
     apiCards.map((card) => [
@@ -529,7 +527,7 @@ test("凭据入口：设置 API 区内嵌工作台；#credential-gate-action 也
   );
   const agentModeSelect = dom.window.document.querySelector('[aria-label="AI Agent 运行模式"]');
   assert.ok(
-    dom.window.document.querySelector('[aria-label="隐藏模型 API Key"]'),
+    dom.window.document.querySelector('[aria-label="显示模型 API Key"]'),
     "AI Agent 模型 Key 使用相同的双态显示控件",
   );
   assert.deepEqual(
@@ -547,7 +545,7 @@ test("凭据入口：设置 API 区内嵌工作台；#credential-gate-action 也
     "FX 模式显示自定义 Gateway URL",
   );
   assert.ok(
-    dom.window.document.querySelector('[aria-label="隐藏 FX Gateway Key"]'),
+    dom.window.document.querySelector('[aria-label="显示 FX Gateway Key"]'),
     "FX Gateway Key 使用相同的双态显示控件",
   );
   assert.match(
@@ -767,7 +765,7 @@ test("CredentialsDialog：保存(浏览器模式)——写隐藏 input、同步 
   assert.equal(credentials.paddleToken, "paddle-secret");
   assert.equal(credentials.modelApiKey, "deepseek-secret");
   assert.equal(credentials.translationCredentialRef, "");
-  assert.equal(byId("browser-api-key").type, "text", "保存后保持可见");
+  assert.equal(byId("browser-api-key").type, "password", "保存后保持遮蔽");
   assert.equal(byId("browser-api-key").value, "deepseek-secret", "保存后回填翻译 Key");
   const persistedValues = Array.from({ length: dom.window.localStorage.length }, (_, index) => (
     dom.window.localStorage.getItem(dom.window.localStorage.key(index)) || ""

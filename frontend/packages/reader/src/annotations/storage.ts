@@ -35,7 +35,23 @@ export function loadNotes(doc: ReaderNotesDocKey): ReaderNote[] {
     return [];
   }
   try {
-    return safeParse(localStorage.getItem(notesStorageKey(doc)));
+    const key = notesStorageKey(doc);
+    const notes = safeParse(localStorage.getItem(key));
+    const jobId = `${doc.jobId || ""}`.trim();
+    const legacyKey = `retainpdf.reader.notes.v1:job:${jobId}`;
+    if (!jobId || key === legacyKey) return notes;
+    const legacy = safeParse(localStorage.getItem(legacyKey));
+    if (!legacy.length) return notes;
+    const ids = new Set(notes.map((note) => note.id));
+    const merged = [...notes, ...legacy.filter((note) => !ids.has(note.id))];
+    const raw = JSON.stringify(merged);
+    try {
+      localStorage.setItem(key, raw);
+      if (localStorage.getItem(key) === raw) localStorage.removeItem(legacyKey);
+    } catch {
+      // 迁移没有确认写入时保留旧键，当前仍可阅读这些笔记。
+    }
+    return merged;
   } catch {
     return [];
   }

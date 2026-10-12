@@ -215,3 +215,51 @@ describe("公式边界", () => {
     assert.equal(result.formulaCount, 1, `认成了 ${result.formulaCount} 个公式`);
   });
 });
+
+async function inlineDocument(text, overrides = {}) {
+  const input = spec();
+  input.pages = [input.pages[1]];
+  Object.assign(input.pages[0].blocks[0], { text, bold: false, ...overrides });
+  const result = await buildLayoutDocx(input);
+  return strFromU8(unzipSync(result.bytes)["word/document.xml"]);
+}
+
+describe("文本框拟合与行内文本", () => {
+  it("半磅字号向下取整，不超过已拟合字号", async () => {
+    const xml = await inlineDocument("plain", { fontSizePt: 9.8 });
+    assert.match(xml, /<w:sz w:val="19"\/>/);
+    assert.match(xml, /<w:szCs w:val="19"\/>/);
+  });
+
+  it("成对双星号产生粗体，单星号与未配对双星号保留", async () => {
+    const xml = await inlineDocument("A **bold** and **strong** * literal **unpaired");
+    const runs = [...xml.matchAll(/<w:r>(<w:rPr>[\s\S]*?<\/w:rPr>)<w:t[^>]*>(.*?)<\/w:t><\/w:r>/g)];
+    assert.deepEqual(runs.map((m) => m[2]), ["A ", "bold", " and ", "strong", " * literal **unpaired"]);
+    assert.deepEqual(runs.map((m) => m[1].includes("<w:b/>")), [false, true, false, true, false]);
+  });
+
+  it("粗体跨公式边界，换行与公式内容保持", async () => {
+    const xml = await inlineDocument("**before $x^{2}$ after**\nnext * literal");
+    assert.ok(!xml.includes("**"));
+    assert.match(xml, /<m:sSup>/);
+    assert.match(xml, /<w:t[^>]*>next \* literal<\/w:t>/);
+    const runs = [...xml.matchAll(/<w:r>(<w:rPr>[\s\S]*?<\/w:rPr>)<w:t[^>]*>(.*?)<\/w:t><\/w:r>/g)];
+    assert.deepEqual(runs.map((m) => m[1].includes("<w:b/>")), [true, true, false]);
+    assert.equal((xml.match(/<wps:txbx>/g) || []).length, 1);
+    assert.equal((xml.match(/<w:wordWrap w:val="0"\/>/g) || []).length, 2);
+  });
+
+  it("空底数字引用是文本上标，普通幂与数学脚标保留 OMML", async () => {
+    const xml = await inlineDocument("Cite $^{[1]}$ $^{[2,3]}$ $^{[4–6]}$; $x^{2}$ $^{\\alpha}$");
+    assert.equal((xml.match(/<w:vertAlign w:val="superscript"\/>/g) || []).length, 3);
+    assert.match(xml, /<w:t[^>]*>\[2,3\]<\/w:t>/);
+    assert.equal((xml.match(/<m:sSup>/g) || []).length, 2);
+  });
+
+  it("文本框允许西文按字断行，并给字体替换保留自动拟合", async () => {
+    const xml = await inlineDocument("supercalifragilisticexpialidocious");
+    assert.match(xml, /<w:wordWrap w:val="0"\/>/);
+    assert.match(xml, /<a:normAutofit\/>/);
+    assert.ok(!xml.includes("<a:noAutofit/>"));
+  });
+});

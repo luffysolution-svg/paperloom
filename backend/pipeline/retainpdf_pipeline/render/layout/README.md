@@ -36,5 +36,5 @@
 
 开关：
 
-- `RETAIN_RENDER_TYPOGRAPHY_MEMORY=0` 可关闭读写。
+- 默认关闭读写；`RETAIN_RENDER_TYPOGRAPHY_MEMORY=1` 可显式启用学习，`=0` 可关闭。重复渲染默认使用源文档排版种子，避免历史最终字号反馈导致逐次缩小。
 - `RETAIN_RENDER_TYPOGRAPHY_MEMORY_MIN_OBS` 可调命中所需最小样本数。

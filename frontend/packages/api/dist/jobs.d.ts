@@ -1,6 +1,7 @@
 import type { JobDetailView, JobListView } from "@retainpdf/contracts/job-status";
 export type FetchJobPayloadOptions = {
     apiPrefix?: string;
+    signal?: AbortSignal;
 };
 export declare function fetchJobPayload(jobId: string, options?: FetchJobPayloadOptions): Promise<JobDetailView>;
 /** @deprecated string form: use fetchJobPayload(jobId, { apiPrefix }) */

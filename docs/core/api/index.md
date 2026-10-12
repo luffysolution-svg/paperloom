@@ -280,6 +280,10 @@ Reader 宿主接入 job/artifact、Markdown、区域、页面元数据和实时�
 
 `/resume` 当前复用 `/rerun` 的恢复执行契约；`/resume-plan` 用于前端先展示“会从哪里恢复、会复用哪些产物、会重跑哪些阶段”。
 
+`/resume` 和 `/rerun` 可保留空请求体，或提供 `overrides.translation` 更新
+`api_key`、`credential_ref`、`base_url`、`model`。更新密钥时会替换旧密钥来源；
+仅重渲染已有译文不调用翻译模型。现有的请求歧义与执行连接恢复限制仍然生效。
+
 主动阶段重试：
 
 `GET /api/v1/jobs/{job_id}/stage-actions`

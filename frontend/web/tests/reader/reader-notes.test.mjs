@@ -7,8 +7,8 @@ import {
   sortNotes,
 } from "../../../../frontend/packages/reader/src/annotations/types.ts";
 
-test("notesStorageKey prefers job id", () => {
-  assert.equal(notesStorageKey({ jobId: "j1", documentId: "d1" }), "retainpdf.reader.notes.v1:job:j1");
+test("notesStorageKey survives job changes through document identity", () => {
+  assert.equal(notesStorageKey({ jobId: "j1", documentId: "d1" }), "retainpdf.reader.notes.v1:doc:d1");
   assert.equal(notesStorageKey({ documentId: "d1" }), "retainpdf.reader.notes.v1:doc:d1");
 });
 
