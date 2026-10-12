@@ -23,6 +23,25 @@ concurrency:
   cancel-in-progress: ${{ github.ref_type != 'tag' }}
 
 jobs:
+  desktop-windows:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22.22.0"
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install JavaScript workspace dependencies
+        shell: pwsh
+        run: npm ci
+      - name: Test Windows desktop update helpers
+        shell: pwsh
+        run: npm run test:desktop
+
   architecture:
     uses: ./.github/workflows/rust-api-architecture.yml
 
