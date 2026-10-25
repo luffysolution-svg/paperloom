@@ -29,6 +29,8 @@ use retain_jobs::job_runner::{
 };
 
 #[cfg(test)]
+mod auth_tests;
+#[cfg(test)]
 mod contract_lock;
 
 #[derive(Clone)]
@@ -55,13 +57,10 @@ impl JobsdState {
 
 /// 鉴权：与壳同源的 RETAIN_API_KEYS。仅监听回环，这层是纵深防御而非边界。
 fn authorized(state: &JobsdState, headers: &HeaderMap) -> bool {
-    if state.api_keys.is_empty() {
-        return true;
-    }
     headers
         .get("X-API-Key")
         .and_then(|value| value.to_str().ok())
-        .map(|key| state.api_keys.contains(key.trim()))
+        .map(|key| retain_core::config::api_key_matches(&state.api_keys, key.trim()))
         .unwrap_or(false)
 }
 

@@ -38,15 +38,6 @@ function evictIfNeeded(excludeKey?: string): void {
   if (oldest) fileCache.delete(oldest);
 }
 
-function getCachedProtectedPdf(url: string): ProtectedPdfFile | null {
-  const key = `${url || ""}`.trim();
-  if (!key || !fileCache.has(key)) return null;
-  const hit = fileCache.get(key)!;
-  // LRU: move to end
-  touchFileCache(key, hit);
-  return hit;
-}
-
 function setCachedProtectedPdf(url: string, file: ProtectedPdfFile) {
   const key = `${url || ""}`.trim();
   if (!key) return;
@@ -89,65 +80,47 @@ export async function loadProtectedPdfFile(
   return file;
 }
 
+const EMPTY_STATE: ProtectedPdfState = { file: null, loading: false, error: "" };
+const LOADING_STATE: ProtectedPdfState = { file: null, loading: true, error: "" };
+
 export function useProtectedPdfFile(
   url = "",
   /** 会话已预下载时直接注入，跳过二次请求 */
   preloaded: ProtectedPdfFile | null = null,
 ): ProtectedPdfState {
-  const [file, setFile] = useState<ProtectedPdfFile | null>(
-    () => preloaded || getCachedProtectedPdf(url),
-  );
-  const [loading, setLoading] = useState(
-    () => Boolean(`${url || ""}`.trim()) && !preloaded && !getCachedProtectedPdf(url),
-  );
-  const [error, setError] = useState("");
+  const normalized = `${url || ""}`.trim();
+  // 结果记着它属于哪个 url。以前只存文件，换 url 后的第一次渲染还返回旧文件：
+  // PdfDocumentPane 拿「新 url + 旧字节」当 Document 的 key 先重挂一次，还把旧 PDF
+  // 整份复制一遍交给 worker，等 effect 换掉文件再挂一次。
+  const [loaded, setLoaded] = useState<(ProtectedPdfState & { url: string }) | null>(null);
 
   useEffect(() => {
-    if (preloaded) {
-      setFile(preloaded);
-      setLoading(false);
-      setError("");
-      return;
-    }
-    const normalized = `${url || ""}`.trim();
-    if (!normalized) {
-      setFile(null);
-      setLoading(false);
-      setError("");
-      return;
-    }
-    const cached = getCachedProtectedPdf(normalized);
+    if (preloaded || !normalized) return undefined;
+    const cached = fileCache.get(normalized);
     if (cached) {
-      setFile(cached);
-      setLoading(false);
-      setError("");
-      return;
+      // 渲染里只读缓存不动它；LRU 的「最近用过」在这里记。
+      touchFileCache(normalized, cached);
+      setLoaded({ url: normalized, file: cached, loading: false, error: "" });
+      return undefined;
     }
-
-    let cancelled = false;
-    setLoading(true);
-    setError("");
-    setFile(null);
-
-    loadProtectedPdfFile(normalized)
+    const controller = new AbortController();
+    loadProtectedPdfFile(normalized, undefined, { signal: controller.signal })
       .then((next) => {
-        if (!cancelled) {
-          setFile(next);
-          setLoading(false);
-        }
+        if (!controller.signal.aborted) setLoaded({ url: normalized, file: next, loading: false, error: "" });
       })
       .catch((err) => {
-        if (!cancelled) {
-          setFile(null);
-          setLoading(false);
-          setError(err?.message || String(err));
+        if (!controller.signal.aborted) {
+          setLoaded({ url: normalized, file: null, loading: false, error: err?.message || String(err) });
         }
       });
+    // 换书或卸载时中止下载，被放弃的大文件不再下完。
+    return () => controller.abort();
+  }, [normalized, preloaded]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [url, preloaded]);
-
-  return { file, loading, error };
+  if (preloaded) return { file: preloaded, loading: false, error: "" };
+  if (!normalized) return EMPTY_STATE;
+  const cached = fileCache.get(normalized);
+  if (cached) return { file: cached, loading: false, error: "" };
+  if (loaded?.url === normalized) return loaded;
+  return LOADING_STATE;
 }

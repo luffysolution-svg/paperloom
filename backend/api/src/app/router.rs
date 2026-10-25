@@ -1,5 +1,6 @@
 use axum::middleware;
 use axum::Router;
+use tower_http::classify::{ServerErrorsAsFailures, SharedClassifier};
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
@@ -22,6 +23,21 @@ mod providers;
 mod public;
 mod simple;
 
+type RequestSpan = fn(&axum::http::Request<axum::body::Body>) -> tracing::Span;
+
+fn trace_layer() -> TraceLayer<SharedClassifier<ServerErrorsAsFailures>, RequestSpan> {
+    TraceLayer::new_for_http().make_span_with(request_span as RequestSpan)
+}
+
+fn request_span(request: &axum::http::Request<axum::body::Body>) -> tracing::Span {
+    tracing::debug_span!(
+        "request",
+        method = %request.method(),
+        path = %request.uri().path(),
+        version = ?request.version(),
+    )
+}
+
 pub fn build_app(state: AppState) -> Router {
     public::routes()
         .merge(authenticated_api_routes(&state))
@@ -31,7 +47,7 @@ pub fn build_app(state: AppState) -> Router {
         // 拿到路由模板而不是具体 URL。见 `route_usage`：删端点之前先量。
         .layer(middleware::from_fn(super::route_usage::record))
         .layer(CorsLayer::permissive())
-        .layer(TraceLayer::new_for_http())
+        .layer(trace_layer())
         .with_state(state)
 }
 
@@ -40,7 +56,7 @@ pub fn build_simple_app(state: AppState) -> Router {
         .merge(authenticated_simple_routes(&state))
         .fallback(unknown_route)
         .layer(CorsLayer::permissive())
-        .layer(TraceLayer::new_for_http())
+        .layer(trace_layer())
         .with_state(state)
 }
 

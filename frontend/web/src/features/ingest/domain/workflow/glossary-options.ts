@@ -30,7 +30,7 @@ export function createGlossaryOptionsLoader({
     }
     glossaryOptionsLoading = fetchGlossaries(apiPrefix)
       .then((payload) => {
-        glossaryOptions = Array.isArray(payload?.items) ? payload.items : [];
+        glossaryOptions = Array.isArray(payload?.items) ? payload.items.filter((item) => item?.enabled !== false) : [];
         glossaryOptionsLoaded = true;
         const requestedSelectedId = `${selectedId || ""}`.trim();
         const fallbackSelectedId = `${getDefaultSelectedId?.() || ""}`.trim();

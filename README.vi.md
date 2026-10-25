@@ -232,7 +232,7 @@ PaperLoom được phát hành theo [GNU AGPL-3.0](LICENSE). Mỗi bản phát h
 
 ## Cộng đồng PaperLoom
 
-Mã QR nhóm hiện tại hết hạn vào **ngày 18 tháng 10 năm 2026**. Nếu mã đã hết hạn, hãy liên hệ người duy trì qua mã WeChat cá nhân ở bên phải.
+Mã QR nhóm hiện tại hết hạn vào **ngày 1 tháng 11 năm 2026**. Nếu mã đã hết hạn, hãy liên hệ người duy trì qua mã WeChat cá nhân ở bên phải.
 
 <table>
   <tr>

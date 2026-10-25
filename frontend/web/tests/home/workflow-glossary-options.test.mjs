@@ -13,6 +13,21 @@ function createLoader({ items, defaultSelectedId, onOptions }) {
   });
 }
 
+test("disabled glossaries are excluded from task options and defaults", async () => {
+  const calls = [];
+  const loader = createLoader({
+    items: [
+      { glossary_id: "disabled", enabled: false },
+      { glossary_id: "enabled", enabled: true },
+      { glossary_id: "legacy" },
+    ],
+    defaultSelectedId: "disabled",
+    onOptions: (options, selectedId) => calls.push([options.map((item) => item.glossary_id), selectedId]),
+  });
+  await loader.loadGlossaryOptions({ force: true });
+  assert.deepEqual(calls, [[["enabled", "legacy"], ""]]);
+});
+
 test("删除术语表后不再回退到已不存在的默认术语表 id", async () => {
   const calls = [];
   const loader = createLoader({

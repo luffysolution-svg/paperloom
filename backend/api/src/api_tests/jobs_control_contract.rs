@@ -23,7 +23,8 @@ fn contract() -> Value {
 /// 字面量里的 `{job_id}` 与契约的 `{job_id}` 恰好同形，可直接比对。
 fn shell_request_paths() -> BTreeSet<String> {
     let source = include_str!("../services/runtime_gateway.rs");
-    source
+    let production = source.split("#[cfg(test)]").next().unwrap_or_default();
+    production
         .split('"')
         .skip(1)
         .step_by(2)

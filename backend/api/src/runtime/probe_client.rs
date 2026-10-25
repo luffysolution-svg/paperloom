@@ -34,6 +34,7 @@ pub(crate) fn build_probe_client(
     label: &str,
 ) -> reqwest::Client {
     reqwest::Client::builder()
+        .no_proxy()
         .connect_timeout(connect_timeout)
         .timeout(request_timeout)
         .pool_max_idle_per_host(0)
@@ -47,6 +48,53 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    #[tokio::test]
+    async fn probes_ignore_proxy_environment() {
+        const CHILD: &str = "PAPERLOOM_PROBE_PROXY_TEST";
+        if std::env::var_os(CHILD).is_none() {
+            let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+            command
+                .args([
+                    "--exact",
+                    "runtime::probe_client::tests::probes_ignore_proxy_environment",
+                    "--nocapture",
+                ])
+                .env(CHILD, "1");
+            for name in ["HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"] {
+                command.env(name, "http://127.0.0.1:9");
+            }
+            for name in ["NO_PROXY", "no_proxy"] {
+                command.env_remove(name);
+            }
+            let output = command.output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stdout)
+            );
+            return;
+        }
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut buf = [0u8; 1024];
+            socket.read(&mut buf).await.unwrap();
+            socket
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+                .await
+                .unwrap();
+        });
+        let client =
+            build_probe_client(Duration::from_secs(1), Duration::from_secs(2), "proxy test");
+        let response = client
+            .get(format!("http://{addr}/readyz"))
+            .send()
+            .await
+            .expect("probe must bypass system proxy");
+        assert_eq!(response.text().await.unwrap(), "ok");
+    }
 
     /// 探测客户端每次探测都必须新开连接。
     ///

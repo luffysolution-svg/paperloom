@@ -24,6 +24,7 @@ mod upload;
 pub use ai_proxy::AiProxyConfig;
 pub use ai_service::AiServiceConfig;
 pub use asset::AssetConfig;
+pub use auth::api_key_matches;
 use auth::AuthRuntimeConfig;
 pub use cleanup::CleanupConfig;
 pub use db::DbConfig;

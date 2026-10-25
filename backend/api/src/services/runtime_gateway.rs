@@ -27,6 +27,9 @@ pub(crate) use crate::job_runner::{
 };
 use crate::process::terminate_job_process_tree;
 
+const CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
+const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
 /// 内部 HTTP 客户端：把接缝操作转发给 retain-jobsd。
 #[derive(Clone)]
 pub struct JobsClient {
@@ -37,8 +40,14 @@ pub struct JobsClient {
 
 impl JobsClient {
     pub fn new(config: &JobsServiceConfig, api_key: String) -> Self {
+        let client = reqwest::Client::builder()
+            .no_proxy()
+            .connect_timeout(CONNECT_TIMEOUT)
+            .timeout(REQUEST_TIMEOUT)
+            .build()
+            .unwrap_or_else(|error| panic!("build jobsd client: {error}"));
         Self {
-            client: reqwest::Client::new(),
+            client,
             base_url: config.base_url(),
             api_key,
         }
@@ -53,10 +62,20 @@ impl JobsClient {
     }
 
     async fn send(&self, method: reqwest::Method, path: &str) -> Result<(), AppError> {
+        self.send_with_timeout(method, path, REQUEST_TIMEOUT).await
+    }
+
+    async fn send_with_timeout(
+        &self,
+        method: reqwest::Method,
+        path: &str,
+        timeout: std::time::Duration,
+    ) -> Result<(), AppError> {
         let url = format!("{}{path}", self.base_url);
         let response = self
             .client
             .request(method, &url)
+            .timeout(timeout)
             .header("X-API-Key", &self.api_key)
             .send()
             .await
@@ -155,7 +174,12 @@ impl JobRuntime {
             // 杀会绕过它的进程组记账。
             Self::Remote { client } => {
                 client
-                    .post(&format!("/internal/v1/processes/{pid}/terminate"))
+                    .send_with_timeout(
+                        reqwest::Method::POST,
+                        &format!("/internal/v1/processes/{pid}/terminate"),
+                        REQUEST_TIMEOUT
+                            + std::time::Duration::from_secs(config.worker_terminate_grace_secs),
+                    )
                     .await
             }
         }
@@ -211,4 +235,73 @@ pub async fn terminate_runtime_process(
     config: &JobRunnerConfig,
 ) -> Result<(), AppError> {
     runtime.terminate_process(pid, config).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    async fn fake_jobsd(delay: Option<Duration>) -> JobsServiceConfig {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            loop {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                tokio::spawn(async move {
+                    let mut buf = [0u8; 4096];
+                    let _ = socket.read(&mut buf).await;
+                    let Some(delay) = delay else {
+                        std::future::pending::<()>().await;
+                        return;
+                    };
+                    tokio::time::sleep(delay).await;
+                    let _ = socket
+                        .write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\n{}")
+                        .await;
+                });
+            }
+        });
+        JobsServiceConfig {
+            port,
+            ..Default::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn a_hung_jobsd_does_not_hold_the_request_forever() {
+        let config = fake_jobsd(None).await;
+        let client = JobsClient::new(&config, "test-key".into());
+        let result = tokio::time::timeout(
+            Duration::from_secs(12),
+            client.post("/internal/v1/jobs/job-1/cancel"),
+        )
+        .await
+        .expect("jobsd requests must time out without relying on the caller");
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn terminate_gets_the_worker_grace_on_top_of_the_request_timeout() {
+        let config = fake_jobsd(Some(Duration::from_millis(10_500))).await;
+        let runtime = JobRuntime::remote(&config, "test-key".into());
+        let with_grace = JobRunnerConfig {
+            worker_terminate_grace_secs: 2,
+            ..Default::default()
+        };
+        runtime
+            .terminate_process(4242, &with_grace)
+            .await
+            .expect("worker grace must be allowed");
+        let no_grace = JobRunnerConfig {
+            worker_terminate_grace_secs: 0,
+            ..Default::default()
+        };
+        assert!(
+            runtime.terminate_process(4242, &no_grace).await.is_err(),
+            "termination without grace must time out"
+        );
+    }
 }

@@ -66,6 +66,28 @@ fn load_local_auth_config(path: &Path) -> Result<Option<LocalAuthConfig>> {
     Ok(Some(config))
 }
 
+/// Compare every configured key without exiting at the first differing byte.
+/// Key lengths are not secret; an empty configured set never matches.
+pub fn api_key_matches(api_keys: &HashSet<String>, candidate: &str) -> bool {
+    let candidate = candidate.as_bytes();
+    let mut matched = false;
+    for key in api_keys {
+        matched |= bytes_equal_in_constant_time(key.as_bytes(), candidate);
+    }
+    matched
+}
+
+fn bytes_equal_in_constant_time(left: &[u8], right: &[u8]) -> bool {
+    if left.len() != right.len() {
+        return false;
+    }
+    let difference = left
+        .iter()
+        .zip(right)
+        .fold(0u8, |acc, (a, b)| acc | (a ^ b));
+    std::hint::black_box(difference) == 0
+}
+
 fn resolve_api_keys(local_auth: Option<&LocalAuthConfig>) -> Result<HashSet<String>> {
     // Explicit deployment settings override the local file. In particular, an
     // operator rotating a key must not keep accepting a stale file-owned key.
@@ -127,6 +149,28 @@ fn resolve_simple_port(local_auth: Option<&LocalAuthConfig>) -> Result<u16> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn api_key_matches_only_exact_configured_keys() {
+        let keys: HashSet<String> = [
+            "first-key-0123456789".into(),
+            "second-key-abcdefghij".into(),
+        ]
+        .into();
+        assert!(api_key_matches(&keys, "first-key-0123456789"));
+        assert!(api_key_matches(&keys, "second-key-abcdefghij"));
+        for wrong in [
+            "",
+            "first-key-012345678",
+            "first-key-01234567890",
+            "First-key-0123456789",
+            "first-key-0123456788",
+        ] {
+            assert!(!api_key_matches(&keys, wrong), "{wrong:?}");
+        }
+        assert!(!api_key_matches(&HashSet::new(), ""));
+        assert!(!api_key_matches(&HashSet::new(), "anything"));
+    }
 
     #[test]
     fn configuration_priority_is_verified_in_isolated_processes() {

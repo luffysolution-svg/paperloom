@@ -10,7 +10,7 @@ export function GlossaryImportPanel({ visible, csvText, onCsvTextChange, onApply
       <textarea
         id={GLOSSARY_DOM_IDS.csvText}
         rows={6}
-        placeholder="原词,译文,类型,匹配模式,备注"
+        placeholder="原词,译文,备注"
         value={csvText}
         onChange={(event) => onCsvTextChange(event.target.value)}
       />

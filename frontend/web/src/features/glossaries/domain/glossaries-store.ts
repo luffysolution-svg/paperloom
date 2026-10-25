@@ -47,6 +47,7 @@ export type GlossaryEntryRow = {
   note: string;
   level: string;
   match_mode: string;
+  context: string;
 };
 
 export type GlossaryDraft = {
@@ -139,6 +140,7 @@ function normalizeEntryForRow(entry: Partial<GlossaryEntryRow> = {}): GlossaryEn
     note: entry.note || "",
     level: entry.level || "preserve",
     match_mode: entry.match_mode || "case_insensitive",
+    context: entry.context || "",
   };
 }
 
@@ -168,7 +170,7 @@ export function readEditorPayload(draft: GlossaryDraft = { name: "", entries: []
       target,
       level,
       match_mode: row.match_mode || "case_insensitive",
-      context: "",
+      context: `${row.context || ""}`.trim(),
       note: `${row.note || ""}`.trim(),
     });
   }

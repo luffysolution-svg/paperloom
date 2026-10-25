@@ -14,7 +14,7 @@ fn has_valid_api_key(deps: AuthRouteDeps<'_>, request: &Request<Body>) -> bool {
         .and_then(|value| value.to_str().ok())
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map(|key| deps.api_keys.contains(key))
+        .map(|key| crate::config::api_key_matches(deps.api_keys, key))
         .unwrap_or(false)
 }
 

@@ -69,14 +69,18 @@ function LibrarySearchPanel({ ports }) {
   const [error, setError] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | number>(0);
   const requestSeqRef = useRef(0);
+  const documentsRef = useRef<Promise<any[]> | null>(null);
 
   useEffect(() => ports.subscribeQuery(setQuery), [ports]);
 
   useEffect(() => {
     const trimmed = query.trim();
     if (!trimmed) {
+      documentsRef.current = null;
       setHits([]);
+      setDocuments([]);
       setError("");
+      setBusy(false);
       return undefined;
     }
     clearTimeout(debounceRef.current);
@@ -84,16 +88,23 @@ function LibrarySearchPanel({ ports }) {
       const seq = requestSeqRef.current + 1;
       requestSeqRef.current = seq;
       setBusy(true);
+      if (!documentsRef.current) {
+        const loading = ports.fetchDocumentList().then((result) => result?.documents || []);
+        documentsRef.current = loading;
+        loading.catch(() => {
+          if (documentsRef.current === loading) documentsRef.current = null;
+        });
+      }
       try {
-        const [searchResult, documentsResult] = await Promise.all([
+        const [searchResult, documentRows] = await Promise.all([
           ports.searchLibrary(trimmed),
-          ports.fetchDocumentList(),
+          documentsRef.current,
         ]);
         if (requestSeqRef.current !== seq) {
           return;
         }
         setHits(searchResult?.hits || []);
-        setDocuments(documentsResult?.documents || []);
+        setDocuments((current) => (current.length ? current : documentRows));
         setError("");
       } catch (searchError) {
         if (requestSeqRef.current === seq) {
@@ -105,7 +116,10 @@ function LibrarySearchPanel({ ports }) {
         }
       }
     }, 250);
-    return () => clearTimeout(debounceRef.current);
+    return () => {
+      clearTimeout(debounceRef.current);
+      requestSeqRef.current += 1;
+    };
   }, [query, ports]);
 
   const cycleStatus = useCallback(async (doc) => {
@@ -118,7 +132,9 @@ function LibrarySearchPanel({ ports }) {
     } catch (_err) {
       // 回滚乐观更新
       setDocuments((current) => current.map((item) => (
-        item.document_id === doc.document_id ? { ...item, reading_status: doc.reading_status } : item
+        item.document_id === doc.document_id && item.reading_status === next
+          ? { ...item, reading_status: doc.reading_status }
+          : item
       )));
     }
   }, [ports]);
