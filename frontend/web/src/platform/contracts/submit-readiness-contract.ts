@@ -21,7 +21,9 @@ export function resolveSubmitReadiness({
 }: any = {}) {
   const uploadReady = Boolean(uploadId);
   const renderReady = Boolean(renderSourceJobId);
-  const desktopConfigMissing = Boolean(desktopMode) && !desktopConfigured && Boolean(needsCredentials);
+  // 首配标记与当前凭据不在同一状态源；已有凭据时无需再过首配门。
+  const desktopConfigMissing = Boolean(desktopMode) && !desktopConfigured
+    && !hasBrowserCredentials && Boolean(needsCredentials);
   const credentialsMissing = !desktopMode && Boolean(needsCredentials) && !hasBrowserCredentials;
   const sourceReady = needsUpload ? uploadReady : renderReady;
   let reason: string = SUBMIT_BLOCK_REASONS.NONE;

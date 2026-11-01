@@ -139,6 +139,7 @@ export interface MountBrowserCredentialsFeatureOptions {
     payload: Record<string, unknown>,
   ) => Promise<any>;
   onCredentialStateChange?: () => void;
+  onSetupComplete?: () => Promise<unknown> | unknown;
   uploadStatePort?: CredentialsUploadStatePort;
   credentialsStatePort?: CredentialsStatePort;
   runtimeEnvPort?: CredentialsRuntimeEnvPort;
@@ -175,6 +176,7 @@ export function mountBrowserCredentialsFeature({
   createCredential,
   updateCredential,
   onCredentialStateChange,
+  onSetupComplete,
   uploadStatePort,
   credentialsStatePort = defaultCredentialsStatePort,
   runtimeEnvPort,
@@ -233,6 +235,7 @@ export function mountBrowserCredentialsFeature({
     checkApiConnectivity,
     setupModePort,
     onCredentialStateChange,
+    onSetupComplete,
     dialogElementsPort,
     syncBrowserDialogFromCredentialState: dialogFlow.syncBrowserDialogFromCredentialState,
     runtimeEnv,

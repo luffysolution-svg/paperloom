@@ -856,6 +856,204 @@ test("CredentialsDialog：保存(桌面模式)——走 saveDesktopConfig 分支
   host.remove();
 });
 
+function captureJobSubmissions() {
+  const previousFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url, options = {}) => {
+    const submitting = options.method === "POST" && `${url}`.endsWith("/jobs");
+    if (submitting) requests.push(JSON.parse(options.body));
+    return new Response(JSON.stringify({ code: 0, data: submitting || `${url}`.endsWith("/jobs/job-setup")
+      ? { job_id: "job-setup", document_id: "doc-setup", status: "running", workflow: "book" }
+      : { items: [], documents: [] } }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+  return { requests, restore: () => { globalThis.fetch = previousFetch; } };
+}
+
+async function prepareUploadedPdf(services) {
+  services.workflowDialog.openUpload();
+  await waitFor(() => byId("job-form"), "上传表单挂载");
+  services.ports.uploadStatePort.setUpload({
+    uploadId: "upload-setup", documentId: "doc-setup",
+    uploadedFileName: "setup.pdf", uploadedPageCount: 2,
+  });
+  services.features.workflowFeature.applyWorkflowMode();
+  await waitFor(() => !byId("submit-btn").disabled, "直接翻译可用");
+}
+
+test("桌面翻译：已保存凭据时首次点击直接提交并打开进度", async () => {
+  const submission = captureJobSubmissions();
+  const services = createServices({
+    initialDesktopMode: true,
+    loadPersistedBrowserConfig: () => ({ paddleToken: "saved-ocr", modelApiKey: "saved-key" }),
+  });
+  const opened = [];
+  services.library.actions.openBookDetail = (payload) => opened.push(payload);
+  const { host, root } = await mountHome(services);
+  try {
+    await prepareUploadedPdf(services);
+    click(byId("submit-btn"));
+    await waitFor(() => opened.length || services.settingsHub.dialogStore.getSnapshot().open, "提交或首配拦截");
+    assert.equal(submission.requests.length, 1, "已有凭据不应再次要求首配");
+    assert.equal(services.settingsHub.dialogStore.getSnapshot().open, false);
+    assert.equal(opened[0].job_id, "job-setup", JSON.stringify(opened));
+    assert.equal(opened[0].prefer_translate_tab, true, "提交后进入进度 Tab");
+  } finally {
+    root.unmount();
+    services.dispose();
+    host.remove();
+    submission.restore();
+  }
+});
+
+test("桌面翻译：拖拽 PDF 复用上传流程，随后首次点击即可提交", async () => {
+  const submission = captureJobSubmissions();
+  let uploadCount = 0;
+  const services = createServices({
+    initialDesktopMode: true,
+    loadPersistedBrowserConfig: () => ({ paddleToken: "saved-ocr", modelApiKey: "saved-key" }),
+  });
+  services.features.uploadFeature.handleFileSelected = async () => {
+    uploadCount += 1;
+    assert.equal(services.uploadDomRefs.fileInput.files[0].name, "1.pdf");
+    services.ports.uploadStatePort.setUpload({ uploadId: "upload-dropped", documentId: "doc-setup", uploadedPageCount: 2 });
+    services.features.workflowFeature.applyWorkflowMode();
+  };
+  const opened = [];
+  services.library.actions.openBookDetail = (payload) => opened.push(payload);
+  const { host, root } = await mountHome(services);
+  try {
+    services.workflowDialog.openUpload();
+    await waitFor(() => byId("file"), "上传表单");
+    const transfer = { files: [new File(["fixture"], "1.pdf", { type: "application/pdf" })], dropEffect: "none" };
+    // jsdom 没有 DataTransfer；保留 files 的浏览器赋值行为，真实拖拽另做浏览器验证。
+    Object.defineProperty(byId("file"), "files", { value: [], writable: true });
+    const tile = byId("file").closest(".upload-tile");
+    const dragover = new Event("dragover", { bubbles: true, cancelable: true });
+    Object.defineProperty(dragover, "dataTransfer", { value: transfer });
+    tile.dispatchEvent(dragover);
+    assert.equal(dragover.defaultPrevented, true, "拖入卡片时允许接收文件");
+    const drop = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, "dataTransfer", { value: transfer });
+    tile.dispatchEvent(drop);
+    assert.equal(drop.defaultPrevented, true, "阻止浏览器直接打开 PDF");
+    await waitFor(() => services.ports.uploadStatePort.getSnapshot().uploadId, "拖拽上传完成");
+    assert.equal(uploadCount, 1);
+    await waitFor(() => !byId("submit-btn").disabled, "拖拽后可以翻译");
+    click(byId("submit-btn"));
+    await waitFor(() => opened.length, "拖拽后提交并打开进度");
+    assert.equal(submission.requests.length, 1);
+    assert.equal(submission.requests[0].source.upload_id, "upload-dropped");
+    assert.equal(opened[0].prefer_translate_tab, true);
+  } finally {
+    root.unmount();
+    services.dispose();
+    host.remove();
+    submission.restore();
+  }
+});
+
+test("桌面翻译：保存并启动等待落盘，再自动提交一次并打开进度", async () => {
+  const submission = captureJobSubmissions();
+  let finishSave;
+  const services = createServices({
+    initialDesktopMode: true,
+    saveDesktopConfig: () => new Promise((resolve) => { finishSave = resolve; }),
+  });
+  const opened = [];
+  services.library.actions.openBookDetail = (payload) => opened.push(payload);
+  const { host, root } = await mountHome(services);
+  try {
+    await prepareUploadedPdf(services);
+    click(byId("submit-btn"));
+    await waitFor(() => byId("browser-credentials-save-btn")?.textContent === "保存并启动", "打开首次配置");
+    await waitForDialogReady();
+    typeInput(byId("browser-paddle-token"), "new-ocr");
+    typeInput(byId("browser-api-key"), "new-key");
+    click(byId("browser-credentials-save-btn"));
+    await waitFor(() => finishSave, "开始持久化");
+    assert.equal(submission.requests.length, 0, "落盘完成前不得启动任务");
+    finishSave({ firstRunCompleted: true });
+    await waitFor(() => !services.settingsHub.dialogStore.getSnapshot().open, "保存后关闭配置");
+    await waitFor(() => opened.length, "自动提交并打开进度");
+    assert.equal(submission.requests.length, 1, "保存后无需再次点击，也不能重复提交");
+    assert.equal(submission.requests[0].source.upload_id, "upload-setup");
+    assert.equal(submission.requests[0].translation.api_key, "new-key");
+    assert.equal(opened[0].prefer_translate_tab, true, JSON.stringify(opened));
+    assert.equal(services.ports.dialogStatePort.getSnapshot().open, false, "上传弹窗随提交成功关闭");
+  } finally {
+    finishSave?.({ firstRunCompleted: true });
+    root.unmount();
+    services.dispose();
+    host.remove();
+    submission.restore();
+  }
+});
+
+test("桌面翻译：常规设置只保存，关闭后首次点击即可翻译", async () => {
+  const submission = captureJobSubmissions();
+  const services = createServices({ initialDesktopMode: true, saveDesktopConfig: async () => ({}) });
+  const opened = [];
+  services.library.actions.openBookDetail = (payload) => opened.push(payload);
+  const { host, root } = await mountHome(services);
+  try {
+    await prepareUploadedPdf(services);
+    document.dispatchEvent(new CustomEvent(APP_EVENTS.openBrowserCredentials));
+    await waitForDialogReady();
+    typeInput(byId("browser-paddle-token"), "settings-ocr");
+    typeInput(byId("browser-api-key"), "settings-key");
+    click(byId("browser-credentials-save-btn"));
+    await waitFor(() => byId("browser-credentials-status")?.textContent.startsWith("已保存"), "常规保存完成");
+    assert.equal(submission.requests.length, 0, "常规保存不能自行启动任务");
+    services.settingsHub.dialogStore.close();
+    await waitFor(() => !byId("app-settings-dialog"), "关闭设置");
+    click(byId("submit-btn"));
+    await waitFor(() => opened.length || services.settingsHub.dialogStore.getSnapshot().open, "首次点击提交");
+    assert.equal(submission.requests.length, 1);
+    assert.equal(opened[0].prefer_translate_tab, true);
+  } finally {
+    root.unmount();
+    services.dispose();
+    host.remove();
+    submission.restore();
+  }
+});
+
+test("桌面翻译：配置保存失败时不启动，修正后可继续保存并启动", async () => {
+  const submission = captureJobSubmissions();
+  let saveFails = true;
+  const services = createServices({
+    initialDesktopMode: true,
+    saveDesktopConfig: async () => {
+      if (saveFails) throw new Error("fixture disk write failed");
+      return { firstRunCompleted: true };
+    },
+  });
+  const opened = [];
+  services.library.actions.openBookDetail = (payload) => opened.push(payload);
+  const { host, root } = await mountHome(services);
+  try {
+    await prepareUploadedPdf(services);
+    click(byId("submit-btn"));
+    await waitFor(() => byId("browser-credentials-save-btn")?.textContent === "保存并启动", "首次配置");
+    await waitForDialogReady();
+    typeInput(byId("browser-paddle-token"), "retry-ocr");
+    typeInput(byId("browser-api-key"), "retry-key");
+    click(byId("browser-credentials-save-btn"));
+    await waitFor(() => byId("browser-credentials-status")?.textContent === "fixture disk write failed", "显示保存失败");
+    assert.equal(submission.requests.length, 0);
+    assert.equal(services.settingsHub.dialogStore.getSnapshot().open, true);
+    saveFails = false;
+    click(byId("browser-credentials-save-btn"));
+    await waitFor(() => opened.length, "重试保存后继续启动");
+    assert.equal(submission.requests.length, 1);
+  } finally {
+    root.unmount();
+    services.dispose();
+    host.remove();
+    submission.restore();
+  }
+});
+
 // 服务端 vault 里的明文，一个字节都不能流进浏览器。
 //
 // 这条用例原来叫「旧凭据读回具体值」，断言的正是相反的事：打开设置就把 vault 里

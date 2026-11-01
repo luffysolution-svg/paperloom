@@ -63,6 +63,7 @@ export function createBrowserCredentialSaveFlow({
   checkApiConnectivity,
   setupModePort,
   onCredentialStateChange,
+  onSetupComplete,
   dialogElementsPort,
   syncBrowserDialogFromCredentialState,
   runtimeEnv,
@@ -85,6 +86,7 @@ export function createBrowserCredentialSaveFlow({
   checkApiConnectivity?: () => Promise<unknown> | unknown;
   setupModePort: { currentSetupMode?: () => boolean };
   onCredentialStateChange?: () => void;
+  onSetupComplete?: () => Promise<unknown> | unknown;
   dialogElementsPort: { elements: () => any };
   syncBrowserDialogFromCredentialState: () => void;
   runtimeEnv: { isDesktopMode?: () => boolean };
@@ -222,6 +224,7 @@ export function createBrowserCredentialSaveFlow({
     // 首次配置弹窗保存后关闭；设置中心内嵌时保持打开以便继续改任务选项
     if (setupModePort.currentSetupMode?.()) {
       viewPort.closeDialog();
+      await onSetupComplete?.();
     }
   }
 

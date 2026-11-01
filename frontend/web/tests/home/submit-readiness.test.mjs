@@ -39,6 +39,32 @@ test("resolveSubmitReadiness reports missing browser credentials before source c
   assert.equal(readiness.reason, SUBMIT_BLOCK_REASONS.MISSING_CREDENTIALS);
 });
 
+test("desktop submissions use current credentials even when the first-run flag is stale", () => {
+  const readiness = resolveSubmitReadiness({
+    workflow: "book",
+    desktopMode: true,
+    desktopConfigured: false,
+    hasBrowserCredentials: true,
+    uploadId: "upload-1",
+  });
+
+  assert.equal(readiness.ready, true);
+  assert.equal(readiness.desktopConfigMissing, false);
+});
+
+test("desktop submissions still require setup when credentials and the first-run flag are missing", () => {
+  const readiness = resolveSubmitReadiness({
+    workflow: "book",
+    desktopMode: true,
+    desktopConfigured: false,
+    hasBrowserCredentials: false,
+    uploadId: "upload-1",
+  });
+
+  assert.equal(readiness.ready, false);
+  assert.equal(readiness.reason, SUBMIT_BLOCK_REASONS.DESKTOP_NOT_CONFIGURED);
+});
+
 test("resolveSubmitReadiness reports missing upload for upload workflows", () => {
   const readiness = resolveSubmitReadiness({
     workflow: "book",

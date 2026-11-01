@@ -11,7 +11,7 @@ const BUILD_TIMEOUT: Duration = Duration::from_secs(600);
 
 pub(crate) const DEFAULT_BACKGROUND_DPI: u32 = 180;
 // Bump when layout/OOXML changes so old downloads remain on disk but are not reused.
-const WORD_RENDERER_VERSION: u32 = 2;
+const WORD_RENDERER_VERSION: u32 = 3;
 
 #[derive(Clone, Copy)]
 pub(crate) struct LayoutDocxOptions {

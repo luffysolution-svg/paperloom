@@ -381,6 +381,80 @@ fn image_block_uses_primary_asset_over_paddle_sub_crops() {
 }
 
 #[test]
+fn backslash_math_delimiters_export_as_obsidian_math() {
+    let normalized = json!({
+        "assets": {},
+        "pages": [{ "page_index": 31, "blocks": [
+            block("p032-b0004", 4, json!({
+                "kind": "text", "text": r"The volume is \( \nu_i = \frac{4}{3}\pi a_i^3 \).",
+            })),
+            block("p032-b0005", 5, json!({
+                "kind": "formula", "text": r"\[ \alpha_i = 3\varepsilon_0\varepsilon\nu_i \]",
+            })),
+        ]}]
+    });
+    let pages = vec![(
+        31,
+        vec![json!({
+            "item_id": "p032-b004", "math_mode": "direct_typst",
+            "translated_text": "其中 \\( \\nu_i = \\frac{4}{3}\\pi a_i^3 \\) 是体积。\\[\n\\varepsilon_i < \\varepsilon\n\\]",
+        })],
+    )];
+    let meta = meta();
+    for full_markdown in [
+        None,
+        Some(r"The volume is \( \nu_i = \frac{4}{3}\pi a_i^3 \)."),
+    ] {
+        let notes = build_notes(
+            &ExportInputs {
+                normalized: &normalized,
+                translation_pages: &pages,
+                full_markdown,
+                images_dir: None,
+                meta: &meta,
+                has_pdf: false,
+                include_source: true,
+                zotero_extras: None,
+            },
+            names_for(&meta),
+        );
+        assert!(notes
+            .source
+            .as_ref()
+            .unwrap()
+            .contains(r"$\nu_i = \frac{4}{3}\pi a_i^3$"));
+        assert!(notes
+            .translated
+            .contains(r"其中 $\nu_i = \frac{4}{3}\pi a_i^3$ 是体积。"));
+        assert!(notes
+            .translated
+            .contains("$$\n\\varepsilon_i < \\varepsilon\n$$"));
+        assert!(notes
+            .translated
+            .contains("$$\n\\alpha_i = 3\\varepsilon_0\\varepsilon\\nu_i\n$$"));
+    }
+}
+
+#[test]
+fn backslash_math_normalization_keeps_literal_and_existing_math() {
+    for text in [
+        r"字面量 \\( x \\) 和 \\[ y \\]",
+        r"未闭合 \( x 和 \[ y",
+        r"$\text{literal \( and \)}$ 与 $$\alpha$$",
+        r"It costs $5 and $10, or \$ 3 \$; $x$ stays.",
+        r"示例 `\(x\)` 与 `\[y\]`",
+        "```latex\n\\(x\\) 与 $y$\n```",
+        "~~~latex\n\\[x\\]\n~~~",
+        r"示例 `` `\(x\)` ``",
+        "~~~text\n~~~literal\n\\(x\\)\n~~~",
+    ] {
+        assert_eq!(tighten_inline_math(text), text);
+    }
+    assert_eq!(tighten_inline_math(r"\(a \\) + b\)"), r"$a \\) + b$");
+    assert_eq!(tighten_inline_math(r"\(x\) ```literal``` \(y\)"), "$x$ ```literal``` $y$");
+}
+
+#[test]
 fn paddle_inline_math_padding_is_trimmed_for_obsidian() {
     // PaddleOCR-VL 的行内公式两侧带空格（`$ V_{Ni} $`），Obsidian 不认作公式。
     let normalized = json!({

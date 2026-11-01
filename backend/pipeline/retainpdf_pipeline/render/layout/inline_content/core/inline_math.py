@@ -73,9 +73,15 @@ def normalize_direct_typst_inline_math_whitespace(text: str) -> str:
     if not source:
         return ""
     chunks: list[str] = []
+    code_tokens = {token.start: token for token in analyze_text(source).tokens if token.kind == TextTokenKind.CODE}
     index = 0
     in_inline_math = False
     while index < len(source):
+        if index in code_tokens:
+            token = code_tokens[index]
+            chunks.append(token.value)
+            index = token.end
+            continue
         char = source[index]
         prev_char = source[index - 1] if index > 0 else ""
         next_char = source[index + 1] if index + 1 < len(source) else ""
@@ -233,6 +239,8 @@ def sanitize_direct_typst_inline_math(text: str) -> str:
     def _sanitize_token(token: TextToken) -> str:
         is_display = token.kind == TextTokenKind.DISPLAY_MATH
         expr = math_token_body(token)
+        if not is_display:
+            expr = re.sub(r"[\r\n]+\s*", " ", expr)
         if not expr:
             return token.value
         if expr in {"^®", "^{®}", r"^\circled{R}", r"^\textcircled{R}"}:

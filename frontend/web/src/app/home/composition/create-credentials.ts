@@ -51,6 +51,7 @@ type CreateCredentialsArgs = {
   updateCredentialOverride?: AsyncFn;
   checkApiConnectivityOverride?: AsyncFn | null;
   saveDesktopConfigOverride?: AsyncFn | null;
+  onSetupComplete?: () => Promise<unknown> | unknown;
 };
 
 export function createCredentials({
@@ -65,6 +66,7 @@ export function createCredentials({
   updateCredentialOverride,
   checkApiConnectivityOverride,
   saveDesktopConfigOverride,
+  onSetupComplete,
 }: CreateCredentialsArgs): {
   browserCredentialsFeature: BrowserCredentialsFeature;
   credentialsView: CredentialsViewBag;
@@ -153,6 +155,7 @@ export function createCredentials({
         /* ignore */
       }
     },
+    onSetupComplete,
     runtimeEnvPort: createCredentialRuntimeEnvPort(legacyState),
     uploadStatePort,
     viewPort: credentialsView.viewPort,

@@ -4,7 +4,7 @@
 // 再以 props 往下传；展示组件只收 props 发回调，不直连 services/store。
 // 事件回调全部具名化，JSX 内不写内联箭头，保证 id/文案/disabled 语义不变。
 
-import { useCallback, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent } from "react";
 
 import { useStoreSnapshot } from "@/ui/hooks/use-store.js";
 import { APP_EVENTS } from "@/platform/contracts/app-contract.js";
@@ -70,6 +70,20 @@ export function HeroUpload() {
     void uploadFeature?.handleFileSelected();
   }
 
+  function handleDragOver(event: ReactDragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = upload.tileEnabled && !upload.tileLocked && !upload.uploading ? "copy" : "none";
+  }
+
+  function handleDrop(event: ReactDragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    if (!upload.tileEnabled || upload.tileLocked || upload.uploading || !event.dataTransfer.files.length) return;
+    const input = uploadDomRefs.fileInput;
+    if (!input) return;
+    input.files = event.dataTransfer.files;
+    handleFileChange();
+  }
+
   // —— 具名回调：翻译选项开/关切换 ——
   function handleToggleTranslationOptions() {
     if (upload.translationOptionsOpen) {
@@ -97,6 +111,8 @@ export function HeroUpload() {
         onFileInputClick={handleFileInputClick}
         onFileChange={handleFileChange}
         onTileClick={handleTileClick}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
         budgetSlot={(
           <UploadBudgetSlot>
             <TranslationBudgetNote budget={workflow.budget} />

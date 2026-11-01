@@ -189,6 +189,12 @@ export function createHomeComposition({
     updateCredentialOverride,
     checkApiConnectivityOverride,
     saveDesktopConfigOverride,
+    onSetupComplete: () => {
+      if (!dialogStatePort.getSnapshot().open || !uploadStatePort.getSnapshot().uploadId) return;
+      // 复用上传表单入口，让提交成功后的进度页跳转与手动点击保持一致。
+      const form = documentRef.getElementById("job-form") as HTMLFormElement | null;
+      form?.requestSubmit();
+    },
   });
   features.browserCredentialsFeature = credentials.browserCredentialsFeature;
 

@@ -6,6 +6,7 @@ from enum import Enum
 
 
 class TextTokenKind(str, Enum):
+    CODE = "code"
     DISPLAY_MATH = "display_math"
     INLINE_MATH = "inline_math"
     PROTECTED_FORMULA = "protected_formula"
@@ -107,7 +108,58 @@ def _match_protected_formula(text: str, index: int) -> int:
     return suffix_end + 2
 
 
+def _match_backslash_math(text: str, index: int, opening: str, closing: str) -> int:
+    if not text.startswith(opening, index) or _is_escaped(text, index):
+        return index
+    cursor = index + len(opening)
+    while cursor < len(text):
+        if text.startswith(closing, cursor):
+            body = text[index + len(opening) : cursor].strip()
+            # Rendering normalizes these delimiters to $...$.
+            if len(body) >= MAX_INLINE_MATH_CHARS:
+                return index
+            return cursor + len(closing) if body else index
+        cursor += 2 if text[cursor] == "\\" else 1
+    return index
+
+
+def _match_code(text: str, index: int) -> int:
+    marker = text[index]
+    if marker not in "`~" or _is_escaped(text, index):
+        return index
+    cursor = index
+    while cursor < len(text) and text[cursor] == marker:
+        cursor += 1
+    width = cursor - index
+    line_start = text.rfind("\n", 0, index) + 1
+    fenced = width >= 3 and not text[line_start:index].strip()
+    if marker == "~" and not fenced:
+        return index
+    while cursor < len(text):
+        start = text.find(marker, cursor)
+        if start < 0:
+            break
+        cursor = start
+        while cursor < len(text) and text[cursor] == marker:
+            cursor += 1
+        run_width = cursor - start
+        if fenced:
+            line_end = text.find("\n", cursor)
+            line_end = len(text) if line_end < 0 else line_end
+            if (
+                run_width >= width
+                and not text[text.rfind("\n", 0, start) + 1 : start].strip()
+                and not text[cursor:line_end].strip()
+            ):
+                return cursor
+        elif run_width == width:
+            return cursor
+    return len(text) if fenced else index
+
+
 def _match_display_math(text: str, index: int) -> int:
+    if text.startswith(r"\[", index):
+        return _match_backslash_math(text, index, r"\[", r"\]")
     if not text.startswith("$$", index) or _is_escaped(text, index):
         return index
     cursor = index + 2
@@ -122,6 +174,8 @@ def _match_display_math(text: str, index: int) -> int:
 
 
 def _match_inline_math(text: str, index: int) -> int:
+    if text.startswith(r"\(", index):
+        return _match_backslash_math(text, index, r"\(", r"\)")
     if (
         text[index] != "$"
         or text.startswith("$$", index)
@@ -173,6 +227,7 @@ def _match_zh_char(text: str, index: int) -> int:
 
 
 TOKEN_RULES: tuple[TokenRule, ...] = (
+    TokenRule(TextTokenKind.CODE, _match_code),
     TokenRule(TextTokenKind.FORMULA_PLACEHOLDER, _match_formula_placeholder),
     TokenRule(TextTokenKind.PROTECTED_FORMULA, _match_protected_formula),
     TokenRule(TextTokenKind.DISPLAY_MATH, _match_display_math),
@@ -229,6 +284,10 @@ def is_formula_token(token: str) -> bool:
 def math_token_body(token: TextToken | str) -> str:
     value = token.value if isinstance(token, TextToken) else str(token or "")
     kind = token.kind if isinstance(token, TextToken) else classify_token_value(value)
+    if kind == TextTokenKind.DISPLAY_MATH and value.startswith(r"\[") and value.endswith(r"\]"):
+        return value[2:-2].strip()
+    if kind == TextTokenKind.INLINE_MATH and value.startswith(r"\(") and value.endswith(r"\)"):
+        return value[2:-2].strip()
     if kind == TextTokenKind.DISPLAY_MATH and value.startswith("$$") and value.endswith("$$"):
         return value[2:-2].strip()
     if kind == TextTokenKind.INLINE_MATH and value.startswith("$") and value.endswith("$"):

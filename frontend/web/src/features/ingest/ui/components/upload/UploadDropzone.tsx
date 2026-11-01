@@ -1,6 +1,6 @@
 // 展示组件边界：只收 props 发回调，不直连 services/store；
 // 文件选择与拖拽预览均由 UploadTile 容器映射为 onFile* 回调。
-import type { ChangeEventHandler, MouseEventHandler, ReactNode, RefCallback } from "react";
+import type { ChangeEventHandler, DragEventHandler, MouseEventHandler, ReactNode, RefCallback } from "react";
 
 import type { UploadViewState } from "../../../domain/upload-store.js";
 
@@ -10,6 +10,8 @@ type UploadDropzoneProps = {
   onFileInputClick: () => void;
   onFileChange: ChangeEventHandler<HTMLInputElement>;
   onTileClick: MouseEventHandler<HTMLDivElement>;
+  onDragOver: DragEventHandler<HTMLDivElement>;
+  onDrop: DragEventHandler<HTMLDivElement>;
   budgetSlot: ReactNode;
 };
 
@@ -19,6 +21,8 @@ export function UploadDropzone({
   onFileInputClick,
   onFileChange,
   onTileClick,
+  onDragOver,
+  onDrop,
   budgetSlot,
 }: UploadDropzoneProps) {
   const tileClasses = [
@@ -30,7 +34,7 @@ export function UploadDropzone({
   ].filter(Boolean).join(" ");
 
   return (
-    <div className={tileClasses} onClick={onTileClick}>
+    <div className={tileClasses} onClick={onTileClick} onDragOver={onDragOver} onDrop={onDrop}>
       <input
         id="file"
         name="file"
