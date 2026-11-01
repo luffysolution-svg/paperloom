@@ -373,10 +373,10 @@ def _render_markdown(report: dict[str, object]) -> str:
             "",
             "## Generated Outputs",
             "",
-            f"- `{output_dir / 'pipeline_dependencies.json'}`",
-            f"- `{output_dir / 'pipeline_dependencies.md'}`",
-            f"- `{output_dir / 'pipeline_runtime_requirements.in'}`",
-            f"- `{output_dir / 'pipeline_test_requirements.in'}`",
+            f"- `{(output_dir / 'pipeline_dependencies.json').as_posix()}`",
+            f"- `{(output_dir / 'pipeline_dependencies.md').as_posix()}`",
+            f"- `{(output_dir / 'pipeline_runtime_requirements.in').as_posix()}`",
+            f"- `{(output_dir / 'pipeline_test_requirements.in').as_posix()}`",
         ]
     )
     lines.append("")

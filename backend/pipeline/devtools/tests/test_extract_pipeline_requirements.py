@@ -86,3 +86,4 @@ def test_report_paths_use_portable_separators(services_root: Path) -> None:
     package = next(entry for entry in report["packages"] if entry["import_name"] == "pytest")
     assert package["test_files"] == ["devtools/tests/test_portable.py"]
     assert "devtools/tests/test_portable.py" in report["external_commands"]["typst"]
+    assert "- `docs/core/python/pipeline_dependencies.json`" in extractor._render_markdown(report).splitlines()
