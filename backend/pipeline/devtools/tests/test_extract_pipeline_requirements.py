@@ -74,3 +74,15 @@ def test_requirements_never_contain_stdlib_module_names(services_root: Path) -> 
 
     assert "requests" in report["runtime_python_packages"]
     assert not {"json", "subprocess", "os"} & set(report["runtime_python_packages"])
+
+
+def test_report_paths_use_portable_separators(services_root: Path) -> None:
+    _write(
+        services_root / "pipeline/devtools/tests/test_portable.py",
+        'import pytest\n# typst compile\n',
+    )
+
+    report = extractor._build_report(services_root)
+    package = next(entry for entry in report["packages"] if entry["import_name"] == "pytest")
+    assert package["test_files"] == ["devtools/tests/test_portable.py"]
+    assert "devtools/tests/test_portable.py" in report["external_commands"]["typst"]

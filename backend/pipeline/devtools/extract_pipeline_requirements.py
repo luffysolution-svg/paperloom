@@ -247,7 +247,7 @@ def _scan_external_commands(scripts_root: Path) -> dict[str, list[str]]:
             except Exception:
                 continue
             if any(marker in text for marker in markers):
-                refs.append(str(path.relative_to(scripts_root)))
+                refs.append(path.relative_to(scripts_root).as_posix())
         if refs:
             results[command] = sorted(refs)
     return results
@@ -263,7 +263,7 @@ def _build_report(services_root: Path) -> dict[str, object]:
         refs = raw_hits[import_name]
         buckets: dict[str, list[str]] = defaultdict(list)
         for hit in refs:
-            buckets[_classify_importer(hit.importer)].append(str(hit.importer.relative_to(scripts_root)))
+            buckets[_classify_importer(hit.importer)].append(hit.importer.relative_to(scripts_root).as_posix())
         package_name = IMPORT_TO_PACKAGE.get(import_name, import_name)
         entry = {
             "import_name": import_name,
