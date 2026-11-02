@@ -1,4 +1,5 @@
-FROM node:22-alpine AS frontend-builder
+# Static browser assets are architecture independent; keep npm/TS builds native.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend-builder
 
 ARG RETAIN_PDF_VERSION=""
 ENV RETAIN_PDF_VERSION="${RETAIN_PDF_VERSION}"
