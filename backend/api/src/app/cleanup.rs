@@ -168,6 +168,15 @@ pub fn spawn_periodic_cleanup_with_interval(
     db: Arc<Db>,
     interval_duration: Duration,
 ) -> tokio::task::JoinHandle<()> {
+    spawn_periodic_cleanup_guarded(settings, db, interval_duration, None)
+}
+
+pub fn spawn_periodic_cleanup_guarded(
+    settings: RetentionSettings,
+    db: Arc<Db>,
+    interval_duration: Duration,
+    gate: Option<Arc<tokio::sync::RwLock<()>>>,
+) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(interval_duration);
         // The first tick fires immediately; skip it since a startup sweep
@@ -175,6 +184,10 @@ pub fn spawn_periodic_cleanup_with_interval(
         interval.tick().await;
         loop {
             interval.tick().await;
+            let _guard = match &gate {
+                Some(gate) => Some(gate.read().await),
+                None => None,
+            };
             if let Err(error) = run_cleanup_once(&settings, &db) {
                 warn!("retention cleanup sweep failed: {error:#}");
             }

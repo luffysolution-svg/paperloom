@@ -16,6 +16,7 @@ use crate::services::uploads::{UploadService, UploadServiceConfig};
 pub struct AppState {
     pub config: Arc<AppConfig>,
     pub db: Arc<Db>,
+    pub(crate) backups: Arc<crate::services::backups::BackupService>,
     pub(crate) ai_gateway: Arc<crate::services::ai::AiGateway>,
     pub(crate) uploads: Arc<UploadService>,
     pub download_generation: Arc<crate::services::download_generation::DownloadGeneration>,
@@ -69,6 +70,10 @@ pub fn build_state(config: Arc<AppConfig>) -> Result<AppState> {
         None
     };
     Ok(AppState {
+        backups: Arc::new(crate::services::backups::BackupService::new(
+            config.clone(),
+            db.clone(),
+        )),
         ai_gateway: Arc::new(crate::services::ai::AiGateway::new(
             &config.ai_proxy,
             config.ai_service.base_url(),
@@ -81,6 +86,7 @@ pub fn build_state(config: Arc<AppConfig>) -> Result<AppState> {
                 python_bin: config.python_bin.clone(),
                 upload_max_bytes: config.upload_max_bytes,
                 upload_max_pages: config.upload_max_pages,
+                min_free_disk_bytes: config.min_free_disk_bytes,
                 processing: config.upload_processing.clone(),
             },
         )),
@@ -170,6 +176,7 @@ mod tests {
                 simple_port: 42000,
                 upload_max_bytes: 0,
                 upload_max_pages: 0,
+                min_free_disk_bytes: 0,
                 upload_processing: Default::default(),
                 api_keys: HashSet::from(["test-key".to_string()]),
                 max_running_jobs: 4,

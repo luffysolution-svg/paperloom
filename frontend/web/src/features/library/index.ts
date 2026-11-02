@@ -26,6 +26,9 @@ export {
   shapeDocumentsWithBooks,
 } from "./domain/documents/shape-documents-with-books.js";
 export {
+  fetchAllDocuments,
+} from "./domain/documents/fetch-all-documents.js";
+export {
   createRecentJobsReactViewPort,
 } from "./domain/recent-jobs-react-port.js";
 export {

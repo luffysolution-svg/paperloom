@@ -8,7 +8,7 @@ use tokio::task::JoinHandle;
 
 use super::jobs::resume_requeued_pipeline_jobs;
 use crate::app::cleanup::{
-    log_startup_settings_with_interval, run_cleanup_once, spawn_periodic_cleanup_with_interval,
+    log_startup_settings_with_interval, run_cleanup_once, spawn_periodic_cleanup_guarded,
     RetentionSettings,
 };
 use crate::app::{build_app, build_simple_app, build_state};
@@ -34,6 +34,7 @@ async fn serve_with_shutdown(
     config: Arc<AppConfig>,
     shutdown: impl std::future::Future<Output = ()> + Send + 'static,
 ) -> Result<()> {
+    crate::services::backups::apply_pending(&config)?;
     let state = build_state(config.clone())?;
     let resumed = resume_requeued_pipeline_jobs(&state)?;
     if resumed > 0 {
@@ -51,10 +52,11 @@ async fn serve_with_shutdown(
     if let Err(error) = run_cleanup_once(&retention_settings, state.db.as_ref()) {
         tracing::warn!("startup retention cleanup sweep failed: {error:#}");
     }
-    let _cleanup_handle = spawn_periodic_cleanup_with_interval(
+    let _cleanup_handle = spawn_periodic_cleanup_guarded(
         retention_settings,
         state.db.clone(),
         config.cleanup.interval,
+        Some(state.backups.gate.clone()),
     );
 
     // 端点使用计数:同样属于运维观测,只在真实服务启动时开,不打扰单测。

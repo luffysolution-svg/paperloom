@@ -41,6 +41,12 @@ pub enum AppError {
     #[error("{0}")]
     Internal(String),
     #[error("{message}")]
+    Reasoned {
+        status: StatusCode,
+        message: String,
+        reason: &'static str,
+    },
+    #[error("{message}")]
     OcrArtifactReuse {
         status: StatusCode,
         code: &'static str,
@@ -162,6 +168,21 @@ impl StructuredError {
 }
 
 impl AppError {
+    pub fn service_unavailable_because(reason: &'static str, message: impl Into<String>) -> Self {
+        Self::Reasoned {
+            status: StatusCode::SERVICE_UNAVAILABLE,
+            message: message.into(),
+            reason,
+        }
+    }
+
+    pub fn too_many_requests_because(reason: &'static str, message: impl Into<String>) -> Self {
+        Self::Reasoned {
+            status: StatusCode::TOO_MANY_REQUESTS,
+            message: message.into(),
+            reason,
+        }
+    }
     pub fn unauthorized(msg: impl Into<String>) -> Self {
         Self::Unauthorized(msg.into())
     }
@@ -303,6 +324,31 @@ impl AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
+        if let Self::Reasoned {
+            status,
+            message,
+            reason,
+        } = &self
+        {
+            let (code, stable_code) = if *status == StatusCode::TOO_MANY_REQUESTS {
+                (42900, "TOO_MANY_REQUESTS")
+            } else {
+                (50300, "SERVICE_UNAVAILABLE")
+            };
+            return (
+                *status,
+                Json(ErrorBody {
+                    code,
+                    message: message.clone(),
+                    error: StructuredError::with_details(
+                        stable_code,
+                        *status,
+                        json!({"reason": reason}),
+                    ),
+                }),
+            )
+                .into_response();
+        }
         if let AppError::OcrArtifactReuse {
             status,
             code,
@@ -427,6 +473,7 @@ impl IntoResponse for AppError {
             AppError::LiveTranslation { .. } => unreachable!("handled above"),
             AppError::DocumentMetadata { .. } => unreachable!("handled above"),
             AppError::DeleteBlockedByFavorites { .. } => unreachable!("handled above"),
+            AppError::Reasoned { .. } => unreachable!("handled above"),
         };
         let body = ErrorBody {
             code,
@@ -456,6 +503,9 @@ impl From<crate::services::uploads::UploadError> for AppError {
         match value {
             UploadError::BadRequest(message) => Self::bad_request(message),
             UploadError::PayloadTooLarge(message) => Self::payload_too_large(message),
+            UploadError::InsufficientStorage(message) => {
+                Self::service_unavailable_because(crate::disk_space::INSUFFICIENT_STORAGE, message)
+            }
             UploadError::Busy => {
                 Self::service_unavailable("PDF processing capacity is busy; please retry")
             }

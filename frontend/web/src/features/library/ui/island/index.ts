@@ -3,6 +3,7 @@ import { APP_EVENTS } from "@/platform/contracts/app-contract.js";
 import { RECENT_JOBS_IDS } from "../recent-jobs-dom-contract.js";
 import { fetchDocumentList, patchDocument } from "@/platform/api/index.js";
 import { searchLibrary } from "@/platform/api/index.js";
+import { fetchAllDocuments } from "../../domain/documents/fetch-all-documents.js";
 
 /** Anchor payload used to open the reader from a search hit / document row. */
 export interface LibrarySearchAnchor {
@@ -77,7 +78,9 @@ class LibrarySearchIsland extends HTMLElement {
     const island = this;
     return {
       searchLibrary: (q) => searchLibrary(API_PREFIX, q),
-      fetchDocumentList: () => fetchDocumentList(API_PREFIX),
+      fetchDocumentList: async () => ({
+        documents: await fetchAllDocuments((page) => fetchDocumentList(API_PREFIX, page)),
+      }),
       patchDocument: (documentId, payload) => patchDocument(API_PREFIX, documentId, payload),
       openReader: (anchor) => {
         const jobId = `${anchor?.job_id || ""}`.trim();

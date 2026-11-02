@@ -2,6 +2,7 @@ pub mod agent_calculations;
 pub mod agent_capabilities;
 pub mod agent_runtime_sessions;
 pub mod ai_proxy;
+pub(crate) mod backups;
 pub mod collections;
 pub mod common;
 pub mod credentials;

@@ -22,6 +22,7 @@ fn make_service(
             python_bin: python_bin.into(),
             upload_max_bytes: 0,
             upload_max_pages: 0,
+            min_free_disk_bytes: 0,
             processing,
         },
     )

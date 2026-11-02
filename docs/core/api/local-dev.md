@@ -64,9 +64,12 @@ Docker 中 `ops/deployment/docker/delivery/docker/auth.local.json` 的 `api_keys
 - `RUST_API_PYTHON_ENTRYPOINT_MODE`：已废弃，不再选择 worker 模式；开发启动器不再传递该变量。
 - `RUST_API_PIPELINE_COMMAND`：辅助任务（如 document-operation）使用的 `retainpdf-pipeline` 命令路径。OCR、翻译、渲染主阶段固定使用 `PYTHON_BIN -m retainpdf_pipeline.ocr|translate|render --spec ...`，不再回退到旧脚本。
 - `PYTHON_BIN`：Python 可执行文件。
-- `RUST_API_UPLOAD_MAX_BYTES`：普通上传大小限制，`0` 表示不限制。
+- `RUST_API_UPLOAD_MAX_BYTES`：普通上传大小限制；`0` 使用安全默认值 512 MiB。
 - `RUST_API_UPLOAD_MAX_PAGES`：普通上传页数限制，`0` 表示不限制。
 - `RUST_API_MAX_RUNNING_JOBS`：最大并发任务数。
+- `RUST_API_MAX_QUEUED_JOBS`：等待执行的任务上限，默认 1000，`0` 不限制；已运行的任务不计入。满时返回 429，`error.details.reason=queue_full`。
+- `RUST_API_MIN_FREE_DISK_MB`：数据盘最低可用空间，默认 1024 MiB，`0` 关闭。上传前及接收过程中检查，建任务／原地续跑前检查；不足返回 503 `insufficient_storage`。Windows 和 Unix 均支持；`/health.data.disk` 提供实际空间和阈值。
+- `RUST_API_DB_REQUIRE_UPGRADE_BACKUP`：默认关闭。开启后，旧库升级前无法创建数据库快照就拒绝升级，保留原结构；快照位于 `DATA_ROOT/backups/schema-upgrades/`。快照只含数据库，全量迁移见[数据备份与迁移](backups.md)。
 
 ## Docker 配置位置
 

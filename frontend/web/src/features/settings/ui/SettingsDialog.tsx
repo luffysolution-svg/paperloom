@@ -35,6 +35,8 @@ import type { DialogStore } from "@/platform/store/dialog-store.js";
 import { useDialogReturnFocus } from "@/ui/hooks/use-dialog-return-focus.js";
 import { APP_SETTINGS_DIALOG_IDS } from "./settings-dialog-ids.js";
 import { ThemeAppearancePanel } from "./ThemeAppearancePanel.jsx";
+import { BackupPanel } from "./BackupPanel.jsx";
+import { DatabaseBackup } from "lucide-react";
 import { Button as ButtonBase } from "@/ui/Button.jsx";
 
 // Decoupled: settings → credentials / app-update 横向依赖改为经 HomeApp 注入(slot)。
@@ -85,6 +87,7 @@ const TABS = [
   { id: "api", label: "接口设置", Icon: IconKey },
   { id: "glossary", label: "术语表", Icon: IconBook },
   { id: "appearance", label: "外观", Icon: IconPalette },
+  { id: "data", label: "数据与备份", Icon: DatabaseBackup },
   { id: "update", label: "更新", Icon: IconUpdate },
 ];
 
@@ -92,6 +95,7 @@ const PANE_HEADS = {
   api: { title: "接口设置", desc: "" },
   glossary: { title: "术语表", desc: "维护术语偏好，翻译时优先使用你的术语。" },
   appearance: { title: "外观", desc: "选择界面配色，立即生效并记住本机选择。" },
+  data: { title: "数据与备份", desc: "导出迁移包，或从本地文件和 WebDAV 恢复资料库。" },
   update: { title: "更新", desc: "查看当前版本、检查更新，并在桌面版中下载和安装新版。" },
 };
 
@@ -256,6 +260,17 @@ export function SettingsDialog({
                 >
                   <PaneHead tab="appearance" />
                   <ThemeAppearancePanel />
+                </TabsPrimitive.Content>
+
+                <TabsPrimitive.Content
+                  value="data"
+                  forceMount
+                  hidden={activeTab !== "data"}
+                  className={panelClass("data")}
+                  data-settings-panel="data"
+                >
+                  <PaneHead tab="data" />
+                  <BackupPanel active={open && activeTab === "data"} />
                 </TabsPrimitive.Content>
 
                 <TabsPrimitive.Content

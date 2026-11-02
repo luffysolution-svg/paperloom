@@ -21,11 +21,14 @@ pub(super) fn should_refresh_bundle_dns(raw_url: &str, error: &str) -> bool {
     let Ok(url) = Url::parse(raw_url) else {
         return false;
     };
+    let error = error.to_ascii_lowercase();
+    let expired_certificate = error.contains("certificate") && error.contains("expired");
+    // A proxy's fake DNS address can close TLS before presenting a certificate.
+    let tls_eof = error.contains("tls handshake eof") || error.contains("unexpected eof");
     url.scheme() == "https"
         && url.host_str() == Some(BUNDLE_HOST)
         && url.port_or_known_default() == Some(443)
-        && error.to_ascii_lowercase().contains("certificate")
-        && error.to_ascii_lowercase().contains("expired")
+        && (expired_certificate || tls_eof)
 }
 
 fn public_bundle_addresses(response: &Value) -> Vec<SocketAddr> {
@@ -103,6 +106,22 @@ pub(super) async fn refreshed_bundle_client(http: &Client, timeout_secs: u64) ->
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn official_bundle_tls_eof_can_refresh_dns_without_weakening_tls() {
+        assert!(should_refresh_bundle_dns(
+            "https://cdn-mineru.openxlab.org.cn/result.zip?signature=private-marker",
+            "client error (Connect): tls handshake eof",
+        ));
+        assert!(!should_refresh_bundle_dns(
+            "https://example.com/result.zip",
+            "tls handshake eof"
+        ));
+        assert!(!should_refresh_bundle_dns(
+            "http://cdn-mineru.openxlab.org.cn/result.zip",
+            "tls handshake eof"
+        ));
+    }
 
     #[test]
     fn expired_official_bundle_certificate_can_refresh_dns_without_changing_the_url() {

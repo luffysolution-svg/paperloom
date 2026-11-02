@@ -187,6 +187,47 @@
 }
 
 /* 接口 / 术语表：启动区（真实表单在独立子对话框，本区是干净的入口说明） */
+@utility app-settings-backup {
+  display: grid;
+  gap: 12px;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.6;
+
+  & section { display: grid; gap: 12px; padding: 16px 0 24px; border-bottom: 1px solid var(--line); }
+  & section:last-child { border-bottom: 0; }
+  & h4 { margin: 0; font-size: 14px; font-weight: 650; }
+  & p { margin: 0; color: var(--muted); }
+  & form { display: grid; gap: 12px; }
+  & label { display: grid; gap: 6px; }
+  & input:not([type="checkbox"]) { width: 100%; min-width: 0; min-height: 38px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); font: inherit; }
+  & input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--ink); flex: none; margin-top: 3px; }
+  & input::placeholder { color: var(--muted); }
+  & button { justify-self: start; min-height: 36px; padding: 6px 12px; border: 1px solid var(--line); border-radius: var(--btn-radius); background: var(--paper); color: var(--ink); font: inherit; cursor: pointer; }
+  & button.app-settings-action { background: var(--btn-primary-bg); color: var(--btn-primary-fg); border-color: transparent; }
+  & button:hover:enabled { filter: brightness(0.96); }
+  & button:disabled { opacity: 0.5; cursor: not-allowed; }
+  & button:focus-visible, & input:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  & .app-backup-check { display: flex; align-items: start; gap: 8px; }
+  & .app-backup-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  & .app-backup-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  & .app-backup-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  & .app-backup-status:empty { display: none; }
+  & .app-backup-status, & .app-backup-error { color: var(--ink); overflow-wrap: anywhere; }
+  & .app-backup-error, & .app-backup-notice { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+  & .app-backup-notice button { margin-top: 8px; }
+  & .app-backup-file-list { margin: 0; padding: 0; list-style: none; }
+  & .app-backup-file-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  & .app-backup-file-list li > div:first-child { min-width: 0; }
+  & small { display: block; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  & .app-backup-path { overflow-wrap: anywhere; }
+
+  @media (max-width: 520px) {
+    & .app-backup-fields { grid-template-columns: minmax(0, 1fr); }
+    & .app-backup-file-list li { flex-wrap: wrap; }
+  }
+}
+
 @utility app-settings-launcher {
   display: grid;
   justify-items: start;

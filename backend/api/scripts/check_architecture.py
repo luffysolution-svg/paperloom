@@ -82,6 +82,7 @@ ALLOWED_APPSTATE_FILES = {
     Path("src/routes/providers.rs"),
     Path("src/routes/uploads.rs"),
     Path("src/services/glossaries/tests.rs"),
+    Path("src/services/backups/tests.rs"),
     Path("src/services/jobs/creation/tests.rs"),
     Path("src/services/jobs/support.rs"),
 }
@@ -131,6 +132,9 @@ ROUTE_STATE_RESOURCE_ALLOWLIST = {
 }
 
 ROUTE_SERVICE_IMPORT_ALLOWLIST = {
+    Path("src/routes/backups.rs"): (
+        "crate::services::backups::",
+    ),
     Path("src/routes/model_requests.rs"): (
         "crate::services::model_requests_api::",
     ),

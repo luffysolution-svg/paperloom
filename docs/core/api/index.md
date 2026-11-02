@@ -5,6 +5,8 @@
 内部 Agent 契约以 [`backend/api/API_SPEC.md`](../../../backend/api/API_SPEC.md)
 及其分领域页面为准。其它 API 文档只作为专题页或历史兼容入口。
 
+资料库导出、导入、重启恢复和手动 WebDAV 备份见[数据备份与迁移](backups.md)。
+
 ## 1. 基础约定
 
 - 完整 API 默认端口：`41000`

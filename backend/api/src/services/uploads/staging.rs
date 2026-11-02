@@ -1,5 +1,6 @@
+use super::incoming::IncomingFile;
 use super::pdf::load_pdf_page_count;
-use super::{UploadError, UploadedPdfInput};
+use super::UploadError;
 use crate::db::Db;
 use crate::models::domain::{build_job_id, now_iso, UploadRecord};
 use std::path::{Path, PathBuf};
@@ -38,6 +39,20 @@ pub(super) fn sanitize_upload_filename(filename: &str) -> Result<PathBuf, Upload
     Ok(PathBuf::from(candidate))
 }
 
+pub(super) enum UploadContent {
+    Bytes(Vec<u8>),
+    Incoming(IncomingFile),
+}
+
+impl UploadContent {
+    pub(super) fn byte_count(&self) -> u64 {
+        match self {
+            Self::Bytes(bytes) => bytes.len() as u64,
+            Self::Incoming(file) => file.byte_count(),
+        }
+    }
+}
+
 pub(super) struct PreparedUpload {
     pending: PendingUpload,
     pub(super) path: PathBuf,
@@ -47,10 +62,12 @@ pub(super) struct PreparedUpload {
 
 pub(super) fn prepare_upload(
     uploads_dir: &Path,
-    upload: UploadedPdfInput,
+    filename: String,
+    developer_mode: bool,
+    content: UploadContent,
     safe_filename: PathBuf,
-    byte_count: u64,
 ) -> Result<PreparedUpload, UploadError> {
+    let byte_count = content.byte_count();
     let upload_id = build_job_id();
     let upload_dir = uploads_dir.join(&upload_id);
     std::fs::create_dir_all(uploads_dir)?;
@@ -58,18 +75,27 @@ pub(super) fn prepare_upload(
     std::fs::create_dir(&upload_dir)?;
     let pending = PendingUpload(upload_dir.clone());
     let upload_path: PathBuf = upload_dir.join(&safe_filename);
-    std::fs::write(&upload_path, &upload.bytes)?;
+    let content_hash = match content {
+        UploadContent::Bytes(bytes) => {
+            std::fs::write(&upload_path, &bytes)?;
+            crate::db::documents::sha256_hex(&bytes)
+        }
+        UploadContent::Incoming(incoming) => {
+            std::fs::rename(incoming.file.path(), &upload_path)?;
+            incoming.file.disarm();
+            incoming.sha256_hex
+        }
+    };
 
     let page_count = load_pdf_page_count(&upload_path).ok();
-    let content_hash = crate::db::documents::sha256_hex(&upload.bytes);
     let record = UploadRecord {
         upload_id,
-        filename: upload.filename,
+        filename,
         stored_path: upload_path.to_string_lossy().to_string(),
         bytes: byte_count,
         page_count: page_count.unwrap_or(0),
         uploaded_at: now_iso(),
-        developer_mode: upload.developer_mode,
+        developer_mode,
         content_hash,
     };
     Ok(PreparedUpload {

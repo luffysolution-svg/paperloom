@@ -9,6 +9,7 @@ use crate::auth;
 use crate::routes::common::{method_not_allowed, unknown_route};
 
 mod ai;
+mod backups;
 mod collections;
 mod credentials;
 mod documents;
@@ -74,8 +75,13 @@ fn authenticated_api_routes(state: &AppState) -> Router<AppState> {
         .merge(providers::routes())
         .merge(fonts::routes())
         .merge(integrations::routes())
+        .merge(backups::routes())
         .merge(crate::routes::model_requests::launcher_routes())
         .method_not_allowed_fallback(method_not_allowed)
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            backups::maintenance_access,
+        ))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             auth::require_api_key,
@@ -85,6 +91,10 @@ fn authenticated_api_routes(state: &AppState) -> Router<AppState> {
 fn authenticated_simple_routes(state: &AppState) -> Router<AppState> {
     simple::routes()
         .method_not_allowed_fallback(method_not_allowed)
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            backups::maintenance_access,
+        ))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             auth::require_api_key,

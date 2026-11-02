@@ -13,7 +13,7 @@ use super::ocr_ambiguity::ambiguous_ocr_dispatch;
 use super::stage_retry_overrides::{
     apply_retry_overrides, discard_ocr_secret_sources, discard_translation_secret_sources,
 };
-use crate::services::job_launcher::start_job_execution;
+use crate::services::job_launcher::{ensure_job_admission, start_job_execution};
 
 impl<'a> JobsFacade<'a> {
     pub fn rerun_submission(
@@ -26,6 +26,7 @@ impl<'a> JobsFacade<'a> {
         let source_job = load_job_or_404(self.command.db, source_job_id)?;
         let plan = resume_plan(&source_job, self.command.control.data_root);
         if plan.resume_workflow == Some(WorkflowKind::Render) {
+            ensure_job_admission(&self.command.submit.launcher)?;
             let job_id = source_job.job_id.clone();
             let ocr_child_id = format!("{}-ocr", job_id);
             // Clean up any previous OCR child that is now orphaned due to in-place rerender

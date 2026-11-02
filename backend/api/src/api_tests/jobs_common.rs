@@ -39,6 +39,7 @@ pub(crate) fn test_state(test_name: &str) -> crate::AppState {
         simple_port: 42000,
         upload_max_bytes: 0,
         upload_max_pages: 0,
+        min_free_disk_bytes: 0,
         upload_processing: Default::default(),
         api_keys: HashSet::from(["test-key".to_string()]),
         max_running_jobs: 1,

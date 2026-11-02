@@ -2,8 +2,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use super::capacity::{busy, UploadCapacity};
+use super::incoming::{remove_stale_incoming, IncomingFile, IncomingUpload};
 use super::pdf::{load_pdf_page_count, repair_pdf_with_pymupdf};
-use super::staging::{prepare_upload, publish_upload, sanitize_upload_filename};
+use super::staging::{prepare_upload, publish_upload, sanitize_upload_filename, UploadContent};
 use super::UploadError;
 use crate::db::Db;
 use crate::models::domain::UploadRecord;
@@ -21,6 +22,7 @@ pub(crate) struct UploadServiceConfig {
     pub(crate) python_bin: String,
     pub(crate) upload_max_bytes: u64,
     pub(crate) upload_max_pages: u32,
+    pub(crate) min_free_disk_bytes: u64,
     pub(crate) processing: UploadProcessingConfig,
 }
 
@@ -38,6 +40,7 @@ pub(crate) struct UploadService {
 
 impl UploadService {
     pub(crate) fn new(db: Arc<Db>, config: UploadServiceConfig) -> Self {
+        remove_stale_incoming(&config.uploads_dir);
         let capacity = Arc::new(UploadCapacity::new(config.processing.clone()));
         Self {
             inner: Arc::new(UploadServiceInner {
@@ -57,18 +60,73 @@ impl UploadService {
         &self,
         upload: UploadedPdfInput,
     ) -> Result<UploadRecord, UploadError> {
+        self.store_content(
+            upload.filename,
+            upload.developer_mode,
+            UploadContent::Bytes(upload.bytes),
+        )
+        .await
+    }
+
+    fn ensure_free_space(&self, extra_bytes: u64) -> Result<(), UploadError> {
+        let floor = self.inner.config.min_free_disk_bytes;
+        if floor == 0 {
+            return Ok(());
+        }
+        crate::disk_space::ensure_free_space(
+            &self.inner.config.uploads_dir,
+            floor.saturating_add(extra_bytes),
+            "upload a PDF",
+        )
+        .map_err(|error| UploadError::InsufficientStorage(error.to_string()))
+    }
+
+    pub(crate) async fn begin_incoming(
+        &self,
+        filename: &str,
+        max_bytes: u64,
+    ) -> Result<IncomingUpload, UploadError> {
+        validate_upload_filename(filename)?;
+        self.ensure_free_space(0)?;
+        let service = self.clone();
+        IncomingUpload::create(
+            &self.inner.config.uploads_dir,
+            max_bytes.min(effective_upload_max_bytes(self.inner.config.upload_max_bytes).get()),
+            Box::new(move || service.ensure_free_space(0)),
+        )
+        .await
+    }
+
+    pub(crate) async fn store_incoming(
+        &self,
+        filename: String,
+        file: IncomingFile,
+        developer_mode: bool,
+    ) -> Result<UploadRecord, UploadError> {
+        self.store_content(filename, developer_mode, UploadContent::Incoming(file))
+            .await
+    }
+
+    async fn store_content(
+        &self,
+        filename: String,
+        developer_mode: bool,
+        content: UploadContent,
+    ) -> Result<UploadRecord, UploadError> {
         let uploads_dir = &self.inner.config.uploads_dir;
         let python_bin = &self.inner.config.python_bin;
         let upload_max_bytes = self.inner.config.upload_max_bytes;
         let upload_max_pages = self.inner.config.upload_max_pages;
-        if !upload.filename.to_lowercase().ends_with(".pdf") {
-            return Err(UploadError::bad_request("uploaded file must be a PDF"));
-        }
-        let byte_count = upload.bytes.len() as u64;
+        let safe_filename = validate_upload_filename(&filename)?;
+        let byte_count = content.byte_count();
         if byte_count > effective_upload_max_bytes(upload_max_bytes).get() {
             return Err(UploadError::payload_too_large("request body is too large"));
         }
-        let safe_filename = sanitize_upload_filename(&upload.filename)?;
+        let extra = match &content {
+            UploadContent::Bytes(_) => byte_count.saturating_mul(2),
+            UploadContent::Incoming(_) => byte_count,
+        };
+        self.ensure_free_space(extra)?;
         let capacity = self.inner.capacity.clone();
         let admitted = capacity
             .admitted
@@ -87,7 +145,13 @@ impl UploadService {
             let prepared = tokio::task::spawn_blocking(move || {
                 let _permit = permit;
                 let _buffer = buffer;
-                prepare_upload(&uploads_dir, upload, safe_filename, byte_count)
+                prepare_upload(
+                    &uploads_dir,
+                    filename,
+                    developer_mode,
+                    content,
+                    safe_filename,
+                )
             })
             .await
             .map_err(|_| UploadError::internal("PDF upload worker failed"))??;
@@ -122,4 +186,11 @@ impl UploadService {
         .await
         .map_err(|_| UploadError::internal("PDF upload worker failed"))?
     }
+}
+
+fn validate_upload_filename(filename: &str) -> Result<PathBuf, UploadError> {
+    if !filename.to_lowercase().ends_with(".pdf") {
+        return Err(UploadError::bad_request("uploaded file must be a PDF"));
+    }
+    sanitize_upload_filename(filename)
 }

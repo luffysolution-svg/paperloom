@@ -11,6 +11,8 @@ mod agent_calculations;
 mod artifacts;
 #[path = "db/assets.rs"]
 mod assets;
+#[path = "db/backup.rs"]
+pub mod backup;
 #[path = "db/collections.rs"]
 mod collections;
 #[path = "db/conversations.rs"]
@@ -47,13 +49,13 @@ mod retention;
 mod rows;
 #[path = "db/schema.rs"]
 mod schema;
+#[cfg(test)]
+#[path = "db/schema_upgrade_tests.rs"]
+mod schema_upgrade_tests;
 #[path = "db/uploads.rs"]
 mod uploads;
 
-use schema::{
-    ensure_events_column, ensure_glossaries_column, ensure_jobs_column,
-    ensure_no_legacy_artifacts_json, ensure_uploads_column, run_versioned_migrations,
-};
+use schema::{ensure_legacy_columns, ensure_no_legacy_artifacts_json, run_versioned_migrations};
 
 /// How long a connection will wait for a lock held by another writer before
 /// giving up with `SQLITE_BUSY`. Without this, concurrent writers (e.g. the
@@ -174,6 +176,11 @@ impl Db {
         if *ready {
             return Ok(());
         }
+        backup::backup_before_upgrade(
+            conn,
+            &self.data_root,
+            retain_core::config::DbConfig::from_env().require_upgrade_backup,
+        )?;
         conn.execute_batch(
             r#"
             PRAGMA journal_mode=WAL;
@@ -272,18 +279,7 @@ impl Db {
         )?;
         // New migrations can reference these columns on pre-library databases.
         // Ensure them before running the migration ladder, not after connect().
-        ensure_jobs_column(conn, "document_id", "TEXT")?;
-        for column in ["stage_detail", "provider", "provider_stage", "event_type"] {
-            ensure_events_column(conn, column, "TEXT")?;
-        }
-        for column in [
-            "progress_current",
-            "progress_total",
-            "retry_count",
-            "elapsed_ms",
-        ] {
-            ensure_events_column(conn, column, "INTEGER")?;
-        }
+        ensure_legacy_columns(conn)?;
         // 图书馆表走版本化迁移,随 schema 保证存在(不依赖 init 被调用)
         run_versioned_migrations(&conn)?;
         *ready = true;
@@ -292,23 +288,7 @@ impl Db {
 
     pub fn init(&self) -> Result<()> {
         let conn = self.connect()?;
-        ensure_jobs_column(&conn, "runtime_json", "TEXT")?;
-        ensure_jobs_column(&conn, "failure_json", "TEXT")?;
-        ensure_glossaries_column(&conn, "description", "TEXT NOT NULL DEFAULT ''")?;
-        ensure_glossaries_column(&conn, "source_lang", "TEXT NOT NULL DEFAULT ''")?;
-        ensure_glossaries_column(&conn, "target_lang", "TEXT NOT NULL DEFAULT ''")?;
-        ensure_glossaries_column(&conn, "enabled", "INTEGER NOT NULL DEFAULT 1")?;
-        ensure_events_column(&conn, "stage_detail", "TEXT")?;
-        ensure_events_column(&conn, "provider", "TEXT")?;
-        ensure_events_column(&conn, "provider_stage", "TEXT")?;
-        ensure_events_column(&conn, "event_type", "TEXT")?;
-        ensure_events_column(&conn, "progress_current", "INTEGER")?;
-        ensure_events_column(&conn, "progress_total", "INTEGER")?;
-        ensure_events_column(&conn, "retry_count", "INTEGER")?;
-        ensure_events_column(&conn, "elapsed_ms", "INTEGER")?;
         ensure_no_legacy_artifacts_json(&conn)?;
-        ensure_uploads_column(&conn, "content_hash", "TEXT NOT NULL DEFAULT ''")?;
-        ensure_jobs_column(&conn, "document_id", "TEXT")?;
         conn.execute_batch(
             "CREATE INDEX IF NOT EXISTS idx_uploads_content_hash ON uploads(content_hash);",
         )?;

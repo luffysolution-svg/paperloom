@@ -3,6 +3,7 @@
 // 从 controller.ts 抽出。依赖全部经参数注入，controller 只做装配。
 
 import { withTimeout } from "@/platform/utils/async-timeout.js";
+import { isRefusedSubmission } from "@/platform/api/index.js";
 import { buildErrorDiagnostic } from "@/platform/utils/error-diagnostics.js";
 import type { UploadPayload, UploadState, UploadStatePort } from "./state.js";
 import type { UploadConfigPortLike, UploadResponsePayload, UploadViewPort } from "./ports.js";
@@ -178,6 +179,12 @@ export function createFileUploadHandler(deps: FileUploadHandlerDeps) {
     } catch (err) {
       resetUploadedFile?.();
       clearFileInputValue?.();
+      if (isRefusedSubmission(err)) {
+        setText("error-box", err.message);
+        viewPort.showUploadStatus("上传失败");
+        applyWorkflowMode();
+        return;
+      }
       setText("error-box", buildErrorDiagnostic(err, {
         operation: "上传 PDF 文件",
         url: uploadUrl,

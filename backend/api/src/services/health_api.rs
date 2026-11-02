@@ -1,6 +1,7 @@
 //! Application facade for liveness and readiness projections.
 
 use serde::Serialize;
+use std::path::Path;
 
 use crate::db::Db;
 use crate::models::domain::{now_iso, JobStatusKind};
@@ -10,6 +11,8 @@ pub struct HealthApiDeps<'a> {
     db: &'a Db,
     ai_supervised: bool,
     jobsd_supervised: bool,
+    data_root: Option<&'a Path>,
+    min_free_disk_bytes: u64,
 }
 
 impl<'a> HealthApiDeps<'a> {
@@ -18,8 +21,23 @@ impl<'a> HealthApiDeps<'a> {
             db,
             ai_supervised,
             jobsd_supervised,
+            data_root: None,
+            min_free_disk_bytes: 0,
         }
     }
+
+    pub fn with_disk(mut self, data_root: &'a Path, min_free_disk_bytes: u64) -> Self {
+        self.data_root = Some(data_root);
+        self.min_free_disk_bytes = min_free_disk_bytes;
+        self
+    }
+}
+
+#[derive(Serialize)]
+pub struct DiskSpaceView {
+    pub free_bytes: Option<u64>,
+    pub min_free_bytes: u64,
+    pub low: bool,
 }
 
 #[derive(Serialize)]
@@ -32,6 +50,7 @@ pub struct HealthView {
     pub ai_service: &'static str,
     pub jobsd: &'static str,
     pub time: String,
+    pub disk: DiskSpaceView,
 }
 
 #[derive(Debug, Serialize)]
@@ -62,6 +81,7 @@ impl ReadinessView {
 }
 
 pub fn build_health_view(deps: &HealthApiDeps<'_>) -> HealthView {
+    let free = deps.data_root.and_then(crate::disk_space::free_space_bytes);
     let db_ok = deps.db.ping().is_ok();
     let queued = deps
         .db
@@ -80,6 +100,12 @@ pub fn build_health_view(deps: &HealthApiDeps<'_>) -> HealthView {
         ai_service: crate::runtime::ai_supervisor::ai_service_status_label(),
         jobsd: crate::runtime::jobsd_supervisor::jobsd_status_label(),
         time: now_iso(),
+        disk: DiskSpaceView {
+            free_bytes: free,
+            min_free_bytes: deps.min_free_disk_bytes,
+            low: deps.min_free_disk_bytes > 0
+                && free.is_some_and(|bytes| bytes < deps.min_free_disk_bytes),
+        },
     }
 }
 

@@ -38,6 +38,47 @@ async fn succeeded(_: ProcessRuntimeDeps, mut job: JobRuntimeState) -> Result<Jo
     Ok(job)
 }
 
+#[tokio::test]
+async fn execution_waiters_keep_fifo_order_across_poll_intervals() {
+    let fixture = Fixture::new(1);
+    fixture.job("first", JobStatusKind::Queued);
+    fixture.job("second", JobStatusKind::Queued);
+    let held = fixture
+        .deps
+        .job_slots
+        .clone()
+        .acquire_owned()
+        .await
+        .unwrap();
+    let (tx, mut rx) = tokio::sync::mpsc::channel(2);
+    let mut workers = Vec::new();
+    for (id, interval) in [("first", 500), ("second", 1)] {
+        let deps = fixture.deps.clone();
+        let tx = tx.clone();
+        workers.push(tokio::spawn(async move {
+            let permit = super::super::execution_queue::wait_for_execution_slot(
+                &deps.db,
+                &deps.canceled_jobs,
+                &deps.job_slots,
+                id,
+                interval,
+            )
+            .await
+            .unwrap()
+            .unwrap();
+            tx.send(id).await.unwrap();
+            drop(permit);
+        }));
+        tokio::task::yield_now().await;
+    }
+    drop(held);
+    assert_eq!(rx.recv().await.unwrap(), "first");
+    assert_eq!(rx.recv().await.unwrap(), "second");
+    for worker in workers {
+        worker.await.unwrap();
+    }
+}
+
 #[test]
 fn workflow_dispatch_does_not_embed_large_pipeline_futures() {
     fn future_size<F, Fut>(_: F) -> usize

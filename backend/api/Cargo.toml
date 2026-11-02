@@ -44,6 +44,8 @@ hmac = "0.13"
 getrandom = "0.2"
 futures-util = "0.3"
 htmd = "0.5"
+roxmltree = "0.21"
+fs2 = "0.4"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

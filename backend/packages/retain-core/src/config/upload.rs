@@ -1,6 +1,6 @@
 use std::num::NonZeroU64;
 
-use super::env_vars::{env_u32, env_u64};
+use super::env_vars::{env_u32, env_u64, env_u64_allow_zero};
 
 pub const DEFAULT_UPLOAD_MAX_BYTES: u64 = 512 * 1024 * 1024;
 
@@ -63,6 +63,7 @@ pub fn effective_upload_max_bytes(configured_max_bytes: u64) -> NonZeroU64 {
 pub struct UploadRuntimeConfig {
     pub upload_max_bytes: u64,
     pub upload_max_pages: u32,
+    pub min_free_disk_bytes: u64,
 }
 
 impl UploadRuntimeConfig {
@@ -70,6 +71,8 @@ impl UploadRuntimeConfig {
         Self {
             upload_max_bytes: env_u64("RUST_API_UPLOAD_MAX_BYTES", 0),
             upload_max_pages: env_u32("RUST_API_UPLOAD_MAX_PAGES", 0),
+            min_free_disk_bytes: env_u64_allow_zero("RUST_API_MIN_FREE_DISK_MB", 1024)
+                .saturating_mul(1024 * 1024),
         }
     }
 
@@ -77,6 +80,8 @@ impl UploadRuntimeConfig {
         Self {
             upload_max_bytes: 0,
             upload_max_pages: 0,
+            min_free_disk_bytes: env_u64_allow_zero("RUST_API_MIN_FREE_DISK_MB", 1024)
+                .saturating_mul(1024 * 1024),
         }
     }
 }

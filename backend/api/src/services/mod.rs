@@ -5,6 +5,7 @@ pub mod agent_runtime_session_api;
 pub(crate) mod agent_runtime_sessions;
 pub(crate) mod ai;
 pub mod artifacts;
+pub(crate) mod backups;
 pub(crate) mod book_projection;
 pub mod credentials;
 pub(crate) mod derived_artifacts;

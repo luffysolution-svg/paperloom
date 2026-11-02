@@ -142,7 +142,7 @@
           "description": "TRANSLATION_MATH_MODES"
         },
         "skip_title_translation": { "type": "boolean" },
-        "classify_batch_size": { "type": "integer" },
+        "classify_batch_size": { "type": "integer", "maximum": 1000 },
         "rule_profile_name": { "type": "string" },
         "custom_rules_text": { "type": "string" },
         "glossary_id": { "type": "string" },
@@ -180,8 +180,8 @@
           "items": { "type": "integer", "minimum": 1 },
           "description": "显式的一基页码；空数组保持 start_page/end_page 的旧语义。"
         },
-        "batch_size": { "type": "integer" },
-        "workers": { "type": "integer" },
+        "batch_size": { "type": "integer", "maximum": 1000 },
+        "workers": { "type": "integer", "maximum": 1000 },
         "accepted_ambiguous_request_risk": { "type": "boolean" }
       }
     },
@@ -191,9 +191,9 @@
       "additionalProperties": false,
       "properties": {
         "render_mode": { "type": "string" },
-        "compile_workers": { "type": "integer" },
+        "compile_workers": { "type": "integer", "maximum": 64 },
         "typst_font_family": { "type": "string" },
-        "pdf_compress_dpi": { "type": "integer" },
+        "pdf_compress_dpi": { "type": "integer", "maximum": 1200 },
         "translated_pdf_name": { "type": "string" },
         "body_font_size_factor": { "type": "number" },
         "body_leading_factor": { "type": "number" },
@@ -215,10 +215,11 @@
       "additionalProperties": false,
       "properties": {
         "job_id": { "type": "string" },
-        "timeout_seconds": { "type": "integer" },
+        "timeout_seconds": { "type": "integer", "maximum": 604800 },
         "no_output_timeout_seconds": {
           "type": "integer",
-          "description": "空闲检测：多久没有 stdout 输出就判定 worker 卡死（秒）。0 表示关闭，也是默认值。与 timeout_seconds 相互独立——后者是整段执行的上限，要按最坏情况给。"
+          "description": "空闲检测：多久没有 stdout 输出就判定 worker 卡死（秒）。0 表示关闭，也是默认值。与 timeout_seconds 相互独立——后者是整段执行的上限，要按最坏情况给。",
+          "maximum": 604800
         },
         "render_after_translation": {
           "type": "boolean",

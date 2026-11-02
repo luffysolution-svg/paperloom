@@ -52,6 +52,7 @@ fn test_state(test_name: &str) -> AppState {
         simple_port: 41001,
         upload_max_bytes: 0,
         upload_max_pages: 0,
+        min_free_disk_bytes: 0,
         upload_processing: Default::default(),
         api_keys: HashSet::new(),
         max_running_jobs: 1,
@@ -80,10 +81,15 @@ fn test_state(test_name: &str) -> AppState {
             python_bin: config.python_bin.clone(),
             upload_max_bytes: config.upload_max_bytes,
             upload_max_pages: config.upload_max_pages,
+            min_free_disk_bytes: config.min_free_disk_bytes,
             processing: config.upload_processing.clone(),
         },
     ));
     AppState {
+        backups: Arc::new(crate::services::backups::BackupService::new(
+            config.clone(),
+            db.clone(),
+        )),
         ai_gateway: Arc::new(
             crate::services::ai::AiGateway::new(
                 &config.ai_proxy,

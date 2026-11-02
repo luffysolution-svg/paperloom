@@ -6,6 +6,8 @@ pub(crate) enum UploadError {
     BadRequest(String),
     #[error("{0}")]
     PayloadTooLarge(&'static str),
+    #[error("{0}")]
+    InsufficientStorage(String),
     #[error("PDF processing capacity is busy; please retry")]
     Busy,
     #[error("PDF processing queue wait timed out")]

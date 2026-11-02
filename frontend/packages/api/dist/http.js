@@ -36,6 +36,24 @@ function summarizeJobRequestContext(payload) {
         parts.push(`source.artifact_job_id=${artifactJobId}`);
     return parts.length > 0 ? ` [${parts.join(", ")}]` : "";
 }
+export const INSUFFICIENT_STORAGE = "insufficient_storage";
+export const INSUFFICIENT_STORAGE_MESSAGE = "磁盘空间不够，删掉一些任务再试。";
+export function refusedSubmissionError(status, payload, url) {
+    const reason = payload?.error?.details?.reason;
+    if (reason !== INSUFFICIENT_STORAGE && reason !== "queue_full")
+        return null;
+    const error = new Error(reason === INSUFFICIENT_STORAGE
+        ? INSUFFICIENT_STORAGE_MESSAGE : "任务队列已满，请等待部分任务开始后再试。");
+    error.name = reason === INSUFFICIENT_STORAGE ? "InsufficientStorageError" : "QueueFullError";
+    error.status = status;
+    error.reason = reason;
+    if (url)
+        error.url = url;
+    return error;
+}
+export function isRefusedSubmission(error) {
+    return error instanceof Error && [INSUFFICIENT_STORAGE, "queue_full"].includes(error.reason || "");
+}
 export async function submitJson(url, payload, options = {}) {
     const timeoutMs = Number(options.timeoutMs) || 0;
     // 裸 fetch 没有超时：对端挂起时 promise 永不 settle，调用方的"进行中"状态
@@ -72,6 +90,9 @@ export async function submitJson(url, payload, options = {}) {
         const contentType = resp.headers.get("content-type") || "";
         if (contentType.includes("application/json")) {
             const errorPayload = await resp.json();
+            const refused = refusedSubmissionError(resp.status, errorPayload, url);
+            if (refused)
+                throw refused;
             const error = new Error(`提交失败: ${resp.status} ${errorPayload.message || JSON.stringify(errorPayload)}${requestContext}`);
             error.status = resp.status;
             error.url = url;
@@ -112,6 +133,11 @@ export function submitUploadRequest(url, form, onProgress) {
         xhr.addEventListener("load", () => {
             if (xhr.status >= 200 && xhr.status < 300) {
                 resolve(unwrapEnvelope(xhr.response));
+                return;
+            }
+            const refused = refusedSubmissionError(xhr.status, xhr.response, url);
+            if (refused) {
+                reject(refused);
                 return;
             }
             const message = typeof xhr.response === "object" && xhr.response ? (xhr.response.message || JSON.stringify(xhr.response)) : (xhr.responseText || "");

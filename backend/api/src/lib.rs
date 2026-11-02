@@ -1,5 +1,6 @@
 pub mod app;
 pub mod auth;
+pub(crate) mod disk_space;
 pub mod error;
 pub mod routes;
 pub(crate) mod runtime;

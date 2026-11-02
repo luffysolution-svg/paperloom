@@ -8,6 +8,8 @@
 - `DATA_ROOT/jobs/{job_id}/`：任务工作目录。
 - `DATA_ROOT/downloads/`：下载缓存。
 - `DATA_ROOT/db/jobs.db`：SQLite 数据库。
+- `DATA_ROOT/uploads/.incoming/`：正在上传的临时文件。普通 PDF 上传边接收边写盘并计算 SHA-256，完整接收后换名进上传目录；中断、超限、校验失败时清理临时文件。启动时清理超过一小时的旧临时文件。
+- `DATA_ROOT/backups/schema-upgrades/`：数据库结构升级前的 SQLite 快照，包含已提交 WAL 页；不包含 PDF 和凭据文件。
 
 ## 任务目录
 

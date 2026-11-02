@@ -3,7 +3,7 @@ use std::path::Path;
 use crate::db::Db;
 use crate::error::AppError;
 use crate::job_events::persist_job_with_resources;
-use crate::models::domain::JobSnapshot;
+use crate::models::domain::{JobSnapshot, JobStatusKind};
 
 use super::runtime_gateway::JobRuntimeLauncher;
 
@@ -13,6 +13,8 @@ pub struct JobLaunchDeps<'a> {
     pub data_root: &'a Path,
     pub output_root: &'a Path,
     pub runtime: JobRuntimeLauncher,
+    pub min_free_disk_bytes: u64,
+    pub max_queued_jobs: u64,
 }
 
 impl<'a> JobLaunchDeps<'a> {
@@ -27,14 +29,44 @@ impl<'a> JobLaunchDeps<'a> {
             data_root,
             output_root,
             runtime,
+            min_free_disk_bytes: 0,
+            max_queued_jobs: 0,
         }
     }
+
+    pub fn with_admission_limits(mut self, min_free_disk_bytes: u64, max_queued_jobs: u64) -> Self {
+        self.min_free_disk_bytes = min_free_disk_bytes;
+        self.max_queued_jobs = max_queued_jobs;
+        self
+    }
+}
+
+pub(crate) fn ensure_job_admission(deps: &JobLaunchDeps<'_>) -> Result<(), AppError> {
+    crate::disk_space::ensure_free_space(
+        deps.data_root,
+        deps.min_free_disk_bytes,
+        "create or resume a job",
+    )?;
+    if deps.max_queued_jobs > 0 {
+        let queued = deps.db.count_jobs_with_status(&JobStatusKind::Queued)?;
+        if queued as u64 >= deps.max_queued_jobs {
+            return Err(AppError::too_many_requests_because(
+                "queue_full",
+                format!(
+                    "任务队列已满（{queued}/{}），请等待任务开始执行后再试。",
+                    deps.max_queued_jobs
+                ),
+            ));
+        }
+    }
+    Ok(())
 }
 
 pub fn start_job_execution(
     deps: &JobLaunchDeps<'_>,
     job: JobSnapshot,
 ) -> Result<JobSnapshot, AppError> {
+    ensure_job_admission(deps)?;
     // The new contract must never silently use the legacy Python transport.
     // Worker rollout is a separate, explicit gate while migration is in flight.
     if job

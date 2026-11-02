@@ -51,6 +51,7 @@ async fn store_pdf_upload(
             python_bin: python_bin.into(),
             upload_max_bytes,
             upload_max_pages,
+            min_free_disk_bytes: 0,
             processing: Default::default(),
         },
     )

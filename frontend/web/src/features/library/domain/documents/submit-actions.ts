@@ -2,6 +2,7 @@
 
 import { API_PREFIX } from "@/platform/config/api-constants.js";
 import {
+  isRefusedSubmission,
   ocrDocument as defaultOcrDocument,
   translateDocument as defaultTranslateDocument,
 } from "@/platform/api/index.js";
@@ -54,6 +55,7 @@ export function createDocumentSubmitActions({
         assembleTranslatePayload(payload, buildTranslateConfig),
       )) as JobSubmissionView;
     } catch (error) {
+      if (isRefusedSubmission(error)) throw error;
       throw new Error(friendlyTranslateError(error as ErrorLike, { reusingOcr }));
     } finally {
       translatingDocumentIds.delete(normalizedId);
@@ -80,6 +82,7 @@ export function createDocumentSubmitActions({
         assembleOcrPayload(payload, buildOcrConfig),
       )) as JobSubmissionView;
     } catch (error) {
+      if (isRefusedSubmission(error)) throw error;
       const message = typeof error === "string" ? error : `${(error as Error)?.message || error || ""}`;
       if (/(token|key|凭据|令牌|密钥|credential)/i.test(message)) {
         throw new Error("OCR 需要先在「设置」里配置 OCR 凭据后再试。");

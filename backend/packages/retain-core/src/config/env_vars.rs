@@ -19,6 +19,13 @@ pub fn env_u64(name: &str, fallback: u64) -> u64 {
         .unwrap_or(fallback)
 }
 
+pub fn env_u64_allow_zero(name: &str, fallback: u64) -> u64 {
+    env::var(name)
+        .ok()
+        .and_then(|value| value.trim().parse().ok())
+        .unwrap_or(fallback)
+}
+
 pub fn env_u32(name: &str, fallback: u32) -> u32 {
     env::var(name)
         .ok()

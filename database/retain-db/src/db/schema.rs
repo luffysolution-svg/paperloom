@@ -7,7 +7,6 @@ use rusqlite::{Connection, Transaction, TransactionBehavior};
 /// 任务系统的表;平台新表(documents/favorites/...)从这里走版本化
 /// 迁移,后续破坏性变更只能追加新版本,不允许改历史条目。
 /// 迁移阶梯当前版本数——测试用它做幂等断言，加迁移时无需再手改测试。
-#[cfg(test)]
 pub(crate) fn versioned_migration_count() -> i64 {
     VERSIONED_MIGRATIONS.len() as i64
 }
@@ -596,56 +595,62 @@ pub(super) fn run_versioned_migrations(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn ensure_uploads_column(
-    conn: &Connection,
-    column: &str,
-    column_def: &str,
-) -> Result<()> {
-    ensure_table_column(conn, "uploads", column, column_def)
-}
+const LEGACY_COLUMNS: &[(&str, &str, &str)] = &[
+    ("jobs", "document_id", "TEXT"),
+    ("jobs", "runtime_json", "TEXT"),
+    ("jobs", "failure_json", "TEXT"),
+    ("uploads", "content_hash", "TEXT NOT NULL DEFAULT ''"),
+    ("glossaries", "description", "TEXT NOT NULL DEFAULT ''"),
+    ("glossaries", "source_lang", "TEXT NOT NULL DEFAULT ''"),
+    ("glossaries", "target_lang", "TEXT NOT NULL DEFAULT ''"),
+    ("glossaries", "enabled", "INTEGER NOT NULL DEFAULT 1"),
+    ("events", "stage_detail", "TEXT"),
+    ("events", "provider", "TEXT"),
+    ("events", "provider_stage", "TEXT"),
+    ("events", "event_type", "TEXT"),
+    ("events", "progress_current", "INTEGER"),
+    ("events", "progress_total", "INTEGER"),
+    ("events", "retry_count", "INTEGER"),
+    ("events", "elapsed_ms", "INTEGER"),
+];
 
-pub(super) fn ensure_jobs_column(conn: &Connection, column: &str, column_def: &str) -> Result<()> {
-    ensure_table_column(conn, "jobs", column, column_def)
-}
-
-pub(super) fn ensure_events_column(
-    conn: &Connection,
-    column: &str,
-    column_def: &str,
-) -> Result<()> {
-    ensure_table_column(conn, "events", column, column_def)
-}
-
-pub(super) fn ensure_glossaries_column(
-    conn: &Connection,
-    column: &str,
-    column_def: &str,
-) -> Result<()> {
-    ensure_table_column(conn, "glossaries", column, column_def)
-}
-
-fn ensure_table_column(
-    conn: &Connection,
-    table: &str,
-    column: &str,
-    column_def: &str,
-) -> Result<()> {
-    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
-    let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
-    let mut has_column = false;
-    for row in rows {
-        if row? == column {
-            has_column = true;
-            break;
-        }
+pub(super) fn ensure_legacy_columns(conn: &Connection) -> Result<()> {
+    if missing_legacy_columns(conn)?.is_empty() {
+        return Ok(());
     }
-    if !has_column {
-        conn.execute(
-            &format!("ALTER TABLE {table} ADD COLUMN {column} {column_def}"),
+    let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
+    for (table, column, definition) in missing_legacy_columns(&tx)? {
+        tx.execute(
+            &format!("ALTER TABLE {table} ADD COLUMN {column} {definition}"),
             [],
         )?;
     }
+    tx.commit()?;
     Ok(())
+}
+
+fn missing_legacy_columns(
+    conn: &Connection,
+) -> Result<Vec<(&'static str, &'static str, &'static str)>> {
+    let mut missing = Vec::new();
+    let mut tables: Vec<(&str, Vec<String>)> = Vec::new();
+    for &(table, column, definition) in LEGACY_COLUMNS {
+        if !tables.iter().any(|(name, _)| *name == table) {
+            let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+            let columns = stmt
+                .query_map([], |row| row.get::<_, String>(1))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            tables.push((table, columns));
+        }
+        let (_, columns) = tables
+            .iter()
+            .find(|(name, _)| *name == table)
+            .expect("table loaded");
+        if !columns.iter().any(|name| name == column) {
+            missing.push((table, column, definition));
+        }
+    }
+    Ok(missing)
 }
 
 pub(super) fn ensure_no_legacy_artifacts_json(conn: &Connection) -> Result<()> {

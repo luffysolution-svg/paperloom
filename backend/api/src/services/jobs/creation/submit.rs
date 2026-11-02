@@ -2,7 +2,7 @@ use crate::db::PipelineDispatchRecord;
 use crate::error::AppError;
 use crate::models::domain::JobSnapshot;
 use crate::models::request::CreateJobInput;
-use crate::services::job_launcher::start_job_execution;
+use crate::services::job_launcher::{ensure_job_admission, start_job_execution};
 use serde_json::Value;
 
 use super::job_builders::{build_ocr_job_snapshot, build_translation_job_snapshot};
@@ -14,6 +14,7 @@ pub(crate) fn create_translation_job(
     deps: &JobSubmitDeps<'_>,
     input: &CreateJobInput,
 ) -> Result<JobSnapshot, AppError> {
+    ensure_job_admission(&deps.launcher)?;
     let job = build_translation_job_snapshot(&deps.snapshot, input)?;
     let job = secure_job_credentials(deps, job)?;
     let _credential_guard = acquire_job_credential_usage_lock(deps, &job)?;
@@ -27,6 +28,7 @@ pub(crate) fn create_ocr_ambiguity_recovery_job(
     resolution: &str,
     receipt: Option<&Value>,
 ) -> Result<JobSnapshot, AppError> {
+    ensure_job_admission(&deps.launcher)?;
     let job = build_translation_job_snapshot(&deps.snapshot, input)?;
     let job = secure_job_credentials(deps, job)?;
     let _credential_guard = acquire_job_credential_usage_lock(deps, &job)?;
@@ -49,6 +51,7 @@ pub(crate) async fn create_ocr_job_from_upload(
     input: &CreateJobInput,
     upload: Option<UploadedPdfInput>,
 ) -> Result<JobSnapshot, AppError> {
+    ensure_job_admission(&deps.launcher)?;
     let stored = match upload {
         Some(upload) => Some(deps.uploads.store(upload).await?),
         None => None,

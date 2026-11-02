@@ -70,6 +70,10 @@ pub fn build_jobs_facade_from_state(state: &AppState) -> JobsFacade<'_> {
         &state.config.data_root,
         &state.config.output_root,
         runtime_launcher,
+    )
+    .with_admission_limits(
+        state.config.min_free_disk_bytes,
+        state.config.job_runner.max_queued_jobs,
     );
     let snapshot = SnapshotBuildDeps::new(state.db.as_ref(), state.config.job_snapshot_runtime());
     let submit = JobSubmitDeps::new(snapshot, state.uploads.as_ref(), launcher);

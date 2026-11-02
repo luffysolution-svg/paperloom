@@ -1,4 +1,4 @@
-use super::env_vars::env_u64;
+use super::env_vars::{env_u64, env_u64_allow_zero};
 
 /// 跑 job 的 tokio worker 线程栈大小。
 ///
@@ -31,6 +31,7 @@ pub const JOB_WORKER_THREAD_STACK_BYTES: usize = 8 * 1024 * 1024;
 #[derive(Clone, Debug)]
 pub struct JobRunnerConfig {
     pub queue_poll_interval_ms: u64,
+    pub max_queued_jobs: u64,
     pub worker_terminate_grace_secs: u64,
     pub worker_terminate_poll_ms: u64,
     /// 进程退出后,等 stdout / stderr 读取任务收尾的上限(秒)。
@@ -46,6 +47,7 @@ impl JobRunnerConfig {
     pub fn from_env() -> Self {
         Self {
             queue_poll_interval_ms: env_u64("RUST_API_QUEUE_POLL_INTERVAL_MS", 250),
+            max_queued_jobs: env_u64_allow_zero("RUST_API_MAX_QUEUED_JOBS", 1000),
             worker_terminate_grace_secs: env_u64("RUST_API_WORKER_TERMINATE_GRACE_SECS", 3),
             worker_terminate_poll_ms: env_u64("RUST_API_WORKER_TERMINATE_POLL_MS", 100),
             worker_output_drain_secs: env_u64("RUST_API_WORKER_OUTPUT_DRAIN_SECS", 30),

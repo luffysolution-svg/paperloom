@@ -5,10 +5,13 @@ use crate::error::AppError;
 use crate::models::api::ApiResponse;
 use crate::models::domain::UploadRecord;
 use crate::routes::common::{
-    build_upload_route_deps, ok_json, read_multipart_field_limited, read_multipart_text_limited,
-    safe_multipart_error, ApiMultipart, UploadRouteDeps,
+    build_upload_route_deps, ok_json, read_multipart_text_limited, safe_multipart_error,
+    ApiMultipart, UploadRouteDeps,
 };
-use crate::services::uploads::api::{store_upload as store_upload_service, store_upload_view};
+use crate::services::uploads::api::{
+    begin_incoming_upload, store_incoming_upload_view, store_upload as store_upload_service,
+    IncomingFile,
+};
 use crate::AppState;
 
 pub async fn upload_pdf(
@@ -20,22 +23,27 @@ pub async fn upload_pdf(
 
     let deps = build_upload_route_deps(&state);
     let mut file_name: Option<String> = None;
-    let mut file_bytes: Option<Vec<u8>> = None;
+    let mut incoming_file: Option<IncomingFile> = None;
     let mut developer_mode = false;
 
-    while let Some(field) = multipart.next_field().await.map_err(safe_multipart_error)? {
+    while let Some(mut field) = multipart.next_field().await.map_err(safe_multipart_error)? {
         let name = field.name().unwrap_or_default().to_string();
         if name == "file" {
-            if file_bytes.is_some() {
+            if incoming_file.is_some() {
                 return Err(AppError::bad_request("duplicate multipart field: file"));
             }
             let filename = field
                 .file_name()
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| "upload.pdf".to_string());
-            let data = read_multipart_field_limited(field, deps.upload_max_bytes).await?;
+            let mut incoming =
+                begin_incoming_upload(&deps.uploads, &filename, deps.upload_max_bytes.get())
+                    .await?;
+            while let Some(chunk) = field.chunk().await.map_err(safe_multipart_error)? {
+                incoming.write_chunk(&chunk).await?;
+            }
             file_name = Some(filename);
-            file_bytes = Some(data.to_vec());
+            incoming_file = Some(incoming.finish().await?);
         } else if name == "developer_mode" {
             let value = read_multipart_text_limited(field, TEXT_FIELD_MAX_BYTES).await?;
             developer_mode = matches!(value.trim(), "1" | "true" | "True" | "TRUE");
@@ -44,9 +52,9 @@ pub async fn upload_pdf(
 
     let filename =
         file_name.ok_or_else(|| AppError::bad_request("missing multipart field: file"))?;
-    let bytes = file_bytes.ok_or_else(|| AppError::bad_request("empty upload"))?;
+    let file = incoming_file.ok_or_else(|| AppError::bad_request("empty upload"))?;
     Ok(ok_json(
-        store_upload_view(&deps.uploads, filename, bytes, developer_mode).await?,
+        store_incoming_upload_view(&deps.uploads, filename, file, developer_mode).await?,
     ))
 }
 

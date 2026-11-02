@@ -80,6 +80,7 @@ async fn all_upload_consumers_use_the_injected_processing_budget() {
             python_bin: "/never-start-python".into(),
             upload_max_bytes: 0,
             upload_max_pages: 0,
+            min_free_disk_bytes: 0,
             processing,
         },
     ));
@@ -125,7 +126,7 @@ async fn all_upload_consumers_use_the_injected_processing_budget() {
             "PDF exceeds processing buffer budget",
             "{uri}"
         );
-        assert_eq!(std::fs::read_dir(&uploads_dir).unwrap().count(), 0);
+        assert!(upload_leftovers(&uploads_dir).is_empty());
         assert_eq!(std::fs::read_dir(&output_root).unwrap().count(), 0);
         assert!(db.list_jobs(10, 0, None, None).unwrap().is_empty());
     }
@@ -196,6 +197,32 @@ async fn upload_route_preserves_success_view_and_document_deduplication() {
     );
     assert!(std::path::Path::new(&first.stored_path).exists());
     assert!(std::path::Path::new(&second.stored_path).exists());
+    assert_eq!(std::fs::read(&first.stored_path).unwrap(), pdf);
+    assert_eq!(first.content_hash, crate::db::documents::sha256_hex(&pdf));
+    let incoming = std::path::Path::new(&first.stored_path)
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join(".incoming");
+    assert_eq!(std::fs::read_dir(incoming).unwrap().count(), 0);
+}
+
+fn upload_leftovers(directory: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut leftovers = Vec::new();
+    for entry in std::fs::read_dir(directory).unwrap() {
+        let path = entry.unwrap().path();
+        if path.file_name().is_some_and(|name| name == ".incoming") {
+            leftovers.extend(
+                std::fs::read_dir(path)
+                    .unwrap()
+                    .map(|entry| entry.unwrap().path()),
+            );
+        } else {
+            leftovers.push(path);
+        }
+    }
+    leftovers
 }
 
 #[tokio::test]
@@ -209,6 +236,7 @@ async fn upload_route_repair_unavailable_preserves_safe_error_and_cleanup() {
             python_bin: "/synthetic-private-missing-python".into(),
             upload_max_bytes: 0,
             upload_max_pages: 0,
+            min_free_disk_bytes: 0,
             processing: Default::default(),
         },
     ));
@@ -228,7 +256,7 @@ async fn upload_route_repair_unavailable_preserves_safe_error_and_cleanup() {
     assert_eq!(payload["error"]["http_status"], 503);
     assert_eq!(payload["error"]["details"], serde_json::json!({}));
     assert!(!payload.to_string().contains("synthetic-private"));
-    assert_eq!(std::fs::read_dir(uploads_dir).unwrap().count(), 0);
+    assert!(upload_leftovers(&uploads_dir).is_empty());
 }
 
 const UPLOAD_BOUNDARY: &str = "retainpdf-upload-route-test";
@@ -283,10 +311,7 @@ async fn upload_route_enforces_configured_stream_limit_without_content_length() 
     assert_eq!(payload["code"], 41300);
     assert_eq!(payload["message"], "request body is too large");
     assert_eq!(payload["error"]["code"], "PAYLOAD_TOO_LARGE");
-    let entries = std::fs::read_dir(uploads_dir)
-        .expect("read uploads directory")
-        .collect::<Result<Vec<_>, _>>()
-        .expect("collect uploads directory");
+    let entries = upload_leftovers(&uploads_dir);
     assert!(entries.is_empty(), "oversize route upload created files");
 }
 

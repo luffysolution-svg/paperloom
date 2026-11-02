@@ -9,7 +9,7 @@ import {
   patchCollection,
   removeDocumentFromCollection,
 } from "@/platform/api/index.js";
-import { shapeDocumentsWithBooks } from "@/features/library/index.js";
+import { fetchAllDocuments, shapeDocumentsWithBooks } from "@/features/library/index.js";
 
 /** 合集记录。领域真值在本功能内，装配层从 @/features/collections 引用。 */
 export type CollectionRecord = {
@@ -37,15 +37,12 @@ export function createCollectionsController({ apiPrefix }) {
 
     // 管理弹窗的勾选清单:全部文档(document 形状,含 title),够用不需要
     // job 卡片的视觉字段。
-    listAllDocuments: async () => {
-      const { documents = [] } = await fetchDocumentList(apiPrefix, { limit: 500 });
-      return documents;
-    },
+    listAllDocuments: () => fetchAllDocuments((page) => fetchDocumentList(apiPrefix, page)),
 
     // 某个合集当前的成员 document_id 集合(管理弹窗打开已有合集时用来
     // 勾选初始状态)。
     async listCollectionDocumentIds(collectionId) {
-      const { documents = [] } = await fetchDocumentList(apiPrefix, { collectionId, limit: 500 });
+      const documents = await fetchAllDocuments((page) => fetchDocumentList(apiPrefix, { collectionId, ...page }));
       return documents.map((doc: { document_id?: string }) => doc.document_id);
     },
 
@@ -59,7 +56,7 @@ export function createCollectionsController({ apiPrefix }) {
     // 留已翻译文档 → 满是馆藏的合集显示"空合集"(和 document_count 对不上的
     // bug),收口到统一编排后不会再发散。
     async fetchFolderBooks(collectionId) {
-      const { documents = [] } = await fetchDocumentList(apiPrefix, { collectionId, limit: 500 });
+      const documents = await fetchAllDocuments((page) => fetchDocumentList(apiPrefix, { collectionId, ...page }));
       return shapeDocumentsWithBooks(documents, {
         fetchLibraryBookList,
         fetchJobPayload,

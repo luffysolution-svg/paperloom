@@ -1,4 +1,5 @@
 import { buildErrorDiagnostic } from "@/platform/utils/error-diagnostics.js";
+import { isRefusedSubmission } from "@/platform/api/index.js";
 import type { RunSubmitFlowOptions, SetTextFn } from "./contracts.js";
 
 // 提交失败的归一口径：missing_upload 由调用方判定并复位上传态；其余错误统一
@@ -20,6 +21,7 @@ export function reportSubmitError({
   collectRunPayload?: RunSubmitFlowOptions["collectRunPayload"];
   setText?: SetTextFn;
 }) {
+  if (isRefusedSubmission(err)) { setText("error-box", err.message); return; }
   const isOcr = `${workflow || (collectRunPayload?.() as any)?.workflow || ""}`.trim() === "ocr";
   setText("error-box", buildErrorDiagnostic(err, {
     operation: "提交 PDF 任务",

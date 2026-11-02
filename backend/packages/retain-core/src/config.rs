@@ -121,6 +121,7 @@ pub struct AppConfig {
     pub simple_port: u16,
     pub upload_max_bytes: u64,
     pub upload_max_pages: u32,
+    pub min_free_disk_bytes: u64,
     pub upload_processing: UploadProcessingConfig,
     pub api_keys: HashSet<String>,
     pub max_running_jobs: usize,
@@ -296,6 +297,7 @@ impl AppConfig {
             simple_port: auth.simple_port,
             upload_max_bytes: upload.upload_max_bytes,
             upload_max_pages: upload.upload_max_pages,
+            min_free_disk_bytes: upload.min_free_disk_bytes,
             // Processing overrides also apply to desktop; snapshot once at startup.
             upload_processing: UploadProcessingConfig::from_env(),
             api_keys: auth.api_keys,

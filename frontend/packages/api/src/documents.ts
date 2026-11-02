@@ -1,6 +1,6 @@
 // documents — pure
 import { buildApiHeaders, unwrapEnvelope } from "./internal/runtime.js";
-import { buildApiEndpoint } from "./http.js";
+import { buildApiEndpoint, refusedSubmissionError } from "./http.js";
 
 export type DocumentRecord = Record<string, any> & {
   document_id?: string;
@@ -135,6 +135,8 @@ function documentRequestError(
   status: number,
   payload: any,
 ): DocumentRequestError {
+  const refused = refusedSubmissionError(status, payload);
+  if (refused) return refused;
   // 通用错误把结构化数据放在 payload.error.details；老接口可能直接在 payload.details/data。
   const structured = payload?.error && typeof payload.error === "object" ? payload.error : null;
   const details = structured?.details && typeof structured.details === "object"
@@ -356,7 +358,8 @@ export async function ocrDocument(
   });
   if (!resp.ok) {
     const envelope: any = await resp.json().catch(() => null);
-    throw new Error(`${envelope?.message || "发起 OCR 失败，请稍后重试。"}(${resp.status})`);
+    throw refusedSubmissionError(resp.status, envelope)
+      ?? new Error(`${envelope?.message || "发起 OCR 失败，请稍后重试。"}(${resp.status})`);
   }
   return unwrapEnvelope(await resp.json());
 }

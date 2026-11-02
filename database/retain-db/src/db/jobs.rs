@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use rusqlite::{params, params_from_iter, types::Value, Row};
+use rusqlite::{params, params_from_iter, types::Value, OptionalExtension, Row};
 
 use crate::models::domain::{
     JobFailureInfo, JobRuntimeInfo, JobSnapshot, JobStatusKind, WorkflowKind,
@@ -45,6 +45,19 @@ fn joined_upload_filename(row: &Row<'_>, data_root: &std::path::Path) -> Option<
 }
 
 impl Db {
+    pub fn job_status(&self, job_id: &str) -> Result<Option<JobStatusKind>> {
+        let status: Option<String> = self
+            .connect()?
+            .query_row(
+                "SELECT status_json FROM jobs WHERE job_id=?1",
+                [job_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(status
+            .map(|value| serde_json::from_str(&value))
+            .transpose()?)
+    }
     /// Stream SQL-filtered candidates and stop after the requested matching page.
     /// The optional joined upload filename lets callers preserve domain-specific
     /// search rules without opening one upload query for every historical job.

@@ -17,6 +17,12 @@ use crate::ocr_provider::{
 
 const RENDER_MODES: &[&str] = &["auto", "overlay", "typst", "typst_visual", "dual"];
 const FONT_UNIFY_MODES: &[&str] = &["role_min", "off"];
+// Keep the existing DeepSeek server default (1000) within the accepted range.
+const MAX_TRANSLATION_WORKERS: i64 = 1000;
+const MAX_TRANSLATION_BATCH_SIZE: i64 = 1000;
+const MAX_RENDER_COMPILE_WORKERS: i64 = 64;
+const MAX_RENDER_PDF_COMPRESS_DPI: i64 = 1200;
+const MAX_RUNTIME_TIMEOUT_SECONDS: i64 = 7 * 24 * 3600;
 
 pub fn validate_provider_credentials(input: &CreateJobInput) -> Result<(), AppError> {
     let provider_kind = require_supported_provider(input.ocr.provider.trim())
@@ -148,6 +154,25 @@ pub(crate) fn map_credential_reference_error(error: CredentialResolveError) -> A
 /// 只校验值域封闭的那四个。`mode` 和 `rule_profile_name` 见
 /// `TRANSLATION_MATH_MODES` 上面那段注释。
 pub fn validate_translation_modes(input: &CreateJobInput) -> Result<(), AppError> {
+    for (field, value, max) in [
+        (
+            "translation.workers",
+            input.translation.workers,
+            MAX_TRANSLATION_WORKERS,
+        ),
+        (
+            "translation.batch_size",
+            input.translation.batch_size,
+            MAX_TRANSLATION_BATCH_SIZE,
+        ),
+        (
+            "translation.classify_batch_size",
+            input.translation.classify_batch_size,
+            MAX_TRANSLATION_BATCH_SIZE,
+        ),
+    ] {
+        validate_at_most(field, value, max)?;
+    }
     validate_allowed_value(
         "translation.math_mode",
         &input.translation.math_mode,
@@ -172,6 +197,16 @@ pub fn validate_translation_modes(input: &CreateJobInput) -> Result<(), AppError
 }
 
 pub fn validate_render_options(input: &CreateJobInput) -> Result<(), AppError> {
+    validate_at_most(
+        "render.compile_workers",
+        input.render.compile_workers,
+        MAX_RENDER_COMPILE_WORKERS,
+    )?;
+    validate_at_most(
+        "render.pdf_compress_dpi",
+        input.render.pdf_compress_dpi,
+        MAX_RENDER_PDF_COMPRESS_DPI,
+    )?;
     validate_optional_output_filename(
         "render.translated_pdf_name",
         &input.render.translated_pdf_name,
@@ -257,6 +292,16 @@ fn validate_optional_output_filename(field: &str, value: &str) -> Result<(), App
 ///
 /// 所以这条校验必须挂在所有创建路径的公共入口上，而不是某一条路径里。
 pub fn validate_runtime_limits(input: &CreateJobInput) -> Result<(), AppError> {
+    validate_at_most(
+        "timeout_seconds",
+        input.runtime.timeout_seconds,
+        MAX_RUNTIME_TIMEOUT_SECONDS,
+    )?;
+    validate_at_most(
+        "no_output_timeout_seconds",
+        input.runtime.no_output_timeout_seconds,
+        MAX_RUNTIME_TIMEOUT_SECONDS,
+    )?;
     if input.runtime.timeout_seconds <= 0 {
         return Err(AppError::bad_request(
             "timeout_seconds must be a positive integer",
@@ -392,6 +437,15 @@ fn validate_upload_limit(
 fn looks_like_url(value: &str) -> bool {
     let value = value.trim().to_ascii_lowercase();
     value.starts_with("http://") || value.starts_with("https://")
+}
+
+fn validate_at_most(field: &str, value: i64, max: i64) -> Result<(), AppError> {
+    if value > max {
+        return Err(AppError::bad_request(format!(
+            "{field} must be at most {max}"
+        )));
+    }
+    Ok(())
 }
 
 fn validate_allowed_value(field: &str, value: &str, allowed: &[&str]) -> Result<(), AppError> {
@@ -850,5 +904,71 @@ mod tests {
         assert!(err
             .to_string()
             .contains("render.translated_pdf_name must be a file name"));
+    }
+
+    #[test]
+    fn numeric_job_options_reject_excessive_resource_requests() {
+        let mut defaults = CreateJobInput::default();
+        defaults.translation.model = "deepseek".into();
+        assert!(
+            crate::models::domain::ResolvedJobSpec::from_input(defaults).resolved_workers()
+                <= MAX_TRANSLATION_WORKERS
+        );
+        type Set = fn(&mut CreateJobInput, i64);
+        type Check = fn(&CreateJobInput) -> Result<(), AppError>;
+        let cases: [(&str, i64, Set, Check); 7] = [
+            (
+                "translation.workers",
+                1000,
+                |i, v| i.translation.workers = v,
+                validate_translation_modes,
+            ),
+            (
+                "translation.batch_size",
+                1000,
+                |i, v| i.translation.batch_size = v,
+                validate_translation_modes,
+            ),
+            (
+                "translation.classify_batch_size",
+                1000,
+                |i, v| i.translation.classify_batch_size = v,
+                validate_translation_modes,
+            ),
+            (
+                "render.compile_workers",
+                64,
+                |i, v| i.render.compile_workers = v,
+                validate_render_options,
+            ),
+            (
+                "render.pdf_compress_dpi",
+                1200,
+                |i, v| i.render.pdf_compress_dpi = v,
+                validate_render_options,
+            ),
+            (
+                "timeout_seconds",
+                604800,
+                |i, v| i.runtime.timeout_seconds = v,
+                validate_runtime_limits,
+            ),
+            (
+                "no_output_timeout_seconds",
+                604800,
+                |i, v| i.runtime.no_output_timeout_seconds = v,
+                validate_runtime_limits,
+            ),
+        ];
+        for (field, max, set, check) in cases {
+            let mut input = CreateJobInput::default();
+            set(&mut input, max);
+            check(&input).unwrap();
+            set(&mut input, max + 1);
+            assert!(
+                check(&input).unwrap_err().to_string().contains(field),
+                "{field}"
+            );
+        }
     }
 }

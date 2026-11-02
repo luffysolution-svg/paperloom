@@ -44,6 +44,26 @@ export interface HttpError extends Error {
   url?: string;
   /** true 表示被 submitJson 的 timeoutMs 中止，而非对端返回了错误。 */
   timedOut?: boolean;
+  reason?: string;
+}
+
+export const INSUFFICIENT_STORAGE = "insufficient_storage";
+export const INSUFFICIENT_STORAGE_MESSAGE = "磁盘空间不够，删掉一些任务再试。";
+
+export function refusedSubmissionError(status: number, payload: unknown, url?: string): HttpError | null {
+  const reason = (payload as any)?.error?.details?.reason;
+  if (reason !== INSUFFICIENT_STORAGE && reason !== "queue_full") return null;
+  const error = new Error(reason === INSUFFICIENT_STORAGE
+    ? INSUFFICIENT_STORAGE_MESSAGE : "任务队列已满，请等待部分任务开始后再试。") as HttpError;
+  error.name = reason === INSUFFICIENT_STORAGE ? "InsufficientStorageError" : "QueueFullError";
+  error.status = status;
+  error.reason = reason;
+  if (url) error.url = url;
+  return error;
+}
+
+export function isRefusedSubmission(error: unknown): error is HttpError {
+  return error instanceof Error && [INSUFFICIENT_STORAGE, "queue_full"].includes((error as HttpError).reason || "");
 }
 
 export interface SubmitJsonOptions {
@@ -92,6 +112,8 @@ export async function submitJson(
     const contentType = resp.headers.get("content-type") || "";
     if (contentType.includes("application/json")) {
       const errorPayload: any = await resp.json();
+      const refused = refusedSubmissionError(resp.status, errorPayload, url);
+      if (refused) throw refused;
       const error = new Error(`提交失败: ${resp.status} ${errorPayload.message || JSON.stringify(errorPayload)}${requestContext}`) as HttpError;
       error.status = resp.status;
       error.url = url;
@@ -130,6 +152,8 @@ export function submitUploadRequest(url: string, form: FormData, onProgress?: (l
         resolve(unwrapEnvelope(xhr.response));
         return;
       }
+      const refused = refusedSubmissionError(xhr.status, xhr.response, url);
+      if (refused) { reject(refused); return; }
       const message = typeof xhr.response === "object" && xhr.response ? ((xhr.response as any).message || JSON.stringify(xhr.response)) : ((xhr as any).responseText || "");
       const error = new Error(`提交失败: ${xhr.status} ${message}`) as HttpError;
       error.status = xhr.status;

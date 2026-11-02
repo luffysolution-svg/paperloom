@@ -1,3 +1,4 @@
+pub(crate) use super::incoming::{IncomingFile, IncomingUpload};
 use super::{UploadService, UploadedPdfInput};
 use crate::error::AppError;
 use crate::models::api::{upload_to_response, UploadView};
@@ -11,6 +12,30 @@ impl<'a> UploadApiDeps<'a> {
     pub(crate) fn new(uploads: &'a UploadService) -> Self {
         Self { uploads }
     }
+}
+
+pub(crate) async fn begin_incoming_upload(
+    deps: &UploadApiDeps<'_>,
+    filename: &str,
+    max_bytes: u64,
+) -> Result<IncomingUpload, AppError> {
+    deps.uploads
+        .begin_incoming(filename, max_bytes)
+        .await
+        .map_err(AppError::from)
+}
+
+pub(crate) async fn store_incoming_upload_view(
+    deps: &UploadApiDeps<'_>,
+    filename: String,
+    file: IncomingFile,
+    developer_mode: bool,
+) -> Result<UploadView, AppError> {
+    let upload = deps
+        .uploads
+        .store_incoming(filename, file, developer_mode)
+        .await?;
+    Ok(upload_to_response(&upload))
 }
 
 pub(crate) async fn store_upload(
@@ -27,14 +52,4 @@ pub(crate) async fn store_upload(
         })
         .await
         .map_err(AppError::from)
-}
-
-pub(crate) async fn store_upload_view(
-    deps: &UploadApiDeps<'_>,
-    filename: String,
-    bytes: Vec<u8>,
-    developer_mode: bool,
-) -> Result<UploadView, AppError> {
-    let upload = store_upload(deps, filename, bytes, developer_mode).await?;
-    Ok(upload_to_response(&upload))
 }

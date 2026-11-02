@@ -125,6 +125,7 @@ impl<'a> JobsFacade<'a> {
         let request_input = if request.create_new_job {
             build_retry_request(&source_job, &request.stage)?
         } else if matches!(request.stage, RetryStageKind::Render) {
+            crate::services::job_launcher::ensure_job_admission(&self.command.submit.launcher)?;
             let mut job = prepare_in_place_render_job(source_job)?;
             apply_retry_overrides_to_resolved_spec(&mut job.request_payload, &request.overrides)?;
             discard_ocr_secret_sources(&mut job.request_payload.ocr);
