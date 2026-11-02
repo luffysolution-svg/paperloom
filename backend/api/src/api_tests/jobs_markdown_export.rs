@@ -503,14 +503,14 @@ async fn spawn_fake_zotero(pdf_path: &Path) -> String {
 
 #[tokio::test]
 async fn zotero_routes_browse_import_dedupe_and_feed_note_metadata() {
+    let _env_guard = obsidian_env_lock();
     let state = setup("zotero-import", true);
     let pdf_path = state.config.data_root.join("zotero-storage/Chai 2026.pdf");
     fs::create_dir_all(pdf_path.parent().unwrap()).expect("storage");
     fs::write(&pdf_path, crate::test_support::pdf::build_test_pdf_bytes()).expect("pdf");
-    std::env::set_var(
-        crate::services::integrations::zotero::ZOTERO_API_ENV,
-        spawn_fake_zotero(&pdf_path).await,
-    );
+    let env_name = crate::services::integrations::zotero::ZOTERO_API_ENV;
+    let previous = std::env::var_os(env_name);
+    std::env::set_var(env_name, spawn_fake_zotero(&pdf_path).await);
 
     let (status, view) = call(state.clone(), "GET", "/api/v1/integrations/zotero", None).await;
     assert_eq!(status, StatusCode::OK);
@@ -629,4 +629,9 @@ async fn zotero_routes_browse_import_dedupe_and_feed_note_metadata() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
+    if let Some(value) = previous {
+        std::env::set_var(env_name, value);
+    } else {
+        std::env::remove_var(env_name);
+    }
 }
