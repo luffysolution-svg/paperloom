@@ -425,7 +425,13 @@ async fn webdav_creates_a_missing_folder_before_uploading_and_preserves_failed_p
                 folder.0.store(true, Ordering::SeqCst);
                 axum::http::StatusCode::CREATED.into_response()
             }
-            "PUT" => axum::http::StatusCode::INSUFFICIENT_STORAGE.into_response(),
+            "PUT" => {
+                // Drain the upload before responding so a connection reset cannot mask the 507.
+                axum::body::to_bytes(request.into_body(), 10 * 1024 * 1024)
+                    .await
+                    .unwrap();
+                axum::http::StatusCode::INSUFFICIENT_STORAGE.into_response()
+            }
             _ => axum::http::StatusCode::METHOD_NOT_ALLOWED.into_response(),
         }
     }
@@ -453,7 +459,7 @@ async fn webdav_creates_a_missing_folder_before_uploading_and_preserves_failed_p
         .await
         .unwrap_err();
     assert!(failure.to_string().contains("本地迁移包已保留"));
-    assert!(failure.to_string().contains("507"));
+    assert!(failure.to_string().contains("507"), "{failure}");
     assert_eq!(folder.1.load(Ordering::SeqCst), 1);
     let status = state.backups.status().await.unwrap();
     assert_eq!(status.items.len(), 1);
