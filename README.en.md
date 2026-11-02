@@ -232,7 +232,7 @@ PaperLoom is released under the [GNU AGPL-3.0](LICENSE). Every official release 
 
 ## PaperLoom community
 
-The current community QR code expires on **November 1, 2026**. If it has expired, contact the maintainer through the personal WeChat code on the right.
+The current community QR code is valid before **November 9, 2026**. If it has expired, contact the maintainer through the personal WeChat code on the right.
 
 <table>
   <tr>
