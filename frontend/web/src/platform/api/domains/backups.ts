@@ -1,6 +1,7 @@
 import { API_PREFIX } from "@/platform/config/api-constants.js";
 import { isMockMode } from "@/platform/config/runtime.js";
 import { buildApiEndpoint, fetchProtected } from "./http.js";
+import { getDesktopHost } from "@/platform/desktop/host.js";
 
 export type BackupItem = {
   id: string;
@@ -21,6 +22,7 @@ export type BackupStatus = {
   restore_hint: string | null;
   active_tasks: number;
   data_root: string;
+  backup_dir: string;
   webdav: WebDavSettings;
 };
 
@@ -67,6 +69,13 @@ export const backupApi = {
   import: (file: File) => request("/import", { method: "POST", headers: { "Content-Type": "application/zip", "X-Confirm-Replace": "true" }, body: file }),
   restore: (name: string, remote: boolean) => request(remote ? "/webdav/restore" : "/restore", json("POST", { name, confirm_replace: true })),
   cancel: () => request("/pending", { method: "DELETE" }),
+  delete: (name: string, remote: boolean) => request(`${remote ? "/webdav" : ""}/files/${encodeURIComponent(name)}`, { method: "DELETE" }),
+  canOpenLocation: () => Boolean(getDesktopHost()),
+  openLocation: async (name?: string, previous = false): Promise<void> => {
+    const host = getDesktopHost();
+    if (!host) throw new Error("请在运行后端的设备上打开此备份目录。");
+    await host.invoke("open_backup_location", { ...(name ? { name } : {}), previous });
+  },
   saveSettings: (settings: WebDavInput) => request<WebDavSettings>("/webdav/settings", json("PUT", settings)),
   test: (settings: WebDavInput) => request("/webdav/test", json("POST", settings)),
   listRemote: () => request<RemoteBackup[]>("/webdav/files"),

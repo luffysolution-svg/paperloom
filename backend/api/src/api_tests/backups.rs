@@ -18,9 +18,14 @@ async fn backup_routes_require_authentication() {
         ("POST", "/api/v1/backups/restore"),
         ("GET", "/api/v1/backups/download/paperloom-backup-x.zip"),
         ("DELETE", "/api/v1/backups/pending"),
+        ("DELETE", "/api/v1/backups/files/paperloom-backup-x.zip"),
         ("PUT", "/api/v1/backups/webdav/settings"),
         ("POST", "/api/v1/backups/webdav/test"),
         ("GET", "/api/v1/backups/webdav/files"),
+        (
+            "DELETE",
+            "/api/v1/backups/webdav/files/paperloom-backup-x.zip",
+        ),
         ("POST", "/api/v1/backups/webdav/backup"),
         ("POST", "/api/v1/backups/webdav/restore"),
     ] {
@@ -41,6 +46,52 @@ async fn backup_routes_require_authentication() {
             "{method} {path}"
         );
     }
+    drop(app);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn deleting_a_local_backup_only_removes_its_zip_and_metadata() {
+    let state = test_state("backup-delete-http");
+    let root = state.config.project_root.clone();
+    let first = state
+        .backups
+        .clone()
+        .create(Default::default(), false)
+        .await
+        .unwrap();
+    let second = state
+        .backups
+        .clone()
+        .create(Default::default(), false)
+        .await
+        .unwrap();
+    let directory = state.config.data_root.join("backups");
+    std::fs::write(directory.join("webdav.json"), b"configuration must remain").unwrap();
+    let app = build_app(state);
+    for (name, expected) in [
+        ("webdav.json", StatusCode::BAD_REQUEST),
+        (first.name.as_str(), StatusCode::OK),
+        (first.name.as_str(), StatusCode::NOT_FOUND),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/api/v1/backups/files/{name}"))
+                    .header("X-API-Key", "test-key")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), expected);
+    }
+    assert!(!directory.join(&first.name).exists());
+    assert!(!directory.join(first.name.replace(".zip", ".json")).exists());
+    assert!(directory.join(&second.name).is_file());
+    assert!(directory.join("webdav.json").is_file());
     drop(app);
     std::fs::remove_dir_all(root).unwrap();
 }

@@ -29,6 +29,7 @@ const { createDesktopLogger } = require("./src/main/desktop-logging");
 const { createDesktopWindows } = require("./src/main/desktop-windows");
 const { createDesktopUpdater } = require("./src/main/app-update");
 const { launchPortableUpdate } = require("./src/main/portable-update");
+const { openBackupLocation } = require("./src/main/backup-location");
 const {
   findDeepLink,
   readerQueryFromDeepLink,
@@ -770,12 +771,15 @@ ipcMain.handle("desktop:invoke", async (event, command, args = {}) => {
     cancel_app_update: desktopUpdater.cancel,
     install_app_update: desktopUpdater.install,
   };
-  if (Object.hasOwn(updateCommands, command)) {
+  if (Object.hasOwn(updateCommands, command) || command === "open_backup_location") {
     const frame = event.senderFrame;
     const url = frame?.url || "";
     const isLocalPage = frontendGatewayBaseUrl && url.startsWith(`${frontendGatewayBaseUrl}/`);
     const isFilePage = url.startsWith(require("url").pathToFileURL(resolveFrontendRoot() + path.sep).href);
-    if (frame !== event.sender.mainFrame || (!isLocalPage && !isFilePage)) throw new Error("更新命令只允许软件主页面调用");
+    if (frame !== event.sender.mainFrame || (!isLocalPage && !isFilePage)) throw new Error("桌面命令只允许软件主页面调用");
+    if (command === "open_backup_location") {
+      return openBackupLocation(path.join(app.getPath("userData"), "data"), args, shell);
+    }
     return updateCommands[command]();
   }
   switch (command) {

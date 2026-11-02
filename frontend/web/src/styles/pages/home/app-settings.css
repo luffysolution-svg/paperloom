@@ -213,6 +213,7 @@
   & .app-backup-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   & .app-backup-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   & .app-backup-status:empty { display: none; }
+  & .app-backup-feedback { position: sticky; top: 0; z-index: 1; display: grid; gap: 8px; padding-block: 8px; background: var(--paper); }
   & .app-backup-status, & .app-backup-error { color: var(--ink); overflow-wrap: anywhere; }
   & .app-backup-error, & .app-backup-notice { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
   & .app-backup-notice button { margin-top: 8px; }
@@ -221,6 +222,8 @@
   & .app-backup-file-list li > div:first-child { min-width: 0; }
   & small { display: block; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
   & .app-backup-path { overflow-wrap: anywhere; }
+  & .app-backup-location { display: grid; gap: 8px; min-width: 0; }
+  & .app-backup-delete { display: grid; gap: 6px; max-width: 240px; }
 
   @media (max-width: 520px) {
     & .app-backup-fields { grid-template-columns: minmax(0, 1fr); }

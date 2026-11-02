@@ -43,6 +43,7 @@ pub(crate) struct BackupStatus {
     pub restore_hint: Option<String>,
     pub active_tasks: u64,
     pub data_root: String,
+    pub backup_dir: String,
     pub webdav: SettingsView,
 }
 
@@ -196,6 +197,7 @@ impl BackupService {
                 restore_hint,
                 active_tasks: this.db.backup_blockers()?,
                 data_root: this.config.data_root.to_string_lossy().into_owned(),
+                backup_dir: this.directory().to_string_lossy().into_owned(),
                 webdav: this.settings()?.view(),
             })
         })
@@ -242,12 +244,17 @@ impl BackupService {
             let this = self.clone();
             let item = blocking(move || this.create_sync(input.include_credentials)).await?;
             if remote {
-                webdav::upload(
+                if let Err(error) = webdav::upload(
                     &self.settings()?,
                     &self.download_path(&item.name)?,
                     &item.name,
                 )
-                .await?;
+                .await
+                {
+                    return Err(AppError::bad_gateway(format!(
+                        "云端上传未完成，本地迁移包已保留，可在本地列表中下载。{error}"
+                    )));
+                }
             }
             Ok(item)
         })
@@ -261,6 +268,32 @@ impl BackupService {
             return Err(AppError::not_found("备份文件不存在"));
         }
         Ok(path)
+    }
+
+    pub async fn delete(self: Arc<Self>, name: String, remote: bool) -> Result<(), AppError> {
+        webdav::validate_name(&name)?;
+        detached(async move {
+            let _operation = self.operation.lock().await;
+            if self.pending.load(Ordering::SeqCst) {
+                return Err(AppError::conflict("请先完成或取消待恢复操作，再删除备份"));
+            }
+            if remote {
+                webdav::delete(&self.settings()?, &name).await?;
+            } else {
+                let this = self.clone();
+                blocking(move || {
+                    fs::remove_file(this.download_path(&name)?)?;
+                    match fs::remove_file(this.directory().join(name.replace(".zip", ".json"))) {
+                        Ok(()) => Ok(()),
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                        Err(error) => Err(error.into()),
+                    }
+                })
+                .await?;
+            }
+            Ok(())
+        })
+        .await
     }
 
     fn stage_sync(&self, source: PathBuf, work: WorkDir) -> Result<RestoreView, AppError> {

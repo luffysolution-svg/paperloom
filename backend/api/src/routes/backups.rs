@@ -113,3 +113,19 @@ pub(crate) async fn restore_remote(
 ) -> Result<Json<ApiResponse<RestoreView>>, AppError> {
     Ok(ok_json(state.backups.restore(input, true).await?))
 }
+
+pub(crate) async fn delete_local(
+    State(state): State<AppState>,
+    ApiPath(name): ApiPath<String>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, AppError> {
+    state.backups.delete(name, false).await?;
+    Ok(ok_json(serde_json::json!({ "deleted": true })))
+}
+
+pub(crate) async fn delete_remote(
+    State(state): State<AppState>,
+    ApiPath(name): ApiPath<String>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, AppError> {
+    state.backups.delete(name, true).await?;
+    Ok(ok_json(serde_json::json!({ "deleted": true })))
+}

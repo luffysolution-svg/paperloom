@@ -14,11 +14,23 @@
 
 ## WebDAV
 
-填写一个**已经存在**的专用文件夹 URL、账号及密码/应用专用密码，保存设置，再测试连接。连接测试检查文件夹可读性，实际写入权限在备份上传时检查。
+填写专用文件夹 URL、账号及密码/应用专用密码，保存设置，再测试连接。文件夹不存在时会尝试通过 MKCOL 创建，父文件夹需已存在。连接测试检查文件夹可读性，实际文件写入权限在备份上传时检查。
+
+坚果云填写 `https://dav.jianguoyun.com/dav` 即可，应用会使用 `https://dav.jianguoyun.com/dav/PaperLoom/` 并在需要时创建此文件夹。保存后的表单和“云端备份位置”会显示实际使用的文件夹地址。
 
 “立即备份”会创建一个独立 ZIP，通过 PUT 上传，并保留本机副本；“查看云端备份”通过 PROPFIND 列出该文件夹中的 PaperLoom 备份。确认替换后，可下载任一云端备份并暂存恢复。
 
+上传失败时，本地迁移包仍会出现在本地列表中。错误提示会区分密码、权限、文件不存在、单文件大小、限流和云端空间不足等情况。
+
 密码只保存在后端 `DATA_ROOT/backups/webdav.json`，不写入浏览器存储或接口响应。密码框留空保留已保存的密码。Unix 上备份、暂存文件及配置使用 `0600` 权限。WebDAV 支持 HTTP(S) Basic 认证，不跟随重定向；文件夹地址须直接指向目标服务。
+
+## 备份位置与删除
+
+本地列表上方显示后端设备的备份目录。桌面版可点击“打开备份文件夹”，或在单个备份旁点击“位置”选中文件；恢复前保留的数据也可打开其所在文件夹。网页部署显示的是服务端路径，需在运行后端的设备上打开。
+
+WebDAV 区域显示实际备份文件夹地址，可复制文件夹或单个云端备份的完整地址。地址不包含账号密码。
+
+本地和云端备份分别提供“删除”，需再次确认。只删除所选位置的 ZIP；本地删除同时移除其列表元数据。另一位置的副本、当前资料库以及恢复前保留的数据均不会删除。有待恢复操作时，需要先完成或取消恢复再删除备份。
 
 ## 迁移范围
 
@@ -47,18 +59,22 @@
 | GET | `/api/v1/backups` | 本机备份、待恢复状态、恢复记录、任务数量、脱敏 WebDAV 配置 |
 | POST | `/api/v1/backups` | `{include_credentials:false}`，创建迁移包并返回文件名 |
 | GET | `/api/v1/backups/download/:name` | 鉴权下载，支持 Range，`Cache-Control: no-store` |
+| DELETE | `/api/v1/backups/files/:name` | 删除指定本地 ZIP 及其列表元数据 |
 | POST | `/api/v1/backups/import` | ZIP 原始文件流；需 `X-Confirm-Replace: true` |
 | POST | `/api/v1/backups/restore` | `{name,confirm_replace:true}`，暂存本机备份 |
 | DELETE | `/api/v1/backups/pending` | 取消待恢复操作 |
 | PUT | `/api/v1/backups/webdav/settings` | `{url,username,password?}`，省略 password 保留原密码 |
 | POST | `/api/v1/backups/webdav/test` | 同配置请求，测试当前表单，未保存也可测试 |
 | GET | `/api/v1/backups/webdav/files` | 云端备份文件名、大小和修改时间 |
+| DELETE | `/api/v1/backups/webdav/files/:name` | 删除指定云端 ZIP，本机副本保留 |
 | POST | `/api/v1/backups/webdav/backup` | `{include_credentials:false}`，本机快照并上传 |
 | POST | `/api/v1/backups/webdav/restore` | `{name,confirm_replace:true}`，下载、校验并暂存 |
 
 恢复暂存成功返回 `restart_required:true`。暂存后普通写接口返回 503，备份状态、只读接口与取消恢复仍可访问。非法路径/损坏包返回 400，任务运行、布局/运行时不支持或重复暂存返回 409。WebDAV 请求失败以 502 和不含密码的提示返回。
 
 ## 验证记录
+
+v0.1.13 的真实坚果云与备份管理验收见[修复报告](../../ops/reports/webdav-backup-v0.1.13.md)。以下为 v0.1.12 初始开发时的记录。
 
 - 新增备份 API/服务测试：10 项通过，覆盖鉴权、确认替换、维护状态、不同数据根目录迁移、凭据选择、损坏/新版本/路径越界包、交换中断回退，以及本地 WebDAV 测试服务的上传/列出/下载恢复。
 - 数据库测试：90 项通过，包含新增的 WAL 快照独立性验证。

@@ -295,15 +295,29 @@ async fn webdav_upload_list_and_download_use_the_same_portable_package() {
             }
             "PUT" => {
                 assert_eq!(request.headers()["if-none-match"], "*");
+                let declared = request.headers()["content-length"]
+                    .to_str()
+                    .unwrap()
+                    .parse::<usize>()
+                    .unwrap();
+                assert!(request.headers().get("transfer-encoding").is_none());
                 let bytes = to_bytes(request.into_body(), 10 * 1024 * 1024)
                     .await
                     .unwrap();
+                assert_eq!(declared, bytes.len());
                 files.lock().unwrap().insert(name, bytes.to_vec());
                 axum::http::StatusCode::CREATED.into_response()
             }
             "GET" => {
                 let bytes = files.lock().unwrap().get(&name).unwrap().clone();
                 Body::from(bytes).into_response()
+            }
+            "DELETE" => {
+                if files.lock().unwrap().remove(&name).is_some() {
+                    axum::http::StatusCode::NO_CONTENT.into_response()
+                } else {
+                    axum::http::StatusCode::NOT_FOUND.into_response()
+                }
             }
             _ => axum::http::StatusCode::METHOD_NOT_ALLOWED.into_response(),
         }
@@ -353,7 +367,7 @@ async fn webdav_upload_list_and_download_use_the_same_portable_package() {
         .clone()
         .restore(
             RestoreInput {
-                name: item.name,
+                name: item.name.clone(),
                 confirm_replace: true,
             },
             true,
@@ -361,7 +375,93 @@ async fn webdav_upload_list_and_download_use_the_same_portable_package() {
         .await
         .unwrap();
     assert!(view.restart_required);
+    assert!(state
+        .backups
+        .clone()
+        .delete(item.name.clone(), true)
+        .await
+        .is_err());
     state.backups.clone().cancel().await.unwrap();
+    state
+        .backups
+        .clone()
+        .delete(item.name.clone(), true)
+        .await
+        .unwrap();
+    assert!(state
+        .backups
+        .clone()
+        .list_remote()
+        .await
+        .unwrap()
+        .is_empty());
+    assert!(state.backups.download_path(&item.name).unwrap().is_file());
+    server.abort();
+    let root = state.config.project_root.clone();
+    drop(state);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn webdav_creates_a_missing_folder_before_uploading_and_preserves_failed_packages() {
+    use axum::{
+        extract::{Request, State},
+        response::IntoResponse,
+        Router,
+    };
+    use std::sync::atomic::{AtomicBool, AtomicUsize};
+    let folder = Arc::new((AtomicBool::new(false), AtomicUsize::new(0)));
+    async fn dav(
+        State(folder): State<Arc<(AtomicBool, AtomicUsize)>>,
+        request: Request,
+    ) -> axum::response::Response {
+        match request.method().as_str() {
+            "PROPFIND" if folder.0.load(Ordering::SeqCst) => {
+                axum::http::StatusCode::MULTI_STATUS.into_response()
+            }
+            "PROPFIND" => axum::http::StatusCode::NOT_FOUND.into_response(),
+            "MKCOL" => {
+                folder.1.fetch_add(1, Ordering::SeqCst);
+                folder.0.store(true, Ordering::SeqCst);
+                axum::http::StatusCode::CREATED.into_response()
+            }
+            "PUT" => axum::http::StatusCode::INSUFFICIENT_STORAGE.into_response(),
+            _ => axum::http::StatusCode::METHOD_NOT_ALLOWED.into_response(),
+        }
+    }
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let router = Router::new().fallback(dav).with_state(folder.clone());
+    let server = tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+    });
+    let state = test_state("backup-create-folder");
+    state
+        .backups
+        .clone()
+        .save_settings(SettingsInput {
+            url: format!("http://{address}/dav/PaperLoom/"),
+            username: "user".into(),
+            password: Some("secret".into()),
+        })
+        .await
+        .unwrap();
+    let failure = state
+        .backups
+        .clone()
+        .create(CreateBackupInput::default(), true)
+        .await
+        .unwrap_err();
+    assert!(failure.to_string().contains("本地迁移包已保留"));
+    assert!(failure.to_string().contains("507"));
+    assert_eq!(folder.1.load(Ordering::SeqCst), 1);
+    let status = state.backups.status().await.unwrap();
+    assert_eq!(status.items.len(), 1);
+    assert!(state
+        .backups
+        .download_path(&status.items[0].name)
+        .unwrap()
+        .is_file());
     server.abort();
     let root = state.config.project_root.clone();
     drop(state);

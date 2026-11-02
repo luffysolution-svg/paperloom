@@ -2,7 +2,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use futures_util::StreamExt;
-use reqwest::{Client, Method, Response, Url};
+use reqwest::{Client, Method, Response, StatusCode, Url};
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
@@ -35,7 +35,10 @@ pub(crate) struct SettingsView {
 impl Settings {
     pub fn view(&self) -> SettingsView {
         SettingsView {
-            url: self.url.clone(),
+            url: self
+                .target(None)
+                .map(|url| url.to_string())
+                .unwrap_or_else(|_| self.url.clone()),
             username: self.username.clone(),
             password_configured: !self.password.is_empty(),
         }
@@ -54,6 +57,10 @@ impl Settings {
             return Err(AppError::bad_request(
                 "WebDAV 地址须为 HTTP(S) 文件夹地址，账号和密码请填在对应字段中",
             ));
+        }
+        // Nutstore exposes a readable /dav/ root, but files must live inside a folder.
+        if url.host_str() == Some("dav.jianguoyun.com") && matches!(url.path(), "/dav" | "/dav/") {
+            url.set_path("/dav/PaperLoom/");
         }
         if !url.path().ends_with('/') {
             url.set_path(&format!("{}/", url.path()));
@@ -101,23 +108,37 @@ pub(super) fn validate_name(name: &str) -> Result<(), AppError> {
 }
 
 async fn checked(response: Result<Response, reqwest::Error>) -> Result<Response, AppError> {
-    let response = response.map_err(|_| {
-        AppError::bad_gateway("WebDAV 连接失败或超时，请检查地址、网络和服务器状态")
-    })?;
+    let response = checked_connection(response)?;
     if !response.status().is_success() {
+        let hint = match response.status() {
+            StatusCode::UNAUTHORIZED => "账号或应用专用密码不正确，请重新检查 WebDAV 设置",
+            StatusCode::FORBIDDEN => "没有此文件夹的访问或写入权限，请检查服务端授权",
+            StatusCode::NOT_FOUND | StatusCode::CONFLICT => {
+                "备份文件或父文件夹不存在，请检查文件夹地址"
+            }
+            StatusCode::PAYLOAD_TOO_LARGE => "备份超过服务器允许的单文件大小，请检查服务商限制",
+            StatusCode::TOO_MANY_REQUESTS => "请求过于频繁，请稍后重试",
+            StatusCode::INSUFFICIENT_STORAGE => "云端存储空间不足，请释放空间后重试",
+            _ => "请检查文件夹权限、网络和服务器状态",
+        };
         return Err(AppError::bad_gateway(format!(
-            "WebDAV 返回 HTTP {}，请检查账号、密码和文件夹权限",
+            "WebDAV 返回 HTTP {}：{hint}",
             response.status().as_u16()
         )));
     }
     Ok(response)
 }
 
+fn propfind(settings: &Settings, depth: &str) -> Result<reqwest::RequestBuilder, AppError> {
+    Ok(settings.request("PROPFIND", None)?
+        .timeout(Duration::from_secs(20))
+        .header("Depth", depth)
+        .header("Content-Type", "application/xml; charset=utf-8")
+        .body("<?xml version=\"1.0\"?><d:propfind xmlns:d=\"DAV:\"><d:prop><d:getcontentlength/><d:getlastmodified/></d:prop></d:propfind>"))
+}
+
 async fn listing(settings: &Settings, depth: &str) -> Result<String, AppError> {
-    let response = checked(settings.request("PROPFIND", None)?
-        .timeout(Duration::from_secs(20)).header("Depth", depth).header("Content-Type", "application/xml; charset=utf-8")
-        .body("<?xml version=\"1.0\"?><d:propfind xmlns:d=\"DAV:\"><d:prop><d:getcontentlength/><d:getlastmodified/></d:prop></d:propfind>")
-        .send().await).await?;
+    let response = checked(propfind(settings, depth)?.send().await).await?;
     let mut stream = response.bytes_stream();
     let mut body = Vec::new();
     while let Some(chunk) = stream.next().await {
@@ -133,8 +154,23 @@ async fn listing(settings: &Settings, depth: &str) -> Result<String, AppError> {
 }
 
 pub(super) async fn test(settings: &Settings) -> Result<(), AppError> {
-    listing(settings, "0").await?;
+    let response = checked_connection(propfind(settings, "0")?.send().await)?;
+    if response.status() != StatusCode::NOT_FOUND {
+        checked(Ok(response)).await?;
+        return Ok(());
+    }
+    let created = checked_connection(settings.request("MKCOL", None)?.send().await)?;
+    // Another client may have created the folder since the first PROPFIND.
+    if created.status() != StatusCode::METHOD_NOT_ALLOWED {
+        checked(Ok(created)).await?;
+    }
+    checked(propfind(settings, "0")?.send().await).await?;
     Ok(())
+}
+
+fn checked_connection(response: Result<Response, reqwest::Error>) -> Result<Response, AppError> {
+    response
+        .map_err(|_| AppError::bad_gateway("WebDAV 连接失败或超时，请检查地址、网络和服务器状态"))
 }
 
 #[derive(Debug, Serialize)]
@@ -182,6 +218,7 @@ pub(super) async fn list(settings: &Settings) -> Result<Vec<RemoteItem>, AppErro
 }
 
 pub(super) async fn upload(settings: &Settings, path: &Path, name: &str) -> Result<(), AppError> {
+    test(settings).await?;
     let file = tokio::fs::File::open(path).await?;
     let bytes = file.metadata().await?.len();
     checked(
@@ -195,6 +232,11 @@ pub(super) async fn upload(settings: &Settings, path: &Path, name: &str) -> Resu
             .await,
     )
     .await?;
+    Ok(())
+}
+
+pub(super) async fn delete(settings: &Settings, name: &str) -> Result<(), AppError> {
+    checked(settings.request("DELETE", Some(name))?.send().await).await?;
     Ok(())
 }
 
@@ -226,11 +268,54 @@ pub(super) async fn download(
 }
 
 pub(super) fn merge(input: SettingsInput, current: Settings) -> Result<Settings, AppError> {
-    let settings = Settings {
+    let mut settings = Settings {
         url: input.url.trim().to_owned(),
         username: input.username,
         password: input.password.unwrap_or(current.password),
     };
-    settings.target(None)?;
+    settings.url = settings.target(None)?.to_string();
     Ok(settings)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nutstore_root_uses_a_writable_folder_without_changing_other_targets() {
+        for root in [
+            "https://dav.jianguoyun.com/dav",
+            "https://dav.jianguoyun.com/dav/",
+        ] {
+            let settings = Settings {
+                url: root.into(),
+                ..Settings::default()
+            };
+            assert_eq!(
+                settings.view().url,
+                "https://dav.jianguoyun.com/dav/PaperLoom/"
+            );
+            assert_eq!(
+                settings
+                    .target(Some("paperloom-backup-test.zip"))
+                    .unwrap()
+                    .path(),
+                "/dav/PaperLoom/paperloom-backup-test.zip"
+            );
+        }
+        for url in [
+            "https://dav.jianguoyun.com/dav/Custom/",
+            "https://example.com/dav/",
+        ] {
+            assert_eq!(
+                Settings {
+                    url: url.into(),
+                    ..Settings::default()
+                }
+                .view()
+                .url,
+                url
+            );
+        }
+    }
 }

@@ -17,7 +17,7 @@ function fixture() {
   const status = {
     items: [{ id: "one", name: "paperloom-backup-one.zip", created_at: "2026-11-02T01:00:00Z", bytes: 1024, file_count: 3, includes_credentials: false }],
     pending_restore: false, last_restore: null, restore_supported: true, restore_hint: null,
-    active_tasks: 0, data_root: "/data", webdav: { url: "https://example.com/dav/", username: "user", password_configured: true },
+    active_tasks: 0, data_root: "/data", backup_dir: "/data/backups", webdav: { url: "https://example.com/dav/", username: "user", password_configured: true },
   };
   const client = {
     status: async () => structuredClone(status),
@@ -30,6 +30,9 @@ function fixture() {
     test: async () => {},
     listRemote: async () => [],
     backupRemote: async () => { calls.push(["remote"]); },
+    delete: async (name, remote) => { calls.push(["delete", name, remote]); if (!remote) status.items = status.items.filter((item) => item.name !== name); },
+    canOpenLocation: () => true,
+    openLocation: async (name, previous) => { calls.push(["location", name, previous]); },
   };
   return { calls, status, client };
 }
@@ -62,6 +65,57 @@ test("restoring needs explicit confirmation and a staged restore can be cancelle
     assert.equal(button(view.host, "创建迁移包").disabled, true);
     await act(async () => button(view.host, "取消待恢复操作").click());
     assert.equal(button(view.host, "创建迁移包").disabled, false);
+  } finally { await view.close(); }
+});
+
+test("deletion needs a separate confirmation and local deletion leaves the cloud list intact", async () => {
+  const { client, calls } = fixture();
+  client.listRemote = async () => [{ name: "paperloom-backup-cloud.zip", bytes: 100, modified_at: "" }];
+  const view = await mount(client);
+  try {
+    await act(async () => button(view.host, "查看云端备份").click());
+    const local = view.host.querySelector('[aria-label="本地迁移包"]');
+    await act(async () => button(local, "删除").click());
+    assert.equal(calls.length, 0);
+    await act(async () => button(local, "取消").click());
+    assert.equal(calls.length, 0);
+    await act(async () => button(local, "删除").click());
+    await act(async () => button(local, "确认删除").click());
+    assert.deepEqual(calls, [["delete", "paperloom-backup-one.zip", false]]);
+    assert.equal(view.host.querySelector('[aria-label="本地迁移包"]'), null);
+    assert.match(view.host.querySelector('[aria-label="WebDAV 迁移包"]').textContent, /cloud/);
+    const remote = view.host.querySelector('[aria-label="WebDAV 迁移包"]');
+    await act(async () => button(remote, "删除").click());
+    await act(async () => button(remote, "确认删除").click());
+    assert.deepEqual(calls[1], ["delete", "paperloom-backup-cloud.zip", true]);
+  } finally { await view.close(); }
+});
+
+test("backup folder, file and previous data can be opened on the desktop", async () => {
+  const { client, calls, status } = fixture();
+  status.last_restore = { restored_at: "now", previous_data_dir: "/data/backups/before-restore/one" };
+  const view = await mount(client);
+  try {
+    assert.match(view.host.textContent, /本地备份位置：\/data\/backups/);
+    await act(async () => button(view.host, "打开备份文件夹").click());
+    await act(async () => button(view.host, "位置").click());
+    await act(async () => button(view.host, "打开原数据文件夹").click());
+    assert.deepEqual(calls, [["location", undefined, undefined], ["location", "paperloom-backup-one.zip", undefined], ["location", undefined, true]]);
+  } finally { await view.close(); }
+});
+
+test("a failed cloud upload refreshes the retained local package and keeps its error visible", async () => {
+  const { client, status } = fixture();
+  client.backupRemote = async () => {
+    status.items.push({ ...status.items[0], id: "retained", name: "paperloom-backup-retained.zip" });
+    throw new Error("上传失败，本地迁移包已保留");
+  };
+  const view = await mount(client);
+  try {
+    await act(async () => button(view.host, "立即备份").click());
+    assert.match(view.host.querySelector('[role="alert"]').textContent, /本地迁移包已保留/);
+    assert.match(view.host.querySelector('[aria-label="本地迁移包"]').textContent, /retained/);
+    assert.equal(button(view.host, "立即备份").disabled, false);
   } finally { await view.close(); }
 });
 

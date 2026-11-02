@@ -23,6 +23,10 @@ pub(super) fn routes() -> Router<AppState> {
             post(backups::import).layer(DefaultBodyLimit::disable()),
         )
         .route("/api/v1/backups/download/:name", get(backups::download))
+        .route(
+            "/api/v1/backups/files/:name",
+            axum::routing::delete(backups::delete_local),
+        )
         .route("/api/v1/backups/restore", post(backups::restore_local))
         .route(
             "/api/v1/backups/pending",
@@ -34,6 +38,10 @@ pub(super) fn routes() -> Router<AppState> {
         )
         .route("/api/v1/backups/webdav/test", post(backups::test_webdav))
         .route("/api/v1/backups/webdav/files", get(backups::list_remote))
+        .route(
+            "/api/v1/backups/webdav/files/:name",
+            axum::routing::delete(backups::delete_remote),
+        )
         .route(
             "/api/v1/backups/webdav/backup",
             post(backups::backup_remote),
