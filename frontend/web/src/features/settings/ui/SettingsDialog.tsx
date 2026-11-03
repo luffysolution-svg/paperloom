@@ -152,16 +152,14 @@ export function SettingsDialog({
   }, [open]);
 
   // API 区内嵌凭据工作台：进入 api tab 时从凭据状态回填表单（不开二层弹窗）。
-  // forceMount 保证面板已挂载；rAF 再补一次，避免 ref 尚未挂上导致密码框空白、保存读到空串。
+  // 等 Portal 内表单 ref 挂好后回填一次，避免重复回填覆盖刚输入的 Key。
   useEffect(() => {
     if (!open || activeTab !== "api") {
       return;
     }
     // setupMode 必须跟着一起传：这个 effect 每次进 api tab 都跑，若只调无参版本
     // 就会把首配门刚设上的 setupMode 冲回 false，表单立刻退回普通形态。
-    const prepare = () => onPrepareCredentialPanels?.({ setupMode });
-    prepare();
-    const raf = requestAnimationFrame(prepare);
+    const raf = requestAnimationFrame(() => onPrepareCredentialPanels?.({ setupMode }));
     return () => cancelAnimationFrame(raf);
   }, [open, activeTab, onPrepareCredentialPanels, setupMode]);
 

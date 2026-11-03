@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useImperativeHandle, useState, type Ref } from "react";
 import {
   fetchAgentRuntimeConfig,
   updateAgentRuntimeConfig,
   type AgentRuntimeConfigView,
   type AgentRuntimeMode,
+  type AgentRuntimeConfigUpdate,
 } from "@/platform/api/index.js";
 import { Bot, FlaskConical, Save } from "lucide-react";
 import { DialogFooter } from "@/ui/components/dialog.js";
@@ -18,8 +19,14 @@ import {
 } from "./agent-runtime-helpers.js";
 import { AgentRuntimeConfirmationField } from "./AgentRuntimeConfirmationField.jsx";
 import { AgentRuntimeFields } from "./AgentRuntimeFields.jsx";
+import { agentConfigSnapshot, SERVICE_PROFILES_CHANGED } from "../domain/service-profiles.js";
 
-export function AgentRuntimeSettingsCard() {
+export type AgentRuntimeSettingsHandle = {
+  saveIfChanged: () => Promise<boolean>;
+  getProfile: () => AgentRuntimeConfigUpdate | null;
+};
+
+export function AgentRuntimeSettingsCard({ ref }: { ref?: Ref<AgentRuntimeSettingsHandle> } = {}) {
   const [config, setConfig] = useState<AgentRuntimeConfigView | null>(null);
   const [mode, setMode] = useState<AgentRuntimeMode>("python");
   const [confirmationMode, setConfirmationMode] = useState<
@@ -36,11 +43,38 @@ export function AgentRuntimeSettingsCard() {
   const [restarting, setRestarting] = useState(false);
   const [message, setMessage] = useState("");
   const [tone, setTone] = useState<"" | "valid" | "error">("");
+  const [dirty, setDirty] = useState(false);
+
+  function getProfile(): AgentRuntimeConfigUpdate | null {
+    if (!dirty) return config ? agentConfigSnapshot(config) : null;
+    return {
+      agent_runtime: mode,
+      agent_confirmation_mode: confirmationMode,
+      llm_base_url: baseUrl.trim(),
+      llm_model: model.trim(),
+      llm_api_key: modelKey.trim(),
+      clear_llm_api_key: !modelKey.trim(),
+      fx_gateway_base_url: fxGatewayBaseUrl.trim(),
+      fx_model: fxModel.trim(),
+      fx_gateway_api_key: gatewayKey.trim(),
+      clear_fx_gateway_api_key: !gatewayKey.trim(),
+    };
+  }
+
+  useImperativeHandle(ref, () => ({
+    saveIfChanged: async () => !dirty || await save(),
+    getProfile,
+  }));
+
+  function edit<T>(setter: (value: T) => void) {
+    return (value: T) => { setDirty(true); setter(value); };
+  }
 
   async function load({ syncForm = true } = {}) {
     const next = await fetchAgentRuntimeConfig();
     setConfig(next);
     if (syncForm) {
+      setDirty(false);
       setMode(next.configured_runtime || activeMode(next.active_runtime) || "python");
       setConfirmationMode(next.agent_confirmation_mode || "explicit");
       setBaseUrl(next.llm_base_url || "https://api.deepseek.com/v1");
@@ -86,6 +120,26 @@ export function AgentRuntimeSettingsCard() {
     };
   }, []);
 
+  useEffect(() => {
+    const refresh = (event: CustomEvent<{ applied: boolean }>) => {
+      if (!event.detail?.applied) return;
+      setLoading(true);
+      void load().then((next) => {
+        setMessage("已切换配置方案");
+        setTone("valid");
+        if (runtimeRestartPending(next)) {
+          setRestarting(true);
+          void waitForRuntime(next.configured_runtime);
+        }
+      }).catch((error) => {
+        setMessage(error.message || "无法读取 AI Agent 配置");
+        setTone("error");
+      }).finally(() => setLoading(false));
+    };
+    document.addEventListener(SERVICE_PROFILES_CHANGED, refresh);
+    return () => document.removeEventListener(SERVICE_PROFILES_CHANGED, refresh);
+  }, []);
+
   async function waitForRuntime(expected: AgentRuntimeMode) {
     try {
       for (let attempt = 0; attempt < 12; attempt += 1) {
@@ -117,7 +171,7 @@ export function AgentRuntimeSettingsCard() {
     if (mode !== "fx" && !modelKey.trim() && !config?.llm_api_key_configured) {
       setMessage(`${modeLabel(mode)}模式需要模型 API Key。`);
       setTone("error");
-      return;
+      return false;
     }
     if (
       mode === "fx"
@@ -126,7 +180,7 @@ export function AgentRuntimeSettingsCard() {
     ) {
       setMessage("FX Agent 模式需要 Gateway Key。");
       setTone("error");
-      return;
+      return false;
     }
     setSaving(true);
     setMessage("正在保存并检查运行环境…");
@@ -146,6 +200,7 @@ export function AgentRuntimeSettingsCard() {
           : {}),
       });
       setConfig(next);
+      setDirty(false);
       setModelKey(next.llm_api_key ?? modelKey.trim());
       setGatewayKey(next.fx_gateway_api_key ?? gatewayKey.trim());
       announceRuntimeConfigChanged();
@@ -157,6 +212,7 @@ export function AgentRuntimeSettingsCard() {
         setMessage("已保存在本机，可直接查看和修改 Key。");
         setTone("valid");
       }
+      return true;
     } catch (error) {
       const errorMessage = (error as Error)?.message || "保存失败";
       if (errorMessage.includes("(409)")) {
@@ -170,6 +226,7 @@ export function AgentRuntimeSettingsCard() {
         setMessage(errorMessage);
       }
       setTone("error");
+      return false;
     } finally {
       setSaving(false);
     }
@@ -204,26 +261,26 @@ export function AgentRuntimeSettingsCard() {
 
       <AgentRuntimeFields
         mode={mode}
-        onModeChange={setMode}
+        onModeChange={edit(setMode)}
         config={config}
         busy={busy}
         baseUrl={baseUrl}
-        onBaseUrlChange={setBaseUrl}
+        onBaseUrlChange={edit(setBaseUrl)}
         model={model}
-        onModelChange={setModel}
+        onModelChange={edit(setModel)}
         modelKey={modelKey}
-        onModelKeyChange={setModelKey}
+        onModelKeyChange={edit(setModelKey)}
         fxGatewayBaseUrl={fxGatewayBaseUrl}
-        onFxGatewayBaseUrlChange={setFxGatewayBaseUrl}
+        onFxGatewayBaseUrlChange={edit(setFxGatewayBaseUrl)}
         fxModel={fxModel}
-        onFxModelChange={setFxModel}
+        onFxModelChange={edit(setFxModel)}
         gatewayKey={gatewayKey}
-        onGatewayKeyChange={setGatewayKey}
+        onGatewayKeyChange={edit(setGatewayKey)}
       />
 
       <AgentRuntimeConfirmationField
         confirmationMode={confirmationMode}
-        onConfirmationModeChange={setConfirmationMode}
+        onConfirmationModeChange={edit(setConfirmationMode)}
         busy={busy}
       />
 
@@ -236,7 +293,7 @@ export function AgentRuntimeSettingsCard() {
           disabled={busy}
         >
           <Save aria-hidden="true" />
-          {saving ? "正在保存…" : restarting ? "重启中…" : "保存设置"}
+          {saving ? "正在保存…" : restarting ? "重启中…" : "保存 AI Agent"}
         </button>
       </DialogFooter>
     </section>

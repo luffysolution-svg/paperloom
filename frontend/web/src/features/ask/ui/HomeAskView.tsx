@@ -12,6 +12,7 @@ import {
 import { useStoreSnapshot } from "@/ui/hooks/use-store.js";
 import { useHomeCredentialsStatePort } from "@/ui/context/home-services-context.js";
 import { HomeAskComposer } from "./HomeAskComposer.js";
+import { ServiceProfileSelect } from "@/features/credentials/index.js";
 import { guideToCredentialSetup } from "./use-home-ask-composer.js";
 import { HomeAskSidebar } from "./HomeAskSidebar.js";
 import { HomeAskThread, HOME_ASK_SUGGESTIONS } from "./HomeAskThread.js";
@@ -188,6 +189,7 @@ export function HomeAskView() {
       />
 
       <div className="home-ask-main">
+        <ServiceProfileSelect disabled={isRunning} />
         {displayedRuntime ? (
           <div className="home-ask-runtime-badge" role="status">
             {agentRuntimeModeLabel(activeAgentRuntimeMode(displayedRuntime))}

@@ -6,7 +6,7 @@ import {
 import { useCredentialsController } from "./useCredentialsController.js";
 import { OCR_PROVIDER_DEFINITIONS } from "@/platform/config/providers.js";
 import { validationIcon } from "../domain/validation-icon.js";
-import { ExternalLink, PlugZap } from "lucide-react";
+import { ExternalLink, PlugZap, Save } from "lucide-react";
 import { SecretInput } from "./SecretInput.js";
 import {
   resetHandlerFor,
@@ -54,6 +54,10 @@ export function OcrPanels() {
             ) : null}
             <div className="credential-card-footer">
               <div className="credential-card-actions">
+                <button type="button" className="app-button secondary" disabled={view.dialogStatus?.tone === "pending"}
+                  onClick={() => void handlers?.saveOcr?.()}>
+                  <Save aria-hidden="true" />保存 OCR
+                </button>
                 {provider.supportsValidation ? (
                   <button
                     id={credentialValidateButtonId(provider.id)}

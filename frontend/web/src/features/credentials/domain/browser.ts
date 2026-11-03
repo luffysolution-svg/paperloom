@@ -8,6 +8,7 @@ import { createCredentialAccess } from "./credential-access.js";
 import { createTranslationProfiles } from "./translation-profiles.js";
 import { createCredentialDialogFlow } from "./dialog-flow.js";
 import { createBrowserCredentialSaveFlow } from "./save-flow.js";
+import { createServiceProfiles } from "./service-profiles.js";
 import { createCredentialValidationFlow } from "./validation-flow.js";
 import type {
   ProviderValidationResult,
@@ -111,6 +112,7 @@ export interface MountBrowserCredentialsFeatureOptions {
   defaultModelApiKey?: () => string;
   defaultModelBaseUrl?: () => string;
   getTaskOptions?: () => Record<string, unknown> | unknown;
+  getServiceProfileSettings?: () => Record<string, unknown>;
   saveTaskOptions?: (options?: Record<string, unknown> | unknown) => unknown;
   saveBrowserStoredConfig?: (credentials?: CredentialsFields | Record<string, unknown> | unknown) => unknown;
   readHiddenCredentialInputs?: () => CredentialsFields | Record<string, unknown> | unknown;
@@ -165,6 +167,7 @@ export function mountBrowserCredentialsFeature({
   defaultModelApiKey,
   defaultModelBaseUrl,
   getTaskOptions,
+  getServiceProfileSettings,
   saveTaskOptions,
   saveBrowserStoredConfig,
   readHiddenCredentialInputs,
@@ -260,6 +263,17 @@ export function mountBrowserCredentialsFeature({
     legacyValidationCachePort,
   });
 
+  const serviceProfiles = createServiceProfiles({
+    getSettings: getServiceProfileSettings || (() => (getTaskOptions?.() || {}) as Record<string, unknown>),
+    getTaskOptions: () => (getTaskOptions?.() || {}) as Record<string, unknown>,
+    saveSettings: async (settings) => saveTaskOptions?.(settings),
+    credentialsStatePort,
+    onApply: () => {
+      dialogFlow.syncBrowserDialogFromCredentialState();
+      onCredentialStateChange?.();
+    },
+  });
+
   viewPort.bindEvents({
     resetOcrValidation: () => {
       credentialsStatePort.resetOcrValidationCache?.();
@@ -278,6 +292,8 @@ export function mountBrowserCredentialsFeature({
     validateOcr: validation.handleOcrValidate,
     validateDeepSeek: validation.handleDeepSeekValidate,
     save: saveFlow.handleSave,
+    saveOcr: () => saveFlow.handleSave("ocr"),
+    saveTranslation: () => saveFlow.handleSave("translation"),
     activateCredentialTab: dialogFlow.activateCredentialTab,
     changeProvider: (event) => {
       if (saveFlow.isSaving()) return;
@@ -316,6 +332,7 @@ export function mountBrowserCredentialsFeature({
   });
 
   return {
+    serviceProfiles,
     activateCredentialTab: dialogFlow.activateCredentialTab,
     ready: () => credentialReferencesReady,
     ensureOcrCredentialsReady: validation.ensureOcrReady,

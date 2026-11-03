@@ -10,7 +10,8 @@ import { CREDENTIAL_DOM_IDS } from "./credentials-dom-ids.js";
 import { useCredentialsController } from "./useCredentialsController.js";
 import { OcrPanels, TranslationPanel } from "./ProviderPanels.jsx";
 import { Button as ButtonBase } from "@/ui/Button.jsx";
-import { AgentRuntimeSettingsCard } from "./AgentRuntimeSettingsCard.jsx";
+import { AgentRuntimeSettingsCard, type AgentRuntimeSettingsHandle } from "./AgentRuntimeSettingsCard.jsx";
+import { ServiceProfileManager } from "./ServiceProfileManager.js";
 import { DialogFooter } from "@/ui/components/dialog.js";
 import { FormStatusLine } from "@/ui/components/form-status-line.js";
 import { Check, Save, ScanText } from "lucide-react";
@@ -26,11 +27,42 @@ const { browser: BROWSER_IDS } = CREDENTIAL_DOM_IDS;
 const SAVED_FEEDBACK_MS = 1600;
 
 export function CredentialsWorkbench() {
-  const { credentials, view, handlers } = useCredentialsController();
+  const { credentials, view, handlers, feature } = useCredentialsController();
+  const agentRef = useRef<AgentRuntimeSettingsHandle>(null);
+  const saveInFlight = useRef(false);
+  const [savingAll, setSavingAll] = useState(false);
 
   const setupMode = Boolean(view.setupMode);
   const status = view.dialogStatus || { message: "", tone: "" };
-  const saving = status.tone === "pending";
+  const saving = savingAll || status.tone === "pending";
+
+  async function saveSettings(profileName?: string) {
+    if (saving || saveInFlight.current) return;
+    saveInFlight.current = true;
+    setSavingAll(true);
+    try {
+      if (agentRef.current && !await agentRef.current.saveIfChanged()) {
+        throw new Error("AI Agent 配置未保存，请检查该组设置");
+      }
+      if (!await handlers?.save?.()) {
+        if (profileName !== undefined) throw new Error("请先补全 OCR 和翻译 API 设置");
+        return;
+      }
+      const manager = feature.serviceProfiles;
+      const { profiles, activeId } = manager.getState();
+      const active = profiles.find((profile) => profile.id === activeId);
+      if (!setupMode && (profileName !== undefined || active)) {
+        await manager.save(profileName ?? active!.name, profileName === undefined ? activeId : undefined,
+          agentRef.current?.getProfile() ?? active?.agent ?? null);
+      }
+    } catch (error) {
+      feature.setDialogStatus((error as Error).message || "保存失败", "error");
+      if (profileName !== undefined) throw error;
+    } finally {
+      saveInFlight.current = false;
+      setSavingAll(false);
+    }
+  }
 
   // 「点了没反应」的另一半：保存快到肉眼看不见时，给成功态一个最短停留。
   //
@@ -57,7 +89,7 @@ export function CredentialsWorkbench() {
     ? "正在保存…"
     : savedPulse
       ? "已保存"
-      : setupMode ? "保存并启动" : "保存接口";
+      : setupMode ? "保存并启动" : "保存设置";
 
   const saveAction = (
     <DialogFooter className="credential-dialog-actions credential-document-actions">
@@ -69,7 +101,7 @@ export function CredentialsWorkbench() {
         // 静默丢弃，用户得不到任何"正在处理"的信号。
         disabled={saving}
         aria-busy={saving}
-        onClick={() => handlers?.save?.()}
+        onClick={() => void saveSettings()}
       >
         {savedPulse && !saving ? <Check aria-hidden="true" /> : <Save aria-hidden="true" />}
         {saveLabel}
@@ -79,6 +111,7 @@ export function CredentialsWorkbench() {
 
   return (
     <div className="credential-workbench">
+      {!setupMode ? <ServiceProfileManager disabled={saving} onSave={(name) => saveSettings(name)} /> : null}
       <div className="credential-panels">
         <div className="credential-panel is-active" data-credential-panel="api">
           <div className="credential-card-grid credential-card-grid-compact credential-api-grid">
@@ -103,7 +136,7 @@ export function CredentialsWorkbench() {
               </div>
               <OcrPanels />
             </section>
-            <TranslationPanel footerAction={saveAction} />
+            <TranslationPanel />
           </div>
         </div>
       </div>
@@ -113,9 +146,10 @@ export function CredentialsWorkbench() {
         </p>
       ) : (
         <div className="credential-agent-section">
-          <AgentRuntimeSettingsCard />
+          <AgentRuntimeSettingsCard ref={agentRef} />
         </div>
       )}
+      {saveAction}
     </div>
   );
 }

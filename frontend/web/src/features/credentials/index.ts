@@ -8,6 +8,7 @@
 //         本文件会拖入整棵 React 组件树，且容易与 reader 宿主形成循环 import。
 
 export { CredentialsWorkbench } from "./ui/CredentialsWorkbench.jsx";
+export { ServiceProfileSelect } from "./ui/ServiceProfileSelect.js";
 export { HiddenCredentialInputs } from "./ui/HiddenCredentialInputs.jsx";
 export { AgentRuntimeSettingsCard } from "./ui/AgentRuntimeSettingsCard.jsx";
 export { CredentialsProvider, useCredentialsServices } from "./ui/credentials-context.jsx";

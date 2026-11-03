@@ -95,10 +95,12 @@ export function createBrowserCredentialSaveFlow({
 }) {
   let credentialSaveInFlight = false;
 
-  async function performSave() {
+  async function performSave(scope: "all" | "ocr" | "translation" = "all") {
+    const saveOcr = scope !== "translation";
+    const saveTranslation = scope !== "ocr";
     const definition = getOcrProviderDefinition(access.currentOcrProvider());
     const existing = access.readCurrentCredentials();
-    translation.captureCurrent();
+    if (saveTranslation) translation.captureCurrent();
     const raw = readCredentialDialogValues({ elementsPort: dialogElementsPort });
     const existingTaskOptions = (getTaskOptions?.() || {}) as Record<string, unknown>;
     const sameTranslationProvider = translation.getCurrentProvider() === (
@@ -125,31 +127,31 @@ export function createBrowserCredentialSaveFlow({
     const existingTranslationCredentialRef = sameTranslationProvider ? `${existing.translationCredentialRef || ""}`.trim() : "";
     const translationError = translationConfigError(values.modelBaseUrl, values.modelName);
     const workersError = translationWorkersError(values.translationWorkers, translation.getCurrentProvider());
-    if ((!ocrToken && !existingOcrCredentialRef)
-      || (!modelApiKey && !existingTranslationCredentialRef)
-      || translationError
-      || workersError) {
-      if (!ocrToken && !existingOcrCredentialRef) {
+    if ((saveOcr && !ocrToken && !existingOcrCredentialRef)
+      || (saveTranslation && ((!modelApiKey && !existingTranslationCredentialRef) || translationError || workersError))) {
+      if (saveOcr && !ocrToken && !existingOcrCredentialRef) {
         viewPort.setOcrValidationMessage(definition.validationMissingMessage, "error", definition.id);
       }
-      if (!modelApiKey && !existingTranslationCredentialRef) {
+      if (saveTranslation && !modelApiKey && !existingTranslationCredentialRef) {
         viewPort.setDeepSeekValidationMessage(TRANSLATION_PROVIDER_DEFINITION.validationMissingMessage, "error");
-      } else if (translationError || workersError) {
+      } else if (saveTranslation && (translationError || workersError)) {
         viewPort.setDeepSeekValidationMessage(translationError || workersError, "error");
       }
       viewPort.setDialogStatus(
-        translationError || workersError || "请填写尚未保存的 OCR Token 或翻译 API Key",
+        (saveTranslation && (translationError || workersError)) || "请填写尚未保存的 OCR Token 或翻译 API Key",
         "error",
       );
-      return;
+      return false;
     }
 
-    translation.recordCurrentProfile({
-      apiKey: values.modelApiKey,
-      baseUrl: values.modelBaseUrl,
-      model: values.modelName,
-      workers: values.translationWorkers,
-    });
+    if (saveTranslation) {
+      translation.recordCurrentProfile({
+        apiKey: values.modelApiKey,
+        baseUrl: values.modelBaseUrl,
+        model: values.modelName,
+        workers: values.translationWorkers,
+      });
+    }
     const nextTaskOptions = {
       ...buildTaskOptionsFromDialogValues({
         values,
@@ -166,18 +168,20 @@ export function createBrowserCredentialSaveFlow({
       const ocrCredentialRef = ocrToken ? "" : existingOcrCredentialRef;
       const translationCredentialRef = modelApiKey ? "" : existingTranslationCredentialRef;
       const nextCredentials = {
-        ocrProvider: definition.id,
-        ocrCredentialRef,
-        paddleToken: definition.id === "paddle" ? ocrToken : existing.paddleToken || "",
-        mineruToken: definition.id === "mineru" ? ocrToken : existing.mineruToken || "",
-        translationCredentialRef,
-        modelApiKey,
+        ...existing,
+        ...(saveOcr ? {
+          ocrProvider: definition.id,
+          ocrCredentialRef,
+          paddleToken: values.paddleToken,
+          mineruToken: values.mineruToken,
+        } : {}),
+        ...(saveTranslation ? { translationCredentialRef, modelApiKey } : {}),
       };
       credentialsStatePort.setCredentials?.(nextCredentials);
       // 统一走 savePersisted*：localStorage + 桌面 snapshot/IPC 一次写齐
       await savePersistedBrowserStoredConfig(nextCredentials);
       // 兼容旧注入（桌面 markConfigured / 任务选项）
-      if (runtimeEnv.isDesktopMode() && saveDesktopConfig) {
+      if (scope === "all" && runtimeEnv.isDesktopMode() && saveDesktopConfig) {
         await persistDesktopCredentials({
           currentOcrProvider: () => definition.id,
           defaultModelApiKey,
@@ -204,17 +208,19 @@ export function createBrowserCredentialSaveFlow({
       }
       // 与上面的凭据落盘同等对待：本行注释里"必须 await 完整持久化"说的就是
       // 这里，漏掉 await 会让任务选项(模型名/URL/并发/profile)写盘失去保障。
-      await saveTaskOptions?.(nextTaskOptions);
+      if (saveTranslation) await saveTaskOptions?.(nextTaskOptions);
       // 再次保证内存态与刚写入的 next 一致
       credentialsStatePort.setCredentials?.(nextCredentials);
     } catch (error) {
       const message = (error as { message?: string })?.message || String(error);
       viewPort.setDialogStatus(message, "error");
-      viewPort.setDeepSeekValidationMessage(message, "error");
-      return;
+      if (scope === "ocr") viewPort.setOcrValidationMessage(message, "error", definition.id);
+      else viewPort.setDeepSeekValidationMessage(message, "error");
+      return false;
     }
     // 写回可见输入，避免保存后输入框仍显示空
-    syncBrowserDialogFromCredentialState();
+    // A section save must leave drafts in the other section intact.
+    if (scope === "all") syncBrowserDialogFromCredentialState();
     onCredentialStateChange?.();
     notifyCredentialsChanged();
     // 带上时刻：否则连续保存的状态是"已保存"→"已保存"，屏幕零变化，
@@ -222,18 +228,19 @@ export function createBrowserCredentialSaveFlow({
     // "这是一次新的保存"，从而重新播放成功反馈。
     viewPort.setDialogStatus(`已保存 ${formatClockTime(now())}`, "valid");
     // 首次配置弹窗保存后关闭；设置中心内嵌时保持打开以便继续改任务选项
-    if (setupModePort.currentSetupMode?.()) {
+    if (scope === "all" && setupModePort.currentSetupMode?.()) {
       viewPort.closeDialog();
       await onSetupComplete?.();
     }
+    return true;
   }
 
-  async function handleSave() {
-    if (credentialSaveInFlight) return;
+  async function handleSave(scope: "all" | "ocr" | "translation" = "all") {
+    if (credentialSaveInFlight) return false;
     credentialSaveInFlight = true;
     viewPort.setDialogStatus("正在保存…", "pending");
     try {
-      await performSave();
+      return await performSave(scope);
     } finally {
       credentialSaveInFlight = false;
     }

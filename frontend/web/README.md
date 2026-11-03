@@ -69,8 +69,15 @@ npm run visual:check
 
 运行时配置由 `runtime-config.js` 提供默认值；本机覆盖写入被 Git 忽略的 `runtime-config.local.js`，可从 `runtime-config.local.example.js` 开始。不要提交 API Key 或供应商凭据。
 
-AI Agent 的模型 Key / FX Gateway Key 通过“设置 → API 设置 → AI Agent”一次性
-提交到本机后端，前端不持久化也不回填原文；后端只返回掩码和运行模式。该入口
+OCR、翻译 API 和 AI Agent 可在“设置 → API 设置”中分别保存；底部“保存设置”
+保存三组设置，首次配置时使用“保存并启动”。MinerU 和 Paddle 的 Token 会同时保留。
+
+配置方案保存 OCR、翻译和 AI Agent 的服务组合，支持命名、另存为、更新、重命名和删除。
+“保存设置”会更新当前方案；更换 Key 后可另存为新方案，保留原方案。翻译窗口和主页 AI
+对话中可以切换已有方案。方案及其中的 Key 保存在当前浏览器或桌面端本机配置中。
+
+AI Agent 的模型 Key / FX Gateway Key 通过“设置 → API 设置 → AI Agent”
+单独保存到本机后端，输入框默认遮蔽，可主动查看和修改。该入口
 与 `runtime-config.js` 中用于前端访问本机 Rust API 的 `xApiKey` 不是同一种
 凭据。运行模式分为 Markdown 检索问答、OpenAI 兼容 Agent 与 FX Gateway Agent：
 前两者使用模型 URL、模型名和模型 Key，FX 模式检查 Gateway Key，并可配置独立

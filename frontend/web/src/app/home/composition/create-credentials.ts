@@ -135,6 +135,7 @@ export function createCredentials({
     defaultModelApiKey,
     defaultModelBaseUrl,
     getTaskOptions: () => features.workflowFeature.developerConfigWithDefaults() || {},
+    getServiceProfileSettings: () => getDeveloperConfig(legacyState),
     saveTaskOptions: saveCredentialTaskOptions,
     saveBrowserStoredConfig,
     readHiddenCredentialInputs: readHiddenCredentialDomInputs,

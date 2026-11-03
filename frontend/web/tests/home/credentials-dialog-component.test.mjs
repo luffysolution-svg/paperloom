@@ -235,6 +235,136 @@ test("Agent Key：读取后遮蔽回填，保存和重新挂载后保留", async
   }
 });
 
+for (const selected of ["paddle", "mineru"]) {
+  test(`首次配置：两个 OCR 都填写后以 ${selected} 保存并启动，不丢另一个 Token`, async () => {
+    const services = createServices({ initialDesktopMode: true, saveDesktopConfig: async () => ({}) });
+    const { host, root } = await mountHome(services);
+    try {
+      document.dispatchEvent(new CustomEvent(APP_EVENTS.openBrowserCredentials, { detail: { setupMode: true } }));
+      await waitForDialogReady();
+      typeInput(byId("browser-paddle-token"), "first-paddle");
+      const select = byId("browser-ocr-provider-select");
+      select.value = "mineru";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      await waitFor(() => services.ports.credentialsStatePort.getCredentials().ocrProvider === "mineru", "切换到 MinerU");
+      typeInput(byId("browser-mineru-token"), "first-mineru");
+      typeInput(byId("browser-api-key"), "first-translation");
+      select.value = selected;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      await wait(0);
+      click(byId("browser-credentials-save-btn"));
+      await waitFor(() => !byId("app-settings-dialog"), "保存并关闭首次配置");
+      document.dispatchEvent(new CustomEvent(APP_EVENTS.openBrowserCredentials));
+      await waitForDialogReady();
+      assert.equal(byId("browser-paddle-token").value, "first-paddle");
+      assert.equal(byId("browser-mineru-token").value, "first-mineru");
+      assert.equal(byId("browser-api-key").value, "first-translation");
+    } finally {
+      root.unmount(); services.dispose(); host.remove();
+    }
+  });
+}
+
+test("配置方案：另存为保留原方案，全局保存更新 Agent，切换后翻译使用对应 Key", async () => {
+  const previousFetch = globalThis.fetch;
+  let savedAgent = {
+    schema: "retainpdf_ai_runtime_config_view_v1", active_runtime: "python-retrieval-v1", configured_runtime: "python",
+    configured_revision: 1, active_revision: 1, restart_state: "active", restart_required: false,
+    agent_confirmation_mode: "explicit", llm_base_url: "https://agent.example/v1", llm_model: "agent-model",
+    llm_api_key: "agent-a", llm_api_key_configured: true, fx_gateway_base_url: "", fx_model: "",
+    fx_gateway_api_key: "", fx_gateway_api_key_configured: false,
+  };
+  const updates = [];
+  globalThis.fetch = async (url, options = {}) => {
+    if (!`${url}`.endsWith("/ai/runtime-config")) return previousFetch(url, options);
+    if (options.method === "PUT") {
+      const update = JSON.parse(options.body);
+      updates.push(update);
+      savedAgent = { ...savedAgent, ...update, configured_revision: savedAgent.configured_revision + 1,
+        active_revision: savedAgent.configured_revision + 1 };
+    }
+    return new Response(JSON.stringify({ data: savedAgent }), { status: 200 });
+  };
+  const services = createServices();
+  const { host, root } = await mountHome(services);
+  const button = (text) => [...document.querySelectorAll("button")].find((node) => node.textContent.trim() === text);
+  const agentKey = () => document.querySelector('input[aria-label="模型 API Key"]');
+  const nameInput = () => document.querySelector('.credential-service-profile-manager input');
+  const manager = services.credentials.feature.serviceProfiles;
+  try {
+    document.dispatchEvent(new CustomEvent(APP_EVENTS.openBrowserCredentials));
+    await waitForDialogReady();
+    await waitFor(() => agentKey()?.value === "agent-a", "读取 Agent 设置");
+    typeInput(byId("browser-paddle-token"), "paddle-a");
+    typeInput(byId("browser-mineru-token"), "mineru-a");
+    typeInput(byId("browser-api-key"), "translation-a");
+    typeInput(nameInput(), "主服务");
+    await wait(0);
+    click(button("另存为新方案"));
+    await waitFor(() => manager.getState().profiles.length === 1, "保存首个方案");
+    const firstId = manager.getState().activeId;
+
+    typeInput(agentKey(), "agent-updated");
+    await wait(0);
+    click(byId("browser-credentials-save-btn"));
+    await waitFor(() => manager.getState().profiles[0].agent?.llm_api_key === "agent-updated", "全局保存包含 Agent 修改");
+    assert.equal(savedAgent.llm_api_key, "agent-updated");
+    assert.equal(updates.length, 1);
+
+    typeInput(byId("browser-paddle-token"), "paddle-b");
+    typeInput(byId("browser-mineru-token"), "mineru-b");
+    typeInput(byId("browser-api-key"), "translation-b");
+    typeInput(agentKey(), "agent-b");
+    typeInput(nameInput(), "备用服务");
+    await wait(0);
+    click(button("另存为新方案"));
+    await waitFor(() => manager.getState().profiles.length === 2, "另存为第二个方案");
+    const secondId = manager.getState().activeId;
+    assert.equal(manager.getState().profiles.find((item) => item.id === firstId).credentials.modelApiKey, "translation-a");
+
+    const select = document.querySelector('.credential-service-profile-manager select');
+    select.value = firstId;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await waitFor(() => byId("browser-api-key").value === "translation-a" && agentKey().value === "agent-updated", "切换同时还原三组配置");
+    assert.equal(byId("browser-mineru-token").value, "mineru-a");
+    services.settingsHub.dialogStore.close();
+    await waitFor(() => !byId("app-settings-dialog"), "关闭设置");
+    services.workflowDialog.openUpload();
+    await waitFor(() => document.querySelector('.credential-service-profile-picker select'), "翻译窗口方案入口");
+    const quick = document.querySelector('.credential-service-profile-picker select');
+    quick.value = secondId;
+    quick.dispatchEvent(new Event("change", { bubbles: true }));
+    await waitFor(() => manager.getState().activeId === secondId, "翻译窗口一键切换");
+    assert.equal(services.features.workflowFeature.buildTranslateJobConfig("").translation.api_key, "translation-b");
+    assert.equal(savedAgent.llm_api_key, "agent-b");
+  } finally {
+    root.unmount(); services.dispose(); host.remove(); globalThis.fetch = previousFetch;
+  }
+});
+
+test("配置方案：Agent 暂时无法读取时，保存翻译修改仍保留方案中的 Agent Key", async () => {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ message: "fixture Agent offline" }), { status: 503 });
+  const services = createServices({ loadPersistedBrowserConfig: () => ({
+    paddleToken: "saved-paddle", mineruToken: "saved-mineru", modelApiKey: "saved-translation",
+  }) });
+  const { host, root } = await mountHome(services);
+  const manager = services.credentials.feature.serviceProfiles;
+  try {
+    await manager.save("已有方案", undefined, { llm_api_key: "saved-agent" });
+    document.dispatchEvent(new CustomEvent(APP_EVENTS.openBrowserCredentials));
+    await waitForDialogReady();
+    await waitFor(() => document.querySelector('.credential-agent-runtime-message')?.textContent.includes("fixture Agent offline"), "Agent 读取失败");
+    typeInput(byId("browser-api-key"), "updated-translation");
+    click(byId("browser-credentials-save-btn"));
+    await waitFor(() => manager.getState().profiles[0].credentials.modelApiKey === "updated-translation", "更新当前方案");
+    assert.equal(manager.getState().profiles[0].agent.llm_api_key, "saved-agent");
+    assert.equal(manager.getState().profiles[0].credentials.mineruToken, "saved-mineru");
+  } finally {
+    root.unmount(); services.dispose(); host.remove(); globalThis.fetch = previousFetch;
+  }
+});
+
 test("MinerU：Token 本机保存、遮蔽回填，切回 Paddle 保留各自 Token", async () => {
   const services = createServices();
   const { host, root } = await mountHome(services);
@@ -303,6 +433,7 @@ test("MinerU：独立检测接入真实 API transport，显示缺失、过期、
   try {
     document.dispatchEvent(new CustomEvent(APP_EVENTS.openBrowserCredentials));
     await waitFor(() => byId("browser-ocr-provider-select"), "OCR 提供商选择器");
+    await waitForDialogReady();
     const select = byId("browser-ocr-provider-select");
     select.value = "mineru";
     select.dispatchEvent(new Event("change", { bubbles: true }));
@@ -422,7 +553,7 @@ test("接口设置只有一个弹窗：常规与首次配置共用设置中心 A
   await waitFor(() => byId("app-settings-dialog") !== null, "常规打开设置中心");
   await waitFor(() => byId("browser-api-key") !== null, "API 区内嵌工作台");
   assert.equal(byId("browser-credentials-dialog"), null, "常规不再弹独立接口设置窗");
-  assert.equal(byId("browser-credentials-save-btn").textContent, "保存接口");
+  assert.equal(byId("browser-credentials-save-btn").textContent, "保存设置");
   assert.equal(byId("browser-credentials-subtitle"), null, "常规入口不该出现首配引导语");
   assert.ok(
     dom.window.document.querySelector(".credential-agent-section > .credential-agent-card"),
@@ -483,7 +614,7 @@ test("凭据入口：设置 API 区内嵌工作台；#credential-gate-action 也
   await waitFor(() => byId("browser-api-key") !== null, "API 区内嵌凭据工作台挂载");
   assert.ok(byId("browser-credentials-save-btn"), "内嵌工作台带保存按钮");
   assert.equal(byId("browser-credentials-tabs"), null, "API 页面不再嵌套二级 Tab");
-  assert.equal(byId("browser-credentials-save-btn").textContent, "保存接口");
+  assert.equal(byId("browser-credentials-save-btn").textContent, "保存设置");
   assert.equal(byId("browser-job-math-mode"), null, "API 页面不再展示公式处理方式");
   const translationKeyInput = byId("browser-api-key");
   const showTranslationKey = dom.window.document.querySelector('[aria-label="显示翻译 API Key"]');
@@ -586,6 +717,7 @@ test("CredentialsDialog：OCR/DeepSeek 校验三态(缺失/错误/通过)", asyn
   dom.window.document.dispatchEvent(new dom.window.CustomEvent(APP_EVENTS.openBrowserCredentials));
   await waitFor(() => byId("app-settings-dialog") !== null, "打开设置");
   await waitFor(() => byId("browser-paddle-validate-btn") !== null, "API 工作台就绪");
+  await waitForDialogReady();
 
   // ---- OCR(paddle):缺失 → 错误 → 通过 ----
   click(byId("browser-paddle-validate-btn"));
@@ -644,6 +776,7 @@ test("CredentialsDialog：保存(浏览器模式)——写隐藏 input、同步 
   dom.window.document.dispatchEvent(new dom.window.CustomEvent(APP_EVENTS.openBrowserCredentials));
   await waitFor(() => byId("app-settings-dialog") !== null, "打开设置");
   await waitFor(() => byId("browser-api-key") !== null, "API 工作台就绪");
+  await waitForDialogReady();
 
   assert.equal(byId("browser-model-base-url").type, "url", "翻译 API 地址保持 URL 输入语义");
   assert.ok(byId("browser-translation-provider"), "翻译 API 使用服务商下拉选择");
@@ -833,6 +966,7 @@ test("CredentialsDialog：保存(桌面模式)——走 saveDesktopConfig 分支
   }));
   // 首配门现在就是设置中心停在 api tab（独立外壳已退役）。
   await waitFor(() => byId("browser-api-key") !== null, "打开接口设置(setupMode)");
+  await waitForDialogReady();
 
   typeInput(byId("browser-paddle-token"), "paddle-desktop");
   typeInput(byId("browser-api-key"), "deepseek-desktop");

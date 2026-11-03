@@ -31,7 +31,7 @@ function TranslationProviderMark({ provider, compact = false }) {
   );
 }
 
-export function TranslationPanel({ footerAction = null }: { footerAction?: React.ReactNode } = {}) {
+export function TranslationPanel() {
   const { credentials, view, handlers, elementsRef } = useCredentialsController();
   const translationProvider = `${view.translationProvider || "custom"}`;
   const providerDefinition = getTranslationProviderDefinition(translationProvider);
@@ -175,6 +175,8 @@ export function TranslationPanel({ footerAction = null }: { footerAction?: React
       {providerDefinition.id === "custom" ? <DesktopPrivateApiAccess /> : null}
       <div className="credential-card-footer">
         <div className="credential-card-actions">
+          <button type="button" className="app-button secondary" disabled={view.dialogStatus?.tone === "pending"}
+            onClick={() => void handlers?.saveTranslation?.()}>保存翻译 API</button>
           <button
             id={BROWSER_IDS.deepSeekValidateButton}
             type="button"
@@ -221,7 +223,6 @@ export function TranslationPanel({ footerAction = null }: { footerAction?: React
             <span id={BROWSER_IDS.deepSeekTopUpLink} className="hidden" />
           )}
         </div>
-        {footerAction}
       </div>
       {validation.tone === "error" && content ? (
         <p className="credential-validation-error" role="alert">{content}</p>

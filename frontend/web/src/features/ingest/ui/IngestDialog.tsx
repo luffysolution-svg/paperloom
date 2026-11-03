@@ -37,6 +37,7 @@ import {
 } from "@/ui/context/home-services-context.js";
 import { useDialogReturnFocus } from "@/ui/hooks/use-dialog-return-focus.js";
 import { WorkflowPanel } from "./WorkflowPanel.jsx";
+import { ServiceProfileSelect } from "@/features/credentials/index.js";
 
 // statusCardSlot 已移除：进度不再进本弹窗。
 export function IngestDialog({
@@ -175,6 +176,7 @@ export function IngestDialog({
                 id={TRANSLATION_WORKFLOW_DIALOG.ids.closeButton}
               />
             </DialogHeader>
+            <ServiceProfileSelect />
             <WorkflowPanel hiddenInputsSlot={hiddenInputsSlot} />
           </DialogShell>
         </DialogContent>

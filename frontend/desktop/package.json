@@ -1,7 +1,7 @@
 {
   "name": "retain-pdf-desktop",
   "productName": "PaperLoom",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "private": true,
   "description": "PaperLoom desktop wrapper",
   "homepage": "https://github.com/luffysolution-svg/paperloom",

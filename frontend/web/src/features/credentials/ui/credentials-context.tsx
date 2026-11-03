@@ -18,6 +18,10 @@ export type CredentialsServices = {
 
 const CredentialsServicesContext = createContext<CredentialsServices | null>(null);
 
+export function useOptionalCredentialsServices() {
+  return useContext(CredentialsServicesContext);
+}
+
 export function CredentialsProvider({
   value,
   children,

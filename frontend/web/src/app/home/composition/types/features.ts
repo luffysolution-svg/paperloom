@@ -1,6 +1,7 @@
 // features：Feature 注册表（神对象 CT：10 字段）。
 import type { GlossariesFeature } from "@/features/glossaries/index.js";
 import type { TranslateDocumentPayload } from "@/features/library/index.js";
+import type { mountBrowserCredentialsFeature } from "@/features/credentials/index.js";
 
 export type WorkflowFeature = {
   applyWorkflowMode: () => void;
@@ -36,18 +37,7 @@ export type UploadFeature = {
   validatePageRanges: () => boolean;
 };
 
-export type BrowserCredentialsFeature = {
-  activateCredentialTab: (tabName?: string) => void;
-  ensureOcrCredentialsReady: (options?: unknown) => Promise<boolean> | boolean | unknown;
-  hasBrowserCredentials: () => boolean;
-  hasOcrCredentials: () => boolean;
-  openBrowserCredentialsDialog: (options?: unknown) => void;
-  prepareCredentialsPanels: () => void;
-  ready: () => Promise<unknown>;
-  refreshDeepSeekBalance: (options?: unknown) => Promise<unknown> | unknown;
-  setDialogStatus: (message?: string, tone?: string) => void;
-  updateCredentialGate: (options?: unknown) => void;
-};
+export type BrowserCredentialsFeature = ReturnType<typeof mountBrowserCredentialsFeature>;
 
 export type AppUpdateFeature = {
   checkForUpdates: (options?: { manual?: boolean }) => Promise<unknown> | unknown;
