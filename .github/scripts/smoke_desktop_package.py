@@ -72,7 +72,14 @@ def main() -> None:
                     os.killpg(process.pid, signal.SIGTERM)
                 except ProcessLookupError:
                     pass
-            process.wait(timeout=30)
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                if os.name == "nt":
+                    raise
+                # The macOS tray can keep Electron alive after SIGTERM.
+                os.killpg(process.pid, signal.SIGKILL)
+                process.wait(timeout=15)
             process = None
         if log is not None:
             log.close()
