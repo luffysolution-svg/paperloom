@@ -45,6 +45,7 @@ import {
   prepareDownloadTarget,
 } from "@/platform/utils/downloads.js";
 import {
+  cancelDownloadToast,
   completeDownloadToast,
   failDownloadToast,
   showDownloadPreparing,
@@ -262,7 +263,7 @@ export function DetailApp({
     const downloadTarget = () => prepareDownloadTarget(fallbackName);
     try {
       showDownloadPreparing(fallbackName);
-      await downloadProtectedResponse({
+      const filename = await downloadProtectedResponse({
         fetchResponse: () => dataPort.fetchProtected(url),
         url,
         fallbackName,
@@ -276,6 +277,7 @@ export function DetailApp({
           updateDownloadProgress({ filename, receivedBytes, totalBytes, percent });
         },
       });
+      if (!filename) cancelDownloadToast();
     } catch (error) {
       setText("detail-head-note", error.message || "下载失败");
       failDownloadToast(error.message || "下载失败");

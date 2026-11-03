@@ -106,7 +106,7 @@ export function ArtifactQuickDownloads({
           <Settings2 aria-hidden="true" />
         </button>
       </header>
-      <TooltipProvider delayDuration={220}>
+      <TooltipProvider delayDuration={220} disableHoverableContent>
         <div className="book-detail-quick-download-grid">
           {DOWNLOADS.map(({ id, label, Icon }) => {
             const item = items[id];
@@ -115,7 +115,8 @@ export function ArtifactQuickDownloads({
             return (
               <Tooltip key={id}>
                 <TooltipTrigger asChild>
-                  <span className="book-detail-quick-download-trigger">
+                  <span className="book-detail-quick-download-trigger" tabIndex={!item || downloadingId ? 0 : undefined}
+                    aria-label={item ? `下载${label}` : unavailableLabel}>
                     <button
                       id={`book-detail-download-${id}-btn`}
                       type="button"
@@ -132,7 +133,7 @@ export function ArtifactQuickDownloads({
                     </button>
                   </span>
                 </TooltipTrigger>
-                <TooltipContent side="top" sideOffset={7}>
+                <TooltipContent className="book-detail-quick-download-tooltip" side="top" sideOffset={7}>
                   {item ? `下载${label}` : unavailableLabel}
                 </TooltipContent>
               </Tooltip>

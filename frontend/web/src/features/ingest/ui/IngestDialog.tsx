@@ -172,11 +172,11 @@ export function IngestDialog({
                   {TRANSLATION_WORKFLOW_DIALOG.copy.uploadTitle}
                 </h2>
               </DialogTitle>
+              <ServiceProfileSelect />
               <DialogCloseButton
                 id={TRANSLATION_WORKFLOW_DIALOG.ids.closeButton}
               />
             </DialogHeader>
-            <ServiceProfileSelect />
             <WorkflowPanel hiddenInputsSlot={hiddenInputsSlot} />
           </DialogShell>
         </DialogContent>

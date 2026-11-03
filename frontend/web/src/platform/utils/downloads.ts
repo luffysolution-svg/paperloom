@@ -259,7 +259,10 @@ export async function downloadProtectedResponse({
   // 不是错误提示，而是一份"打开什么都没有的文档"。Word 导出在打包环境里失败时就是
   // 这么表现的，排查了很久才发现根本没请求成功。
   const resolvedTarget = typeof target === "function" ? await target() : target;
-  if (resolvedTarget?.kind === "aborted") return "";
+  if (resolvedTarget?.kind === "aborted") {
+    await resp.body?.cancel().catch(() => {});
+    return "";
+  }
   await saveResponseDownload(resp, {
     target: resolvedTarget,
     filename,

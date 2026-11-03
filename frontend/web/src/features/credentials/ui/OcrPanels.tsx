@@ -4,6 +4,7 @@ import {
   credentialValidationId,
 } from "./credentials-dom-ids.js";
 import { useCredentialsController } from "./useCredentialsController.js";
+import { useCredentialSave } from "./useCredentialSave.js";
 import { OCR_PROVIDER_DEFINITIONS } from "@/platform/config/providers.js";
 import { validationIcon } from "../domain/validation-icon.js";
 import { ExternalLink, PlugZap, Save } from "lucide-react";
@@ -15,6 +16,7 @@ import {
 export function OcrPanels() {
   const { credentials, view, handlers, tokenInputRef } = useCredentialsController();
   const activeProvider = credentials.ocrProvider;
+  const { saving, save } = useCredentialSave(handlers?.saveOcr, "OCR 设置已保存");
 
   return (
     <div className="credential-provider-panels">
@@ -54,9 +56,9 @@ export function OcrPanels() {
             ) : null}
             <div className="credential-card-footer">
               <div className="credential-card-actions">
-                <button type="button" className="app-button secondary" disabled={view.dialogStatus?.tone === "pending"}
-                  onClick={() => void handlers?.saveOcr?.()}>
-                  <Save aria-hidden="true" />保存 OCR
+                <button type="button" className="app-button secondary" disabled={saving || view.dialogStatus?.tone === "pending"}
+                  aria-busy={saving} onClick={() => void save()}>
+                  <Save aria-hidden="true" />{saving ? "正在保存…" : "保存 OCR"}
                 </button>
                 {provider.supportsValidation ? (
                   <button

@@ -105,6 +105,23 @@ test("backup folder, file and previous data can be opened on the desktop", async
   } finally { await view.close(); }
 });
 
+test("Windows paths hide the extended prefix and retain the full local and UNC addresses", async () => {
+  const { client, status, calls } = fixture();
+  status.backup_dir = String.raw`\\?\C:\Users\测试用户\AppData\Roaming\PaperLoom\data\backups`;
+  status.last_restore = { restored_at: "now", previous_data_dir: String.raw`\\?\UNC\server\share\backups\before-restore\one` };
+  const original = structuredClone(status);
+  const view = await mount(client);
+  try {
+    const paths = [...view.host.querySelectorAll(".app-backup-location-path")];
+    const expected = [String.raw`C:\Users\测试用户\AppData\Roaming\PaperLoom\data\backups`, String.raw`\\server\share\backups\before-restore\one`];
+    assert.deepEqual(paths.map((path) => path.textContent), expected);
+    assert.deepEqual(paths.map((path) => path.title), expected);
+    await act(async () => button(view.host, "打开原数据文件夹").click());
+    assert.deepEqual(calls, [["location", undefined, true]]);
+    assert.deepEqual(status, original, "display formatting leaves the stored paths unchanged");
+  } finally { await view.close(); }
+});
+
 test("a failed cloud upload refreshes the retained local package and keeps its error visible", async () => {
   const { client, status } = fixture();
   client.backupRemote = async () => {

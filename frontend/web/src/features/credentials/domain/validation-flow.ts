@@ -65,6 +65,9 @@ export function createCredentialValidationFlow({
   legacyRuntimePort?: unknown;
   legacyValidationCachePort?: unknown;
 }) {
+  let ocrValidationRequest = 0;
+  let deepSeekValidationRequest = 0;
+
   async function ensureOcrReady({
     onMissingToken,
     onInvalidToken,
@@ -96,6 +99,7 @@ export function createCredentialValidationFlow({
   }
 
   async function handleOcrValidate() {
+    const request = ++ocrValidationRequest;
     const provider = access.currentOcrProvider();
     const token = ocrTokenFromDialogValues(
       readCredentialDialogValues({ elementsPort: dialogElementsPort }),
@@ -117,12 +121,20 @@ export function createCredentialValidationFlow({
       validateOcrToken,
       setOcrValidationMessage: viewPort.setOcrValidationMessage,
       showResult: true,
+      isCurrent: () => request === ocrValidationRequest
+        && provider === access.currentOcrProvider()
+        && token === ocrTokenFromDialogValues(readCredentialDialogValues({ elementsPort: dialogElementsPort }), provider),
       credentialsStatePort,
       legacyRuntimePort,
     });
   }
 
   async function handleDeepSeekValidate() {
+    const request = ++deepSeekValidationRequest;
+    const fields = ["apiKeyInput", "modelBaseUrlInput", "modelNameInput"];
+    const elements = deepSeekViewPort.elements();
+    const inputs = fields.map((field) => elements[field]);
+    const values = inputs.map((input) => `${input?.value || ""}`.trim());
     await runBrowserDeepSeekValidate({
       apiPrefix,
       state,
@@ -132,6 +144,11 @@ export function createCredentialValidationFlow({
       onBalanceChange: onCredentialStateChange,
       credentialsStatePort,
       legacyRuntimePort,
+      isCurrent: () => {
+        const current = deepSeekViewPort.elements();
+        return request === deepSeekValidationRequest && fields.every((field, index) =>
+          current[field] === inputs[index] && `${current[field]?.value || ""}`.trim() === values[index]);
+      },
       viewPort: deepSeekViewPort,
     });
   }

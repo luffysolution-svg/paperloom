@@ -8,6 +8,10 @@ function size(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GiB`;
 }
 
+function displayPath(path: string): string {
+  return path.replace(/^\\\\\?\\UNC\\/i, "\\\\").replace(/^\\\\\?\\/, "");
+}
+
 export function BackupPanel({ active = true, client = backupApi }: { active?: boolean; client?: BackupClient }) {
   const [status, setStatus] = useState<BackupStatus | null>(null);
   const [busy, setBusy] = useState("");
@@ -139,7 +143,7 @@ export function BackupPanel({ active = true, client = backupApi }: { active?: bo
             <button type="button" disabled={Boolean(busy)} onClick={() => void run("正在刷新…", async () => {})}>刷新</button>
           </div>
         </div>
-        {status ? <p>本地备份位置：<span className="app-backup-path">{status.backup_dir}</span></p> : null}
+        {status ? <p>本地备份位置：<span className="app-backup-path app-backup-location-path" title={displayPath(status.backup_dir)}>{displayPath(status.backup_dir)}</span></p> : null}
         <p>将书库、原文与译文、合集、收藏批注、问答记录和术语表打包，换机时导入同一份 ZIP。</p>
         <label className="app-backup-check"><input type="checkbox" checked={includeCredentials} disabled={locked} onChange={(event) => setIncludeCredentials(event.target.checked)} />同时包含 OCR、翻译模型密钥与 Agent 配置</label>
         {includeCredentials ? <p className="app-backup-notice">密钥会以明文随迁移包保存，请只将文件存放在你信任的位置。WebDAV 密码始终留在本机。</p> : <p>未勾选时，迁移后需要重新设置模型接口。</p>}
@@ -159,7 +163,7 @@ export function BackupPanel({ active = true, client = backupApi }: { active?: bo
         <label htmlFor="backup-import-file">导入迁移包<input id="backup-import-file" type="file" accept=".zip,application/zip" disabled={locked} onChange={(event) => setFile(event.target.files?.[0] || null)} /></label>
         <button type="button" disabled={cannotRestore || !file} onClick={() => { if (file && confirmed) void run("正在上传并校验迁移包，请稍候…", () => client.import(file), restoreMessage); }}>校验并暂存恢复</button>
         {status?.restore_hint ? <p>{status.restore_hint}</p> : null}
-        {status?.last_restore ? <div className="app-backup-location"><p>上次恢复前的数据：<span className="app-backup-path">{status.last_restore.previous_data_dir}</span></p>{client.canOpenLocation() ? <button type="button" disabled={Boolean(busy)} onClick={() => void run("正在打开恢复前的数据文件夹…", () => client.openLocation(undefined, true))}>打开原数据文件夹</button> : null}</div> : null}
+        {status?.last_restore ? <div className="app-backup-location"><p>上次恢复前的数据：<span className="app-backup-path app-backup-location-path" title={displayPath(status.last_restore.previous_data_dir)}>{displayPath(status.last_restore.previous_data_dir)}</span></p>{client.canOpenLocation() ? <button type="button" disabled={Boolean(busy)} onClick={() => void run("正在打开恢复前的数据文件夹…", () => client.openLocation(undefined, true))}>打开原数据文件夹</button> : null}</div> : null}
       </section>
 
       <section aria-labelledby="backup-webdav-title">

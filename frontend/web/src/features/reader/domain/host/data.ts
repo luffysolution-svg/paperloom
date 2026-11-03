@@ -5,7 +5,7 @@ import {
   fetchJobMarkdown as fetchApiJobMarkdown,
 } from "@retainpdf/api/jobs-artifacts";
 import { fetchJobPayload as fetchApiJobPayload } from "@retainpdf/api/jobs";
-import { fetchDocumentByJobId } from "@/platform/api/index.js";
+import { buildJobDetailEndpoint, fetchDocumentByJobId } from "@/platform/api/index.js";
 import {
   fetchReaderMetadata as fetchApiReaderMetadata,
   fetchReaderRegions as fetchApiReaderRegions,
@@ -92,10 +92,15 @@ async function fetchJobMarkdownSource(
   // JobLike 子集读取 markdown artifacts，故收窄而非 any。
   const contract = resolveJobMarkdownContract(job as unknown as JobLike);
   if (!contract?.rawUrl) return null;
+  // OCR details can advertise /ocr/jobs/... links, while downloads are served
+  // by the same /jobs/... routes used by the artifact center.
+  const ocrJobUrl = snapshotWorkflow(job) === "ocr"
+    ? buildJobDetailEndpoint(jobId, apiPrefix || API_PREFIX)
+    : "";
   return {
-    rawUrl: contract.rawUrl,
+    rawUrl: ocrJobUrl ? `${ocrJobUrl}/markdown?raw=true` : contract.rawUrl,
     totalBytes: contract.sizeBytes ?? null,
-    imagesBaseUrl: contract.imagesBaseUrl || "",
+    imagesBaseUrl: ocrJobUrl ? `${ocrJobUrl}/markdown/images/` : contract.imagesBaseUrl || "",
   };
 }
 

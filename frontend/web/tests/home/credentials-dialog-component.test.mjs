@@ -302,6 +302,7 @@ test("配置方案：另存为保留原方案，全局保存更新 Agent，切�
     await wait(0);
     click(button("另存为新方案"));
     await waitFor(() => manager.getState().profiles.length === 1, "保存首个方案");
+    await waitFor(() => [...document.querySelectorAll('[data-sonner-toast]')].some((node) => node.textContent.includes("已另存为方案「主服务」")), "显示另存成功提示");
     const firstId = manager.getState().activeId;
 
     typeInput(agentKey(), "agent-updated");
@@ -476,6 +477,133 @@ test("MinerU：独立检测接入真实 API transport，显示缺失、过期、
     host.remove();
     globalThis.fetch = previousFetch;
   }
+});
+
+test("切换翻译服务后，空 Key 的检测不会发送另一服务已保存的 Key", async () => {
+  const calls = [];
+  const services = createServices({
+    loadPersistedBrowserConfig: () => ({ paddleToken: "saved-ocr", modelApiKey: "saved-deepseek-key" }),
+    validators: { validateDeepSeekToken: async (_prefix, payload) => { calls.push(payload); return { ok: true, status: "valid" }; } },
+  });
+  const { host, root } = await mountHome(services);
+  try {
+    document.dispatchEvent(new CustomEvent(APP_EVENTS.openBrowserCredentials));
+    await waitForDialogReady();
+    services.credentials.view.handlersRef.current.changeTranslationProvider("custom");
+    await wait(0);
+    typeInput(byId("browser-model-base-url"), "https://other-provider.example/v1");
+    typeInput(byId("browser-model-name"), "other-model");
+    assert.equal(byId("browser-api-key").value, "");
+    await services.credentials.view.handlersRef.current.validateDeepSeek();
+    assert.equal(calls.length, 0, "an empty custom Key must not reuse the saved DeepSeek Key");
+    assert.equal(services.credentials.view.store.getSnapshot().deepSeek.tone, "error");
+    assert.match(services.credentials.view.store.getSnapshot().deepSeek.message, /填写.*Key/);
+  } finally { root.unmount(); services.dispose(); host.remove(); }
+});
+
+test("修改 OCR Token 后，旧检测结果不会重新显示为通过", async () => {
+  let finish;
+  const services = createServices({ validators: { validateOcrToken: () => new Promise((resolve) => { finish = resolve; }) } });
+  const { host, root } = await mountHome(services);
+  try {
+    document.dispatchEvent(new CustomEvent(APP_EVENTS.openBrowserCredentials));
+    await waitForDialogReady();
+    typeInput(byId("browser-paddle-token"), "old-token");
+    const checking = services.credentials.view.handlersRef.current.validateOcr();
+    await waitFor(() => finish, "OCR 检测已发出");
+    typeInput(byId("browser-paddle-token"), "changed-token");
+    finish({ ok: true, status: "valid", summary: "旧 Token 可用" });
+    await checking;
+    assert.equal(services.credentials.view.store.getSnapshot().validations.paddle.tone, "");
+  } finally { finish?.({ ok: false }); root.unmount(); services.dispose(); host.remove(); }
+});
+
+test("修改翻译模型后，旧检测结果不会覆盖新配置的状态", async () => {
+  let finish;
+  const services = createServices({ validators: { validateDeepSeekToken: () => new Promise((resolve) => { finish = resolve; }) } });
+  const { host, root } = await mountHome(services);
+  try {
+    document.dispatchEvent(new CustomEvent(APP_EVENTS.openBrowserCredentials));
+    await waitForDialogReady();
+    services.credentials.view.handlersRef.current.changeTranslationProvider("custom");
+    await wait(0);
+    typeInput(byId("browser-model-base-url"), "https://model.example/v1");
+    typeInput(byId("browser-api-key"), "model-key");
+    typeInput(byId("browser-model-name"), "old-model");
+    const checking = services.credentials.view.handlersRef.current.validateDeepSeek();
+    await waitFor(() => finish, "翻译检测已发出");
+    typeInput(byId("browser-model-name"), "new-model");
+    finish({ ok: true, status: "valid" });
+    await checking;
+    assert.equal(services.credentials.view.store.getSnapshot().deepSeek.tone, "");
+  } finally { finish?.({ ok: false }); root.unmount(); services.dispose(); host.remove(); }
+});
+
+test("分组保存显示执行状态，并在操作旁之外通知成功或失败", async () => {
+  const services = createServices();
+  const { host, root } = await mountHome(services);
+  const handlers = services.credentials.view.handlersRef.current;
+  const hasToast = (type, message) => [...document.querySelectorAll(`[data-sonner-toast][data-type="${type}"]`)].some((node) => node.textContent.includes(message));
+  try {
+    document.dispatchEvent(new CustomEvent(APP_EVENTS.openBrowserCredentials));
+    await waitForDialogReady();
+    typeInput(byId("browser-paddle-token"), "ocr-feedback");
+    typeInput(byId("browser-api-key"), "translation-feedback");
+    for (const [handler, label, message] of [["saveOcr", "保存 OCR", "OCR 设置已保存"], ["saveTranslation", "保存翻译 API", "翻译 API 设置已保存"]]) {
+      const original = handlers[handler];
+      let finish;
+      const pending = new Promise((resolve) => { finish = resolve; });
+      handlers[handler] = async () => { await pending; return original(); };
+      services.credentials.feature.setDialogStatus(`准备${label}`, "");
+      await wait(0);
+      const save = [...document.querySelectorAll("button")].find((node) => node.textContent.trim() === label);
+      click(save);
+      await waitFor(() => save.disabled && save.getAttribute("aria-busy") === "true", `${label}执行状态`);
+      assert.equal(save.textContent.trim(), "正在保存…");
+      finish();
+      await waitFor(() => hasToast("success", message), `${label}成功提示`);
+      await waitFor(() => !save.disabled, `${label}可再次使用`);
+      handlers[handler] = original;
+    }
+    typeInput(byId("browser-translation-workers"), "0");
+    click([...document.querySelectorAll("button")].find((node) => node.textContent.trim() === "保存翻译 API"));
+    await waitFor(() => hasToast("error", "并发"), "翻译保存失败说明原因");
+  } finally { root.unmount(); services.dispose(); host.remove(); }
+});
+
+test("方案重命名和删除显示执行、成功与失败提示", async () => {
+  const services = createServices();
+  const manager = services.credentials.feature.serviceProfiles;
+  const { host, root } = await mountHome(services);
+  await manager.save("原方案");
+  const button = (label) => [...document.querySelectorAll("button")].find((node) => node.textContent.trim() === label);
+  const hasToast = (type, message) => [...document.querySelectorAll(`[data-sonner-toast][data-type="${type}"]`)].some((node) => node.textContent.includes(message));
+  try {
+    document.dispatchEvent(new CustomEvent(APP_EVENTS.openBrowserCredentials));
+    await waitForDialogReady();
+    typeInput(document.querySelector('.credential-service-profile-manager input'), "改名方案");
+    await wait(0);
+    const rename = manager.rename;
+    let finish;
+    manager.rename = async (...args) => { await new Promise((resolve) => { finish = resolve; }); return rename(...args); };
+    click(button("重命名"));
+    await waitFor(() => button("正在重命名…")?.disabled, "显示正在重命名");
+    finish();
+    await waitFor(() => hasToast("success", "方案已重命名为「改名方案」"), "重命名成功提示");
+    const remove = manager.remove;
+    manager.remove = async () => { throw new Error("方案写入失败"); };
+    click(button("删除方案"));
+    await waitFor(() => button("确认删除"), "显示删除确认");
+    click(button("确认删除"));
+    await waitFor(() => hasToast("error", "方案写入失败"), "删除失败提示");
+    assert.equal(manager.getState().profiles.length, 1);
+    manager.remove = async (...args) => { await new Promise((resolve) => { finish = resolve; }); return remove(...args); };
+    click(button("确认删除"));
+    await waitFor(() => button("正在删除…")?.disabled, "显示正在删除");
+    finish();
+    await waitFor(() => hasToast("success", "已删除方案「改名方案」"), "删除成功提示");
+    assert.equal(manager.getState().profiles.length, 0);
+  } finally { root.unmount(); services.dispose(); host.remove(); }
 });
 
 test("保存按钮每次点击都有可见反馈，不会让人以为没生效", async () => {

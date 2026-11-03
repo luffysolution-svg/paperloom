@@ -104,6 +104,11 @@ export function updateDownloadProgress({
   });
 }
 
+export function cancelDownloadToast() {
+  clearHideTimer();
+  toastElement()?.hide();
+}
+
 export function completeDownloadToast(filename = "") {
   clearHideTimer();
   toastElement()?.setState({

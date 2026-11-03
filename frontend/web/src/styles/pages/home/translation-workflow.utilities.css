@@ -179,9 +179,31 @@
     min-height: 50px;
     align-items: center;
     justify-content: flex-end;
-    padding: 8px 12px;
+    padding: 16px 24px 0;
     border-bottom: 0;
   }
+}
+
+.translation-workflow-head .credential-service-profile-picker {
+  flex: 1;
+  margin-right: auto;
+}
+
+.translation-workflow-head .credential-service-profile-picker label {
+  flex-wrap: nowrap;
+}
+
+.translation-workflow-head .credential-service-profile-picker label > span {
+  flex: none;
+  color: var(--muted);
+}
+
+.translation-workflow-head .credential-service-profile-picker select {
+  width: 180px;
+  min-width: 0;
+  height: 36px;
+  border-radius: 10px;
+  font-size: 13px;
 }
 
 @utility translation-workflow-head-copy {
@@ -324,6 +346,10 @@
 @media (max-width: 620px) {
   .translation-workflow-head {
     padding: 18px 18px 16px;
+  }
+
+  .translation-workflow-head.is-upload-head {
+    padding: 14px 14px 0;
   }
 
   .translation-options-grid {

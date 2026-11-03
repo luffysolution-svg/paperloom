@@ -217,6 +217,10 @@
   min-width: 0;
 }
 
+.book-detail-quick-download-tooltip {
+  z-index: 120;
+}
+
 .book-detail-quick-download-btn {
   display: flex;
   width: 100%;

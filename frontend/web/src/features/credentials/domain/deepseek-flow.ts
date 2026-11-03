@@ -49,6 +49,7 @@ export async function handleBrowserDeepSeekValidate({
   queryDeepSeekBalance,
   onBalanceChange,
   silent = false,
+  isCurrent = () => true,
   credentialsStatePort = defaultCredentialsStatePort,
   viewPort,
 }: any) {
@@ -58,10 +59,9 @@ export async function handleBrowserDeepSeekValidate({
     modelNameInput,
   } = viewPort.elements();
   const storedCredentials = credentialsStatePort.getCredentials?.() || {};
-  const modelApiKey = apiKeyInput?.value?.trim()
-    || `${storedCredentials.modelApiKey || ""}`.trim()
-    || defaultModelApiKey?.()
-    || "";
+  const modelApiKey = apiKeyInput
+    ? `${apiKeyInput.value || ""}`.trim()
+    : `${storedCredentials.modelApiKey || ""}`.trim() || defaultModelApiKey?.() || "";
   const baseUrl = modelBaseUrlInput?.value?.trim() || "";
   // 模型名必须一起送去检测：探针走 /chat/completions，没有模型名就只能验 Key，
   // 用户填错模型时会拿到一个假绿灯，真正翻译才失败。
@@ -77,8 +77,13 @@ export async function handleBrowserDeepSeekValidate({
   credentialsStatePort.resetDeepSeekBalance?.();
   onBalanceChange?.();
   if (!modelApiKey) {
-    if (!silent && storedCredentials.translationCredentialRef) {
-      viewPort.setValidationMessage("翻译 API 使用旧配置；请填写 Key 后检测", "");
+    if (!silent) {
+      viewPort.setValidationMessage(
+        storedCredentials.translationCredentialRef
+          ? "翻译 API 使用旧配置；请填写 Key 后检测"
+          : TRANSLATION_PROVIDER_DEFINITION.validationMissingMessage,
+        storedCredentials.translationCredentialRef ? "" : "error",
+      );
     }
     return { ok: false, status: "missing_key" };
   }
@@ -98,6 +103,7 @@ export async function handleBrowserDeepSeekValidate({
     setDeepSeekValidationMessage: viewPort.setValidationMessage,
     showResult: false,
   });
+  if (!isCurrent()) return result;
   if (result.ok) {
     if (!isOfficialDeepSeekBaseUrl(baseUrl)) {
       viewPort.setTopUpVisible(false);
@@ -115,6 +121,7 @@ export async function handleBrowserDeepSeekValidate({
       baseUrl,
       queryDeepSeekBalance,
     });
+    if (!isCurrent()) return balance;
     if (balance.status === "unsupported_provider") {
       if (!silent) {
         viewPort.setValidationMessage(`${providerLabel} 可用${modelScopeNote}`, "valid");

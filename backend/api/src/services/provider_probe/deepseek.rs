@@ -239,10 +239,44 @@ pub(crate) async fn query_deepseek_balance_view(
 
 fn normalize_deepseek_base_url(raw: &str, runtime: &DeepSeekRuntimeConfig) -> String {
     let trimmed = raw.trim().trim_end_matches('/');
-    if trimmed.is_empty() {
-        runtime.default_base_url.trim_end_matches('/').to_string()
+    let base_url = if trimmed.is_empty() {
+        runtime.default_base_url.trim().trim_end_matches('/')
     } else {
-        trimmed.to_string()
+        trimmed
+    };
+    base_url
+        .strip_suffix("/chat/completions")
+        .unwrap_or(base_url)
+        .to_string()
+}
+
+#[cfg(test)]
+mod endpoint_tests {
+    use super::*;
+
+    #[test]
+    fn probe_chat_endpoint_matches_the_translation_transport() {
+        let runtime = DeepSeekRuntimeConfig {
+            default_base_url: "https://model.example/v1".to_string(),
+            balance_url: String::new(),
+            probe_timeout_secs: 5,
+            allow_private_urls: false,
+        };
+        for raw in [
+            "https://model.example/v1/chat/completions",
+            " https://model.example/v1/chat/completions/ ",
+            "https://model.example/v1/",
+            "",
+        ] {
+            assert_eq!(
+                format!(
+                    "{}/chat/completions",
+                    normalize_deepseek_base_url(raw, &runtime)
+                ),
+                "https://model.example/v1/chat/completions",
+                "probe and translation must call the same endpoint for {raw:?}",
+            );
+        }
     }
 }
 

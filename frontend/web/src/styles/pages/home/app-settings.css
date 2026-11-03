@@ -223,6 +223,7 @@
   & .app-backup-file-list li > div:first-child { min-width: 0; }
   & small { display: block; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
   & .app-backup-path { overflow-wrap: anywhere; }
+  & .app-backup-location-path { display: block; margin-top: 4px; user-select: text; }
   & .app-backup-location { display: grid; gap: 8px; min-width: 0; }
   & .app-backup-delete { display: grid; gap: 6px; max-width: 240px; }
 

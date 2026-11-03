@@ -1,5 +1,6 @@
 import { CREDENTIAL_DOM_IDS } from "./credentials-dom-ids.js";
 import { useCredentialsController } from "./useCredentialsController.js";
+import { useCredentialSave } from "./useCredentialSave.js";
 import {
   getTranslationProviderDefinition,
   TRANSLATION_PROVIDER_DEFINITION,
@@ -33,6 +34,7 @@ function TranslationProviderMark({ provider, compact = false }) {
 
 export function TranslationPanel() {
   const { credentials, view, handlers, elementsRef } = useCredentialsController();
+  const { saving, save } = useCredentialSave(handlers?.saveTranslation, "翻译 API 设置已保存");
   const translationProvider = `${view.translationProvider || "custom"}`;
   const providerDefinition = getTranslationProviderDefinition(translationProvider);
   const fixedBaseUrl = providerDefinition.id !== "custom";
@@ -175,8 +177,8 @@ export function TranslationPanel() {
       {providerDefinition.id === "custom" ? <DesktopPrivateApiAccess /> : null}
       <div className="credential-card-footer">
         <div className="credential-card-actions">
-          <button type="button" className="app-button secondary" disabled={view.dialogStatus?.tone === "pending"}
-            onClick={() => void handlers?.saveTranslation?.()}>保存翻译 API</button>
+          <button type="button" className="app-button secondary" disabled={saving || view.dialogStatus?.tone === "pending"}
+            aria-busy={saving} onClick={() => void save()}>{saving ? "正在保存…" : "保存翻译 API"}</button>
           <button
             id={BROWSER_IDS.deepSeekValidateButton}
             type="button"

@@ -4,6 +4,7 @@ import {
   prepareDownloadTarget,
 } from "@/platform/utils/downloads.js";
 import {
+  cancelDownloadToast,
   completeDownloadToast,
   showDownloadPreparing,
   updateDownloadProgress,
@@ -36,7 +37,7 @@ export async function downloadProtectedResource(
   }
   try {
     showDownloadPreparing(suggestedName);
-    return await downloadProtectedResponse({
+    const filename = await downloadProtectedResponse({
       fetchResponse: () => fetchProtected(url),
       url,
       fallbackName,
@@ -63,6 +64,8 @@ export async function downloadProtectedResource(
         updateDownloadProgress({ filename, receivedBytes, totalBytes, percent });
       },
     });
+    if (!filename) cancelDownloadToast();
+    return filename;
   } finally {
     if (typeof onBusy === "function") {
       window.setTimeout(() => onBusy(false), 240);

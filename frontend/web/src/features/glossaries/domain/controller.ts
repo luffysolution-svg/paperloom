@@ -1,4 +1,5 @@
 import {
+  cancelDownloadToast,
   completeDownloadToast,
   failDownloadToast,
   showDownloadPreparing,
@@ -191,6 +192,11 @@ export function mountGlossariesFeature({
           updateDownloadProgress({ filename: progressFilename, receivedBytes, totalBytes, percent });
         },
       });
+      if (!filename) {
+        cancelDownloadToast();
+        viewPort.setStatus("已取消导出");
+        return;
+      }
       viewPort.setStatus(`已导出 ${filename}。`, "valid");
     } catch (err) {
       const message = err.message || String(err);

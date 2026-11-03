@@ -4,6 +4,7 @@ import {
   prepareDownloadTarget,
 } from "@/platform/utils/downloads.js";
 import {
+  cancelDownloadToast,
   completeDownloadToast,
   failDownloadToast,
   showDownloadPreparing,
@@ -67,7 +68,7 @@ export function mountArtifactDownloadsFeature({
     try {
       viewPort.setLinkBusy(link, true, "下载中...");
       showDownloadPreparing(preferredName);
-      await downloadProtectedResponse({
+      const filename = await downloadProtectedResponse({
         fetchResponse: () => fetchProtected(url),
         url,
         fallbackName,
@@ -94,6 +95,7 @@ export function mountArtifactDownloadsFeature({
           });
         },
       });
+      if (!filename) cancelDownloadToast();
     } catch (err) {
       setText("error-box", buildErrorDiagnostic(err, {
         operation: "下载任务产物",

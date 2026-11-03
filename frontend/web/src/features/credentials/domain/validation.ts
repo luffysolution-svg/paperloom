@@ -45,6 +45,7 @@ export interface RunOcrTokenValidationOptions {
   ) => Promise<ProviderValidationResult | unknown> | ProviderValidationResult | unknown;
   setOcrValidationMessage?: (message?: string, tone?: string, providerId?: string) => void;
   showResult?: boolean;
+  isCurrent?: () => boolean;
   legacyRuntimePort?: unknown;
 }
 
@@ -107,6 +108,7 @@ export async function runOcrTokenValidation({
   validateOcrToken,
   setOcrValidationMessage,
   showResult = true,
+  isCurrent = () => true,
   legacyRuntimePort,
 }: RunOcrTokenValidationOptions) {
   const definition = getOcrProviderDefinition(providerId);
@@ -138,6 +140,7 @@ export async function runOcrTokenValidation({
   }
   try {
     const result = asValidationResult(await validateOcrToken(apiPrefix, definition.id, normalizedToken));
+    if (!isCurrent()) return result;
     setOcrValidationRuntime({ state, credentialsStatePort, legacyRuntimePort }, {
       provider: definition.id,
       token: normalizedToken,
@@ -150,10 +153,10 @@ export async function runOcrTokenValidation({
     }
     return result;
   } catch (err) {
-    resetOcrValidationRuntime({ state, credentialsStatePort, legacyRuntimePort });
     const timedOut = timeoutSummary(err);
     const summary = timedOut || `${definition.label} Token 检测失败，请稍后重试。`;
-    if (showResult) {
+    if (isCurrent()) resetOcrValidationRuntime({ state, credentialsStatePort, legacyRuntimePort });
+    if (showResult && isCurrent()) {
       setOcrValidationMessage(summary, "error", definition.id);
     }
     return {
