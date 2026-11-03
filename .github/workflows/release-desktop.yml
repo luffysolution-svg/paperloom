@@ -505,7 +505,7 @@ jobs:
         run: |
           sudo apt-get install -y xvfb libasound2t64 "./$DESKTOP_ROOT/linux/PaperLoom-Linux-${{ steps.version.outputs.version }}.deb"
           xvfb-run -a python3 .github/scripts/smoke_desktop_package.py \
-            --app /opt/PaperLoom/paperloom --version "${{ steps.version.outputs.version }}" \
+            --app /opt/PaperLoom/retain-pdf-desktop --version "${{ steps.version.outputs.version }}" \
             --root "$RUNNER_TEMP/paperloom-package-smoke"
 
       - name: Upload installed package smoke evidence
