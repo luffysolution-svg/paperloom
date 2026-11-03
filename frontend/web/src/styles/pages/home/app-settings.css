@@ -213,6 +213,7 @@
   & .app-backup-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   & .app-backup-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   & .app-backup-status:empty { display: none; }
+  & .app-backup-progress { width: 100%; height: 8px; accent-color: var(--ink); }
   & .app-backup-feedback { position: sticky; top: 0; z-index: 1; display: grid; gap: 8px; padding-block: 8px; background: var(--paper); }
   & .app-backup-status, & .app-backup-error { color: var(--ink); overflow-wrap: anywhere; }
   & .app-backup-error, & .app-backup-notice { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }

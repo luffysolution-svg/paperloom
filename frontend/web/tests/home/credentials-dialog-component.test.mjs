@@ -352,6 +352,7 @@ test("保存按钮每次点击都有可见反馈，不会让人以为没生效",
   const { host, root } = await mountHome(services);
   dom.window.document.dispatchEvent(new dom.window.CustomEvent(APP_EVENTS.openBrowserCredentials));
   await waitFor(() => byId("browser-api-key") !== null, "API 区");
+  await waitForDialogReady();
 
   const statusEl = () => byId("browser-credentials-status");
   const saveBtn = () => byId("browser-credentials-save-btn");

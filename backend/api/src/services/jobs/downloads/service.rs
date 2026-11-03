@@ -76,6 +76,7 @@ impl<'a> JobDownloads<'a> {
         &self,
         job_id: &str,
         include_source: bool,
+        base_name: Option<String>,
     ) -> Result<FileDownload, AppError> {
         let zotero_extras = load_zotero_extras(&self.deps, job_id).await;
         let deps = self.deps.owned();
@@ -83,13 +84,14 @@ impl<'a> JobDownloads<'a> {
         self.deps
             .download_generation
             .run(
-                format!("{job_id}:markdown-export:{include_source}"),
+                format!("{job_id}:markdown-export:{include_source}:{base_name:?}"),
                 move || {
                     markdown_export_download(
                         &deps.borrowed(),
                         &job_id,
                         include_source,
                         zotero_extras,
+                        base_name.as_deref(),
                     )
                 },
             )

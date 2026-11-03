@@ -5,6 +5,7 @@
 //! directly; a public entrypoint does not need an extra forwarding function.
 
 pub use super::documents::{get_document, list_documents, patch_document};
+pub(crate) use crate::services::jobs::{BatchExportInput, BatchExportView};
 
 use crate::error::AppError;
 use crate::models::api::{

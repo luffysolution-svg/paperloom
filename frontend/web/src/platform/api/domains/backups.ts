@@ -2,6 +2,7 @@ import { API_PREFIX } from "@/platform/config/api-constants.js";
 import { isMockMode } from "@/platform/config/runtime.js";
 import { buildApiEndpoint, fetchProtected } from "./http.js";
 import { getDesktopHost } from "@/platform/desktop/host.js";
+import { backupClientConfig } from "@/platform/config/backup-client-config.js";
 
 export type BackupItem = {
   id: string;
@@ -14,6 +15,14 @@ export type BackupItem = {
 export type WebDavSettings = { url: string; username: string; password_configured: boolean };
 export type WebDavInput = { url: string; username: string; password?: string };
 export type RemoteBackup = { name: string; bytes: number; modified_at: string };
+export type BackupProgress = {
+  state: "running" | "completed" | "failed";
+  phase: "pack" | "upload" | "download" | "import" | "validate";
+  completed: number;
+  total: number | null;
+  unit: "bytes" | "files";
+  message: string | null;
+};
 export type BackupStatus = {
   items: BackupItem[];
   pending_restore: boolean;
@@ -24,6 +33,7 @@ export type BackupStatus = {
   data_root: string;
   backup_dir: string;
   webdav: WebDavSettings;
+  operation?: BackupProgress | null;
 };
 
 async function request<T>(path = "", options: RequestInit = {}): Promise<T> {
@@ -38,7 +48,7 @@ function json(method: string, payload: unknown): RequestInit {
   return { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) };
 }
 
-async function download(name: string): Promise<void> {
+async function download(name: string, onProgress?: (progress: BackupProgress) => void): Promise<void> {
   if (isMockMode()) throw new Error("演示模式不能下载备份。");
   const picker = (window as Window & {
     showSaveFilePicker?: (options: unknown) => Promise<{ createWritable(): Promise<WritableStream<Uint8Array>> }>;
@@ -50,11 +60,20 @@ async function download(name: string): Promise<void> {
     const body = await response.json().catch(() => null);
     throw new Error(body?.message || "下载备份失败，请重试。");
   }
+  let completed = 0;
+  const total = Number(response.headers.get("Content-Length")) || null;
+  const body = response.body?.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      completed += chunk.byteLength;
+      onProgress?.({ state: "running", phase: "download", completed, total, unit: "bytes", message: null });
+      controller.enqueue(chunk);
+    },
+  }));
   if (destination && response.body) {
-    await response.body.pipeTo(await destination.createWritable());
+    await body!.pipeTo(await destination.createWritable());
     return;
   }
-  const url = URL.createObjectURL(await response.blob());
+  const url = URL.createObjectURL(await (body ? new Response(body).blob() : response.blob()));
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = name;
@@ -64,7 +83,7 @@ async function download(name: string): Promise<void> {
 
 export const backupApi = {
   status: () => request<BackupStatus>(),
-  create: (includeCredentials: boolean) => request<BackupItem>("", json("POST", { include_credentials: includeCredentials })),
+  create: (includeCredentials: boolean) => request<BackupItem>("", json("POST", { include_credentials: includeCredentials, ...(includeCredentials ? { frontend_config: backupClientConfig() } : {}) })),
   download,
   import: (file: File) => request("/import", { method: "POST", headers: { "Content-Type": "application/zip", "X-Confirm-Replace": "true" }, body: file }),
   restore: (name: string, remote: boolean) => request(remote ? "/webdav/restore" : "/restore", json("POST", { name, confirm_replace: true })),
@@ -79,7 +98,8 @@ export const backupApi = {
   saveSettings: (settings: WebDavInput) => request<WebDavSettings>("/webdav/settings", json("PUT", settings)),
   test: (settings: WebDavInput) => request("/webdav/test", json("POST", settings)),
   listRemote: () => request<RemoteBackup[]>("/webdav/files"),
-  backupRemote: (includeCredentials: boolean) => request<BackupItem>("/webdav/backup", json("POST", { include_credentials: includeCredentials })),
+  syncRemote: (name: string) => request<BackupItem>(`/webdav/files/${encodeURIComponent(name)}/sync`, { method: "POST" }),
+  backupRemote: (includeCredentials: boolean) => request<BackupItem>("/webdav/backup", json("POST", { include_credentials: includeCredentials, ...(includeCredentials ? { frontend_config: backupClientConfig() } : {}) })),
 };
 
 export type BackupClient = typeof backupApi;

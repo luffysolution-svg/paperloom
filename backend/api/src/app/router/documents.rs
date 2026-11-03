@@ -8,6 +8,14 @@ pub(super) fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/documents", get(library_data::list_documents_route))
         .route(
+            "/api/v1/documents/export-batch",
+            post(library_data::export_documents_route),
+        )
+        .route(
+            "/api/v1/documents/export-batch/:name",
+            get(library_data::download_document_export_route),
+        )
+        .route(
             "/api/v1/documents/:document_id",
             get(library_data::get_document_route)
                 .patch(library_data::patch_document_route)

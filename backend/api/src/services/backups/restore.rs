@@ -89,6 +89,8 @@ fn recover(root: &Path, journal: &Journal) -> Result<()> {
             fs::remove_dir_all(pending)?;
         }
     } else {
+        let frontend_config_restored = journal.entries.iter().any(|(name, _)| name == "secrets")
+            && root.join("secrets/frontend-config.json").is_file();
         let receipt = backups.join("last-restore.json");
         if receipt.exists() {
             fs::remove_file(&receipt)?;
@@ -98,6 +100,7 @@ fn recover(root: &Path, journal: &Journal) -> Result<()> {
             &serde_json::json!({
                 "restored_at": chrono::Utc::now().to_rfc3339(),
                 "previous_data_dir": previous.to_string_lossy(),
+                "frontend_config_restored": frontend_config_restored,
             }),
         )?;
         let pending = backups.join("pending");

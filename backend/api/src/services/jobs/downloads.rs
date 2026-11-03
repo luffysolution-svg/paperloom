@@ -11,6 +11,7 @@ use self::deps::DownloadJobsDeps;
 // can evolve without turning one route helper into another large grab bag.
 mod artifact_deps;
 mod artifacts;
+mod batch;
 mod deps;
 mod documents;
 mod markdown;
@@ -26,6 +27,7 @@ mod word;
 mod tests;
 
 use artifacts::{bundle_download, registered_artifact_download};
+pub(crate) use batch::{BatchExportInput, BatchExportView};
 use documents::document_download;
 pub(crate) use documents::DocumentDownloadKind;
 use markdown::{

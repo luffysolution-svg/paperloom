@@ -225,6 +225,26 @@ jobs:
         shell: pwsh
         run: npm --prefix frontend/desktop run smoke:frontend-bundle
 
+      - name: Install and exercise Windows release package
+        shell: pwsh
+        run: |
+          $installer = Join-Path $PWD "$env:DESKTOP_ROOT/win/PaperLoom-Windows-${{ steps.version.outputs.version }}-Setup.exe"
+          $installRoot = Join-Path $env:RUNNER_TEMP "paperloom-installed"
+          $install = Start-Process -FilePath $installer -ArgumentList '/S', "/D=$installRoot" -WindowStyle Hidden -PassThru -Wait
+          if ($install.ExitCode -ne 0) { throw "Installer exited with $($install.ExitCode)" }
+          python .github/scripts/smoke_desktop_package.py --app "$installRoot/PaperLoom.exe" --version "${{ steps.version.outputs.version }}" --root "$env:RUNNER_TEMP/paperloom-package-smoke"
+
+      - name: Upload installed package smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: package-smoke-${{ runner.os }}-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/paperloom-package-smoke/result.json
+            ${{ runner.temp }}/paperloom-package-smoke/startup-*.log
+            ${{ runner.temp }}/paperloom-package-smoke/profile/logs/*.log
+          if-no-files-found: ignore
+
       - name: Upload Windows package artifact
         uses: actions/upload-artifact@v7
         with:
@@ -479,6 +499,25 @@ jobs:
             grep -F 'not found' "$ldd_log" >&2
             exit 1
           fi
+
+      - name: Install and exercise Linux release package
+        shell: bash
+        run: |
+          sudo apt-get install -y xvfb libasound2t64 "./$DESKTOP_ROOT/linux/PaperLoom-Linux-${{ steps.version.outputs.version }}.deb"
+          xvfb-run -a python3 .github/scripts/smoke_desktop_package.py \
+            --app /opt/PaperLoom/paperloom --version "${{ steps.version.outputs.version }}" \
+            --root "$RUNNER_TEMP/paperloom-package-smoke"
+
+      - name: Upload installed package smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: package-smoke-${{ runner.os }}-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/paperloom-package-smoke/result.json
+            ${{ runner.temp }}/paperloom-package-smoke/startup-*.log
+            ${{ runner.temp }}/paperloom-package-smoke/profile/logs/*.log
+          if-no-files-found: ignore
 
       - name: Upload Linux package artifact
         uses: actions/upload-artifact@v7
@@ -1076,6 +1115,29 @@ jobs:
       - name: Smoke frontend bundle after manifest validation
         shell: bash
         run: npm --prefix frontend/desktop run smoke:frontend-bundle
+
+      - name: Install and exercise macOS release package
+        shell: bash
+        run: |
+          mount_root="$RUNNER_TEMP/paperloom-dmg"
+          hdiutil attach "$DESKTOP_ROOT/mac/PaperLoom-Mac-${{ steps.version.outputs.version }}.dmg" \
+            -readonly -nobrowse -mountpoint "$mount_root"
+          ditto "$mount_root/PaperLoom.app" "$RUNNER_TEMP/PaperLoom.app"
+          hdiutil detach "$mount_root"
+          python3 .github/scripts/smoke_desktop_package.py \
+            --app "$RUNNER_TEMP/PaperLoom.app/Contents/MacOS/PaperLoom" \
+            --version "${{ steps.version.outputs.version }}" --root "$RUNNER_TEMP/paperloom-package-smoke"
+
+      - name: Upload installed package smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: package-smoke-${{ runner.os }}-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/paperloom-package-smoke/result.json
+            ${{ runner.temp }}/paperloom-package-smoke/startup-*.log
+            ${{ runner.temp }}/paperloom-package-smoke/profile/logs/*.log
+          if-no-files-found: ignore
 
       - name: Upload macOS package artifact
         uses: actions/upload-artifact@v7

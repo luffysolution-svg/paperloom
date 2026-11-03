@@ -8,6 +8,7 @@ use tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
 
 use super::archive::{self, MAX_ARCHIVE_BYTES};
+use super::progress::Progress;
 use crate::error::AppError;
 
 #[derive(Clone, Default, Deserialize, Serialize)]
@@ -217,17 +218,29 @@ pub(super) async fn list(settings: &Settings) -> Result<Vec<RemoteItem>, AppErro
     Ok(items)
 }
 
-pub(super) async fn upload(settings: &Settings, path: &Path, name: &str) -> Result<(), AppError> {
+pub(super) async fn upload(
+    settings: &Settings,
+    path: &Path,
+    name: &str,
+    progress: Progress,
+) -> Result<(), AppError> {
     test(settings).await?;
     let file = tokio::fs::File::open(path).await?;
     let bytes = file.metadata().await?.len();
+    progress.phase("upload", Some(bytes), "bytes");
+    let stream = ReaderStream::new(file).map(move |chunk| {
+        if let Ok(bytes) = &chunk {
+            progress.advance(bytes.len() as u64);
+        }
+        chunk
+    });
     checked(
         settings
             .request("PUT", Some(name))?
             .header("Content-Type", "application/zip")
             .header("Content-Length", bytes)
             .header("If-None-Match", "*")
-            .body(reqwest::Body::wrap_stream(ReaderStream::new(file)))
+            .body(reqwest::Body::wrap_stream(stream))
             .send()
             .await,
     )
@@ -244,6 +257,7 @@ pub(super) async fn download(
     settings: &Settings,
     name: &str,
     destination: &Path,
+    progress: Progress,
 ) -> Result<(), AppError> {
     let response = checked(settings.request("GET", Some(name))?.send().await).await?;
     if response
@@ -253,6 +267,7 @@ pub(super) async fn download(
         return Err(AppError::payload_too_large("迁移包不能超过 64 GiB"));
     }
     let mut file = tokio::fs::File::from_std(archive::private_file(destination)?);
+    progress.phase("download", response.content_length(), "bytes");
     let mut bytes = 0u64;
     let mut stream = response.bytes_stream();
     while let Some(chunk) = stream.next().await {
@@ -262,6 +277,7 @@ pub(super) async fn download(
             return Err(AppError::payload_too_large("迁移包不能超过 64 GiB"));
         }
         file.write_all(&chunk).await?;
+        progress.advance(chunk.len() as u64);
     }
     file.sync_all().await?;
     Ok(())

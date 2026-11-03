@@ -20,8 +20,8 @@ use crate::models::api::{
 };
 use crate::models::request::CreateJobInput;
 use crate::routes::common::{
-    build_jobs_route_deps, build_library_route_deps, ok_json, request_base_url, run_job_query_once,
-    ApiJson, ApiPath, ApiQuery,
+    build_jobs_download_route_deps, build_jobs_route_deps, build_library_route_deps, ok_json,
+    request_base_url, run_job_query_once, ApiJson, ApiPath, ApiQuery,
 };
 use crate::routes::job_helpers::stream_file;
 use crate::services::library::api::{
@@ -31,11 +31,40 @@ use crate::services::library::api::{
     document_source_pdf_download, document_thumbnail_download, get_document,
     list_document_metadata_suggestions_view, list_documents, list_favorites_view,
     ocr_document_view, patch_document, patch_favorite_view, search_blocks_view,
-    translate_document_view,
+    translate_document_view, BatchExportInput, BatchExportView,
 };
 use crate::AppState;
 
 // --- documents ---
+
+pub(crate) async fn export_documents_route(
+    State(state): State<AppState>,
+    ApiJson(input): ApiJson<BatchExportInput>,
+) -> Result<Json<ApiResponse<BatchExportView>>, AppError> {
+    Ok(ok_json(
+        build_jobs_download_route_deps(&state)
+            .downloads
+            .export_batch(input)
+            .await?,
+    ))
+}
+
+pub(crate) async fn download_document_export_route(
+    State(state): State<AppState>,
+    ApiPath(name): ApiPath<String>,
+    headers: HeaderMap,
+) -> Result<Response, AppError> {
+    let file = build_jobs_download_route_deps(&state)
+        .downloads
+        .batch_export_download(&name)?;
+    stream_file(
+        file.path,
+        &file.content_type,
+        file.download_name,
+        Some(&headers),
+    )
+    .await
+}
 
 pub async fn list_documents_route(
     State(state): State<AppState>,

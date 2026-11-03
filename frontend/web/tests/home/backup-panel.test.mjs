@@ -30,6 +30,7 @@ function fixture() {
     test: async () => {},
     listRemote: async () => [],
     backupRemote: async () => { calls.push(["remote"]); },
+    syncRemote: async (name) => { calls.push(["sync", name]); status.items.push({ ...status.items[0], id: "synced", name }); },
     delete: async (name, remote) => { calls.push(["delete", name, remote]); if (!remote) status.items = status.items.filter((item) => item.name !== name); },
     canOpenLocation: () => true,
     openLocation: async (name, previous) => { calls.push(["location", name, previous]); },
@@ -147,5 +148,43 @@ test("an inactive panel makes no requests; failed backups expose a retryable err
     await act(async () => button(view.host, "创建迁移包").click());
     assert.equal(view.host.querySelector('[role="alert"]').textContent, "磁盘空间不足");
     assert.equal(button(view.host, "创建迁移包").disabled, false);
+  } finally { await view.close(); }
+});
+
+test("a cloud backup can be synced locally without confirming a library replacement", async () => {
+  const { client, calls } = fixture();
+  client.listRemote = async () => [{ name: "paperloom-backup-cloud.zip", bytes: 100, modified_at: "" }];
+  const view = await mount(client);
+  try {
+    await act(async () => button(view.host, "查看云端备份").click());
+    const remote = view.host.querySelector('[aria-label="WebDAV 迁移包"]');
+    assert.equal(button(remote, "恢复").disabled, true);
+    await act(async () => button(remote, "同步到本地").click());
+    assert.deepEqual(calls, [["sync", "paperloom-backup-cloud.zip"]]);
+    assert.equal(button(remote, "已在本地").disabled, true);
+    assert.match(view.host.querySelector('[aria-label="本地迁移包"]').textContent, /cloud/);
+    assert.doesNotMatch(view.host.textContent, /重启后替换资料库/);
+  } finally { await view.close(); }
+});
+
+test("an ongoing transfer shows measured progress and stops polling after completion", async () => {
+  const { client, status } = fixture();
+  status.operation = { state: "running", phase: "upload", completed: 512, total: 1024, unit: "bytes", message: null };
+  let reads = 0;
+  client.status = async () => { reads++; return structuredClone(status); };
+  const view = await mount(client);
+  try {
+    const progress = view.host.querySelector('progress');
+    assert.equal(progress.value, 512);
+    assert.equal(progress.max, 1024);
+    assert.match(view.host.querySelector('[role="status"]').textContent, /正在上传到 WebDAV/);
+    assert.equal(button(view.host, "创建迁移包").disabled, true);
+    status.operation.state = "completed";
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 360)); });
+    assert.equal(view.host.querySelector('progress'), null);
+    assert.equal(button(view.host, "创建迁移包").disabled, false);
+    const finishedReads = reads;
+    await new Promise((resolve) => setTimeout(resolve, 550));
+    assert.equal(reads, finishedReads);
   } finally { await view.close(); }
 });

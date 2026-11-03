@@ -228,6 +228,8 @@ fn add_file_to_zip(
 pub enum ZipSource<'a> {
     File(&'a Path),
     Bytes(&'a [u8]),
+    /// Expand an existing generated bundle under this entry's directory prefix.
+    Archive(&'a Path),
 }
 
 /// 按给定顺序写 ZIP；先写同目录临时文件再原子替换，失败不留半成品。
@@ -244,6 +246,22 @@ pub fn write_zip_atomically(
             ZipSource::Bytes(bytes) => {
                 zip.start_file(archive_name.as_str(), options)?;
                 io::Write::write_all(&mut zip, bytes)?;
+            }
+            ZipSource::Archive(path) => {
+                let mut source = zip::ZipArchive::new(File::open(path)?)?;
+                for index in 0..source.len() {
+                    let mut entry = source.by_index(index)?;
+                    if entry.is_dir() {
+                        continue;
+                    }
+                    let relative = entry
+                        .enclosed_name()
+                        .ok_or_else(|| AppError::internal("导出包中的附件路径无效"))?
+                        .to_string_lossy()
+                        .replace('\\', "/");
+                    zip.start_file(format!("{archive_name}/{relative}"), options)?;
+                    io::copy(&mut entry, &mut zip)?;
+                }
             }
         }
     }

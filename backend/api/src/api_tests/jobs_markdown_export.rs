@@ -14,6 +14,7 @@ use crate::models::{
     now_iso, CreateJobInput, JobArtifacts, JobSnapshot, JobStatusKind, UploadRecord,
 };
 
+mod batch_downloads;
 mod zotero_writeback_batch;
 
 #[tokio::test]

@@ -24,6 +24,14 @@ pub(super) fn routes() -> Router<AppState> {
         )
         .route("/api/v1/backups/download/:name", get(backups::download))
         .route(
+            "/api/v1/backups/restored-config",
+            get(backups::restored_config),
+        )
+        .route(
+            "/api/v1/backups/webdav/files/:name/sync",
+            post(backups::sync_remote),
+        )
+        .route(
             "/api/v1/backups/files/:name",
             axum::routing::delete(backups::delete_local),
         )

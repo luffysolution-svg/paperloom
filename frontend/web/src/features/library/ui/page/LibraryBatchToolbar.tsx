@@ -6,7 +6,7 @@
 // LibrarySearchDock,两者不会同时出现)。
 
 import { useEffect, useRef, useState } from "react";
-import { Gem } from "lucide-react";
+import { Download, Gem } from "lucide-react";
 import { cn } from "@/ui/lib/utils";
 
 function IconTrash(props) {
@@ -56,6 +56,7 @@ export function LibraryBatchToolbar({
   onCancel,
   onDelete,
   onExportObsidian,
+  onExport = undefined,
   onWritebackZotero,
   collections = [],
   onAddToCollection,
@@ -86,7 +87,7 @@ export function LibraryBatchToolbar({
 
   return (
     <div className="library-search-dock" aria-label="批量操作工具栏">
-      <div className="flex min-h-[52px] flex-wrap items-center gap-2 rounded-full border border-[color-mix(in_srgb,color-mix(in_srgb,var(--line)_85%,var(--muted))_82%,transparent)] bg-paper/82 p-2 pl-4 shadow-[0_18px_46px_color-mix(in_srgb,var(--shadow-color)_12%,transparent)] backdrop-blur-[18px]">
+      <div className="flex min-h-[52px] flex-wrap items-center gap-2 rounded-2xl border border-[color-mix(in_srgb,color-mix(in_srgb,var(--line)_85%,var(--muted))_82%,transparent)] bg-paper/82 p-2 pl-4 shadow-[0_18px_46px_color-mix(in_srgb,var(--shadow-color)_12%,transparent)] backdrop-blur-[18px]">
         <button
           type="button"
           className="shrink-0 rounded-[var(--btn-radius)] px-2 py-1 text-xs font-medium text-muted-foreground transition active:scale-95 hover:bg-muted/40 hover:text-foreground"
@@ -111,7 +112,16 @@ export function LibraryBatchToolbar({
             : `全选已加载${Number.isFinite(totalSelectable) ? `(${totalSelectable})` : ""}`}
         </button>
 
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+        <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
+          <button
+            type="button"
+            className="inline-flex h-8 items-center gap-1.5 rounded-[var(--btn-radius)] border border-border bg-paper px-3 text-xs font-medium transition active:scale-95 hover:bg-muted/30 disabled:pointer-events-none disabled:opacity-50"
+            disabled={busy || !hasSelection}
+            onClick={onExport}
+          >
+            <Download className="size-3.5 opacity-70" aria-hidden="true" />
+            批量导出
+          </button>
           <button
             type="button"
             className="inline-flex h-8 items-center rounded-[var(--btn-radius)] border border-border bg-paper px-3 text-xs font-medium transition active:scale-95 hover:bg-muted/30 disabled:pointer-events-none disabled:opacity-50"

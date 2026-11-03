@@ -11,6 +11,7 @@ import {
   loadPersistedConfig,
 } from "@/platform/config/desktop-persistence.js";
 import { bootstrapDesktop } from "@/app/desktop/bootstrap.js";
+import { restoreBackupClientConfig } from "@/platform/config/backup-client-config.js";
 
 // appUpdateAutoCheckEnabled: true——create-home-composition 默认关闭后台
 // GitHub 自检（测试隔离），生产入口这里显式打开。
@@ -23,6 +24,13 @@ async function bootHome() {
     } catch (error) {
       console.error("[desktop] failed to restore persisted config", error);
     }
+  }
+
+  try {
+    const restored = await restoreBackupClientConfig();
+    if (restored && desktopMode) desktopConfig = restored;
+  } catch (error) {
+    console.error("[backup] failed to restore interface config", error);
   }
 
   const services = createHomeComposition({

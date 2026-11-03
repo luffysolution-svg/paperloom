@@ -13,6 +13,11 @@ async fn backup_routes_require_authentication() {
     let app = build_app(state);
     for (method, path) in [
         ("GET", "/api/v1/backups"),
+        ("GET", "/api/v1/backups/restored-config"),
+        (
+            "POST",
+            "/api/v1/backups/webdav/files/paperloom-backup-x.zip/sync",
+        ),
         ("POST", "/api/v1/backups"),
         ("POST", "/api/v1/backups/import"),
         ("POST", "/api/v1/backups/restore"),

@@ -53,6 +53,7 @@ async fn create(state: &crate::AppState, credentials: bool) -> BackupItem {
         .create(
             CreateBackupInput {
                 include_credentials: credentials,
+                ..Default::default()
             },
             false,
         )
@@ -107,9 +108,10 @@ async fn round_trip_to_different_root_preserves_database_files_and_old_library()
     let view = target
         .backups
         .clone()
-        .import(futures_util::stream::iter(vec![Ok::<_, ()>(Bytes::from(
-            bytes,
-        ))]))
+        .import(
+            futures_util::stream::iter(vec![Ok::<_, ()>(Bytes::from(bytes))]),
+            None,
+        )
         .await
         .unwrap();
     assert!(view.restart_required);
@@ -172,6 +174,76 @@ async fn credentials_are_opt_in_and_webdav_password_is_never_exported() {
     drop(zip);
     let root = state.config.project_root.clone();
     drop(state);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn frontend_ocr_and_translation_config_round_trips_only_when_requested() {
+    let source = test_state("backup-frontend-source");
+    let config = serde_json::json!({
+        "browser_config": { "ocrProvider": "mineru", "paddleToken": "paddle-secret", "mineruToken": "mineru-secret", "modelApiKey": "translation-secret" },
+        "developer_config": { "model": "custom-model", "baseUrl": "https://example.com/v1", "translationProfiles": { "custom": { "apiKey": "profile-secret", "model": "custom-model" } } }
+    });
+    for include_credentials in [false, true] {
+        let item = source
+            .backups
+            .clone()
+            .create(
+                CreateBackupInput {
+                    include_credentials,
+                    frontend_config: Some(config.clone()),
+                },
+                false,
+            )
+            .await
+            .unwrap();
+        let path = source.backups.download_path(&item.name).unwrap();
+        let mut zip = zip::ZipArchive::new(fs::File::open(&path).unwrap()).unwrap();
+        assert_eq!(
+            zip.by_name("data/secrets/frontend-config.json").is_ok(),
+            include_credentials
+        );
+        drop(zip);
+        if !include_credentials {
+            continue;
+        }
+        let target = test_state("backup-frontend-target");
+        target
+            .backups
+            .clone()
+            .import(
+                futures_util::stream::iter(vec![Ok::<_, ()>(Bytes::from(fs::read(path).unwrap()))]),
+                None,
+            )
+            .await
+            .unwrap();
+        assert!(target
+            .backups
+            .clone()
+            .restored_config()
+            .await
+            .unwrap()
+            .is_none());
+        let target_config = target.config.clone();
+        drop(target);
+        apply_pending(&target_config).unwrap();
+        let restored = crate::app::build_state(target_config.clone()).unwrap();
+        let restored_config = restored
+            .backups
+            .clone()
+            .restored_config()
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(restored_config["config"], config);
+        let status = serde_json::to_string(&restored.backups.status().await.unwrap()).unwrap();
+        assert!(!status.contains("translation-secret"));
+        assert!(!status.contains("mineru-secret"));
+        drop(restored);
+        fs::remove_dir_all(&target_config.project_root).unwrap();
+    }
+    let root = source.config.project_root.clone();
+    drop(source);
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -362,6 +434,56 @@ async fn webdav_upload_list_and_download_use_the_same_portable_package() {
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].name, item.name);
     assert_eq!(listed[0].bytes, item.bytes);
+    let uploaded = state.backups.status().await.unwrap().operation.unwrap();
+    assert_eq!(uploaded.state, "completed");
+    assert_eq!(uploaded.phase, "upload");
+    assert_eq!(uploaded.total, Some(item.bytes));
+    assert_eq!(uploaded.completed, item.bytes);
+    state
+        .backups
+        .clone()
+        .delete(item.name.clone(), false)
+        .await
+        .unwrap();
+    let synced = state
+        .backups
+        .clone()
+        .sync_remote(item.name.clone())
+        .await
+        .unwrap();
+    assert_eq!(synced.bytes, item.bytes);
+    assert!(!state.backups.pending.load(Ordering::SeqCst));
+    assert!(!state.config.data_root.join("backups/pending").exists());
+    assert_eq!(state.backups.status().await.unwrap().items.len(), 1);
+    assert!(state
+        .backups
+        .clone()
+        .sync_remote(item.name.clone())
+        .await
+        .is_err());
+    files.lock().unwrap().insert(
+        "paperloom-backup-corrupt.zip".into(),
+        b"invalid-zip".to_vec(),
+    );
+    assert!(state
+        .backups
+        .clone()
+        .sync_remote("paperloom-backup-corrupt.zip".into())
+        .await
+        .is_err());
+    assert_eq!(state.backups.status().await.unwrap().items.len(), 1);
+    assert_eq!(
+        state
+            .backups
+            .status()
+            .await
+            .unwrap()
+            .operation
+            .unwrap()
+            .state,
+        "failed"
+    );
+    files.lock().unwrap().remove("paperloom-backup-corrupt.zip");
     let view = state
         .backups
         .clone()

@@ -9,6 +9,7 @@ use sha2::{Digest, Sha256};
 use walkdir::WalkDir;
 use zip::{write::FileOptions, ZipArchive, ZipWriter};
 
+use super::progress::Progress;
 use crate::db::{backup::inspect_backup_snapshot, Db};
 
 pub(super) const DATA_DIRS: &[&str] = &[
@@ -25,6 +26,7 @@ const CREDENTIAL_FILES: &[&str] = &[
     "secrets/credentials.json",
     "secrets/ai-runtime.json",
     "secrets/zotero-local-auth.json",
+    "secrets/frontend-config.json",
 ];
 pub(super) const MAX_ARCHIVE_BYTES: u64 = 64 * 1024 * 1024 * 1024;
 const MAX_EXPANDED_BYTES: u64 = 256 * 1024 * 1024 * 1024;
@@ -128,6 +130,8 @@ pub(super) fn create(
     work: &Path,
     destination: &Path,
     credentials: bool,
+    frontend_config: Option<&serde_json::Value>,
+    progress: &Progress,
 ) -> Result<Manifest> {
     fs::create_dir_all(work)?;
     let snapshot = work.join("snapshot.db");
@@ -157,7 +161,13 @@ pub(super) fn create(
     }
     if credentials {
         for relative in CREDENTIAL_FILES {
-            let path = root.join(relative);
+            let path = if *relative == "secrets/frontend-config.json" && frontend_config.is_some() {
+                let path = work.join("frontend-config.json");
+                write_json(&path, &frontend_config.unwrap())?;
+                path
+            } else {
+                root.join(relative)
+            };
             if path.is_file() {
                 if path.symlink_metadata()?.file_type().is_symlink() {
                     bail!("凭据文件不能是符号链接");
@@ -183,6 +193,7 @@ pub(super) fn create(
         files: Vec::new(),
     };
     let mut total = 0u64;
+    progress.phase("pack", Some(sources.len() as u64), "files");
     for (path, source) in sources {
         archive.start_file(format!("data/{path}"), options)?;
         let (bytes, sha256) = copy_hashed(&mut File::open(&source)?, &mut archive)?;
@@ -195,6 +206,7 @@ pub(super) fn create(
             bytes,
             sha256,
         });
+        progress.advance(1);
     }
     if db.backup_blockers()? != 0 {
         bail!("备份期间有任务启动，请等待任务完成后重试");
@@ -209,7 +221,12 @@ pub(super) fn create(
     Ok(manifest)
 }
 
-pub(super) fn extract(source: &Path, destination: &Path, current_schema: i64) -> Result<Manifest> {
+pub(super) fn extract(
+    source: &Path,
+    destination: &Path,
+    current_schema: i64,
+    progress: &Progress,
+) -> Result<Manifest> {
     let mut archive = ZipArchive::new(File::open(source)?).context("无法读取 ZIP 迁移包")?;
     if archive.len() > MAX_FILES + 1 {
         bail!("迁移包文件数过多");
@@ -234,6 +251,7 @@ pub(super) fn extract(source: &Path, destination: &Path, current_schema: i64) ->
     }
     let mut names = HashSet::new();
     let mut total = 0u64;
+    progress.phase("validate", Some(manifest.files.len() as u64), "files");
     for entry in &manifest.files {
         safe_relative(&entry.path)?;
         if !permitted_file(&entry.path, manifest.includes_credentials)
@@ -286,6 +304,7 @@ pub(super) fn extract(source: &Path, destination: &Path, current_schema: i64) ->
         if bytes != entry.bytes || sha256 != entry.sha256 {
             bail!("文件校验失败：{}，请重新导出或下载备份", entry.path);
         }
+        progress.advance(1);
     }
     let version = inspect_backup_snapshot(&destination.join("data/db/jobs.db"))?;
     if version != manifest.schema_version {

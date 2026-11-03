@@ -2,6 +2,7 @@
 // 各 feature 不得再硬编码字符串；已有对外导出的模块保留 re-export 以免断链。
 export const BROWSER_CONFIG_STORAGE_KEY = "retainpdf.browser.config.v1";
 export const DEVELOPER_CONFIG_STORAGE_KEY = "retainpdf.developer.config.v1";
+export const RESTORED_CONFIG_STORAGE_KEY = "paperloom.backup.restored-config.v1";
 
 /** jobs：当前正在轮询的任务 id（localStorage）。 */
 export const ACTIVE_JOB_STORAGE_KEY = "retainpdf.activeJobId";

@@ -699,6 +699,7 @@ body.is-soft-reader-open {
 /* 底部悬浮搜索条(LibrarySearchDock.jsx)——挪回底部后是唯一内容,不用再
    和添加/设置按钮共享一条 pill,宽度收窄一档(min(420px, 视口-56px))。 */
 @utility library-search-dock {
+  &[aria-label="批量操作工具栏"] { width: min(780px, calc(100dvw - 28px)); }
   position: fixed;
   left: 50%;
   bottom: 16px;

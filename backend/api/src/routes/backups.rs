@@ -57,10 +57,15 @@ pub(crate) async fn import(
     {
         return Err(AppError::bad_request("请先确认在重启后替换当前资料库"));
     }
+    let total = request
+        .headers()
+        .get(header::CONTENT_LENGTH)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse().ok());
     Ok(ok_json(
         state
             .backups
-            .import(request.into_body().into_data_stream())
+            .import(request.into_body().into_data_stream(), total)
             .await?,
     ))
 }
@@ -98,6 +103,22 @@ pub(crate) async fn list_remote(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<Vec<RemoteItem>>>, AppError> {
     Ok(ok_json(state.backups.list_remote().await?))
+}
+
+pub(crate) async fn sync_remote(
+    State(state): State<AppState>,
+    ApiPath(name): ApiPath<String>,
+) -> Result<Json<ApiResponse<BackupItem>>, AppError> {
+    Ok(ok_json(state.backups.sync_remote(name).await?))
+}
+
+pub(crate) async fn restored_config(State(state): State<AppState>) -> Result<Response, AppError> {
+    use axum::response::IntoResponse;
+    let mut response = ok_json(state.backups.restored_config().await?).into_response();
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, "no-store".parse().unwrap());
+    Ok(response)
 }
 
 pub(crate) async fn backup_remote(

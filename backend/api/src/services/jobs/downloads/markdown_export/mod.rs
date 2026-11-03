@@ -300,9 +300,13 @@ pub(super) fn markdown_export_download(
     job_id: &str,
     include_source: bool,
     zotero_extras: ZoteroExtrasState,
+    base_name: Option<&str>,
 ) -> Result<FileDownload, AppError> {
     let source = ExportSource::load(deps, job_id, zotero_extras)?;
-    let bundle = source.bundle(&source.default_base_name(), include_source);
+    let base = base_name
+        .map(note::sanitize_file_name)
+        .unwrap_or_else(|| source.default_base_name());
+    let bundle = source.bundle(&base, include_source);
     let names = &bundle.names;
     let mut entries: Vec<(String, ZipSource<'_>)> = vec![(
         format!("{}.md", names.base),
@@ -321,8 +325,11 @@ pub(super) fn markdown_export_download(
         ));
     }
 
+    let variant = base_name
+        .map(|_| format!("-{:x}", md5::compute(format!("{base}:{include_source}"))))
+        .unwrap_or_default();
     let zip_path = job_artifacts_dir(deps.data_root, &source.job)?
-        .join(format!("{}-obsidian.zip", source.job.job_id));
+        .join(format!("{}-obsidian{variant}.zip", source.job.job_id));
     write_zip_atomically(&zip_path, &entries)?;
     // Content-Disposition 直接拼文件名，非 ASCII 会失败；中文笔记名只体现在包内。
     let download_name = if names.base.is_ascii() {

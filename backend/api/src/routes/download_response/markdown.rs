@@ -53,7 +53,7 @@ pub async fn markdown_export_response(
 ) -> Result<Response, AppError> {
     let download = deps
         .downloads
-        .markdown_export_download(job_id, query.include_source)
+        .markdown_export_download(job_id, query.include_source, None)
         .await?;
     file_download_response(download, headers).await
 }

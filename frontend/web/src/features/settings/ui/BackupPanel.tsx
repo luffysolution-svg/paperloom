@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { backupApi, type BackupClient, type BackupStatus, type RemoteBackup } from "@/platform/api/domains/backups.js";
+import { backupApi, type BackupClient, type BackupProgress, type BackupStatus, type RemoteBackup } from "@/platform/api/domains/backups.js";
 
 function size(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KiB`;
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GiB`;
@@ -10,6 +11,7 @@ function size(bytes: number): string {
 export function BackupPanel({ active = true, client = backupApi }: { active?: boolean; client?: BackupClient }) {
   const [status, setStatus] = useState<BackupStatus | null>(null);
   const [busy, setBusy] = useState("");
+  const [downloadProgress, setDownloadProgress] = useState<BackupProgress | null>(null);
   const running = useRef(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -34,12 +36,28 @@ export function BackupPanel({ active = true, client = backupApi }: { active?: bo
     return () => { ignore = true; };
   }, [active, client]);
 
+  const serverBusy = status?.operation?.state === "running";
+  useEffect(() => {
+    if (!active || (!busy && !serverBusy)) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    async function poll() {
+      const next = await client.status().catch(() => null);
+      if (cancelled) return;
+      if (next) setStatus(next);
+      timer = setTimeout(() => void poll(), 500);
+    }
+    timer = setTimeout(() => void poll(), 300);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [active, busy, serverBusy, client]);
+
   async function run(label: string, action: () => Promise<unknown>, success = "") {
     if (running.current) return;
     running.current = true;
     setBusy(label);
     setError("");
     setMessage("");
+    setDownloadProgress(null);
     try {
       await action();
       setStatus(await client.status());
@@ -57,12 +75,19 @@ export function BackupPanel({ active = true, client = backupApi }: { active?: bo
     }
   }
 
-  const locked = Boolean(busy) || Boolean(status?.pending_restore);
+  const locked = Boolean(busy) || serverBusy || Boolean(status?.pending_restore);
   const cannotSnapshot = locked || !status || status.active_tasks > 0;
   const cannotRestore = cannotSnapshot || !status?.restore_supported || !confirmed;
   const dirty = password !== "" || url.trim() !== status?.webdav.url || username !== status?.webdav.username;
   const davInput = () => ({ url, username, ...(password ? { password } : {}) });
   const restoreMessage = "迁移包已校验并暂存。请退出并重新启动应用；网页部署请重启后端服务。";
+  const progress = downloadProgress || (serverBusy ? status.operation : null);
+  const phaseLabels = { pack: "正在打包", upload: "正在上传到 WebDAV", download: "正在下载", import: "正在接收迁移包", validate: "正在校验迁移包" };
+  const feedbackError = error || (!busy && status?.operation?.state === "failed" ? status.operation.message : "");
+  const feedbackMessage = message || (status?.operation?.state === "completed" ? "上次备份操作已完成。" : "");
+  const progressText = progress
+    ? `${phaseLabels[progress.phase]} · ${progress.unit === "files" ? `${progress.completed}${progress.total ? ` / ${progress.total}` : ""} 个文件` : `${size(progress.completed)}${progress.total ? ` / ${size(progress.total)}` : ""}`}`
+    : busy;
 
   function restore(name: string, remote: boolean) {
     if (!confirmed) return;
@@ -93,10 +118,11 @@ export function BackupPanel({ active = true, client = backupApi }: { active?: bo
   }
 
   return (
-    <div className="app-settings-backup" aria-busy={Boolean(busy)}>
-      {error || busy || message ? <div className="app-backup-feedback">
-        {error ? <p role="alert" className="app-backup-error">{error}</p> : null}
-        <p role="status" aria-live="polite" className="app-backup-status">{busy || message}</p>
+    <div className="app-settings-backup" aria-busy={Boolean(busy) || serverBusy}>
+      {feedbackError || busy || serverBusy || feedbackMessage ? <div className="app-backup-feedback">
+        {feedbackError ? <p role="alert" className="app-backup-error">{feedbackError}</p> : null}
+        <p role="status" aria-live="polite" className="app-backup-status">{busy || serverBusy ? progressText : feedbackMessage}</p>
+        {busy || serverBusy ? <progress className="app-backup-progress" aria-label="备份操作进度" max={progress?.total || 1} value={progress?.total ? Math.min(progress.completed, progress.total) : undefined} /> : null}
       </div> : null}
       {status?.pending_restore ? (
         <div className="app-backup-notice">
@@ -115,7 +141,7 @@ export function BackupPanel({ active = true, client = backupApi }: { active?: bo
         </div>
         {status ? <p>本地备份位置：<span className="app-backup-path">{status.backup_dir}</span></p> : null}
         <p>将书库、原文与译文、合集、收藏批注、问答记录和术语表打包，换机时导入同一份 ZIP。</p>
-        <label className="app-backup-check"><input type="checkbox" checked={includeCredentials} disabled={locked} onChange={(event) => setIncludeCredentials(event.target.checked)} />同时包含模型密钥与 Agent 配置</label>
+        <label className="app-backup-check"><input type="checkbox" checked={includeCredentials} disabled={locked} onChange={(event) => setIncludeCredentials(event.target.checked)} />同时包含 OCR、翻译模型密钥与 Agent 配置</label>
         {includeCredentials ? <p className="app-backup-notice">密钥会以明文随迁移包保存，请只将文件存放在你信任的位置。WebDAV 密码始终留在本机。</p> : <p>未勾选时，迁移后需要重新设置模型接口。</p>}
         <button type="button" className="app-settings-action" disabled={cannotSnapshot} onClick={() => void run("正在创建迁移包，请稍候…", () => client.create(includeCredentials), "迁移包已创建，可以在下方下载。")}>创建迁移包</button>
         {status && status.active_tasks > 0 ? <p>当前有 {status.active_tasks} 个任务未结束，完成或取消后请点击刷新。</p> : null}
@@ -125,7 +151,7 @@ export function BackupPanel({ active = true, client = backupApi }: { active?: bo
             {status.items.map((item) => (
               <li key={item.id}>
                 <div><time dateTime={item.created_at}>{new Date(item.created_at).toLocaleString()}</time><small>{size(item.bytes)} · {item.file_count} 个文件{item.includes_credentials ? " · 含密钥" : ""}</small><small className="app-backup-path">{item.name}</small></div>
-                <div className="app-backup-actions"><button type="button" disabled={Boolean(busy)} onClick={() => void run("正在下载迁移包…", () => client.download(item.name), "迁移包已下载。")}>下载</button><button type="button" disabled={cannotRestore} onClick={() => restore(item.name, false)}>恢复</button>{client.canOpenLocation() ? <button type="button" disabled={Boolean(busy)} onClick={() => void run("正在定位备份文件…", () => client.openLocation(item.name))}>位置</button> : null}{deleteActions(item.name, false)}</div>
+                <div className="app-backup-actions"><button type="button" disabled={Boolean(busy) || serverBusy} onClick={() => void run("正在下载迁移包…", () => client.download(item.name, setDownloadProgress), "迁移包已下载。")}>下载</button><button type="button" disabled={cannotRestore} onClick={() => restore(item.name, false)}>恢复</button>{client.canOpenLocation() ? <button type="button" disabled={Boolean(busy)} onClick={() => void run("正在定位备份文件…", () => client.openLocation(item.name))}>位置</button> : null}{deleteActions(item.name, false)}</div>
               </li>
             ))}
           </ul>
@@ -164,7 +190,7 @@ export function BackupPanel({ active = true, client = backupApi }: { active?: bo
           <button type="button" disabled={locked || dirty || !status?.webdav.url} onClick={() => void run("正在读取云端备份…", async () => setRemoteItems(await client.listRemote()))}>查看云端备份</button>
         </div>
         {remoteItems ? remoteItems.length ? (
-          <ul className="app-backup-file-list" aria-label="WebDAV 迁移包">{remoteItems.map((item) => <li key={item.name}><div><span className="app-backup-path">{item.name}</span><small>{size(item.bytes)}</small></div><div className="app-backup-actions"><button type="button" disabled={cannotRestore} onClick={() => restore(item.name, true)}>恢复</button><button type="button" disabled={Boolean(busy)} onClick={() => copyAddress(item.name)}>复制地址</button>{deleteActions(item.name, true)}</div></li>)}</ul>
+          <ul className="app-backup-file-list" aria-label="WebDAV 迁移包">{remoteItems.map((item) => <li key={item.name}><div><span className="app-backup-path">{item.name}</span><small>{size(item.bytes)}</small></div><div className="app-backup-actions"><button type="button" disabled={locked || status?.items.some((local) => local.name === item.name)} onClick={() => void run("正在同步云端备份到本地…", () => client.syncRemote(item.name), "备份已同步到本地，可在本地列表中下载或恢复。")}>{status?.items.some((local) => local.name === item.name) ? "已在本地" : "同步到本地"}</button><button type="button" disabled={cannotRestore} onClick={() => restore(item.name, true)}>恢复</button><button type="button" disabled={Boolean(busy)} onClick={() => copyAddress(item.name)}>复制地址</button>{deleteActions(item.name, true)}</div></li>)}</ul>
         ) : <p className="app-backup-empty">此文件夹还没有 PaperLoom 备份。</p> : null}
       </section>
     </div>

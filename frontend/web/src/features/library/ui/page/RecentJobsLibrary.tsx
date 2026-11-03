@@ -21,6 +21,7 @@ import {
 import { LibraryToolbar } from "./LibraryToolbar.jsx";
 import { LibraryFilterMenu } from "./LibraryFilterMenu.jsx";
 import { LibraryBatchToolbar } from "./LibraryBatchToolbar.jsx";
+import { BatchExportDialog } from "./BatchExportDialog.js";
 import { useLibraryAutoLoad } from "./useLibraryAutoLoad.js";
 import { useHomeReturnRestore } from "./useHomeReturnRestore.js";
 import { deriveLibraryPageState } from "../../domain/library-page-state.js";
@@ -50,6 +51,7 @@ export function RecentJobsLibrary({ onBatchModeChange }: any = {}) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [tagFilter, setTagFilter] = useState("");
   const [obsidianBatchOpen, setObsidianBatchOpen] = useState(false);
+  const [batchExportOpen, setBatchExportOpen] = useState(false);
   const [zoteroBatchOpen, setZoteroBatchOpen] = useState(false);
 
   const items = Array.isArray(recentJobs.items) ? recentJobs.items : [];
@@ -187,6 +189,7 @@ export function RecentJobsLibrary({ onBatchModeChange }: any = {}) {
           onCancel={() => setBatchMode(false)}
           onDelete={handleBatchDelete}
           onExportObsidian={() => setObsidianBatchOpen(true)}
+          onExport={() => setBatchExportOpen(true)}
           onWritebackZotero={() => setZoteroBatchOpen(true)}
           collections={collections}
           onAddToCollection={handleBatchAddToCollection}
@@ -198,6 +201,7 @@ export function RecentJobsLibrary({ onBatchModeChange }: any = {}) {
         onOpenChange={setObsidianBatchOpen}
         documentIds={[...effectiveSelectedIds]}
       />
+      {batchExportOpen ? <BatchExportDialog open onOpenChange={setBatchExportOpen} documentIds={[...effectiveSelectedIds]} /> : null}
       <ZoteroBatchWritebackDialog
         open={zoteroBatchOpen}
         onOpenChange={setZoteroBatchOpen}

@@ -23,8 +23,8 @@ pub(crate) use deps::{
     CommandJobsDeps, ControlDeps, JobSubmitDeps, QueryJobsDeps, ReplayDeps, SnapshotBuildDeps,
 };
 pub(crate) use downloads::{
-    normalize_vault_folder, note_uri_path, ConflictPolicy, DocumentDownloadKind, FileDownload,
-    JobDownloads, MarkdownDownload, VaultWriteStatus,
+    normalize_vault_folder, note_uri_path, BatchExportInput, BatchExportView, ConflictPolicy,
+    DocumentDownloadKind, FileDownload, JobDownloads, MarkdownDownload, VaultWriteStatus,
 };
 pub(crate) use facade::build_jobs_facade;
 pub use facade::JobsFacade;

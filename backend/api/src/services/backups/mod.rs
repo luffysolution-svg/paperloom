@@ -1,6 +1,7 @@
 //! Portable library migration and manual WebDAV backups.
 
 mod archive;
+mod progress;
 mod restore;
 mod webdav;
 
@@ -45,6 +46,7 @@ pub(crate) struct BackupStatus {
     pub data_root: String,
     pub backup_dir: String,
     pub webdav: SettingsView,
+    pub operation: Option<progress::BackupProgress>,
 }
 
 #[derive(Default, Deserialize)]
@@ -52,6 +54,8 @@ pub(crate) struct BackupStatus {
 pub(crate) struct CreateBackupInput {
     #[serde(default)]
     pub include_credentials: bool,
+    #[serde(default)]
+    pub frontend_config: Option<serde_json::Value>,
 }
 
 #[derive(Deserialize)]
@@ -81,6 +85,7 @@ pub(crate) struct BackupService {
     operation: Mutex<()>,
     pub gate: Arc<RwLock<()>>,
     pub pending: AtomicBool,
+    progress: progress::Progress,
 }
 
 async fn blocking<T: Send + 'static>(
@@ -108,6 +113,7 @@ impl BackupService {
             operation: Mutex::new(()),
             gate: Arc::default(),
             pending: AtomicBool::new(pending),
+            progress: progress::Progress::default(),
         }
     }
 
@@ -199,12 +205,13 @@ impl BackupService {
                 data_root: this.config.data_root.to_string_lossy().into_owned(),
                 backup_dir: this.directory().to_string_lossy().into_owned(),
                 webdav: this.settings()?.view(),
+                operation: this.progress.snapshot(),
             })
         })
         .await
     }
 
-    fn create_sync(&self, credentials: bool) -> Result<BackupItem, AppError> {
+    fn create_sync(&self, input: CreateBackupInput) -> Result<BackupItem, AppError> {
         let work = self.work_dir()?;
         let id = format!(
             "{}-{:016x}",
@@ -218,7 +225,9 @@ impl BackupService {
             &self.db,
             &work.0,
             &path,
-            credentials,
+            input.include_credentials,
+            input.frontend_config.as_ref(),
+            &self.progress,
         )?;
         let item = BackupItem {
             id,
@@ -226,7 +235,7 @@ impl BackupService {
             created_at: manifest.created_at,
             bytes: fs::metadata(&path)?.len(),
             file_count: manifest.files.len(),
-            includes_credentials: credentials,
+            includes_credentials: input.include_credentials,
         };
         fs::rename(path, self.directory().join(&name))?;
         archive::write_json(&self.directory().join(name.replace(".zip", ".json")), &item)?;
@@ -241,22 +250,27 @@ impl BackupService {
         detached(async move {
             let _operation = self.operation.lock().await;
             let _gate = self.idle_gate()?;
-            let this = self.clone();
-            let item = blocking(move || this.create_sync(input.include_credentials)).await?;
-            if remote {
-                if let Err(error) = webdav::upload(
-                    &self.settings()?,
-                    &self.download_path(&item.name)?,
-                    &item.name,
-                )
+            self.progress
+                .track("pack", async {
+                    let this = self.clone();
+                    let item = blocking(move || this.create_sync(input)).await?;
+                    if remote {
+                        if let Err(error) = webdav::upload(
+                            &self.settings()?,
+                            &self.download_path(&item.name)?,
+                            &item.name,
+                            self.progress.clone(),
+                        )
+                        .await
+                        {
+                            return Err(AppError::bad_gateway(format!(
+                                "云端上传未完成，本地迁移包已保留，可在本地列表中下载。{error}"
+                            )));
+                        }
+                    }
+                    Ok(item)
+                })
                 .await
-                {
-                    return Err(AppError::bad_gateway(format!(
-                        "云端上传未完成，本地迁移包已保留，可在本地列表中下载。{error}"
-                    )));
-                }
-            }
-            Ok(item)
         })
         .await
     }
@@ -300,8 +314,13 @@ impl BackupService {
         restore::check_runtime(&self.config)
             .map_err(|error| AppError::conflict(error.to_string()))?;
         let extracted = work.0.join("extracted");
-        let manifest = archive::extract(&source, &extracted, self.db.backup_schema_version()?)
-            .map_err(|error| AppError::bad_request(format!("迁移包校验失败：{error}")))?;
+        let manifest = archive::extract(
+            &source,
+            &extracted,
+            self.db.backup_schema_version()?,
+            &self.progress,
+        )
+        .map_err(|error| AppError::bad_request(format!("迁移包校验失败：{error}")))?;
         if self.db.backup_blockers()? != 0 {
             return Err(AppError::conflict("有任务正在运行，请稍后重试恢复"));
         }
@@ -314,7 +333,11 @@ impl BackupService {
         })
     }
 
-    pub async fn import<S, E>(self: Arc<Self>, stream: S) -> Result<RestoreView, AppError>
+    pub async fn import<S, E>(
+        self: Arc<Self>,
+        stream: S,
+        total: Option<u64>,
+    ) -> Result<RestoreView, AppError>
     where
         S: Stream<Item = Result<Bytes, E>> + Send + Unpin + 'static,
         E: Send + 'static,
@@ -322,26 +345,32 @@ impl BackupService {
         detached(async move {
             let _operation = self.operation.lock().await;
             let _gate = self.idle_gate()?;
-            restore::check_runtime(&self.config)
-                .map_err(|error| AppError::conflict(error.to_string()))?;
-            let work = self.work_dir()?;
-            let path = work.0.join("upload.zip");
-            let mut file = tokio::fs::File::from_std(archive::private_file(&path)?);
-            let mut stream = stream;
-            let mut bytes = 0u64;
-            while let Some(chunk) = stream.next().await {
-                let chunk =
-                    chunk.map_err(|_| AppError::bad_request("迁移包上传中断，请重新选择文件"))?;
-                bytes += chunk.len() as u64;
-                if bytes > archive::MAX_ARCHIVE_BYTES {
-                    return Err(AppError::payload_too_large("迁移包不能超过 64 GiB"));
-                }
-                file.write_all(&chunk).await?;
-            }
-            file.sync_all().await?;
-            drop(file);
-            let this = self.clone();
-            blocking(move || this.stage_sync(path, work)).await
+            self.progress
+                .track("import", async {
+                    self.progress.phase("import", total, "bytes");
+                    restore::check_runtime(&self.config)
+                        .map_err(|error| AppError::conflict(error.to_string()))?;
+                    let work = self.work_dir()?;
+                    let path = work.0.join("upload.zip");
+                    let mut file = tokio::fs::File::from_std(archive::private_file(&path)?);
+                    let mut stream = stream;
+                    let mut bytes = 0u64;
+                    while let Some(chunk) = stream.next().await {
+                        let chunk = chunk
+                            .map_err(|_| AppError::bad_request("迁移包上传中断，请重新选择文件"))?;
+                        bytes += chunk.len() as u64;
+                        if bytes > archive::MAX_ARCHIVE_BYTES {
+                            return Err(AppError::payload_too_large("迁移包不能超过 64 GiB"));
+                        }
+                        file.write_all(&chunk).await?;
+                        self.progress.advance(chunk.len() as u64);
+                    }
+                    file.sync_all().await?;
+                    drop(file);
+                    let this = self.clone();
+                    blocking(move || this.stage_sync(path, work)).await
+                })
+                .await
         })
         .await
     }
@@ -357,18 +386,28 @@ impl BackupService {
         detached(async move {
             let _operation = self.operation.lock().await;
             let _gate = self.idle_gate()?;
-            restore::check_runtime(&self.config)
-                .map_err(|error| AppError::conflict(error.to_string()))?;
-            let work = self.work_dir()?;
-            let source = if remote {
-                let source = work.0.join("download.zip");
-                webdav::download(&self.settings()?, &input.name, &source).await?;
-                source
-            } else {
-                self.download_path(&input.name)?
-            };
-            let this = self.clone();
-            blocking(move || this.stage_sync(source, work)).await
+            self.progress
+                .track(if remote { "download" } else { "validate" }, async {
+                    restore::check_runtime(&self.config)
+                        .map_err(|error| AppError::conflict(error.to_string()))?;
+                    let work = self.work_dir()?;
+                    let source = if remote {
+                        let source = work.0.join("download.zip");
+                        webdav::download(
+                            &self.settings()?,
+                            &input.name,
+                            &source,
+                            self.progress.clone(),
+                        )
+                        .await?;
+                        source
+                    } else {
+                        self.download_path(&input.name)?
+                    };
+                    let this = self.clone();
+                    blocking(move || this.stage_sync(source, work)).await
+                })
+                .await
         })
         .await
     }
@@ -420,6 +459,78 @@ impl BackupService {
         let this = self.clone();
         let settings = blocking(move || this.settings()).await?;
         webdav::list(&settings).await
+    }
+
+    /// Keep a verified remote package locally without staging a library replacement.
+    pub async fn sync_remote(self: Arc<Self>, name: String) -> Result<BackupItem, AppError> {
+        webdav::validate_name(&name)?;
+        detached(async move {
+            let _operation = self.operation.lock().await;
+            self.progress
+                .track("download", async {
+                    if self.download_path(&name).is_ok() {
+                        return Err(AppError::conflict("此备份已在本地列表中"));
+                    }
+                    let work = self.work_dir()?;
+                    let path = work.0.join("download.zip");
+                    webdav::download(&self.settings()?, &name, &path, self.progress.clone())
+                        .await?;
+                    let this = self.clone();
+                    blocking(move || {
+                        let manifest = archive::extract(
+                            &path,
+                            &work.0.join("verified"),
+                            this.db.backup_schema_version()?,
+                            &this.progress,
+                        )
+                        .map_err(|error| {
+                            AppError::bad_request(format!("迁移包校验失败：{error}"))
+                        })?;
+                        let item = BackupItem {
+                            id: name
+                                .trim_start_matches("paperloom-backup-")
+                                .trim_end_matches(".zip")
+                                .to_owned(),
+                            name: name.clone(),
+                            created_at: manifest.created_at,
+                            bytes: fs::metadata(&path)?.len(),
+                            file_count: manifest.files.len(),
+                            includes_credentials: manifest.includes_credentials,
+                        };
+                        archive::write_json(
+                            &this.directory().join(name.replace(".zip", ".json")),
+                            &item,
+                        )?;
+                        fs::rename(path, this.directory().join(name))?;
+                        Ok(item)
+                    })
+                    .await
+                })
+                .await
+        })
+        .await
+    }
+
+    pub async fn restored_config(self: Arc<Self>) -> Result<Option<serde_json::Value>, AppError> {
+        blocking(move || {
+            let receipt = self.directory().join("last-restore.json");
+            if !receipt.is_file() {
+                return Ok(None);
+            }
+            let receipt: serde_json::Value = serde_json::from_slice(&fs::read(receipt)?)
+                .map_err(|_| AppError::internal("恢复记录损坏"))?;
+            if receipt["frontend_config_restored"] != true {
+                return Ok(None);
+            }
+            let config: serde_json::Value = serde_json::from_slice(&fs::read(
+                self.config.data_root.join("secrets/frontend-config.json"),
+            )?)
+            .map_err(|_| AppError::internal("恢复的接口配置损坏"))?;
+            Ok(Some(
+                serde_json::json!({ "restored_at": receipt["restored_at"], "config": config }),
+            ))
+        })
+        .await
     }
 }
 
