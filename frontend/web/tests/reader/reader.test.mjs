@@ -373,7 +373,7 @@ test("reader ai config prefers persisted browser credentials", () => {
     apiKey: "sk-local",
     baseUrl: "https://reader.local/v1",
     model: "deepseek-chat",
-    provider: "deepseek",
+    provider: "custom",
   });
 });
 
