@@ -57,7 +57,7 @@ function ScanIcon() {
 // 取全局服务；那四个按钮要读 statusCard store（useStatusCardModel），一旦直接
 // 写在这里，孤立挂载本组件的组件级测试就会因为缺少 HomeShellProviders 而崩。
 // 真正的注入点在 BookDetailDialog（它本来就在 providers 里）。
-export function BookDetailProcessingTab({ ocr, translation, loading = false, error = "", resultActionsSlot = null }: any) {
+export function BookDetailProcessingTab({ ocr, translation, loading = false, error = "", resultActionsSlot = null, profileSlot = null }: any) {
   const ocrJob = ocr?.job ?? null;
   const ocrActive = isDocumentJobActive(ocrJob);
   const ocrStatus = documentJobPresentation(ocrJob, "尚未执行");
@@ -232,6 +232,7 @@ export function BookDetailProcessingTab({ ocr, translation, loading = false, err
             // 由「还没见过任何任务」推出，点下去可能与在跑的任务撞车。
             canTranslate={bootstrapping ? false : translation.canTranslate}
             ocrActionSlot={ocrAction}
+            profileSlot={profileSlot}
           />
         </div>
 

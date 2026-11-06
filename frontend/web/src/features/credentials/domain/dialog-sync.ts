@@ -19,12 +19,15 @@ export function syncCredentialDialogFields({
 
   if (paddleInput) {
     paddleInput.value = credentials.paddleToken || "";
+    delete paddleInput.dataset?.clearCredential;
   }
   if (mineruInput) {
     mineruInput.value = credentials.mineruToken || "";
+    delete mineruInput.dataset?.clearCredential;
   }
   if (apiKeyInput) {
     apiKeyInput.value = credentials.modelApiKey || defaultModelApiKey?.() || "";
+    delete apiKeyInput.dataset?.clearCredential;
   }
   if (modelBaseUrlInput) {
     modelBaseUrlInput.value = taskOptions.baseUrl || defaultModelBaseUrl?.() || "";

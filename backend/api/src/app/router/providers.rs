@@ -23,4 +23,12 @@ pub(super) fn routes() -> Router<AppState> {
             "/api/v1/providers/deepseek/balance",
             post(providers::query_deepseek_balance),
         )
+        .route(
+            "/api/v1/providers/models",
+            post(providers::list_models),
+        )
+        .route(
+            "/api/v1/providers/private-access",
+            post(providers::set_private_provider_access),
+        )
 }

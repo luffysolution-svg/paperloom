@@ -40,6 +40,24 @@ pub struct DeepSeekTokenValidationRequest {
     pub model: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ModelListRequest {
+    pub api_key: String,
+    #[serde(default)]
+    pub base_url: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ModelListView {
+    pub ok: bool,
+    pub status: &'static str,
+    pub summary: String,
+    pub retryable: bool,
+    pub models: Vec<String>,
+    pub base_url: String,
+    pub checked_at: String,
+}
+
 #[derive(Debug, Serialize)]
 pub struct DeepSeekBalanceInfoView {
     pub currency: String,

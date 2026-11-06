@@ -88,7 +88,7 @@ export function normalizeBrowserStoredConfig(
     ocrCredentialRef: typeof source.ocrCredentialRef === "string"
       ? source.ocrCredentialRef.trim()
       : "",
-    paddleToken: typeof source.paddleToken === "string" ? source.paddleToken : "",
+    paddleToken: typeof source.paddleToken === "string" ? source.paddleToken.trim() : "",
     mineruToken: typeof source.mineruToken === "string" ? source.mineruToken.trim() : "",
     translationCredentialRef: typeof source.translationCredentialRef === "string"
       ? source.translationCredentialRef.trim()

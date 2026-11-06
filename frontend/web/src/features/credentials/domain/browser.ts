@@ -1,4 +1,5 @@
 import { dialogDataset } from "./translation-profile.js";
+import { inferTranslationProvider } from "@/platform/config/providers.js";
 import {
   defaultCredentialsStatePort,
 } from "./default-state-port.js";
@@ -10,6 +11,7 @@ import { createCredentialDialogFlow } from "./dialog-flow.js";
 import { createBrowserCredentialSaveFlow } from "./save-flow.js";
 import { createServiceProfiles } from "./service-profiles.js";
 import { createCredentialValidationFlow } from "./validation-flow.js";
+import { createTranslationModelListFlow } from "./model-list-flow.js";
 import type {
   ProviderValidationResult,
 } from "./validation.js";
@@ -48,6 +50,8 @@ export interface CredentialsViewPort {
   openDialog?: () => void;
   setDeepSeekTopUpVisible?: (visible?: boolean) => void;
   setTranslationProvider?: (provider?: string) => void;
+  setTranslationModels?: (payload?: Record<string, unknown>) => void;
+  setDirty?: (dirty?: boolean) => void;
   setDeepSeekValidationMessage?: (message?: string, tone?: string) => void;
   setDialogMode?: (options?: {
     setupMode?: boolean;
@@ -134,6 +138,10 @@ export interface MountBrowserCredentialsFeatureOptions {
     apiPrefix?: unknown,
     payload?: unknown,
   ) => Promise<ProviderValidationResult | unknown> | ProviderValidationResult | unknown;
+  listModels?: (
+    apiPrefix?: unknown,
+    payload?: unknown,
+  ) => Promise<unknown> | unknown;
   createCredential?: (apiPrefix: string | undefined, payload: Record<string, unknown>) => Promise<any>;
   updateCredential?: (
     apiPrefix: string | undefined,
@@ -176,6 +184,7 @@ export function mountBrowserCredentialsFeature({
   validateOcrToken,
   validateDeepSeekToken,
   queryDeepSeekBalance,
+  listModels,
   createCredential,
   updateCredential,
   onCredentialStateChange,
@@ -263,6 +272,14 @@ export function mountBrowserCredentialsFeature({
     legacyValidationCachePort,
   });
 
+  const modelList = createTranslationModelListFlow({
+    apiPrefix,
+    dialogElementsPort,
+    currentProvider: () => translation.getCurrentProvider(),
+    listModels,
+    viewPort,
+  });
+
   const serviceProfiles = createServiceProfiles({
     getSettings: getServiceProfileSettings || (() => (getTaskOptions?.() || {}) as Record<string, unknown>),
     getTaskOptions: () => (getTaskOptions?.() || {}) as Record<string, unknown>,
@@ -291,6 +308,7 @@ export function mountBrowserCredentialsFeature({
     },
     validateOcr: validation.handleOcrValidate,
     validateDeepSeek: validation.handleDeepSeekValidate,
+    fetchModels: modelList.fetchModels,
     save: saveFlow.handleSave,
     saveOcr: () => saveFlow.handleSave("ocr"),
     saveTranslation: () => saveFlow.handleSave("translation"),
@@ -299,9 +317,15 @@ export function mountBrowserCredentialsFeature({
       if (saveFlow.isSaving()) return;
       dialogFlow.handleOcrProviderChange(event);
       credentialsStatePort.resetOcrValidationCache?.();
+      viewPort.setDirty?.(true);
       onCredentialStateChange?.();
     },
-    changeTranslationProvider: dialogFlow.handleTranslationProviderChange,
+    changeTranslationProvider: (provider) => {
+      modelList.clear();
+      dialogFlow.handleTranslationProviderChange(provider);
+      viewPort.setDirty?.(true);
+    },
+    markDirty: () => viewPort.setDirty?.(true),
   });
 
   // 凭据只住在这个浏览器里，一个字节都不向服务端要。
@@ -333,6 +357,16 @@ export function mountBrowserCredentialsFeature({
 
   return {
     serviceProfiles,
+    getTranslationConfig: () => {
+      const options = (getTaskOptions?.() || {}) as Record<string, unknown>;
+      const baseUrl = `${options.baseUrl || defaultModelBaseUrl?.() || ""}`.trim();
+      return {
+        provider: `${options.translationProvider || inferTranslationProvider(baseUrl)}`.trim(),
+        model: `${options.model || ""}`.trim(),
+        workers: Number(options.workers) || 0,
+        baseUrl,
+      };
+    },
     activateCredentialTab: dialogFlow.activateCredentialTab,
     ready: () => credentialReferencesReady,
     ensureOcrCredentialsReady: validation.ensureOcrReady,

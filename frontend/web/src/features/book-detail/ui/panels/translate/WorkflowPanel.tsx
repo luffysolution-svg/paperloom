@@ -35,6 +35,7 @@ export type BookTranslationWorkflowPanelProps = {
   ocrReuse?: { jobId: string } | null;
   /** 与「翻译整本」同排的动作（例如「开始/重新 OCR」）。 */
   ocrActionSlot?: ReactNode;
+  profileSlot?: ReactNode;
   onRangeOnChange: (value: boolean) => void;
   onStartPageChange: (value: string) => void;
   onEndPageChange: (value: string) => void;
@@ -70,6 +71,7 @@ export function BookTranslationWorkflowPanel({
   stageActionError = "",
   ocrReuse = null,
   ocrActionSlot = null,
+  profileSlot = null,
   onRangeOnChange,
   onStartPageChange,
   onEndPageChange,
@@ -134,6 +136,7 @@ export function BookTranslationWorkflowPanel({
         error={error}
         ocrReuse={ocrReuse}
         extraActions={ocrActionSlot}
+        profileSlot={profileSlot}
         onRangeOnChange={onRangeOnChange}
         onStartPageChange={onStartPageChange}
         onEndPageChange={onEndPageChange}

@@ -22,6 +22,9 @@ export function translationConfigError(baseUrl = "", model = "") {
     if (parsed.username || parsed.password) {
       return "翻译 API URL 不能包含用户名或密码";
     }
+    if (parsed.search || parsed.hash) {
+      return "翻译 API URL 不能包含查询参数或片段";
+    }
   } catch {
     return "翻译 API URL 必须是有效的 http(s) 地址";
   }

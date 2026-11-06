@@ -7,15 +7,18 @@ export interface CredentialDialogValues {
   modelBaseUrl: string;
   modelName: string;
   translationWorkers: string;
+  clearPaddleToken: boolean;
+  clearMineruToken: boolean;
+  clearModelApiKey: boolean;
   mathMode: string;
   ocrCredentialRef?: string;
   translationCredentialRef?: string;
 }
 
 export interface CredentialDialogElementsLike {
-  paddleInput?: { value?: string } | null;
-  mineruInput?: { value?: string } | null;
-  apiKeyInput?: { value?: string } | null;
+  paddleInput?: { value?: string; dataset?: Record<string, string> } | null;
+  mineruInput?: { value?: string; dataset?: Record<string, string> } | null;
+  apiKeyInput?: { value?: string; dataset?: Record<string, string> } | null;
   modelBaseUrlInput?: { value?: string } | null;
   modelNameInput?: { value?: string } | null;
   translationWorkersInput?: { value?: string } | null;
@@ -58,6 +61,9 @@ export function readCredentialDialogValues({
     modelBaseUrl: modelBaseUrlInput?.value?.trim() || "",
     modelName: modelNameInput?.value?.trim() || "",
     translationWorkers: translationWorkersInput?.value?.trim() || "",
+    clearPaddleToken: paddleInput?.dataset?.clearCredential === "1",
+    clearMineruToken: mineruInput?.dataset?.clearCredential === "1",
+    clearModelApiKey: apiKeyInput?.dataset?.clearCredential === "1",
     mathMode: mathModeSelect?.value || "direct_typst",
   };
 }

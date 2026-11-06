@@ -47,3 +47,19 @@ export async function queryDeepSeekBalance(apiPrefix, payload) {
     ],
   };
 }
+
+export async function listModels(apiPrefix, payload) {
+  void apiPrefix;
+  void payload;
+  return {
+    ok: true,
+    status: "valid",
+    summary: "模拟模式：已获取模型列表",
+    models: ["deepseek-flash", "deepseek-chat"],
+  };
+}
+
+export async function setPrivateProviderAccess(apiPrefix, payload) {
+  void apiPrefix;
+  return { enabled: Boolean(payload?.enabled), restart_required: false };
+}

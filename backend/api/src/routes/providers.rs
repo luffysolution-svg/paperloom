@@ -7,7 +7,7 @@ use crate::ocr_provider::{provider_public_definitions, OcrProviderPublicDefiniti
 use crate::routes::common::{build_provider_route_deps, ApiJson};
 use crate::services::provider_api::{
     self, DeepSeekBalanceView, DeepSeekTokenValidationRequest, MineruTokenValidationRequest,
-    MineruTokenValidationView, PaddleTokenValidationRequest,
+    MineruTokenValidationView, ModelListRequest, ModelListView, PaddleTokenValidationRequest,
 };
 use crate::AppState;
 
@@ -50,4 +50,34 @@ pub async fn query_deepseek_balance(
     let deps = build_provider_route_deps(&state);
     let view = provider_api::query_deepseek_balance(&deps, payload).await?;
     Ok(Json(ApiResponse::ok(view)))
+}
+
+pub async fn list_models(
+    State(state): State<AppState>,
+    ApiJson(payload): ApiJson<ModelListRequest>,
+) -> Result<Json<ApiResponse<ModelListView>>, AppError> {
+    let deps = build_provider_route_deps(&state);
+    let view = provider_api::list_models(&deps, payload).await?;
+    Ok(Json(ApiResponse::ok(view)))
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct PrivateProviderAccessRequest {
+    pub enabled: bool,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct PrivateProviderAccessView {
+    pub enabled: bool,
+    pub restart_required: bool,
+}
+
+pub async fn set_private_provider_access(
+    ApiJson(payload): ApiJson<PrivateProviderAccessRequest>,
+) -> Result<Json<ApiResponse<PrivateProviderAccessView>>, AppError> {
+    provider_api::set_private_provider_urls(payload.enabled);
+    Ok(Json(ApiResponse::ok(PrivateProviderAccessView {
+        enabled: payload.enabled,
+        restart_required: false,
+    })))
 }

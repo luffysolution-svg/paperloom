@@ -47,6 +47,7 @@ type CreateCredentialsArgs = {
   validateOcrTokenOverride?: AsyncFn | null;
   validateDeepSeekTokenOverride?: AsyncFn;
   queryDeepSeekBalanceOverride?: AsyncFn;
+  listModelsOverride?: AsyncFn;
   createCredentialOverride?: AsyncFn;
   updateCredentialOverride?: AsyncFn;
   checkApiConnectivityOverride?: AsyncFn | null;
@@ -62,6 +63,7 @@ export function createCredentials({
   validateOcrTokenOverride,
   validateDeepSeekTokenOverride,
   queryDeepSeekBalanceOverride,
+  listModelsOverride,
   createCredentialOverride,
   updateCredentialOverride,
   checkApiConnectivityOverride,
@@ -144,6 +146,7 @@ export function createCredentials({
     validateOcrToken: validateOcrTokenOverride || validateCredentialOcrToken,
     validateDeepSeekToken: validateDeepSeekTokenOverride,
     queryDeepSeekBalance: queryDeepSeekBalanceOverride,
+    listModels: listModelsOverride,
     createCredential: createCredentialOverride || createCredential,
     updateCredential: updateCredentialOverride || updateCredential,
     onCredentialStateChange: () => {

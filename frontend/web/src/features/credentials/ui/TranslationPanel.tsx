@@ -32,7 +32,7 @@ function TranslationProviderMark({ provider, compact = false }) {
   );
 }
 
-export function TranslationPanel() {
+export function TranslationPanel({ disabled = false }: { disabled?: boolean } = {}) {
   const { credentials, view, handlers, elementsRef } = useCredentialsController();
   const { saving, save } = useCredentialSave(handlers?.saveTranslation, "翻译 API 设置已保存");
   const translationProvider = `${view.translationProvider || "custom"}`;
@@ -43,6 +43,7 @@ export function TranslationPanel() {
   // 只有 tone === "pending" 才算「检测进行中」。此前用「有消息且无 tone」推断，
   // 会把中性提示（如「使用旧配置；请填写 Key 后检测」）误判成进行中并锁死按钮。
   const pending = validation.tone === "pending";
+  const locked = disabled || saving || view.dialogStatus?.tone === "pending";
   const badgeClasses = [
     "token-inline-status",
     content ? "" : "hidden",
@@ -65,6 +66,7 @@ export function TranslationPanel() {
           <span className="developer-label">API 服务</span>
           <SelectPrimitive.Root
             value={providerDefinition.id}
+            disabled={locked}
             onValueChange={(value) => handlers?.changeTranslationProvider?.(value)}
           >
             <SelectPrimitive.Trigger
@@ -123,11 +125,12 @@ export function TranslationPanel() {
             aria-readonly={fixedBaseUrl}
             title={fixedBaseUrl ? `${providerDefinition.label} 官方地址，由服务商选项管理` : "自定义 OpenAI 兼容 API 地址"}
             ref={(node) => { elementsRef.modelBaseUrlInput = node || null; }}
-            onInput={() => handlers?.resetDeepSeekValidation?.()}
+            disabled={locked}
+            onInput={() => { handlers?.markDirty?.(); handlers?.resetDeepSeekValidation?.(); }}
           />
         </label>
-        <label className="credential-translation-model-field">
-          <span className="developer-label">模型</span>
+        <div className="credential-translation-model-field">
+          <label htmlFor={BROWSER_IDS.modelName} className="developer-label">模型</label>
           <input
             id={BROWSER_IDS.modelName}
             type="text"
@@ -135,21 +138,63 @@ export function TranslationPanel() {
             placeholder="模型名称"
             defaultValue=""
             ref={(node) => { elementsRef.modelNameInput = node || null; }}
-            onInput={() => handlers?.resetDeepSeekValidation?.()}
+            disabled={locked}
+            onInput={() => { handlers?.markDirty?.(); handlers?.resetDeepSeekValidation?.(); }}
           />
-        </label>
-        <label className="credential-translation-key-field">
-          <span className="developer-label">API Key</span>
-          <SecretInput
-            id={BROWSER_IDS.apiKey}
-            secretLabel="翻译 API Key"
-            autoComplete="off"
-            placeholder={TRANSLATION_PROVIDER_DEFINITION.keyPlaceholder}
-            defaultValue=""
-            ref={(node) => { elementsRef.apiKeyInput = node || null; }}
-            onInput={() => handlers?.resetDeepSeekValidation?.()}
-          />
-        </label>
+          {view.translationModels?.items?.length ? (
+            <label htmlFor={BROWSER_IDS.modelOptions} className="credential-translation-model-list-field">
+              <span className="developer-label">已发现模型</span>
+              <select
+                id={BROWSER_IDS.modelOptions}
+                disabled={locked}
+                defaultValue=""
+                onChange={(event) => {
+                  const input = elementsRef.modelNameInput;
+                  if (input) input.value = event.currentTarget.value;
+                  handlers?.markDirty?.();
+                  handlers?.resetDeepSeekValidation?.();
+                }}
+              >
+                <option value="">选择模型以回填</option>
+                {view.translationModels.items.map((model) => <option key={model} value={model}>{model}</option>)}
+              </select>
+            </label>
+          ) : null}
+        </div>
+        <div className="credential-translation-key-field">
+          <label htmlFor={BROWSER_IDS.apiKey} className="developer-label">API Key</label>
+          <div className="credential-secret-input-row">
+            <SecretInput
+              id={BROWSER_IDS.apiKey}
+              secretLabel="翻译 API Key"
+              autoComplete="off"
+              placeholder={TRANSLATION_PROVIDER_DEFINITION.keyPlaceholder}
+              defaultValue=""
+              ref={(node) => { elementsRef.apiKeyInput = node || null; }}
+              disabled={locked}
+              onInput={() => {
+                if (elementsRef.apiKeyInput) delete elementsRef.apiKeyInput.dataset.clearCredential;
+                handlers?.markDirty?.();
+                handlers?.resetDeepSeekValidation?.();
+              }}
+            />
+            <button
+              type="button"
+              className="credential-inline-clear"
+              disabled={locked}
+              onClick={() => {
+                const input = elementsRef.apiKeyInput;
+                if (!input) return;
+                input.value = "";
+                input.dataset.clearCredential = "1";
+                handlers?.markDirty?.();
+                handlers?.resetDeepSeekValidation?.();
+              }}
+            >
+              清除
+            </button>
+          </div>
+        </div>
         <label className="credential-translation-workers-field">
           <span className="developer-label">并发数</span>
           <input
@@ -165,6 +210,8 @@ export function TranslationPanel() {
             aria-label="翻译并发数"
             defaultValue=""
             ref={(node) => { elementsRef.translationWorkersInput = node || null; }}
+            disabled={locked}
+            onInput={() => handlers?.markDirty?.()}
           />
         </label>
       </div>
@@ -177,13 +224,22 @@ export function TranslationPanel() {
       {providerDefinition.id === "custom" ? <DesktopPrivateApiAccess /> : null}
       <div className="credential-card-footer">
         <div className="credential-card-actions">
-          <button type="button" className="app-button secondary" disabled={saving || view.dialogStatus?.tone === "pending"}
+          <button type="button" className="app-button secondary" disabled={locked}
             aria-busy={saving} onClick={() => void save()}>{saving ? "正在保存…" : "保存翻译 API"}</button>
+          <button
+            type="button"
+            className="app-button secondary"
+            disabled={locked || view.translationModels?.loading}
+            aria-busy={view.translationModels?.loading}
+            onClick={() => void handlers?.fetchModels?.()}
+          >
+            {view.translationModels?.loading ? "正在拉取模型…" : "拉取模型"}
+          </button>
           <button
             id={BROWSER_IDS.deepSeekValidateButton}
             type="button"
             className="app-button secondary"
-            disabled={pending}
+            disabled={locked || pending}
             onClick={() => handlers?.validateDeepSeek?.()}
           >
             <PlugZap aria-hidden="true" />
@@ -193,11 +249,17 @@ export function TranslationPanel() {
             id={BROWSER_IDS.deepSeekValidation}
             className={badgeClasses}
             title={content || TRANSLATION_PROVIDER_DEFINITION.validationIdleMessage}
+            aria-label={content || TRANSLATION_PROVIDER_DEFINITION.validationIdleMessage}
             role="status"
             aria-live="polite"
           >
             {validationIcon(validation.tone, content)}
           </span>
+          {view.translationModels?.message ? (
+            <span className={`credential-model-list-status is-${view.translationModels.tone || "idle"}`} role="status" aria-live="polite">
+              {view.translationModels.message}
+            </span>
+          ) : null}
           {providerDefinition.docsUrl ? (
             <a className="credential-card-link" href={providerDefinition.docsUrl} target="_blank" rel="noopener noreferrer">
               {providerDefinition.docsLabel}

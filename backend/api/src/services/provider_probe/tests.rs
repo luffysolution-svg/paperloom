@@ -53,6 +53,12 @@ fn validate_provider_base_url_rejects_embedded_credentials() {
 }
 
 #[test]
+fn validate_provider_base_url_rejects_query_and_fragment() {
+    assert!(validate_provider_base_url("https://example.com/v1?key=secret", false).is_err());
+    assert!(validate_provider_base_url("https://example.com/v1#fragment", false).is_err());
+}
+
+#[test]
 fn validate_provider_base_url_allow_private_urls_escape_hatch() {
     assert!(validate_provider_base_url("http://127.0.0.1:11434", true).is_ok());
     assert!(validate_provider_base_url("http://localhost:11434", true).is_ok());

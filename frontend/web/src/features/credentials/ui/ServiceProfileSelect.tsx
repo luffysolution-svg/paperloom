@@ -16,10 +16,16 @@ export function useServiceProfiles() {
   return { manager, ...state };
 }
 
-export function ServiceProfileSelect({ disabled = false }: { disabled?: boolean } = {}) {
+export function ServiceProfileSelect({
+  disabled = false,
+  label = "配置方案",
+  showModel = false,
+}: { disabled?: boolean; label?: string; showModel?: boolean } = {}) {
   const { manager, profiles, activeId, busy } = useServiceProfiles();
   const [error, setError] = useState("");
   if (!manager || !profiles.length) return null;
+  const active = profiles.find((profile) => profile.id === activeId);
+  const activeModel = `${active?.translation?.model || ""}`.trim();
 
   async function change(id: string) {
     setError("");
@@ -33,13 +39,14 @@ export function ServiceProfileSelect({ disabled = false }: { disabled?: boolean 
   return (
     <div className="credential-service-profile-picker">
       <label>
-        <span>配置方案</span>
+        <span>{label}</span>
         <select aria-label="配置方案" value={activeId} disabled={disabled || busy}
           onChange={(event) => void change(event.target.value)}>
           <option value="" disabled>当前设置</option>
           {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
         </select>
       </label>
+      {showModel && activeModel ? <span className="credential-service-profile-model">模型：{activeModel}</span> : null}
       {busy ? <span role="status">正在切换…</span> : null}
       {error ? <p role="alert" className="credential-validation-error">{error}</p> : null}
     </div>

@@ -134,9 +134,9 @@ export function CredentialsWorkbench() {
                   ))}
                 </select>
               </div>
-              <OcrPanels />
+            <OcrPanels disabled={saving} />
             </section>
-            <TranslationPanel />
+            <TranslationPanel disabled={saving} />
           </div>
         </div>
       </div>

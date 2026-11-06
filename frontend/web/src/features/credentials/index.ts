@@ -9,6 +9,7 @@
 
 export { CredentialsWorkbench } from "./ui/CredentialsWorkbench.jsx";
 export { ServiceProfileSelect } from "./ui/ServiceProfileSelect.js";
+export { TranslationConfigSummary } from "./ui/TranslationConfigSummary.jsx";
 export { HiddenCredentialInputs } from "./ui/HiddenCredentialInputs.jsx";
 export { AgentRuntimeSettingsCard } from "./ui/AgentRuntimeSettingsCard.jsx";
 export { CredentialsProvider, useCredentialsServices } from "./ui/credentials-context.jsx";

@@ -38,9 +38,11 @@ type DialogFlowViewPort = {
     activateCredentialTab?: (tabName?: string) => void;
   }) => void;
   setDialogStatus?: (message?: string, tone?: string) => void;
+  setDirty?: (dirty?: boolean) => void;
   setHiddenOcrProvider?: (providerId?: string) => void;
   setOcrValidationMessage?: (message?: string, tone?: string, providerId?: string) => void;
   setTranslationProvider?: (provider?: string) => void;
+  setTranslationModels?: (payload?: Record<string, unknown>) => void;
   syncOcrProviderControls?: (providerId?: string) => void;
   updateCredentialGate?: (options?: UpdateCredentialGateViewOptions) => boolean | void;
 };
@@ -135,6 +137,7 @@ export function createCredentialDialogFlow({
       elementsPort: dialogElementsPort,
     });
     viewPort.setTranslationProvider?.(translation.getCurrentProvider());
+    viewPort.setTranslationModels?.({ items: [], loading: false, tone: "", message: "" });
     syncOcrCredentialFeedback();
     viewPort.setDeepSeekValidationMessage("", "");
     if (profile.apiKey) {
@@ -143,6 +146,7 @@ export function createCredentialDialogFlow({
     viewPort.setDeepSeekTopUpVisible(false);
     balanceState.resetDeepSeekBalance();
     viewPort.setDialogStatus("", "");
+    viewPort.setDirty?.(false);
   }
 
   /**
@@ -155,8 +159,11 @@ export function createCredentialDialogFlow({
    * AI Agent 卡片，保存时写 firstRunCompleted。此前它另有一个独立外壳，
    * 同一件事两套壳，用户看到的是两个长得不一样的「接口设置」。
    */
-  function prepareCredentialsPanels({ setupMode = false }: { setupMode?: boolean } = {}) {
-    syncBrowserDialogFromCredentialState();
+  function prepareCredentialsPanels({ setupMode = false, preserveDraft = false }: {
+    setupMode?: boolean;
+    preserveDraft?: boolean;
+  } = {}) {
+    if (!preserveDraft) syncBrowserDialogFromCredentialState();
     setCredentialDialogMode(setupMode);
     activateCredentialTab("api");
   }

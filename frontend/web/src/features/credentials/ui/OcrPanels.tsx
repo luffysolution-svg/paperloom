@@ -13,10 +13,11 @@ import {
   resetHandlerFor,
 } from "./provider-panel-shared.js";
 
-export function OcrPanels() {
-  const { credentials, view, handlers, tokenInputRef } = useCredentialsController();
+export function OcrPanels({ disabled = false }: { disabled?: boolean } = {}) {
+  const { credentials, view, handlers, tokenInputRef, elementsRef } = useCredentialsController();
   const activeProvider = credentials.ocrProvider;
   const { saving, save } = useCredentialSave(handlers?.saveOcr, "OCR 设置已保存");
+  const locked = disabled || saving || view.dialogStatus?.tone === "pending";
 
   return (
     <div className="credential-provider-panels">
@@ -39,8 +40,9 @@ export function OcrPanels() {
             data-ocr-provider-panel={provider.id}
             hidden={!active}
           >
-            <label>
-              <span className="developer-label">{provider.tokenLabel}</span>
+            <div className="credential-token-field">
+              <label htmlFor={credentialTokenInputId(provider.id)} className="developer-label">{provider.tokenLabel}</label>
+              <div className="credential-secret-input-row">
               <SecretInput
                 id={credentialTokenInputId(provider.id)}
                 secretLabel={provider.tokenLabel}
@@ -48,15 +50,36 @@ export function OcrPanels() {
                 placeholder={provider.tokenPlaceholder}
                 defaultValue=""
                 ref={tokenInputRef(provider.id)}
-                onInput={() => resetHandlerFor(handlers)?.()}
+                disabled={locked}
+                onInput={() => {
+                  if (elementsRef.tokenInputs[provider.id]) delete elementsRef.tokenInputs[provider.id]!.dataset.clearCredential;
+                  handlers?.markDirty?.();
+                  resetHandlerFor(handlers)?.();
+                }}
               />
-            </label>
+              <button
+                type="button"
+                className="credential-inline-clear"
+                disabled={locked}
+                onClick={() => {
+                  const input = elementsRef.tokenInputs[provider.id];
+                  if (!input) return;
+                  input.value = "";
+                  input.dataset.clearCredential = "1";
+                  handlers?.markDirty?.();
+                  resetHandlerFor(handlers)?.();
+                }}
+              >
+                清除
+              </button>
+              </div>
+            </div>
             {!provider.supportsValidation ? (
               <p className="credential-ocr-hint">{provider.validationUnavailableMessage}</p>
             ) : null}
             <div className="credential-card-footer">
               <div className="credential-card-actions">
-                <button type="button" className="app-button secondary" disabled={saving || view.dialogStatus?.tone === "pending"}
+                <button type="button" className="app-button secondary" disabled={locked}
                   aria-busy={saving} onClick={() => void save()}>
                   <Save aria-hidden="true" />{saving ? "正在保存…" : "保存 OCR"}
                 </button>
@@ -65,7 +88,7 @@ export function OcrPanels() {
                     id={credentialValidateButtonId(provider.id)}
                     type="button"
                     className="app-button secondary"
-                    disabled={validation.tone === "pending"}
+                    disabled={locked || validation.tone === "pending"}
                     onClick={() => handlers?.validateOcr?.()}
                   >
                     <PlugZap aria-hidden="true" />

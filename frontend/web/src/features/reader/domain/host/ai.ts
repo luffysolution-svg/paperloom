@@ -28,6 +28,7 @@ import {
   defaultModelBaseUrl,
   defaultModelName,
 } from "@/platform/config/runtime.js";
+import { inferTranslationProvider } from "@/platform/config/providers.js";
 import {
   loadBrowserStoredConfig,
   loadDeveloperStoredConfig,
@@ -65,6 +66,14 @@ export const aiOperationsPort: ReaderAgentOperationPort = {
   fetchRuntimeConfig: (options) => fetchAgentRuntimeConfig({ fetchImpl: fetch, apiPrefix: API_PREFIX }),
 };
 
+export function resolveReaderAiConfig(options = {}) {
+  const config = readerAi.resolveReaderAiConfig(options);
+  return {
+    ...config,
+    provider: inferTranslationProvider(config.baseUrl),
+  };
+}
+
 // 注册点参数类型直接取自 reader 包公开工厂签名，避免 any 掩盖契约漂移。
 type ReaderAiConfigAdapters = NonNullable<
   Parameters<typeof readerAi.setReaderAiConfigAdapters>[0]
@@ -99,6 +108,6 @@ export const createReaderAskAnswerer = (options: ReaderAskAnswererOptions = {}) 
     apiPrefix: API_PREFIX,
     ask: askLibraryAi,
     documentByJobId: fetchDocumentByJobId,
-    llmConfig: readerAi.resolveReaderAiConfig,
+    llmConfig: resolveReaderAiConfig,
     ...options,
   });

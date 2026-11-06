@@ -52,9 +52,17 @@ pub fn validate_translation_credentials(input: &CreateJobInput) -> Result<(), Ap
     if base_url.is_empty() {
         return Err(AppError::bad_request("base_url is required"));
     }
-    if !(base_url.starts_with("http://") || base_url.starts_with("https://")) {
+    let parsed_base_url = url::Url::parse(base_url)
+        .map_err(|_| AppError::bad_request("base_url must be a valid absolute http(s) URL"))?;
+    if !matches!(parsed_base_url.scheme(), "http" | "https")
+        || parsed_base_url.host_str().is_none()
+        || !parsed_base_url.username().is_empty()
+        || parsed_base_url.password().is_some()
+        || parsed_base_url.query().is_some()
+        || parsed_base_url.fragment().is_some()
+    {
         return Err(AppError::bad_request(
-            "base_url must start with http:// or https://",
+            "base_url must be HTTP(S), without credentials, query or fragment",
         ));
     }
 

@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { useCredentialsServices } from "./credentials-context.js";
 
 export function useCredentialSave(action: (() => Promise<boolean>) | undefined, successMessage: string) {
-  const { view } = useCredentialsServices();
+  const { view, feature } = useCredentialsServices();
   const [saving, setSaving] = useState(false);
   const inFlight = useRef(false);
 
@@ -13,6 +13,14 @@ export function useCredentialSave(action: (() => Promise<boolean>) | undefined, 
     setSaving(true);
     try {
       if (await action?.()) {
+        const manager = feature?.serviceProfiles;
+        const profileState = manager?.getState?.();
+        const active = profileState?.profiles?.find((profile) => profile.id === profileState.activeId);
+        if (manager && active) {
+          void manager.save(active.name, active.id).catch(() => {
+            toast.error("当前配置方案同步失败，请点击“保存设置”重试");
+          });
+        }
         toast.success(successMessage);
       } else {
         toast.error(view.store.getSnapshot().dialogStatus?.message || "保存失败，请重试");

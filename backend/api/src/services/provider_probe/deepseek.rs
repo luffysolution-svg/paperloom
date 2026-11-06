@@ -5,8 +5,8 @@ use crate::error::AppError;
 use crate::models::domain::now_iso;
 
 use super::types::{
-    DeepSeekBalanceInfoView, DeepSeekBalanceView, DeepSeekTokenValidationRequest,
-    MineruTokenValidationView,
+    DeepSeekBalanceInfoView, DeepSeekBalanceView, DeepSeekTokenValidationRequest, MineruTokenValidationView,
+    ModelListRequest, ModelListView,
 };
 use super::url_policy::validate_provider_base_url;
 
@@ -38,6 +38,7 @@ pub(crate) async fn validate_deepseek_token_view(
     let checked_at = now_iso();
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(runtime.probe_timeout_secs))
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|err| AppError::internal(format!("build deepseek probe client failed: {err}")))?;
 
@@ -73,6 +74,104 @@ pub(crate) async fn validate_deepseek_token_view(
     };
 
     Ok(view)
+}
+
+pub(crate) async fn list_models_view(
+    payload: ModelListRequest,
+    runtime: DeepSeekRuntimeConfig,
+) -> Result<ModelListView, AppError> {
+    let api_key = payload.api_key.trim();
+    if api_key.is_empty() {
+        return Err(AppError::bad_request("api_key is required"));
+    }
+
+    let base_url = normalize_deepseek_base_url(&payload.base_url, &runtime);
+    validate_provider_base_url(&base_url, runtime.allow_private_urls)?;
+    let checked_at = now_iso();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(runtime.probe_timeout_secs))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|err| AppError::internal(format!("build model list client failed: {err}")))?;
+    let models_url = format!("{}/models", base_url.trim_end_matches('/'));
+    let response = client.get(&models_url).bearer_auth(api_key).send().await;
+    let response = match response {
+        Ok(response) => response,
+        Err(_err) => {
+            return Ok(ModelListView {
+                ok: false,
+                status: "network_error",
+                summary: "模型列表获取失败，请检查 API URL 或网络".to_string(),
+                retryable: true,
+                models: vec![],
+                base_url,
+                checked_at,
+            });
+        }
+    };
+    let status_code = response.status();
+    let body_text = response.text().await.unwrap_or_default();
+    if !status_code.is_success() {
+        let (status, summary, retryable) = if status_code == reqwest::StatusCode::UNAUTHORIZED
+            || status_code == reqwest::StatusCode::FORBIDDEN
+        {
+            ("unauthorized", "翻译 API Key 无效".to_string(), false)
+        } else if status_code == reqwest::StatusCode::NOT_FOUND
+            || status_code == reqwest::StatusCode::METHOD_NOT_ALLOWED
+        {
+            ("unsupported", "该 API 不提供模型列表，请手动填写模型名".to_string(), false)
+        } else if status_code.is_server_error() || status_code == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            ("network_error", "模型列表获取失败，请稍后重试".to_string(), true)
+        } else {
+            ("provider_error", format!("模型列表接口返回 {}", status_code.as_u16()), false)
+        };
+        return Ok(ModelListView {
+            ok: false,
+            status,
+            summary,
+            retryable,
+            models: vec![],
+            base_url,
+            checked_at,
+        });
+    }
+
+    let parsed: Value = serde_json::from_str(&body_text).unwrap_or(Value::Null);
+    let mut models = parsed
+        .get("data")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.get("id").and_then(Value::as_str))
+                .map(str::trim)
+                .filter(|model| !model.is_empty())
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    models.sort_unstable();
+    models.dedup();
+    if models.is_empty() {
+        return Ok(ModelListView {
+            ok: false,
+            status: "empty",
+            summary: "接口返回成功，但没有可用模型".to_string(),
+            retryable: false,
+            models,
+            base_url,
+            checked_at,
+        });
+    }
+    Ok(ModelListView {
+        ok: true,
+        status: "valid",
+        summary: format!("已获取 {} 个模型", models.len()),
+        retryable: false,
+        models,
+        base_url,
+        checked_at,
+    })
 }
 
 /// 判定一次失败响应是否在拒绝**模型**（而非 Key 或网络）。
@@ -224,6 +323,7 @@ pub(crate) async fn query_deepseek_balance_view(
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(runtime.probe_timeout_secs))
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|err| {
             AppError::internal(format!("build deepseek balance client failed: {err}"))

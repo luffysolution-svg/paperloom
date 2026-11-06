@@ -7,11 +7,11 @@ import { OcrPanels } from "./OcrPanels.jsx";
 import { TranslationPanel } from "./TranslationPanel.jsx";
 
 // 兼容旧调用：统一 Provider 面板（可选）
-export function ProviderPanels() {
+export function ProviderPanels({ disabled = false }: { disabled?: boolean } = {}) {
   return (
     <>
-      <OcrPanels />
-      <TranslationPanel />
+      <OcrPanels disabled={disabled} />
+      <TranslationPanel disabled={disabled} />
     </>
   );
 }

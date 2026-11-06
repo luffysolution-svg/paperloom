@@ -10,6 +10,11 @@ let enabled = false;
 let rejectSave = false;
 let resumeSave;
 const saves = [];
+const previousFetch = globalThis.fetch;
+globalThis.fetch = async () => new Response(JSON.stringify({ data: { enabled: true, restart_required: false } }), {
+  status: 200,
+  headers: { "content-type": "application/json" },
+});
 window.retainPdfDesktop = {
   invoke() {},
   loadDesktopConfig: async () => ({ allowPrivateProviderUrls: enabled }),
@@ -25,7 +30,7 @@ const React = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { DesktopPrivateApiAccess } = await import("../../src/features/credentials/ui/DesktopPrivateApiAccess.jsx");
 
-test("desktop local API switch requires an explicit click and reports restart and save failures", async () => {
+test("desktop local API switch requires an explicit click and reports immediate refresh and save failures", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -40,7 +45,8 @@ test("desktop local API switch requires an explicit click and reports restart an
     await React.act(async () => { resumeSave(); });
     assert.deepEqual(saves, [{ allowPrivateProviderUrls: true }]);
     assert.equal(checkbox.checked, true);
-    assert.match(container.querySelector('[role="status"]').textContent, /重启/);
+    await React.act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    assert.match(container.querySelector('[role="status"]').textContent, /立即生效/);
     rejectSave = true;
     await React.act(async () => { checkbox.click(); });
     assert.equal(checkbox.checked, true, "failed saves must keep the persisted permission");
@@ -48,5 +54,6 @@ test("desktop local API switch requires an explicit click and reports restart an
   } finally {
     await React.act(async () => { root.unmount(); });
     container.remove();
+    globalThis.fetch = previousFetch;
   }
 });

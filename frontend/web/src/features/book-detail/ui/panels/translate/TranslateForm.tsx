@@ -19,6 +19,7 @@ export type BookTranslateLaunchFormProps = {
   ocrReuse?: { jobId: string } | null;
   /** 与「翻译整本」同排的附加动作（例如「仅 OCR」按钮），统一成一行。 */
   extraActions?: ReactNode;
+  profileSlot?: ReactNode;
   onRangeOnChange: (value: boolean) => void;
   onStartPageChange: (value: string) => void;
   onEndPageChange: (value: string) => void;
@@ -38,6 +39,7 @@ export function BookTranslateLaunchForm({
   error = "",
   ocrReuse = null,
   extraActions = null,
+  profileSlot = null,
   onRangeOnChange,
   onStartPageChange,
   onEndPageChange,
@@ -58,6 +60,7 @@ export function BookTranslateLaunchForm({
       {canTranslate ? (
         <div className="book-detail-processing-actions flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
+            {profileSlot}
             {ocrReuse ? (
               <span
                 className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted px-2 py-1 text-[11px] font-medium text-foreground"

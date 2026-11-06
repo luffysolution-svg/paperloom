@@ -944,14 +944,6 @@ test("CredentialsDialog：保存(浏览器模式)——写隐藏 input、同步 
     "Qwen 选项使用本地品牌图标",
   );
 
-  services.credentials.view.handlersRef.current.changeTranslationProvider("anthropic");
-  await waitFor(() => byId("browser-model-base-url").value === "https://api.anthropic.com/v1", "选择 Anthropic 后写入官方地址");
-  assert.equal(byId("browser-model-name").value, "claude-sonnet-5");
-  assert.equal(byId("browser-api-key").value, "", "Anthropic 不复用 Qwen Key");
-  assert.equal(byId("browser-translation-workers").value, "50");
-  assert.equal(byId("browser-translation-workers").max, "100");
-  typeInput(byId("browser-api-key"), "anthropic-profile-key");
-
   services.credentials.view.handlersRef.current.changeTranslationProvider("openai");
   await waitFor(() => byId("browser-model-base-url").value === "https://api.openai.com/v1", "选择 OpenAI 后写入官方地址");
   assert.equal(byId("browser-model-name").value, "gpt-5.6-luna");
@@ -1051,8 +1043,6 @@ test("CredentialsDialog：保存(浏览器模式)——写隐藏 input、同步 
   assert.equal(translationConfig.translationProfiles.qwen.apiKey, "qwen-profile-key");
   assert.equal(translationConfig.translationProfiles.qwen.model, "qwen3.8-flash");
   assert.equal(translationConfig.translationProfiles.qwen.workers, 20);
-  assert.equal(translationConfig.translationProfiles.anthropic.apiKey, "anthropic-profile-key");
-  assert.equal(translationConfig.translationProfiles.anthropic.model, "claude-sonnet-5");
   assert.equal(translationConfig.translationProfiles.openai.apiKey, "openai-profile-key");
   assert.equal(translationConfig.translationProfiles.openai.model, "gpt-5.6-luna");
   assert.equal(translationConfig.translationProfiles.zhipu.apiKey, "zhipu-profile-key");

@@ -15,6 +15,7 @@ test("translation profile：URL / 模型名 / 并发数校验文案", () => {
   assert.equal(translationConfigError("", "deepseek"), "请填写翻译 API URL");
   assert.match(translationConfigError("ftp://x", "m"), /http\(s\)/);
   assert.match(translationConfigError("https://u:p@x.com", "m"), /用户名或密码/);
+  assert.match(translationConfigError("https://x.com/v1?key=secret", "m"), /查询参数/);
   assert.equal(translationConfigError("https://api.deepseek.com", ""), "请填写翻译模型名称");
   assert.equal(translationConfigError("https://api.deepseek.com", "deepseek-chat"), "");
 

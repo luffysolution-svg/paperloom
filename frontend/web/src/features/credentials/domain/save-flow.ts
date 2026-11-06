@@ -34,6 +34,7 @@ type SaveFlowViewPort = {
   setOcrValidationMessage?: (message?: string, tone?: string, providerId?: string) => void;
   setDeepSeekValidationMessage?: (message?: string, tone?: string) => void;
   setDialogStatus?: (message?: string, tone?: string) => void;
+  setDirty?: (dirty?: boolean) => void;
   closeDialog?: () => void;
 };
 
@@ -110,9 +111,11 @@ export function createBrowserCredentialSaveFlow({
     // 输入框留空时沿用当前值，避免保存其他设置时误删凭据。
     const values = {
       ...raw,
-      paddleToken: `${raw.paddleToken || ""}`.trim() || `${existing.paddleToken || ""}`.trim(),
-      mineruToken: `${raw.mineruToken || ""}`.trim() || `${existing.mineruToken || ""}`.trim(),
-      modelApiKey: `${raw.modelApiKey || ""}`.trim() || (sameTranslationProvider ? `${existing.modelApiKey || ""}`.trim() : ""),
+      paddleToken: raw.clearPaddleToken ? "" : `${raw.paddleToken || ""}`.trim() || `${existing.paddleToken || ""}`.trim(),
+      mineruToken: raw.clearMineruToken ? "" : `${raw.mineruToken || ""}`.trim() || `${existing.mineruToken || ""}`.trim(),
+      modelApiKey: raw.clearModelApiKey
+        ? ""
+        : `${raw.modelApiKey || ""}`.trim() || (sameTranslationProvider ? `${existing.modelApiKey || ""}`.trim() : ""),
       modelBaseUrl: `${raw.modelBaseUrl || ""}`.trim()
         || `${existingTaskOptions.baseUrl || ""}`.trim()
         || `${defaultModelBaseUrl?.() || ""}`.trim(),
@@ -127,12 +130,15 @@ export function createBrowserCredentialSaveFlow({
     const existingTranslationCredentialRef = sameTranslationProvider ? `${existing.translationCredentialRef || ""}`.trim() : "";
     const translationError = translationConfigError(values.modelBaseUrl, values.modelName);
     const workersError = translationWorkersError(values.translationWorkers, translation.getCurrentProvider());
-    if ((saveOcr && !ocrToken && !existingOcrCredentialRef)
-      || (saveTranslation && ((!modelApiKey && !existingTranslationCredentialRef) || translationError || workersError))) {
-      if (saveOcr && !ocrToken && !existingOcrCredentialRef) {
+    const clearOcr = saveOcr && raw.clearPaddleToken && definition.id === "paddle"
+      || saveOcr && raw.clearMineruToken && definition.id === "mineru";
+    const clearTranslation = saveTranslation && raw.clearModelApiKey;
+    if ((saveOcr && !clearOcr && !ocrToken && !existingOcrCredentialRef)
+      || (saveTranslation && !clearTranslation && ((!modelApiKey && !existingTranslationCredentialRef) || translationError || workersError))) {
+      if (saveOcr && !clearOcr && !ocrToken && !existingOcrCredentialRef) {
         viewPort.setOcrValidationMessage(definition.validationMissingMessage, "error", definition.id);
       }
-      if (saveTranslation && !modelApiKey && !existingTranslationCredentialRef) {
+      if (saveTranslation && !clearTranslation && !modelApiKey && !existingTranslationCredentialRef) {
         viewPort.setDeepSeekValidationMessage(TRANSLATION_PROVIDER_DEFINITION.validationMissingMessage, "error");
       } else if (saveTranslation && (translationError || workersError)) {
         viewPort.setDeepSeekValidationMessage(translationError || workersError, "error");
@@ -223,6 +229,7 @@ export function createBrowserCredentialSaveFlow({
     if (scope === "all") syncBrowserDialogFromCredentialState();
     onCredentialStateChange?.();
     notifyCredentialsChanged();
+    viewPort.setDirty?.(scope !== "all");
     // 带上时刻：否则连续保存的状态是"已保存"→"已保存"，屏幕零变化，
     // 用户无法判断这次到底存没存，只能反复点。时刻也让 UI 能识别出
     // "这是一次新的保存"，从而重新播放成功反馈。

@@ -27,6 +27,12 @@ pub(super) fn validate_provider_base_url(
         ));
     }
 
+    if parsed.query().is_some() || parsed.fragment().is_some() {
+        return Err(AppError::bad_request(
+            "base_url must not contain query or fragment",
+        ));
+    }
+
     if allow_private_urls {
         return Ok(());
     }

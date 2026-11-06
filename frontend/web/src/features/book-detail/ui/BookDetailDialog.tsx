@@ -36,6 +36,7 @@ import { canStartTranslation, useBookDetailCover } from "./use-book-detail-cover
 import { useBookDetailTab } from "./use-book-detail-tab.js";
 import { useBookDetailArtifactCenter } from "./use-book-detail-artifact-center.js";
 import { useStoreSnapshot } from "@/ui/hooks/use-store.js";
+import { ServiceProfileSelect, TranslationConfigSummary } from "@/features/credentials/index.js";
 
 export function BookDetailDialog() {
   const { dialogStore } = useHomeBookDetail();
@@ -257,6 +258,12 @@ export function BookDetailDialog() {
               // 结果操作行读全局 statusCard store，注入点放在这里（对话框本身
               // 长在 HomeShellProviders 内），让「进度」Tab 组件保持纯展示。
               resultActionsSlot={<ProcessingResultActions />}
+              profileSlot={(
+                <div className="book-detail-translation-config">
+                  <ServiceProfileSelect label="翻译配置" />
+                  <TranslationConfigSummary />
+                </div>
+              )}
               ocr={{
                 job: documentJobs.ocrStatusJob,
                 rangeOn: ocrState.rangeOn,

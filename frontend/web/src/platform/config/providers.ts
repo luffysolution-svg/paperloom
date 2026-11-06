@@ -53,7 +53,6 @@ export const TRANSLATION_PROVIDER_DEFINITION = {
 
 export const DEEPSEEK_TRANSLATION_BASE_URL = "https://api.deepseek.com/v1";
 export const QWEN_TRANSLATION_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1";
-export const ANTHROPIC_TRANSLATION_BASE_URL = "https://api.anthropic.com/v1";
 export const OPENAI_TRANSLATION_BASE_URL = "https://api.openai.com/v1";
 export const ZHIPU_TRANSLATION_BASE_URL = "https://open.bigmodel.cn/api/paas/v4";
 
@@ -79,15 +78,6 @@ export const TRANSLATION_PROVIDER_OPTIONS = [
     logoUrl: "src/assets/providers/deepseek.svg",
     docsUrl: TRANSLATION_PROVIDER_DEFINITION.docsUrl,
     docsLabel: TRANSLATION_PROVIDER_DEFINITION.docsLabel,
-  },
-  {
-    id: "anthropic",
-    label: "Anthropic",
-    baseUrl: ANTHROPIC_TRANSLATION_BASE_URL,
-    defaultModel: "claude-sonnet-5",
-    defaultWorkers: 50,
-    maxWorkers: 100,
-    logoUrl: "src/assets/providers/anthropic.svg",
   },
   {
     id: "openai",
@@ -140,9 +130,6 @@ export function inferTranslationProvider(baseUrl = "") {
       && normalizedPath === "/compatible-mode/v1"
     ) {
       return "qwen";
-    }
-    if (parsed.hostname.toLowerCase() === "api.anthropic.com" && normalizedPath === "/v1") {
-      return "anthropic";
     }
     if (parsed.hostname.toLowerCase() === "api.openai.com" && normalizedPath === "/v1") {
       return "openai";

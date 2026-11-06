@@ -9,9 +9,9 @@ export function ocrTokenFromCredentials(
   { defaultPaddleToken, providerId }: OcrTokenOptions = {},
 ): string {
   if (normalizeOcrProvider(providerId || credentials.ocrProvider) === "mineru") {
-    return credentials.mineruToken || "";
+    return `${credentials.mineruToken || ""}`.trim();
   }
-  const token = credentials.paddleToken;
+  const token = `${credentials.paddleToken || ""}`.trim();
   if (token) {
     return token;
   }

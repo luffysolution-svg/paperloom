@@ -21,3 +21,9 @@ export async function validateDeepSeekToken(apiPrefix, payload) {
 export async function queryDeepSeekBalance(apiPrefix, payload) {
     return submitJson(buildApiEndpoint(apiPrefix, "providers/deepseek/balance"), payload, probeOptions);
 }
+export async function listModels(apiPrefix, payload) {
+    return submitJson(buildApiEndpoint(apiPrefix, "providers/models"), payload, probeOptions);
+}
+export async function setPrivateProviderAccess(apiPrefix, payload) {
+    return submitJson(buildApiEndpoint(apiPrefix, "providers/private-access"), payload, probeOptions);
+}

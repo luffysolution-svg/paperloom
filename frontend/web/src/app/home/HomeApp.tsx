@@ -23,6 +23,7 @@ import {
   useHomeAppUpdate,
   useHomeCollections,
   useHomeCredentials,
+  useHomeCredentialsViewStore,
   useHomeCredentialsStatePort,
   useHomeGlossaries,
   useHomeLibrary,
@@ -53,6 +54,7 @@ import {
   HiddenCredentialInputs,
 } from "@/features/credentials/index.js";
 import { useDialogState } from "@/ui/hooks/use-dialog-state.js";
+import { useStoreSnapshot } from "@/ui/hooks/use-store.js";
 import { SettingsDialog } from "@/features/settings/index.js";
 import { useAppEvent } from "@/ui/hooks/use-app-event.js";
 import { APP_EVENTS } from "@/platform/contracts/app-contract.js";
@@ -196,6 +198,11 @@ function SettingsDialogSlot() {
   const settingsHub = useHomeSettingsHub();
   const glossaries = useHomeGlossaries();
   const credentials = useHomeCredentials();
+  const credentialsView = useStoreSnapshot(useHomeCredentialsViewStore());
+  const prepareCredentialPanels = useCallback(
+    (options: { setupMode?: boolean; preserveDraft?: boolean }) => credentials?.feature?.prepareCredentialsPanels?.(options),
+    [credentials?.feature],
+  );
 
   // 「打开接口设置」只有这一个落点了。首次配置门曾经另开一个独立弹窗
   // （CredentialsDialog），于是同一件事有两个长得不一样的壳；现在两条路都是
@@ -209,7 +216,8 @@ function SettingsDialogSlot() {
     <SettingsDialog
       dialogStore={settingsHub.dialogStore}
       onOpenGlossaries={() => glossaries.dialogStore.open()}
-      onPrepareCredentialPanels={(options) => credentials?.feature?.prepareCredentialsPanels?.(options)}
+      onPrepareCredentialPanels={prepareCredentialPanels}
+      credentialsDirty={Boolean(credentialsView.dirty)}
       credentialsWorkbenchSlot={<CredentialsWorkbench />}
       apiPaneSetupHintSlot={
         <p id={CREDENTIAL_DOM_IDS.browser.subtitle} className="muted">先配好接口再开始</p>
