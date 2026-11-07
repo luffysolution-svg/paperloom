@@ -34,6 +34,7 @@ def _request(tmp_path: Path) -> TranslationExecutionRequest:
 def _plan():
     from retainpdf_pipeline.translate.artifacts.aggregator import TranslationRunDiagnostics
     return SimpleNamespace(
+        connection_profile=SimpleNamespace(protocol="openai", thinking="auto"),
         data={},
         start=0,
         stop=0,

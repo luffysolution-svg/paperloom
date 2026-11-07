@@ -106,7 +106,7 @@ def test_copied_resume_reinitializes_under_same_borrowed_lease(tmp_path, monkeyp
     monkeypatch.setenv("RETAIN_TRANSLATION_TRANSPORT", "legacy")
     request = request_for(tmp_path)
     request.source_json_path.write_text("{}")
-    plan = SimpleNamespace(start=0, stop=0, glossary_entries=[], policy_config=SimpleNamespace(
+    plan = SimpleNamespace(connection_profile=SimpleNamespace(protocol="openai", thinking="auto"), start=0, stop=0, glossary_entries=[], policy_config=SimpleNamespace(
         rule_profile_name="general_sci", custom_rules_text="",
     ))
     with TranslationCheckpointSession.acquire(request, plan) as previous:
