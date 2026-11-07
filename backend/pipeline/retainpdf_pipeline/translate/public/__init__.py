@@ -11,6 +11,7 @@ from importlib import import_module
 
 
 _EXPORTS = {
+    "register_connection": ("retainpdf_pipeline.translate.llm.shared.model_wire", "register_connection"),
     "write_translation_debug_index": ("retainpdf_pipeline.translate.artifacts", "write_translation_debug_index"),
     "write_translation_diagnostics": ("retainpdf_pipeline.translate.artifacts", "write_translation_diagnostics"),
     "blocking_untranslated_items": ("retainpdf_pipeline.translate.artifacts", "blocking_untranslated_items"),

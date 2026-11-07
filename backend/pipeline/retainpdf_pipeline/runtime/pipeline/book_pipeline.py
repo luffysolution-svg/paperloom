@@ -63,7 +63,7 @@ def run_book_pipeline(
     thinking: str | None = None,
 ) -> dict:
     if api_protocol is not None or thinking is not None:
-        from retainpdf_pipeline.translate.llm.shared.model_wire import register_connection
+        from retainpdf_pipeline.translate.public import register_connection
         register_connection(base_url=base_url, model=model, protocol=api_protocol, thinking=thinking)
     total_started = time.perf_counter()
     translation_summary = translate_book_pipeline(

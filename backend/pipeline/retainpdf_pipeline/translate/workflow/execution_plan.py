@@ -9,6 +9,7 @@ from retainpdf_pipeline.translate.artifacts import TranslationRequestJournal
 from retainpdf_pipeline.translate.artifacts import translation_run_diagnostics_scope
 from retainpdf_pipeline.translate.artifacts import classify_provider_family
 from retainpdf_pipeline.translate.llm.shared.control_context import TranslationControlContext
+from retainpdf_pipeline.translate.llm.shared.model_wire import ConnectionProfile, resolve_profile
 from retainpdf_pipeline.translate.core.ocr.json_extractor import get_page_count
 from retainpdf_pipeline.translate.core.ocr.json_extractor import load_ocr_json
 from retainpdf_pipeline.translate.services.policy import TranslationPolicyConfig
@@ -36,6 +37,7 @@ class TranslationExecutionPlan:
     translation_context: TranslationControlContext
     run_diagnostics: TranslationRunDiagnostics
     glossary_entries: list[GlossaryEntry]
+    connection_profile: ConnectionProfile
 
 
 def build_translation_execution_plan(request: TranslationExecutionRequest) -> TranslationExecutionPlan:
@@ -136,4 +138,5 @@ def _build_translation_execution_plan(request, journals) -> TranslationExecution
         translation_context=translation_context,
         run_diagnostics=run_diagnostics,
         glossary_entries=glossary_entries,
+        connection_profile=resolve_profile(base_url=request.base_url, model=request.model),
     )

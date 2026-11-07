@@ -30,15 +30,13 @@ def item_bbox(item: dict | None) -> list[float]:
     return [0, 0, 0, 0]
 
 
-def item_source_text(item: dict | None) -> str:
+def item_source_text(item: dict | None, *, block_only: bool = False) -> str:
     source = item or {}
-    return str(
-        source.get("translation_unit_protected_source_text")
-        or source.get("group_protected_source_text")
-        or source.get("protected_source_text")
-        or source.get("source_text")
-        or ""
-    )
+    unit = source.get("translation_unit_protected_source_text")
+    group = source.get("group_protected_source_text")
+    protected = source.get("protected_source_text")
+    raw = source.get("source_text")
+    return str((None if block_only else unit or group) or protected or raw or "")
 
 
 def item_raw_block_type(item: dict | None) -> str:

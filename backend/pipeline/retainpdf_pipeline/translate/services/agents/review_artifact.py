@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from retainpdf_pipeline.translate.artifacts.review import TRANSLATION_REVIEW_SCHEMA
 from retainpdf_pipeline.translate.artifacts.review import TRANSLATION_REVIEW_SCHEMA_VERSION
+from retainpdf_pipeline.translate.core.item_reader import item_source_text
 from retainpdf_pipeline.translate.llm.shared.control_context import TranslationControlContext
 from retainpdf_pipeline.translate.services.agents.coordinator import TranslationAgentCoordinator
 
@@ -40,7 +41,7 @@ def build_translation_review(
             review_item = item
             if item.get("translation_unit_kind") == "group" and item.get("translated_text"):
                 # Unit output has already been distributed back to layout blocks.
-                review_item = {**item, "translation_unit_protected_source_text": item.get("protected_source_text") or item.get("source_text") or "", "group_protected_source_text": ""}
+                review_item = {**item, "translation_unit_protected_source_text": item_source_text(item, block_only=True), "group_protected_source_text": ""}
             review = coordinator.review_batch([review_item], result)
             reviewed_item_count += review.reviewed_item_count
             for issue in review.issues:
