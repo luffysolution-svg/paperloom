@@ -81,8 +81,8 @@ export function AssistantMessageRow({
     <MessagePrimitive.Root className="aui-msg aui-msg-assistant" data-role="assistant">
       <div className="aui-msg-stack">
         {streaming ? <AiRunStatus running label={progress} elapsedMs={(message.metadata?.custom?.metrics as TurnMetrics | undefined)?.elapsed_ms || 0} /> : null}
-        {message.status?.type === "incomplete" && message.status.reason === "cancelled" ? <div className="ai-run-status" role="status">已中断，已生成的内容保留在对话中</div> : null}
-        {!streaming && message.status?.type === "incomplete" && message.status.reason === "error" ? <div className="ai-turn-error" role="alert">
+        {message.status?.type === "incomplete" && message.status.reason === "cancelled" ? <div className="reader-ai-run-status" role="status">已中断，已生成的内容保留在对话中</div> : null}
+        {!streaming && message.status?.type === "incomplete" && message.status.reason === "error" ? <div className="reader-ai-turn-error" role="alert">
           {String((message.metadata?.custom?.metrics as TurnMetrics | undefined)?.error || "本轮未完成，请重新生成或检查连接设置。")}
         </div> : null}
         {/* 轮次预算用尽、模型被强制收尾。它写出来的话语气照常,不标出来就看不出。

@@ -9,7 +9,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import { askLibraryAi, createConversation, getConversation, saveAiSelection, selectionForRequest } from "@/platform/api/index.js";
+import { askLibraryAi, createConversation, saveAiSelection, selectionForRequest } from "@/platform/api/index.js";
 import { applyTurnEvent, type TurnPart } from "@/platform/api/index.js";
 import {
   resolveReaderAiConfig,
@@ -22,7 +22,7 @@ import { operationSignalsFromResult } from "../domain/home-ask-operation-signal.
 import { makeId } from "../domain/home-ask-ids.js";
 import { classifyTurnFailure } from "../domain/home-ask-turn-failure.js";
 import { saveConversationId } from "../domain/home-ask-conversation-storage.js";
-import { nodesFromDetail } from "../domain/home-ask-message-mapping.js";
+import { waitForStoppedMessage } from "../domain/home-ask-cancel-snapshot.js";
 import type { HomeAskCitation, HomeAskMessage, HomeAskScope } from "../domain/types.js";
 
 type EnqueueOperationSignal = (params: {
@@ -342,21 +342,8 @@ export function useHomeAskTurn({
             status: "cancelled",
           });
           // The HTTP stream is closed; confirm the terminal snapshot through Rust.
-          let saved = false;
-          for (let attempt = 0; attempt < 15; attempt++) {
-            try {
-              const detail = await getConversation(conversationIdRef.current);
-              const record = detail.messages.find((message) => message.message_id === assistantId);
-              if (record && record.finish_reason !== "running") {
-                const node = nodesFromDetail(detail).nodes.find((message) => message.id === assistantId);
-                if (node) patchMessage(assistantId, { ...node, persisted: true });
-                saved = true;
-                break;
-              }
-            } catch { break; }
-            await new Promise((resolve) => setTimeout(resolve, 200));
-          }
-          if (!saved) patchMessage(assistantId, { persisted: false });
+          const saved = await waitForStoppedMessage(conversationIdRef.current, assistantId);
+          patchMessage(assistantId, saved ? { ...saved, persisted: true } : { persisted: false });
         }
       } else {
         // 重新生成失败时错误就停在这一版上。它和原答案是兄弟，切换器给出 « 1/2 »，

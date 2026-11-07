@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-const scrollMemory = new Map<string, { top: number; pinned: boolean }>();
 
 /**
  * 跟随底部，但用户往回看时让开。
@@ -23,6 +22,7 @@ export function useStickToBottom(
   changeKey: unknown,
   { streaming = false, enabled = true, scopeKey = "" }: { streaming?: boolean; enabled?: boolean; scopeKey?: string } = {},
 ) {
+  const scrollMemory = useRef(new Map<string, { top: number; pinned: boolean }>()).current;
   const pinnedRef = useRef(true);
   const [atBottom, setAtBottom] = useState(true);
 
@@ -37,7 +37,7 @@ export function useStickToBottom(
     pinnedRef.current = saved?.pinned ?? true;
     node.scrollTop = saved && !saved.pinned ? saved.top : node.scrollHeight;
     setAtBottom(pinnedRef.current);
-  }, [scopeKey, enabled, containerRef]);
+  }, [scopeKey, enabled, containerRef, scrollMemory]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -57,7 +57,7 @@ export function useStickToBottom(
     observer?.observe(node);
     if (node.firstElementChild) observer?.observe(node.firstElementChild);
     return () => { node.removeEventListener("scroll", onScroll); observer?.disconnect(); };
-  }, [containerRef, isNearBottom, enabled, scopeKey]);
+  }, [containerRef, isNearBottom, enabled, scopeKey, scrollMemory]);
 
   useEffect(() => {
     const node = containerRef.current;

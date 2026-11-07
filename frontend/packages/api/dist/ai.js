@@ -320,9 +320,12 @@ export async function askLibraryAi({ onTurnEvent = null, scopeDocumentIds = [], 
     }
     const runId = aid || globalThis.crypto?.randomUUID?.() || `run-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     payload.run_id = runId;
-    payload.scope_document_ids = scopeDocumentIds;
-    payload.attachments = attachments;
-    payload.force_compress = forceCompress;
+    if (scopeDocumentIds.length)
+        payload.scope_document_ids = scopeDocumentIds;
+    if (attachments.length)
+        payload.attachments = attachments;
+    if (forceCompress)
+        payload.force_compress = true;
     const cancelRun = () => {
         void fetchImpl(buildApiEndpoint(apiPrefix, `ai/connections/runs/${encodeURIComponent(runId)}/cancel`), {
             method: "POST", headers: buildApiHeaders(), keepalive: true,

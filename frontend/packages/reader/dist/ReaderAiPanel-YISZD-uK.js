@@ -1,8 +1,8 @@
 import { jsx as a, jsxs as O, Fragment as be } from "react/jsx-runtime";
 import { useState as H, useRef as B, useEffect as V, useMemo as Z, useCallback as Q, useId as pt } from "react";
-import { m as Ue, f as mt, g as ft, u as ht, a as gt, n as yt, c as vt } from "./AiTurnContent-DsLaqag-.js";
+import { m as Ue, f as mt, g as ft, u as ht, a as gt, n as yt, c as vt } from "./AiTurnContent-D8ylgAX6.js";
 import { Square as wt, ArrowUp as It, Copy as bt, GitBranch as Rt, RefreshCw as Ct, Sigma as He, Table2 as Nt, Image as Mt, Type as _t, X as Re, BookOpen as Ge, Sparkles as ge, FileText as ke, ArrowDown as Ve, Quote as kt, ListTree as St, FlaskConical as At, ShieldCheck as $t, Loader2 as Ae, Bot as Tt, ChevronUp as xt, ChevronDown as Qe, TriangleAlert as Ye, ExternalLink as Et, Check as Je, Circle as Pt, Plus as Ot, Pencil as Dt, Trash2 as Ft } from "lucide-react";
-import { g as me, h as fe, i as De, j as qt, d as zt, b as Bt } from "./ReaderApp-DfDVOaOp.js";
+import { g as me, h as fe, i as De, j as qt, d as zt, b as Bt } from "./ReaderApp-DM3p-ohC.js";
 import { ThreadPrimitive as ae, ComposerPrimitive as ve, MessagePrimitive as Xe, ActionBarPrimitive as Me, useAui as Lt, SelectionToolbarPrimitive as jt, useExternalStoreRuntime as Kt, AssistantRuntimeProvider as Wt } from "@assistant-ui/react";
 import { r as Ze } from "./reader-regions-DsePY7B_.js";
 import { e as ue, q as oe, C as Fe, l as Ut, v as Ht } from "./answer-enhance-DShVYmyb.js";
@@ -37,8 +37,8 @@ function fn({
   const c = tt(e);
   return /* @__PURE__ */ a(Xe.Root, { className: "aui-msg aui-msg-assistant", "data-role": "assistant", children: /* @__PURE__ */ O("div", { className: "aui-msg-stack", children: [
     s ? /* @__PURE__ */ a(mt, { running: !0, label: r, elapsedMs: ((R = (f = (g = e.metadata) == null ? void 0 : g.custom) == null ? void 0 : f.metrics) == null ? void 0 : R.elapsed_ms) || 0 }) : null,
-    ((y = e.status) == null ? void 0 : y.type) === "incomplete" && e.status.reason === "cancelled" ? /* @__PURE__ */ a("div", { className: "ai-run-status", role: "status", children: "已中断，已生成的内容保留在对话中" }) : null,
-    !s && ((l = e.status) == null ? void 0 : l.type) === "incomplete" && e.status.reason === "error" ? /* @__PURE__ */ a("div", { className: "ai-turn-error", role: "alert", children: String(((k = ($ = (_ = e.metadata) == null ? void 0 : _.custom) == null ? void 0 : $.metrics) == null ? void 0 : k.error) || "本轮未完成，请重新生成或检查连接设置。") }) : null,
+    ((y = e.status) == null ? void 0 : y.type) === "incomplete" && e.status.reason === "cancelled" ? /* @__PURE__ */ a("div", { className: "reader-ai-run-status", role: "status", children: "已中断，已生成的内容保留在对话中" }) : null,
+    !s && ((l = e.status) == null ? void 0 : l.type) === "incomplete" && e.status.reason === "error" ? /* @__PURE__ */ a("div", { className: "reader-ai-turn-error", role: "alert", children: String(((k = ($ = (_ = e.metadata) == null ? void 0 : _.custom) == null ? void 0 : $.metrics) == null ? void 0 : k.error) || "本轮未完成，请重新生成或检查连接设置。") }) : null,
     !s && i === "rounds_exhausted" ? /* @__PURE__ */ a("div", { className: "aui-msg-truncated", role: "status", children: "检索与计算的步数已用尽，这个回答是提前收尾的——追问一句可以让它接着做。" }) : null,
     c || (I = (P = (D = e.metadata) == null ? void 0 : D.custom) == null ? void 0 : P.parts) != null && I.length ? /* @__PURE__ */ a("div", { className: "aui-msg-bubble", children: /* @__PURE__ */ a("div", { className: "aui-md", children: /* @__PURE__ */ a(
       ft,
@@ -2733,4 +2733,4 @@ function Lr({
 export {
   Lr as ReaderAiPanel
 };
-//# sourceMappingURL=ReaderAiPanel-Dek4KZby.js.map
+//# sourceMappingURL=ReaderAiPanel-YISZD-uK.js.map

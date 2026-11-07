@@ -1,9 +1,9 @@
-import { jsxs as d, jsx as n, Fragment as S } from "react/jsx-runtime";
+import { jsxs as d, jsx as a, Fragment as S } from "react/jsx-runtime";
 import { useId as e2, useState as k, useCallback as j, useRef as P, useEffect as M, useLayoutEffect as V2, createContext as L2, useContext as d2, useMemo as g2, memo as U2 } from "react";
 import { Popover as H } from "radix-ui";
-import { Plug as G2, ChevronDown as R, Search as _2, Loader2 as t2, RefreshCw as M2, Check as U, Plus as f2, ChevronLeft as C2, ChevronRight as n2, Settings2 as W2, ShieldCheck as Z2, Clock3 as K2, ListChecks as $2, BookOpen as I2, CircleAlert as D2, Brain as Y2, Wrench as X2 } from "lucide-react";
-import { AI_AGENT_EVENT as G, AI_CONNECTIONS_CHANGED as v2, AI_SELECTION_CHANGED as y2, saveAiSelection as b2, probeAiConnection as Q2, selectionForRequest as J2, fetchAiConnections as e0, fetchAgentInteractions as t0, answerAgentInteraction as n0 } from "@retainpdf/api";
-import { D as S2, g as a0, m as z2, F as Q, E as P2, B as i0, d as r0, k as l0, o as o0, j as s0, z as c0, l as w2, C as E2 } from "./answer-enhance-DShVYmyb.js";
+import { Plug as G2, ChevronDown as R, Search as _2, Loader2 as t2, RefreshCw as M2, Check as U, Plus as f2, ChevronLeft as C2, ChevronRight as a2, Settings2 as W2, ShieldCheck as Z2, Clock3 as K2, ListChecks as $2, BookOpen as I2, CircleAlert as D2, Brain as Y2, Wrench as X2 } from "lucide-react";
+import { AI_AGENT_EVENT as G, AI_CONNECTIONS_CHANGED as v2, AI_SELECTION_CHANGED as y2, saveAiSelection as b2, probeAiConnection as Q2, selectionForRequest as J2, fetchAiConnections as e0, fetchAgentInteractions as t0, answerAgentInteraction as a0 } from "@retainpdf/api";
+import { D as S2, g as n0, m as z2, F as Q, E as P2, B as r0, d as i0, k as l0, o as o0, j as s0, z as c0, l as w2, C as E2 } from "./answer-enhance-DShVYmyb.js";
 import d0, { setCustomComponents as u0, PreCodeNode as h0, MathInlineNode as m0 } from "markstream-react";
 import { createPortal as p0 } from "react-dom";
 const g0 = "retainpdf-chart", f0 = 6, C0 = 40, D0 = /* @__PURE__ */ new Set(["bar", "line", "pie"]);
@@ -21,10 +21,10 @@ function V(e, t = "") {
 function y0(e) {
   if (!Array.isArray(e)) return [];
   const t = [];
-  for (const i of e) {
-    if (!i || typeof i != "object") continue;
-    const r = i, a = v0(r.value ?? r.y);
-    if (a !== null && (t.push({ label: V(r.label ?? r.x, `${t.length + 1}`), value: a }), t.length >= C0))
+  for (const r of e) {
+    if (!r || typeof r != "object") continue;
+    const i = r, n = v0(i.value ?? i.y);
+    if (n !== null && (t.push({ label: V(i.label ?? i.x, `${t.length + 1}`), value: n }), t.length >= C0))
       break;
   }
   return t;
@@ -32,10 +32,10 @@ function y0(e) {
 function b0(e) {
   if (!Array.isArray(e)) return [];
   const t = [];
-  for (const i of e) {
-    if (!i || typeof i != "object") continue;
-    const r = i, a = y0(r.points ?? r.data);
-    if (a.length && (t.push({ name: V(r.name, `系列 ${t.length + 1}`), points: a }), t.length >= f0))
+  for (const r of e) {
+    if (!r || typeof r != "object") continue;
+    const i = r, n = y0(i.points ?? i.data);
+    if (n.length && (t.push({ name: V(i.name, `系列 ${t.length + 1}`), points: n }), t.length >= f0))
       break;
   }
   return t;
@@ -43,35 +43,35 @@ function b0(e) {
 function w0(e) {
   const t = `${e || ""}`.trim();
   if (!t) return null;
-  let i;
+  let r;
   try {
-    i = JSON.parse(t);
+    r = JSON.parse(t);
   } catch {
     return null;
   }
-  if (!i || typeof i != "object" || Array.isArray(i)) return null;
-  const r = i, a = `${r.kind ?? r.type ?? ""}`.trim().toLowerCase();
-  if (!D0.has(a)) return null;
-  const l = b0(r.series);
+  if (!r || typeof r != "object" || Array.isArray(r)) return null;
+  const i = r, n = `${i.kind ?? i.type ?? ""}`.trim().toLowerCase();
+  if (!D0.has(n)) return null;
+  const l = b0(i.series);
   if (!l.length) return null;
-  const c = a === "pie" ? l.slice(0, 1) : l;
+  const c = n === "pie" ? l.slice(0, 1) : l;
   return {
-    kind: a,
-    title: V(r.title),
-    xLabel: V(r.xLabel ?? r.x_label),
-    yLabel: V(r.yLabel ?? r.y_label),
+    kind: n,
+    title: V(i.title),
+    xLabel: V(i.xLabel ?? i.x_label),
+    yLabel: V(i.yLabel ?? i.y_label),
     series: c
   };
 }
 function E0(e) {
-  const t = e.series.flatMap((c) => c.points.map((s) => s.value)), i = Math.min(...t), r = Math.max(...t), a = Math.min(0, i), l = Math.max(0, r);
-  return a === l ? { min: a, max: l + 1 } : { min: a, max: l };
+  const t = e.series.flatMap((c) => c.points.map((s) => s.value)), r = Math.min(...t), i = Math.max(...t), n = Math.min(0, r), l = Math.max(0, i);
+  return n === l ? { min: n, max: l + 1 } : { min: n, max: l };
 }
 function u2(e) {
   let t = [];
-  for (const i of e.series)
-    i.points.length > t.length && (t = i.points);
-  return t.map((i) => i.label);
+  for (const r of e.series)
+    r.points.length > t.length && (t = r.points);
+  return t.map((r) => r.label);
 }
 const H2 = 640, h2 = 300, _ = { top: 16, right: 16, bottom: 44, left: 52 }, O = H2 - _.left - _.right, z = h2 - _.top - _.bottom, F2 = [
   "var(--chart-1, #4c6ef5)",
@@ -82,7 +82,7 @@ const H2 = 640, h2 = 300, _ = { top: 16, right: 16, bottom: 44, left: 52 }, O = 
   "var(--chart-6, #0c8599)"
 ], W = (e) => F2[e % F2.length];
 function F0(e, t) {
-  return Array.from({ length: 5 }, (r, a) => e + (t - e) * a / 4);
+  return Array.from({ length: 5 }, (i, n) => e + (t - e) * n / 4);
 }
 function x0(e) {
   const t = Math.abs(e);
@@ -94,25 +94,25 @@ function A0(e) {
 function k0({
   spec: e,
   min: t,
-  max: i,
-  labels: r
+  max: r,
+  labels: i
 }) {
-  const a = (s) => _.top + z - (s - t) / (i - t) * z, l = A0(r.length), c = O / Math.max(1, r.length);
+  const n = (s) => _.top + z - (s - t) / (r - t) * z, l = A0(i.length), c = O / Math.max(1, i.length);
   return /* @__PURE__ */ d("g", { className: "reader-answer-chart-axes", children: [
-    F0(t, i).map((s) => /* @__PURE__ */ d("g", { children: [
-      /* @__PURE__ */ n(
+    F0(t, r).map((s) => /* @__PURE__ */ d("g", { children: [
+      /* @__PURE__ */ a(
         "line",
         {
           className: "reader-answer-chart-grid",
           x1: _.left,
           x2: _.left + O,
-          y1: a(s),
-          y2: a(s)
+          y1: n(s),
+          y2: n(s)
         }
       ),
-      /* @__PURE__ */ n("text", { className: "reader-answer-chart-tick", x: _.left - 8, y: a(s), textAnchor: "end", dominantBaseline: "middle", children: x0(s) })
+      /* @__PURE__ */ a("text", { className: "reader-answer-chart-tick", x: _.left - 8, y: n(s), textAnchor: "end", dominantBaseline: "middle", children: x0(s) })
     ] }, s)),
-    r.map((s, p) => p % l === 0 ? /* @__PURE__ */ n(
+    i.map((s, p) => p % l === 0 ? /* @__PURE__ */ a(
       "text",
       {
         className: "reader-answer-chart-tick",
@@ -123,8 +123,8 @@ function k0({
       },
       `${s}-${p}`
     ) : null),
-    e.yLabel ? /* @__PURE__ */ n("text", { className: "reader-answer-chart-axis-label", x: _.left, y: _.top - 4, textAnchor: "start", children: e.yLabel }) : null,
-    e.xLabel ? /* @__PURE__ */ n(
+    e.yLabel ? /* @__PURE__ */ a("text", { className: "reader-answer-chart-axis-label", x: _.left, y: _.top - 4, textAnchor: "start", children: e.yLabel }) : null,
+    e.xLabel ? /* @__PURE__ */ a(
       "text",
       {
         className: "reader-answer-chart-axis-label",
@@ -136,11 +136,11 @@ function k0({
     ) : null
   ] });
 }
-function N0({ spec: e, min: t, max: i }) {
-  const r = u2(e), a = O / Math.max(1, r.length), l = a * 0.7, c = l / e.series.length, s = (m) => _.top + z - (m - t) / (i - t) * z, p = s(0);
-  return /* @__PURE__ */ n(S, { children: e.series.map((m, o) => /* @__PURE__ */ n("g", { fill: W(o), children: m.points.map((u, f) => {
-    const v = s(u.value), w = _.left + a * f + (a - l) / 2 + c * o;
-    return /* @__PURE__ */ n(
+function N0({ spec: e, min: t, max: r }) {
+  const i = u2(e), n = O / Math.max(1, i.length), l = n * 0.7, c = l / e.series.length, s = (m) => _.top + z - (m - t) / (r - t) * z, p = s(0);
+  return /* @__PURE__ */ a(S, { children: e.series.map((m, o) => /* @__PURE__ */ a("g", { fill: W(o), children: m.points.map((u, f) => {
+    const v = s(u.value), w = _.left + n * f + (n - l) / 2 + c * o;
+    return /* @__PURE__ */ a(
       "rect",
       {
         x: w,
@@ -148,26 +148,26 @@ function N0({ spec: e, min: t, max: i }) {
         width: Math.max(1, c - 1),
         height: Math.max(1, Math.abs(p - v)),
         rx: 2,
-        children: /* @__PURE__ */ n("title", { children: `${m.name} · ${u.label}: ${u.value}` })
+        children: /* @__PURE__ */ a("title", { children: `${m.name} · ${u.label}: ${u.value}` })
       },
       `${u.label}-${f}`
     );
   }) }, m.name)) });
 }
-function L0({ spec: e, min: t, max: i }) {
-  const r = u2(e), a = O / Math.max(1, r.length), l = (s) => _.top + z - (s - t) / (i - t) * z, c = (s) => _.left + a * (s + 0.5);
-  return /* @__PURE__ */ n(S, { children: e.series.map((s, p) => {
+function L0({ spec: e, min: t, max: r }) {
+  const i = u2(e), n = O / Math.max(1, i.length), l = (s) => _.top + z - (s - t) / (r - t) * z, c = (s) => _.left + n * (s + 0.5);
+  return /* @__PURE__ */ a(S, { children: e.series.map((s, p) => {
     const m = s.points.map((o, u) => `${u === 0 ? "M" : "L"} ${c(u)} ${l(o.value)}`).join(" ");
     return /* @__PURE__ */ d("g", { stroke: W(p), fill: W(p), children: [
-      /* @__PURE__ */ n("path", { className: "reader-answer-chart-line", d: m, fill: "none" }),
-      s.points.map((o, u) => /* @__PURE__ */ n(
+      /* @__PURE__ */ a("path", { className: "reader-answer-chart-line", d: m, fill: "none" }),
+      s.points.map((o, u) => /* @__PURE__ */ a(
         "circle",
         {
           cx: c(u),
           cy: l(o.value),
           r: 3,
           stroke: "none",
-          children: /* @__PURE__ */ n("title", { children: `${s.name} · ${o.label}: ${o.value}` })
+          children: /* @__PURE__ */ a("title", { children: `${s.name} · ${o.label}: ${o.value}` })
         },
         `${o.label}-${u}`
       ))
@@ -176,25 +176,25 @@ function L0({ spec: e, min: t, max: i }) {
 }
 function _0({ spec: e }) {
   var p;
-  const t = ((p = e.series[0]) == null ? void 0 : p.points) ?? [], i = t.map((m) => Math.max(0, m.value)), r = i.reduce((m, o) => m + o, 0);
-  if (r <= 0) return null;
-  const a = _.left + O / 2, l = _.top + z / 2, c = Math.min(O, z) / 2 - 8;
+  const t = ((p = e.series[0]) == null ? void 0 : p.points) ?? [], r = t.map((m) => Math.max(0, m.value)), i = r.reduce((m, o) => m + o, 0);
+  if (i <= 0) return null;
+  const n = _.left + O / 2, l = _.top + z / 2, c = Math.min(O, z) / 2 - 8;
   let s = -Math.PI / 2;
-  return /* @__PURE__ */ n(S, { children: t.map((m, o) => {
-    const u = i[o] / r, f = s + u * Math.PI * 2, v = a + c * Math.cos(s), w = l + c * Math.sin(s), D = a + c * Math.cos(f), F = l + c * Math.sin(f), x = u > 0.5 ? 1 : 0, y = u >= 1 ? `M ${a} ${l - c} A ${c} ${c} 0 1 1 ${a - 0.01} ${l - c} Z` : `M ${a} ${l} L ${v} ${w} A ${c} ${c} 0 ${x} 1 ${D} ${F} Z`;
-    return s = f, /* @__PURE__ */ n("path", { d: y, fill: W(o), children: /* @__PURE__ */ n("title", { children: `${m.label}: ${m.value}（${(u * 100).toFixed(1)}%）` }) }, `${m.label}-${o}`);
+  return /* @__PURE__ */ a(S, { children: t.map((m, o) => {
+    const u = r[o] / i, f = s + u * Math.PI * 2, v = n + c * Math.cos(s), w = l + c * Math.sin(s), D = n + c * Math.cos(f), F = l + c * Math.sin(f), x = u > 0.5 ? 1 : 0, y = u >= 1 ? `M ${n} ${l - c} A ${c} ${c} 0 1 1 ${n - 0.01} ${l - c} Z` : `M ${n} ${l} L ${v} ${w} A ${c} ${c} 0 ${x} 1 ${D} ${F} Z`;
+    return s = f, /* @__PURE__ */ a("path", { d: y, fill: W(o), children: /* @__PURE__ */ a("title", { children: `${m.label}: ${m.value}（${(u * 100).toFixed(1)}%）` }) }, `${m.label}-${o}`);
   }) });
 }
 function M0({ spec: e }) {
-  var i;
-  const t = e.kind === "pie" ? (((i = e.series[0]) == null ? void 0 : i.points) ?? []).map((r) => r.label) : e.series.map((r) => r.name);
-  return t.length < 2 ? null : /* @__PURE__ */ n("ul", { className: "reader-answer-chart-legend", children: t.map((r, a) => /* @__PURE__ */ d("li", { children: [
-    /* @__PURE__ */ n("span", { className: "reader-answer-chart-swatch", style: { background: W(a) }, "aria-hidden": !0 }),
-    r
-  ] }, `${r}-${a}`)) });
+  var r;
+  const t = e.kind === "pie" ? (((r = e.series[0]) == null ? void 0 : r.points) ?? []).map((i) => i.label) : e.series.map((i) => i.name);
+  return t.length < 2 ? null : /* @__PURE__ */ a("ul", { className: "reader-answer-chart-legend", children: t.map((i, n) => /* @__PURE__ */ d("li", { children: [
+    /* @__PURE__ */ a("span", { className: "reader-answer-chart-swatch", style: { background: W(n) }, "aria-hidden": !0 }),
+    i
+  ] }, `${i}-${n}`)) });
 }
 function $0({ spec: e }) {
-  const t = e2(), { min: i, max: r } = E0(e), a = u2(e), l = e.title || `${e.series.length} 个系列的${e.kind === "pie" ? "占比" : "对比"}图`;
+  const t = e2(), { min: r, max: i } = E0(e), n = u2(e), l = e.title || `${e.series.length} 个系列的${e.kind === "pie" ? "占比" : "对比"}图`;
   return /* @__PURE__ */ d("figure", { className: "reader-answer-chart", children: [
     /* @__PURE__ */ d(
       "svg",
@@ -205,16 +205,16 @@ function $0({ spec: e }) {
         "aria-labelledby": t,
         preserveAspectRatio: "xMidYMid meet",
         children: [
-          /* @__PURE__ */ n("title", { id: t, children: l }),
-          e.kind !== "pie" ? /* @__PURE__ */ n(k0, { spec: e, min: i, max: r, labels: a }) : null,
-          e.kind === "bar" ? /* @__PURE__ */ n(N0, { spec: e, min: i, max: r }) : null,
-          e.kind === "line" ? /* @__PURE__ */ n(L0, { spec: e, min: i, max: r }) : null,
-          e.kind === "pie" ? /* @__PURE__ */ n(_0, { spec: e }) : null
+          /* @__PURE__ */ a("title", { id: t, children: l }),
+          e.kind !== "pie" ? /* @__PURE__ */ a(k0, { spec: e, min: r, max: i, labels: n }) : null,
+          e.kind === "bar" ? /* @__PURE__ */ a(N0, { spec: e, min: r, max: i }) : null,
+          e.kind === "line" ? /* @__PURE__ */ a(L0, { spec: e, min: r, max: i }) : null,
+          e.kind === "pie" ? /* @__PURE__ */ a(_0, { spec: e }) : null
         ]
       }
     ),
-    /* @__PURE__ */ n(M0, { spec: e }),
-    e.title ? /* @__PURE__ */ n("figcaption", { className: "reader-answer-chart-caption", children: e.title }) : null
+    /* @__PURE__ */ a(M0, { spec: e }),
+    e.title ? /* @__PURE__ */ a("figcaption", { className: "reader-answer-chart-caption", children: e.title }) : null
   ] });
 }
 const I0 = 1600;
@@ -245,15 +245,15 @@ function S0(e) {
 function z0({
   language: e,
   code: t,
-  children: i
+  children: r
 }) {
-  const [r, a] = k(!1), l = S0(e), c = j(() => {
+  const [i, n] = k(!1), l = S0(e), c = j(() => {
     var p;
     const s = `${t || ""}`;
     s.trim() && ((p = navigator.clipboard) == null || p.writeText(s).then(
       () => {
         var m;
-        a(!0), (m = globalThis.setTimeout) == null || m.call(globalThis, () => a(!1), I0);
+        n(!0), (m = globalThis.setTimeout) == null || m.call(globalThis, () => n(!1), I0);
       },
       () => {
       }
@@ -261,30 +261,30 @@ function z0({
   }, [t]);
   return /* @__PURE__ */ d("div", { className: "reader-answer-code", children: [
     /* @__PURE__ */ d("div", { className: "reader-answer-code-bar", children: [
-      /* @__PURE__ */ n("span", { className: "reader-answer-code-lang", children: l }),
-      /* @__PURE__ */ n(
+      /* @__PURE__ */ a("span", { className: "reader-answer-code-lang", children: l }),
+      /* @__PURE__ */ a(
         "button",
         {
           type: "button",
           className: "reader-answer-code-copy",
           onClick: c,
           title: "复制代码",
-          children: r ? "已复制" : "复制"
+          children: i ? "已复制" : "复制"
         }
       )
     ] }),
-    i
+    r
   ] });
 }
 const P0 = 8, H0 = 8;
-function R0(e, t, i, { gap: r = P0, margin: a = H0 } = {}) {
-  const l = i.height - e.bottom, c = e.top, s = t.height + r + a, p = l >= s || l >= c ? "bottom" : "top", m = p === "bottom" ? e.bottom + r : e.top - r - t.height, o = Math.max(a, i.height - t.height - a), u = Math.min(Math.max(m, a), o), f = e.left + e.width / 2 - t.width / 2, v = Math.max(a, i.width - t.width - a);
-  return { left: Math.min(Math.max(f, a), v), top: u, placement: p };
+function R0(e, t, r, { gap: i = P0, margin: n = H0 } = {}) {
+  const l = r.height - e.bottom, c = e.top, s = t.height + i + n, p = l >= s || l >= c ? "bottom" : "top", m = p === "bottom" ? e.bottom + i : e.top - i - t.height, o = Math.max(n, r.height - t.height - n), u = Math.min(Math.max(m, n), o), f = e.left + e.width / 2 - t.width / 2, v = Math.max(n, r.width - t.width - n);
+  return { left: Math.min(Math.max(f, n), v), top: u, placement: p };
 }
 const O0 = 240, R2 = 180;
 function O2(e, t) {
-  const i = `${e || ""}`.replace(/\s+/g, " ").trim();
-  return i.length <= t ? i : `${i.slice(0, t - 1)}…`;
+  const r = `${e || ""}`.replace(/\s+/g, " ").trim();
+  return r.length <= t ? r : `${r.slice(0, t - 1)}…`;
 }
 function B2(e, t) {
   return S2(e) === null ? [] : `${e.job_id || t || ""}`.trim() ? ["translated", "source"] : [];
@@ -295,9 +295,9 @@ function B0(e, t) {
 function T0({
   citation: e,
   jobId: t,
-  anchor: i,
-  cardId: r,
-  onPointerEnter: a,
+  anchor: r,
+  cardId: i,
+  onPointerEnter: n,
   onPointerLeave: l
 }) {
   const c = P(null), s = P(null), p = B2(e, t), m = S2(e), o = m === null ? null : m + 1, u = O2(`${e.snippet || ""}`, R2), [f, v] = k(
@@ -309,7 +309,7 @@ function T0({
     const E = `${e.job_id || t || ""}`.trim(), b = new AbortController();
     return (async () => {
       for (const C of p) {
-        const g = a0(
+        const g = n0(
           E,
           m ?? 0,
           C,
@@ -328,9 +328,9 @@ function T0({
     };
   }, [e, t, m, p.length]), V2(() => {
     const y = c.current;
-    if (!y || !i) return;
+    if (!y || !r) return;
     const E = () => {
-      const b = i.getBoundingClientRect(), C = y.getBoundingClientRect(), g = R0(
+      const b = r.getBoundingClientRect(), C = y.getBoundingClientRect(), g = R0(
         { top: b.top, left: b.left, bottom: b.bottom, width: b.width },
         {
           width: C.width || y.offsetWidth,
@@ -343,21 +343,21 @@ function T0({
     return E(), window.addEventListener("scroll", E, !0), window.addEventListener("resize", E), () => {
       window.removeEventListener("scroll", E, !0), window.removeEventListener("resize", E);
     };
-  }, [i, f, u]);
+  }, [r, f, u]);
   const F = /* @__PURE__ */ d(
     "div",
     {
       ref: c,
-      id: r,
+      id: i,
       role: "tooltip",
       className: `reader-ai-citation-card${w ? " is-placed" : ""}`,
       "data-placement": (w == null ? void 0 : w.placement) || "bottom",
       style: { left: `${(w == null ? void 0 : w.left) ?? 0}px`, top: `${(w == null ? void 0 : w.top) ?? 0}px` },
-      onMouseEnter: a,
+      onMouseEnter: n,
       onMouseLeave: l,
       children: [
         p.length ? /* @__PURE__ */ d("div", { className: "reader-ai-citation-card-figure", "data-state": f, children: [
-          /* @__PURE__ */ n(
+          /* @__PURE__ */ a(
             "img",
             {
               ref: s,
@@ -367,11 +367,11 @@ function T0({
               width: O0
             }
           ),
-          f === "failed" ? /* @__PURE__ */ n("span", { className: "reader-ai-citation-card-thumb-fallback", children: "预览暂不可用" }) : null
+          f === "failed" ? /* @__PURE__ */ a("span", { className: "reader-ai-citation-card-thumb-fallback", children: "预览暂不可用" }) : null
         ] }) : null,
         /* @__PURE__ */ d("div", { className: "reader-ai-citation-card-text", children: [
-          /* @__PURE__ */ n("div", { className: "reader-ai-citation-card-head", children: o ? `第 ${o} 页` : "来源" }),
-          u ? /* @__PURE__ */ n("p", { className: "reader-ai-citation-card-snippet", children: u }) : null
+          /* @__PURE__ */ a("div", { className: "reader-ai-citation-card-head", children: o ? `第 ${o} 页` : "来源" }),
+          u ? /* @__PURE__ */ a("p", { className: "reader-ai-citation-card-snippet", children: u }) : null
         ] })
       ]
     }
@@ -379,8 +379,8 @@ function T0({
   return x ? p0(F, x) : F;
 }
 const j0 = 140, x2 = 180;
-function q0({ citation: e, label: t, jobId: i, onJump: r }) {
-  const [a, l] = k(!1), c = P(null), s = P(null), p = `reader-ai-citation-card-${e2().replace(/[^a-zA-Z0-9_-]/g, "")}`, m = P2(e), o = B0(e, i), u = j(() => {
+function q0({ citation: e, label: t, jobId: r, onJump: i }) {
+  const [n, l] = k(!1), c = P(null), s = P(null), p = `reader-ai-citation-card-${e2().replace(/[^a-zA-Z0-9_-]/g, "")}`, m = P2(e), o = B0(e, r), u = j(() => {
     s.current !== null && (clearTimeout(s.current), s.current = null);
   }, []), f = j((D, F) => {
     u(), s.current = setTimeout(() => {
@@ -403,18 +403,18 @@ function q0({ citation: e, label: t, jobId: i, onJump: r }) {
         type: "button",
         className: "reader-ai-citation-ref",
         "data-page": m ?? void 0,
-        "aria-describedby": a ? p : void 0,
-        "aria-expanded": o ? a : void 0,
+        "aria-describedby": n ? p : void 0,
+        "aria-expanded": o ? n : void 0,
         title: m ? `跳到第 ${m} 页` : "定位来源",
         onClick: (D) => {
-          D.preventDefault(), D.stopPropagation(), w(), r == null || r(e);
+          D.preventDefault(), D.stopPropagation(), w(), i == null || i(e);
         },
         onMouseEnter: o ? () => f(!0, j0) : void 0,
         onMouseLeave: o ? () => f(!1, x2) : void 0,
         onFocus: o ? v : void 0,
         onBlur: o ? w : void 0,
         onKeyDown: (D) => {
-          D.key === "Escape" && a && (D.stopPropagation(), w());
+          D.key === "Escape" && n && (D.stopPropagation(), w());
         },
         children: [
           "[",
@@ -423,11 +423,11 @@ function q0({ citation: e, label: t, jobId: i, onJump: r }) {
         ]
       }
     ),
-    a && o ? /* @__PURE__ */ n(
+    n && o ? /* @__PURE__ */ a(
       T0,
       {
         citation: e,
-        jobId: i,
+        jobId: r,
         anchor: c.current,
         cardId: p,
         onPointerEnter: v,
@@ -442,18 +442,18 @@ const T2 = "retainpdf-ai-answer", A2 = 320, V0 = 2, m2 = L2({
   citations: []
 });
 function U0(e) {
-  const t = Number(e.naturalWidth) || 0, i = e.closest(".reader-ai-image-jump"), r = i || e, a = t > 0 && t < A2;
-  if (e.classList.toggle("is-low-resolution", a), i == null || i.classList.toggle("is-low-resolution", a), a) {
+  const t = Number(e.naturalWidth) || 0, r = e.closest(".reader-ai-image-jump"), i = r || e, n = t > 0 && t < A2;
+  if (e.classList.toggle("is-low-resolution", n), r == null || r.classList.toggle("is-low-resolution", n), n) {
     const l = Math.min(
       A2,
       Math.max(t, t * V0)
     );
-    r.style.setProperty("--reader-ai-image-width", `${l}px`);
+    i.style.setProperty("--reader-ai-image-width", `${l}px`);
   } else
-    r.style.removeProperty("--reader-ai-image-width");
+    i.style.removeProperty("--reader-ai-image-width");
 }
 function G0({ node: e }) {
-  const { final: t, jobId: i, citations: r, onJumpCitation: a } = d2(m2), l = P(null), c = P(null), s = `${e.alt || ""}`.trim(), p = i0(e.src, i, {}, r0(r)), m = l0(e.src, r, i), o = P2(m), u = j((v) => {
+  const { final: t, jobId: r, citations: i, onJumpCitation: n } = d2(m2), l = P(null), c = P(null), s = `${e.alt || ""}`.trim(), p = r0(e.src, r, {}, i0(i)), m = l0(e.src, i, r), o = P2(m), u = j((v) => {
     var F;
     const w = l.current;
     if (w === v || ((F = c.current) == null || F.abort(), c.current = null, w && Q(w), l.current = v, !v || !p)) return;
@@ -471,8 +471,8 @@ function G0({ node: e }) {
     var v;
     (v = c.current) == null || v.abort(), c.current = null, Q(l.current), l.current = null;
   }, []), !p)
-    return t ? /* @__PURE__ */ n("span", { className: "aui-image-blocked", children: s ? `[图片不可用：${s}]` : "[图片不可用]" }) : /* @__PURE__ */ n("span", { className: "aui-image-pending", "aria-label": s || "图片加载中", children: s ? `[图片：${s}]` : "[图片加载中]" });
-  const f = /* @__PURE__ */ n(
+    return t ? /* @__PURE__ */ a("span", { className: "aui-image-blocked", children: s ? `[图片不可用：${s}]` : "[图片不可用]" }) : /* @__PURE__ */ a("span", { className: "aui-image-pending", "aria-label": s || "图片加载中", children: s ? `[图片：${s}]` : "[图片加载中]" });
+  const f = /* @__PURE__ */ a(
     "img",
     {
       ref: u,
@@ -484,7 +484,7 @@ function G0({ node: e }) {
       title: e.title || void 0
     }
   );
-  return !m || !a ? f : /* @__PURE__ */ d(
+  return !m || !n ? f : /* @__PURE__ */ d(
     "button",
     {
       type: "button",
@@ -492,29 +492,29 @@ function G0({ node: e }) {
       "data-page": o ?? void 0,
       title: o ? `定位到 PDF 第 ${o} 页` : "定位到图片来源",
       onClick: (v) => {
-        v.preventDefault(), v.stopPropagation(), a({ ...m, image_url: p });
+        v.preventDefault(), v.stopPropagation(), n({ ...m, image_url: p });
       },
       children: [
         f,
-        /* @__PURE__ */ n("span", { className: "reader-ai-image-jump-label", "aria-hidden": "true", children: o ? `定位 p.${o}` : "定位来源" })
+        /* @__PURE__ */ a("span", { className: "reader-ai-image-jump-label", "aria-hidden": "true", children: o ? `定位 p.${o}` : "定位来源" })
       ]
     }
   );
 }
 function W0({ node: e }) {
-  const { citations: t, jobId: i, onJumpCitation: r } = d2(m2), a = `${e.href || ""}`.match(/^#retainpdf-citation-(\d+)$/), l = a ? t.find((s) => `${s.ref}` === a[1]) : null;
+  const { citations: t, jobId: r, onJumpCitation: i } = d2(m2), n = `${e.href || ""}`.match(/^#retainpdf-citation-(\d+)$/), l = n ? t.find((s) => `${s.ref}` === n[1]) : null;
   if (l)
-    return /* @__PURE__ */ n(
+    return /* @__PURE__ */ a(
       q0,
       {
         citation: l,
-        label: `${(a == null ? void 0 : a[1]) ?? ""}`,
-        jobId: i,
-        onJump: r
+        label: `${(n == null ? void 0 : n[1]) ?? ""}`,
+        jobId: r,
+        onJump: i
       }
     );
   const c = `${e.text || e.href || ""}`.trim();
-  return /* @__PURE__ */ n(
+  return /* @__PURE__ */ a(
     "span",
     {
       className: "aui-md-extlink",
@@ -527,13 +527,13 @@ function W0({ node: e }) {
 function Z0(e) {
   const t = e.node;
   if (`${(t == null ? void 0 : t.language) || ""}`.trim().toLowerCase() === g0) {
-    const i = w0(`${(t == null ? void 0 : t.code) || ""}`);
-    if (i) return /* @__PURE__ */ n($0, { spec: i });
+    const r = w0(`${(t == null ? void 0 : t.code) || ""}`);
+    if (r) return /* @__PURE__ */ a($0, { spec: r });
   }
-  return /* @__PURE__ */ n(z0, { language: `${(t == null ? void 0 : t.language) || ""}`, code: `${(t == null ? void 0 : t.code) || ""}`, children: /* @__PURE__ */ n(h0, { node: e.node }) });
+  return /* @__PURE__ */ a(z0, { language: `${(t == null ? void 0 : t.language) || ""}`, code: `${(t == null ? void 0 : t.code) || ""}`, children: /* @__PURE__ */ a(h0, { node: e.node }) });
 }
 function K0({ node: e }) {
-  return /* @__PURE__ */ n(
+  return /* @__PURE__ */ a(
     m0,
     {
       node: e.markup === "$$" ? { ...e, markup: "$" } : e
@@ -549,19 +549,19 @@ u0(T2, {
 function Y0({
   content: e,
   final: t,
-  indexKey: i,
-  jobId: r,
-  citations: a = [],
+  indexKey: r,
+  jobId: i,
+  citations: n = [],
   onJumpCitation: l,
   onClickCapture: c
 }) {
-  return /* @__PURE__ */ n(m2.Provider, { value: { final: t, jobId: r, citations: a, onJumpCitation: l }, children: /* @__PURE__ */ n(
+  return /* @__PURE__ */ a(m2.Provider, { value: { final: t, jobId: i, citations: n, onJumpCitation: l }, children: /* @__PURE__ */ a(
     "div",
     {
       className: "retain-markstream-shell",
       "data-markdown-renderer": "markstream-react",
       onClickCapture: c,
-      children: /* @__PURE__ */ n(
+      children: /* @__PURE__ */ a(
         d0,
         {
           batchRendering: !t,
@@ -570,7 +570,7 @@ function Y0({
           fade: !1,
           final: t,
           htmlPolicy: "escape",
-          indexKey: i,
+          indexKey: r,
           maxLiveNodes: 0,
           renderCodeBlocksAsPre: !0,
           showTooltips: !1,
@@ -581,12 +581,12 @@ function Y0({
     }
   ) });
 }
-function a2({
+function n2({
   content: e,
   streaming: t = !1,
-  citations: i = [],
-  jobId: r = "",
-  className: a = "",
+  citations: r = [],
+  jobId: i = "",
+  className: n = "",
   streamingClassName: l = "",
   pendingClassName: c = "",
   finalClassName: s = "",
@@ -594,12 +594,12 @@ function a2({
   onJumpCitation: m
 }) {
   var x;
-  const o = P(null), u = e2(), f = t ? `${e || ""}` : `${e || ""}`.trim(), v = `${r || ((x = i.find((y) => y.job_id)) == null ? void 0 : x.job_id) || ""}`.trim(), w = g2(() => {
+  const o = P(null), u = e2(), f = t ? `${e || ""}` : `${e || ""}`.trim(), v = `${i || ((x = r.find((y) => y.job_id)) == null ? void 0 : x.job_id) || ""}`.trim(), w = g2(() => {
     const y = /* @__PURE__ */ new Map();
-    for (const E of i)
+    for (const E of r)
       o0(E) && y.set(`${E.ref}`, E);
     return y;
-  }, [i]), D = g2(
+  }, [r]), D = g2(
     () => s0(f, w),
     [f, w]
   );
@@ -613,20 +613,20 @@ function a2({
         (b = E.querySelector(".reader-ai-citations")) == null || b.remove();
         return;
       }
-      c0(E, i, {
+      c0(E, r, {
         onJump: (C) => m == null ? void 0 : m(C),
         answerText: f,
         max: p
       });
     }
-  }, [t, v, w, i, m, f, p]), M(() => () => Q(o.current), []), f.trim() ? /* @__PURE__ */ n("div", { ref: o, className: `${a} ${t ? l : s || c}`.trim(), children: /* @__PURE__ */ n(
+  }, [t, v, w, r, m, f, p]), M(() => () => Q(o.current), []), f.trim() ? /* @__PURE__ */ a("div", { ref: o, className: `${n} ${t ? l : s || c}`.trim(), children: /* @__PURE__ */ a(
     Y0,
     {
       content: D,
       final: !t,
       indexKey: u,
       jobId: v,
-      citations: i,
+      citations: r,
       onJumpCitation: m,
       onClickCapture: (y) => {
         const E = y.target;
@@ -635,7 +635,7 @@ function a2({
     }
   ) }) : null;
 }
-const i2 = [
+const r2 = [
   { id: "openai", name: "OpenAI", brand: "codex", baseUrl: "https://api.openai.com/v1", protocol: "openai_responses", keyUrl: "https://platform.openai.com/api-keys" },
   { id: "anthropic", name: "Anthropic / Claude", brand: "claude", baseUrl: "https://api.anthropic.com/v1", protocol: "anthropic", keyUrl: "https://console.anthropic.com/settings/keys" },
   { id: "deepseek", name: "DeepSeek", brand: "deepseek", baseUrl: "https://api.deepseek.com/v1", protocol: "openai", keyUrl: "https://platform.deepseek.com/api_keys" },
@@ -661,11 +661,11 @@ const i2 = [
   "mimo-code": "mimo"
 };
 function o2(e) {
-  if (e.provider) return i2.find((r) => r.id === e.provider) || i2.at(-1);
-  const t = e.base_url.toLowerCase(), i = t.includes("anthropic") ? "anthropic" : t.includes("deepseek") ? "deepseek" : t.includes("openrouter") ? "openrouter" : t.includes("dashscope") ? "qwen" : t.includes("openai.com") ? "openai" : "custom";
-  return i2.find((r) => r.id === i);
+  if (e.provider) return r2.find((i) => i.id === e.provider) || r2.at(-1);
+  const t = e.base_url.toLowerCase(), r = t.includes("anthropic") ? "anthropic" : t.includes("deepseek") ? "deepseek" : t.includes("openrouter") ? "openrouter" : t.includes("dashscope") ? "qwen" : t.includes("openai.com") ? "openai" : "custom";
+  return r2.find((i) => i.id === r);
 }
-function r2(e) {
+function i2(e) {
   return e.kind === "byoa" ? j2[e.preset] || "custom" : o2(e).brand;
 }
 function ce(e) {
@@ -752,11 +752,11 @@ const X0 = {
   }
 };
 function l2({ brand: e, size: t = 24 }) {
-  const i = e === "custom" ? null : X0[e];
-  return /* @__PURE__ */ n("span", { className: "reader-ai-brand", "aria-hidden": "true", style: { width: t, height: t }, children: i ? i.monochrome ? /* @__PURE__ */ n("span", { className: "reader-ai-brand-mask", style: { maskImage: `url("${i.image}")`, WebkitMaskImage: `url("${i.image}")` } }) : /* @__PURE__ */ n("img", { src: i.image, alt: "", width: t, height: t }) : /* @__PURE__ */ n(G2, { size: t * 0.8, strokeWidth: 1.7 }) });
+  const r = e === "custom" ? null : X0[e];
+  return /* @__PURE__ */ a("span", { className: "reader-ai-brand", "aria-hidden": "true", style: { width: t, height: t }, children: r ? r.monochrome ? /* @__PURE__ */ a("span", { className: "reader-ai-brand-mask", style: { maskImage: `url("${r.image}")`, WebkitMaskImage: `url("${r.image}")` } }) : /* @__PURE__ */ a("img", { src: r.image, alt: "", width: t, height: t }) : /* @__PURE__ */ a(G2, { size: t * 0.8, strokeWidth: 1.7 }) });
 }
-function s2({ items: e, value: t, onSelect: i, allowCustom: r = !1, defaultLabel: a = "服务默认模型", defaultValue: l = "", loading: c = !1, error: s = "", onRefresh: p }) {
-  const [m, o] = k(""), u = e2(), f = m.trim(), v = e.filter((D) => (f || !a || D.value !== l) && `${D.name} ${D.value} ${D.group || ""}`.toLowerCase().includes(f.toLowerCase()));
+function s2({ items: e, value: t, onSelect: r, allowCustom: i = !1, defaultLabel: n = "服务默认模型", defaultValue: l = "", loading: c = !1, error: s = "", onRefresh: p }) {
+  const [m, o] = k(""), u = e2(), f = m.trim(), v = e.filter((D) => (f || !n || D.value !== l) && `${D.name} ${D.value} ${D.group || ""}`.toLowerCase().includes(f.toLowerCase()));
   function w(D) {
     var y;
     if (D.key !== "ArrowDown" && D.key !== "ArrowUp") return;
@@ -765,8 +765,8 @@ function s2({ items: e, value: t, onSelect: i, allowCustom: r = !1, defaultLabel
   }
   return /* @__PURE__ */ d("div", { className: "reader-ai-model-list", onKeyDown: w, children: [
     /* @__PURE__ */ d("div", { className: "reader-ai-model-search", children: [
-      /* @__PURE__ */ n(_2, { size: 15, "aria-hidden": "true" }),
-      /* @__PURE__ */ n(
+      /* @__PURE__ */ a(_2, { size: 15, "aria-hidden": "true" }),
+      /* @__PURE__ */ a(
         "input",
         {
           "aria-label": "搜索模型",
@@ -775,59 +775,59 @@ function s2({ items: e, value: t, onSelect: i, allowCustom: r = !1, defaultLabel
           "aria-controls": u,
           "aria-expanded": "true",
           autoComplete: "off",
-          placeholder: r ? "搜索或输入模型名称…" : "搜索模型…",
+          placeholder: i ? "搜索或输入模型名称…" : "搜索模型…",
           value: m,
           onChange: (D) => o(D.target.value)
         }
       ),
-      p ? /* @__PURE__ */ n("button", { type: "button", className: "reader-ai-menu-icon", "aria-label": "刷新模型列表", disabled: c, onClick: p, children: c ? /* @__PURE__ */ n(t2, { size: 14, className: "reader-ai-spin", "aria-hidden": "true" }) : /* @__PURE__ */ n(M2, { size: 14, "aria-hidden": "true" }) }) : null
+      p ? /* @__PURE__ */ a("button", { type: "button", className: "reader-ai-menu-icon", "aria-label": "刷新模型列表", disabled: c, onClick: p, children: c ? /* @__PURE__ */ a(t2, { size: 14, className: "reader-ai-spin", "aria-hidden": "true" }) : /* @__PURE__ */ a(M2, { size: 14, "aria-hidden": "true" }) }) : null
     ] }),
     /* @__PURE__ */ d("div", { className: "reader-ai-model-results", id: u, role: "listbox", "aria-label": "可用模型", "aria-busy": c, children: [
-      !f && a ? /* @__PURE__ */ d("button", { type: "button", role: "option", "aria-selected": !t || t === l, className: "reader-ai-model-option", onClick: () => i(""), children: [
-        /* @__PURE__ */ n("span", { children: a }),
-        !t || t === l ? /* @__PURE__ */ n(U, { size: 15, "aria-hidden": "true" }) : null
+      !f && n ? /* @__PURE__ */ d("button", { type: "button", role: "option", "aria-selected": !t || t === l, className: "reader-ai-model-option", onClick: () => r(""), children: [
+        /* @__PURE__ */ a("span", { children: n }),
+        !t || t === l ? /* @__PURE__ */ a(U, { size: 15, "aria-hidden": "true" }) : null
       ] }) : null,
       v.map((D, F) => {
         var x;
         return /* @__PURE__ */ d("div", { children: [
-          D.group && D.group !== ((x = v[F - 1]) == null ? void 0 : x.group) ? /* @__PURE__ */ n("p", { className: "reader-ai-menu-label", children: D.group }) : null,
-          /* @__PURE__ */ d("button", { type: "button", role: "option", "aria-selected": t === D.value, className: "reader-ai-model-option", onClick: () => i(D.value), children: [
-            /* @__PURE__ */ n("span", { title: D.value, children: D.name }),
-            t === D.value ? /* @__PURE__ */ n(U, { size: 15, "aria-hidden": "true" }) : null
+          D.group && D.group !== ((x = v[F - 1]) == null ? void 0 : x.group) ? /* @__PURE__ */ a("p", { className: "reader-ai-menu-label", children: D.group }) : null,
+          /* @__PURE__ */ d("button", { type: "button", role: "option", "aria-selected": t === D.value, className: "reader-ai-model-option", onClick: () => r(D.value), children: [
+            /* @__PURE__ */ a("span", { title: D.value, children: D.name }),
+            t === D.value ? /* @__PURE__ */ a(U, { size: 15, "aria-hidden": "true" }) : null
           ] })
         ] }, D.value);
       }),
-      r && f && !e.some((D) => D.value === f) ? /* @__PURE__ */ d("button", { type: "button", role: "option", "aria-selected": "false", className: "reader-ai-model-option reader-ai-model-custom", onClick: () => i(f), children: [
+      i && f && !e.some((D) => D.value === f) ? /* @__PURE__ */ d("button", { type: "button", role: "option", "aria-selected": "false", className: "reader-ai-model-option reader-ai-model-custom", onClick: () => r(f), children: [
         /* @__PURE__ */ d("span", { children: [
           "使用「",
           f,
           "」"
         ] }),
-        /* @__PURE__ */ n("small", { children: "自定义模型" })
+        /* @__PURE__ */ a("small", { children: "自定义模型" })
       ] }) : null,
-      !v.length && (!r || !f) ? /* @__PURE__ */ n("p", { className: "reader-ai-menu-empty", children: c ? "正在读取模型…" : f ? "没有匹配的模型" : r ? "可搜索列表，也可输入服务商提供的模型名称。" : "由 Agent 使用其默认模型。" }) : null
+      !v.length && (!i || !f) ? /* @__PURE__ */ a("p", { className: "reader-ai-menu-empty", children: c ? "正在读取模型…" : f ? "没有匹配的模型" : i ? "可搜索列表，也可输入服务商提供的模型名称。" : "由 Agent 使用其默认模型。" }) : null
     ] }),
-    s ? /* @__PURE__ */ n("p", { className: "reader-ai-menu-notice", role: "status", children: s }) : null
+    s ? /* @__PURE__ */ a("p", { className: "reader-ai-menu-notice", role: "status", children: s }) : null
   ] });
 }
-function de({ value: e, items: t, onChange: i, disabled: r = !1, loading: a = !1, error: l = "", onRefresh: c }) {
+function de({ value: e, items: t, onChange: r, disabled: i = !1, loading: n = !1, error: l = "", onRefresh: c }) {
   const [s, p] = k(!1);
   return /* @__PURE__ */ d(H.Root, { open: s, onOpenChange: p, children: [
-    /* @__PURE__ */ d(H.Trigger, { type: "button", className: "reader-ai-model-field", "aria-label": "选择默认模型", disabled: r, children: [
-      /* @__PURE__ */ n("span", { className: e ? "" : "reader-ai-placeholder", children: e || "选择或输入模型" }),
-      /* @__PURE__ */ n(R, { size: 15, "aria-hidden": "true" })
+    /* @__PURE__ */ d(H.Trigger, { type: "button", className: "reader-ai-model-field", "aria-label": "选择默认模型", disabled: i, children: [
+      /* @__PURE__ */ a("span", { className: e ? "" : "reader-ai-placeholder", children: e || "选择或输入模型" }),
+      /* @__PURE__ */ a(R, { size: 15, "aria-hidden": "true" })
     ] }),
-    /* @__PURE__ */ n(H.Portal, { children: /* @__PURE__ */ n(H.Content, { className: "reader-ai-service-menu reader-ai-model-field-menu", align: "start", sideOffset: 6, collisionPadding: 12, "aria-label": "选择默认模型", children: /* @__PURE__ */ n(
+    /* @__PURE__ */ a(H.Portal, { children: /* @__PURE__ */ a(H.Content, { className: "reader-ai-service-menu reader-ai-model-field-menu", align: "start", sideOffset: 6, collisionPadding: 12, "aria-label": "选择默认模型", children: /* @__PURE__ */ a(
       s2,
       {
         value: e,
         items: t.map((m) => ({ value: m, name: m })),
         onSelect: (m) => {
-          i(m), p(!1);
+          r(m), p(!1);
         },
         allowCustom: !0,
         defaultLabel: "",
-        loading: a,
+        loading: n,
         error: l,
         onRefresh: c
       }
@@ -835,22 +835,22 @@ function de({ value: e, items: t, onChange: i, disabled: r = !1, loading: a = !1
   ] });
 }
 const q2 = L2(null), ue = q2.Provider, he = () => d2(q2), J = /* @__PURE__ */ new Map(), c2 = /* @__PURE__ */ new Map();
-function Q0(e, t, i) {
-  J.set(e, t), i && c2.set(e, i), document.dispatchEvent(new CustomEvent(G, { detail: { type: "agent_connection", connection_id: e, config_options: t, capabilities: i } }));
+function Q0(e, t, r) {
+  J.set(e, t), r && c2.set(e, r), document.dispatchEvent(new CustomEvent(G, { detail: { type: "agent_connection", connection_id: e, config_options: t, capabilities: r } }));
 }
 function Y(e) {
   const t = J2(e);
   return t.connectionId ? t : { connectionId: "legacy", model: "", options: {} };
 }
 function me(e, t = !1) {
-  const i = P(t);
-  i.current = t;
-  const [r, a] = k(null), [l, c] = k(() => Y(e)), [s, p] = k([]), [m, o] = k(), [u, f] = k(""), [v, w] = k(!0), [D, F] = k(w2);
+  const r = P(t);
+  r.current = t;
+  const [i, n] = k(null), [l, c] = k(() => Y(e)), [s, p] = k([]), [m, o] = k(), [u, f] = k(""), [v, w] = k(!0), [D, F] = k(w2);
   M(() => {
     let b = !0;
     const C = () => {
       w(!0), F(w2()), e0().then((g) => {
-        b && (a(g), f(""));
+        b && (n(g), f(""));
       }).catch((g) => {
         b && f(g.message || "无法读取 AI 服务");
       }).finally(() => {
@@ -863,7 +863,7 @@ function me(e, t = !1) {
   }, []), M(() => {
     c(Y(e));
     const b = () => {
-      i.current || c(Y(e));
+      r.current || c(Y(e));
     };
     return document.addEventListener(y2, b), window.addEventListener("storage", b), () => {
       document.removeEventListener(y2, b), window.removeEventListener("storage", b);
@@ -871,12 +871,12 @@ function me(e, t = !1) {
   }, [e]), M(() => {
     !t && e && c(Y(e));
   }, [t, e]);
-  const x = (r == null ? void 0 : r.connections.filter((b) => k2(b, D))) || [], y = x.find((b) => b.id === l.connectionId);
+  const x = (i == null ? void 0 : i.connections.filter((b) => k2(b, D))) || [], y = x.find((b) => b.id === l.connectionId);
   M(() => {
-    if (!r || l.connectionId !== "legacy" || y) return;
-    const b = r.connections.find((C) => k2(C, D) && (C.kind === "byoa" || C.api_key_configured));
+    if (!i || l.connectionId !== "legacy" || y) return;
+    const b = i.connections.find((C) => k2(C, D) && (C.kind === "byoa" || C.api_key_configured));
     b && b2(e, { connectionId: b.id, model: "", options: {} });
-  }, [r, l.connectionId, y, D, e]), M(() => {
+  }, [i, l.connectionId, y, D, e]), M(() => {
     p(J.get(l.connectionId) || []), o(c2.get(l.connectionId));
     const b = (C) => {
       const g = C.detail;
@@ -888,7 +888,7 @@ function me(e, t = !1) {
   }, [l.connectionId, e]);
   const E = !!(y && (y.kind === "byoa" || y.api_key_configured || y.legacy_inherited && D));
   return {
-    catalog: r,
+    catalog: i,
     connections: x,
     selection: l,
     selected: y,
@@ -897,18 +897,18 @@ function me(e, t = !1) {
     error: u,
     loading: v,
     configured: E,
-    blocked: !!(r && !E),
+    blocked: !!(i && !E),
     change: (b) => {
       c(b), b2(e, b);
     }
   };
 }
 function X(e) {
-  return (e == null ? void 0 : e.options.flatMap((t) => "group" in t ? t.options.map((i) => ({ ...i, group: t.name })) : [t])) || [];
+  return (e == null ? void 0 : e.options.flatMap((t) => "group" in t ? t.options.map((r) => ({ ...r, group: t.name })) : [t])) || [];
 }
-function pe({ controller: e, disabled: t = !1, onManage: i }) {
+function pe({ controller: e, disabled: t = !1, onManage: r }) {
   var q;
-  const { connections: r, selected: a, selection: l, options: c, change: s, loading: p, error: m } = e, [o, u] = k(!1), [f, v] = k("models"), [w, D] = k(""), [F, x] = k(!1), [y, E] = k(""), b = P(null), C = c.find((h) => h.category === "model"), g = l.model || (a == null ? void 0 : a.model) || (C == null ? void 0 : C.currentValue) || "", A = ((q = X(C).find((h) => h.value === g)) == null ? void 0 : q.name) || g || "默认模型", $ = c.filter((h) => h !== C && h.type === "select"), N = $.find((h) => h.id === w), I = (a == null ? void 0 : a.kind) === "byoa" ? X(C) : [.../* @__PURE__ */ new Set([a == null ? void 0 : a.model, ...(a == null ? void 0 : a.models) || []])].filter((h) => !!h).map((h) => ({ value: h, name: h })), Z = i || (() => {
+  const { connections: i, selected: n, selection: l, options: c, change: s, loading: p, error: m } = e, [o, u] = k(!1), [f, v] = k("models"), [w, D] = k(""), [F, x] = k(!1), [y, E] = k(""), b = P(null), C = c.find((h) => h.category === "model"), g = l.model || (n == null ? void 0 : n.model) || (C == null ? void 0 : C.currentValue) || "", A = ((q = X(C).find((h) => h.value === g)) == null ? void 0 : q.name) || g || "默认模型", $ = c.filter((h) => h !== C && h.type === "select"), N = $.find((h) => h.id === w), I = (n == null ? void 0 : n.kind) === "byoa" ? X(C) : [.../* @__PURE__ */ new Set([n == null ? void 0 : n.model, ...(n == null ? void 0 : n.models) || []])].filter((h) => !!h).map((h) => ({ value: h, name: h })), Z = r || (() => {
     if (document.getElementById("home-root")) document.dispatchEvent(new CustomEvent("retainpdf:open-browser-credentials"));
     else {
       const h = new URL("index.html", window.location.href);
@@ -923,7 +923,7 @@ function pe({ controller: e, disabled: t = !1, onManage: i }) {
     var h, L;
     o && f === "models" && ((L = (h = b.current) == null ? void 0 : h.querySelector("input")) == null || L.focus());
   }, [o, f, l.connectionId]);
-  async function B(h = a) {
+  async function B(h = n) {
     if (!(!h || F)) {
       x(!0), E("");
       try {
@@ -936,8 +936,8 @@ function pe({ controller: e, disabled: t = !1, onManage: i }) {
       }
     }
   }
-  return /* @__PURE__ */ n("div", { className: "reader-ai-connection-control", children: /* @__PURE__ */ d(H.Root, { open: o, onOpenChange: (h) => {
-    u(h), v(a ? "models" : "services"), D(""), h && (a == null ? void 0 : a.kind) === "byoa" && !c.length && B();
+  return /* @__PURE__ */ a("div", { className: "reader-ai-connection-control", children: /* @__PURE__ */ d(H.Root, { open: o, onOpenChange: (h) => {
+    u(h), v(n ? "models" : "services"), D(""), h && (n == null ? void 0 : n.kind) === "byoa" && !c.length && B();
   }, children: [
     /* @__PURE__ */ d(
       H.Trigger,
@@ -945,19 +945,19 @@ function pe({ controller: e, disabled: t = !1, onManage: i }) {
         className: "reader-ai-service-trigger",
         type: "button",
         disabled: t || p,
-        "aria-label": a ? `切换 AI 服务与模型，当前 ${K(a)}，${A}` : "添加 AI 服务",
+        "aria-label": n ? `切换 AI 服务与模型，当前 ${K(n)}，${A}` : "添加 AI 服务",
         children: [
-          p ? /* @__PURE__ */ n(t2, { size: 15, className: "reader-ai-spin", "aria-hidden": "true" }) : a ? /* @__PURE__ */ n(l2, { brand: r2(a), size: 17 }) : /* @__PURE__ */ n(f2, { size: 15, "aria-hidden": "true" }),
-          /* @__PURE__ */ n("span", { className: "reader-ai-service-name", children: a ? K(a) : p ? "读取服务…" : "选择 AI 服务" }),
-          a ? /* @__PURE__ */ d(S, { children: [
-            /* @__PURE__ */ n("span", { className: "reader-ai-service-dot", "aria-hidden": "true", children: "·" }),
-            /* @__PURE__ */ n("span", { className: "reader-ai-service-model", title: A, children: A })
+          p ? /* @__PURE__ */ a(t2, { size: 15, className: "reader-ai-spin", "aria-hidden": "true" }) : n ? /* @__PURE__ */ a(l2, { brand: i2(n), size: 17 }) : /* @__PURE__ */ a(f2, { size: 15, "aria-hidden": "true" }),
+          /* @__PURE__ */ a("span", { className: "reader-ai-service-name", children: n ? K(n) : p ? "读取服务…" : "选择 AI 服务" }),
+          n ? /* @__PURE__ */ d(S, { children: [
+            /* @__PURE__ */ a("span", { className: "reader-ai-service-dot", "aria-hidden": "true", children: "·" }),
+            /* @__PURE__ */ a("span", { className: "reader-ai-service-model", title: A, children: A })
           ] }) : null,
-          /* @__PURE__ */ n(R, { size: 12, className: "reader-ai-service-chevron", "aria-hidden": "true" })
+          /* @__PURE__ */ a(R, { size: 12, className: "reader-ai-service-chevron", "aria-hidden": "true" })
         ]
       }
     ),
-    /* @__PURE__ */ n(H.Portal, { children: /* @__PURE__ */ d(
+    /* @__PURE__ */ a(H.Portal, { children: /* @__PURE__ */ d(
       H.Content,
       {
         ref: b,
@@ -974,60 +974,60 @@ function pe({ controller: e, disabled: t = !1, onManage: i }) {
         children: [
           f === "services" ? /* @__PURE__ */ d(S, { children: [
             /* @__PURE__ */ d("div", { className: "reader-ai-menu-head", children: [
-              a ? /* @__PURE__ */ n("button", { className: "reader-ai-menu-icon", type: "button", "aria-label": "返回模型选择", onClick: () => v("models"), children: /* @__PURE__ */ n(C2, { size: 16 }) }) : null,
-              /* @__PURE__ */ n("strong", { children: "选择 AI 服务" })
+              n ? /* @__PURE__ */ a("button", { className: "reader-ai-menu-icon", type: "button", "aria-label": "返回模型选择", onClick: () => v("models"), children: /* @__PURE__ */ a(C2, { size: 16 }) }) : null,
+              /* @__PURE__ */ a("strong", { children: "选择 AI 服务" })
             ] }),
             /* @__PURE__ */ d("div", { className: "reader-ai-service-rows", role: "listbox", "aria-label": "已连接的 AI 服务", children: [
-              r.map((h) => /* @__PURE__ */ d("button", { type: "button", role: "option", "aria-selected": (a == null ? void 0 : a.id) === h.id, className: "reader-ai-service-row", onClick: () => {
+              i.map((h) => /* @__PURE__ */ d("button", { type: "button", role: "option", "aria-selected": (n == null ? void 0 : n.id) === h.id, className: "reader-ai-service-row", onClick: () => {
                 s({ connectionId: h.id, model: "", options: {} }), v("models"), h.kind === "byoa" && !J.has(h.id) && B(h);
               }, children: [
-                /* @__PURE__ */ n(l2, { brand: r2(h), size: 23 }),
+                /* @__PURE__ */ a(l2, { brand: i2(h), size: 23 }),
                 /* @__PURE__ */ d("span", { children: [
-                  /* @__PURE__ */ n("strong", { children: K(h) }),
-                  /* @__PURE__ */ n("small", { children: h.kind === "byoa" ? "使用本机登录" : h.model || "模型 API" })
+                  /* @__PURE__ */ a("strong", { children: K(h) }),
+                  /* @__PURE__ */ a("small", { children: h.kind === "byoa" ? "使用本机登录" : h.model || "模型 API" })
                 ] }),
-                (a == null ? void 0 : a.id) === h.id ? /* @__PURE__ */ n(U, { size: 15, "aria-hidden": "true" }) : null
+                (n == null ? void 0 : n.id) === h.id ? /* @__PURE__ */ a(U, { size: 15, "aria-hidden": "true" }) : null
               ] }, h.id)),
-              r.length ? null : /* @__PURE__ */ n("p", { className: "reader-ai-menu-empty", children: "连接本机 Agent 或模型 API 后，就可以开始对话。" })
+              i.length ? null : /* @__PURE__ */ a("p", { className: "reader-ai-menu-empty", children: "连接本机 Agent 或模型 API 后，就可以开始对话。" })
             ] })
           ] }) : f === "settings" ? /* @__PURE__ */ d(S, { children: [
             /* @__PURE__ */ d("div", { className: "reader-ai-menu-head", children: [
-              /* @__PURE__ */ n("button", { type: "button", className: "reader-ai-menu-icon", "aria-label": "返回模型选择", onClick: () => {
+              /* @__PURE__ */ a("button", { type: "button", className: "reader-ai-menu-icon", "aria-label": "返回模型选择", onClick: () => {
                 v("models"), D("");
-              }, children: /* @__PURE__ */ n(C2, { size: 16 }) }),
-              /* @__PURE__ */ n("strong", { children: (N == null ? void 0 : N.name) || "对话设置" })
+              }, children: /* @__PURE__ */ a(C2, { size: 16 }) }),
+              /* @__PURE__ */ a("strong", { children: (N == null ? void 0 : N.name) || "对话设置" })
             ] }),
-            N ? /* @__PURE__ */ n(s2, { items: X(N), value: l.options[N.id] ?? N.currentValue, defaultLabel: "", onSelect: (h) => {
+            N ? /* @__PURE__ */ a(s2, { items: X(N), value: l.options[N.id] ?? N.currentValue, defaultLabel: "", onSelect: (h) => {
               s({ ...l, options: { ...l.options, [N.id]: h } }), D("");
             } }, N.id) : $.map((h) => {
               var L;
               return /* @__PURE__ */ d("button", { type: "button", className: "reader-ai-menu-action", onClick: () => D(h.id), children: [
-                /* @__PURE__ */ n("span", { children: h.name }),
-                /* @__PURE__ */ n("small", { children: (L = X(h).find((T) => T.value === (l.options[h.id] ?? h.currentValue))) == null ? void 0 : L.name }),
-                /* @__PURE__ */ n(n2, { size: 14 })
+                /* @__PURE__ */ a("span", { children: h.name }),
+                /* @__PURE__ */ a("small", { children: (L = X(h).find((T) => T.value === (l.options[h.id] ?? h.currentValue))) == null ? void 0 : L.name }),
+                /* @__PURE__ */ a(a2, { size: 14 })
               ] }, h.id);
             }),
             N ? null : /* @__PURE__ */ d("button", { type: "button", className: "reader-ai-menu-action", disabled: F, onClick: () => void B(), children: [
-              /* @__PURE__ */ n(M2, { size: 14, className: F ? "reader-ai-spin" : "" }),
-              /* @__PURE__ */ n("span", { children: F ? "正在读取…" : "重新读取 Agent 配置" })
+              /* @__PURE__ */ a(M2, { size: 14, className: F ? "reader-ai-spin" : "" }),
+              /* @__PURE__ */ a("span", { children: F ? "正在读取…" : "重新读取 Agent 配置" })
             ] })
           ] }) : /* @__PURE__ */ d(S, { children: [
             /* @__PURE__ */ d("button", { type: "button", className: "reader-ai-menu-current", onClick: () => v("services"), children: [
-              a ? /* @__PURE__ */ n(l2, { brand: r2(a), size: 24 }) : null,
+              n ? /* @__PURE__ */ a(l2, { brand: i2(n), size: 24 }) : null,
               /* @__PURE__ */ d("span", { children: [
-                /* @__PURE__ */ n("strong", { children: a ? K(a) : "选择 AI 服务" }),
-                /* @__PURE__ */ n("small", { children: "切换服务" })
+                /* @__PURE__ */ a("strong", { children: n ? K(n) : "选择 AI 服务" }),
+                /* @__PURE__ */ a("small", { children: "切换服务" })
               ] }),
-              /* @__PURE__ */ n(n2, { size: 15, "aria-hidden": "true" })
+              /* @__PURE__ */ a(a2, { size: 15, "aria-hidden": "true" })
             ] }),
-            /* @__PURE__ */ n(
+            /* @__PURE__ */ a(
               s2,
               {
                 items: I,
                 value: l.model,
-                defaultLabel: (a == null ? void 0 : a.kind) === "byoa" ? "Agent 默认模型" : a != null && a.model ? `默认 · ${a.model}` : "服务默认模型",
-                defaultValue: (a == null ? void 0 : a.kind) === "byok" ? a.model : void 0,
-                allowCustom: (a == null ? void 0 : a.kind) === "byok",
+                defaultLabel: (n == null ? void 0 : n.kind) === "byoa" ? "Agent 默认模型" : n != null && n.model ? `默认 · ${n.model}` : "服务默认模型",
+                defaultValue: (n == null ? void 0 : n.kind) === "byok" ? n.model : void 0,
+                allowCustom: (n == null ? void 0 : n.kind) === "byok",
                 loading: F,
                 onSelect: (h) => {
                   s({ ...l, model: h }), u(!1);
@@ -1035,18 +1035,18 @@ function pe({ controller: e, disabled: t = !1, onManage: i }) {
               },
               l.connectionId
             ),
-            (a == null ? void 0 : a.kind) === "byoa" ? /* @__PURE__ */ d("button", { type: "button", className: "reader-ai-menu-action reader-ai-menu-divider", onClick: () => v("settings"), children: [
-              /* @__PURE__ */ n(W2, { size: 14 }),
-              /* @__PURE__ */ n("span", { children: "对话设置" }),
-              /* @__PURE__ */ n(n2, { size: 14 })
+            (n == null ? void 0 : n.kind) === "byoa" ? /* @__PURE__ */ d("button", { type: "button", className: "reader-ai-menu-action reader-ai-menu-divider", onClick: () => v("settings"), children: [
+              /* @__PURE__ */ a(W2, { size: 14 }),
+              /* @__PURE__ */ a("span", { children: "对话设置" }),
+              /* @__PURE__ */ a(a2, { size: 14 })
             ] }) : null
           ] }),
-          m || y ? /* @__PURE__ */ n("p", { className: "reader-ai-menu-notice", role: "status", children: m || y }) : null,
+          m || y ? /* @__PURE__ */ a("p", { className: "reader-ai-menu-notice", role: "status", children: m || y }) : null,
           /* @__PURE__ */ d("button", { type: "button", className: "reader-ai-menu-action reader-ai-menu-divider", onClick: () => {
             u(!1), Z();
           }, children: [
-            /* @__PURE__ */ n(f2, { size: 14, "aria-hidden": "true" }),
-            /* @__PURE__ */ n("span", { children: r.length ? "管理 AI 服务" : "添加 AI 服务" })
+            /* @__PURE__ */ a(f2, { size: 14, "aria-hidden": "true" }),
+            /* @__PURE__ */ a("span", { children: i.length ? "管理 AI 服务" : "添加 AI 服务" })
           ] })
         ]
       }
@@ -1055,23 +1055,23 @@ function pe({ controller: e, disabled: t = !1, onManage: i }) {
 }
 function ge({ conversationId: e, running: t }) {
   var w, D, F, x, y, E, b;
-  const [i, r] = k([]), [a, l] = k({}), [c, s] = k(!1), [p, m] = k("");
+  const [r, i] = k([]), [n, l] = k({}), [c, s] = k(!1), [p, m] = k("");
   M(() => {
-    r([]), l({}), m("");
+    i([]), l({}), m("");
     let C = !0;
     e && t0(e).then((A) => {
-      C && r(A);
+      C && i(A);
     }).catch(() => {
     });
     const g = (A) => {
       const $ = A.detail;
-      !$ || $.conversation_id !== e || ($.type === "agent_interaction" ? r((N) => N.some((I) => I.interaction_id === $.interaction_id) ? N : [...N, $]) : $.type === "agent_interaction_resolved" && r((N) => N.filter((I) => I.interaction_id !== $.interaction_id)));
+      !$ || $.conversation_id !== e || ($.type === "agent_interaction" ? i((N) => N.some((I) => I.interaction_id === $.interaction_id) ? N : [...N, $]) : $.type === "agent_interaction_resolved" && i((N) => N.filter((I) => I.interaction_id !== $.interaction_id)));
     };
     return document.addEventListener(G, g), () => {
       C = !1, document.removeEventListener(G, g);
     };
   }, [e, t]);
-  const o = i[0];
+  const o = r[0];
   if (M(() => {
     var A, $;
     const C = (($ = (A = o == null ? void 0 : o.request) == null ? void 0 : A.requestedSchema) == null ? void 0 : $.properties) || {}, g = Object.fromEntries(Object.entries(C).flatMap(([N, I]) => Object.hasOwn(I, "default") ? [[N, I.default]] : I.type === "boolean" ? [[N, !1]] : []));
@@ -1081,7 +1081,7 @@ function ge({ conversationId: e, running: t }) {
   async function v(C) {
     s(!0), m("");
     try {
-      await n0(o.interaction_id, C), r((g) => g.filter((A) => A.interaction_id !== o.interaction_id)), l({});
+      await a0(o.interaction_id, C), i((g) => g.filter((A) => A.interaction_id !== o.interaction_id)), l({});
     } catch (g) {
       m(g.message);
     } finally {
@@ -1090,18 +1090,18 @@ function ge({ conversationId: e, running: t }) {
   }
   return /* @__PURE__ */ d("section", { className: "reader-ai-agent-interaction", "aria-label": "Agent 请求确认", "aria-live": "polite", children: [
     /* @__PURE__ */ d("div", { className: "reader-ai-agent-interaction-head", children: [
-      /* @__PURE__ */ n(Z2, { size: 17, "aria-hidden": "true" }),
+      /* @__PURE__ */ a(Z2, { size: 17, "aria-hidden": "true" }),
       /* @__PURE__ */ d("strong", { children: [
         o.connection_name,
         " ",
         o.kind === "permission" ? "请求权限" : "需要你的补充"
       ] })
     ] }),
-    /* @__PURE__ */ n("p", { children: u.message || ((D = u.toolCall) == null ? void 0 : D.title) || "请确认本次操作" }),
-    o.kind === "permission" && ((x = (F = u.toolCall) == null ? void 0 : F.rawInput) != null && x.command) ? /* @__PURE__ */ n("pre", { className: "reader-ai-agent-command", children: String(u.toolCall.rawInput.command).slice(0, 4e3) }) : null,
-    o.kind === "permission" && ((E = (y = u.toolCall) == null ? void 0 : y.locations) != null && E.length) ? /* @__PURE__ */ n("p", { className: "reader-ai-connection-notice", children: u.toolCall.locations.map((C) => C.path).filter(Boolean).join("、") }) : null,
+    /* @__PURE__ */ a("p", { children: u.message || ((D = u.toolCall) == null ? void 0 : D.title) || "请确认本次操作" }),
+    o.kind === "permission" && ((x = (F = u.toolCall) == null ? void 0 : F.rawInput) != null && x.command) ? /* @__PURE__ */ a("pre", { className: "reader-ai-agent-command", children: String(u.toolCall.rawInput.command).slice(0, 4e3) }) : null,
+    o.kind === "permission" && ((E = (y = u.toolCall) == null ? void 0 : y.locations) != null && E.length) ? /* @__PURE__ */ a("p", { className: "reader-ai-connection-notice", children: u.toolCall.locations.map((C) => C.path).filter(Boolean).join("、") }) : null,
     o.kind === "form" ? /* @__PURE__ */ d("form", { onSubmit: (C) => {
-      C.preventDefault(), v({ action: "accept", content: a });
+      C.preventDefault(), v({ action: "accept", content: n });
     }, children: [
       Object.entries(f).map(([C, g]) => {
         var A, $, N, I, Z, B, q;
@@ -1110,35 +1110,35 @@ function ge({ conversationId: e, running: t }) {
             g.title || C,
             ($ = (A = u.requestedSchema) == null ? void 0 : A.required) != null && $.includes(C) ? " *" : ""
           ] }),
-          g.description ? /* @__PURE__ */ n("small", { children: g.description }) : null,
-          g.type === "array" && ((N = g.items) != null && N.enum) ? /* @__PURE__ */ n(
+          g.description ? /* @__PURE__ */ a("small", { children: g.description }) : null,
+          g.type === "array" && ((N = g.items) != null && N.enum) ? /* @__PURE__ */ a(
             "select",
             {
               multiple: !0,
               "aria-label": g.title || C,
-              value: Array.isArray(a[C]) ? a[C] : [],
+              value: Array.isArray(n[C]) ? n[C] : [],
               onChange: (h) => l((L) => ({ ...L, [C]: Array.from(h.target.selectedOptions, (T) => T.value) })),
-              children: g.items.enum.map((h) => /* @__PURE__ */ n("option", { value: h, children: h }, h))
+              children: g.items.enum.map((h) => /* @__PURE__ */ a("option", { value: h, children: h }, h))
             }
           ) : g.enum ? /* @__PURE__ */ d(
             "select",
             {
               "aria-label": g.title || C,
               required: (Z = (I = u.requestedSchema) == null ? void 0 : I.required) == null ? void 0 : Z.includes(C),
-              value: String(a[C] ?? ""),
+              value: String(n[C] ?? ""),
               onChange: (h) => l((L) => ({ ...L, [C]: h.target.value })),
               children: [
-                /* @__PURE__ */ n("option", { value: "", children: "请选择" }),
-                g.enum.map((h) => /* @__PURE__ */ n("option", { value: h, children: h }, h))
+                /* @__PURE__ */ a("option", { value: "", children: "请选择" }),
+                g.enum.map((h) => /* @__PURE__ */ a("option", { value: h, children: h }, h))
               ]
             }
-          ) : /* @__PURE__ */ n(
+          ) : /* @__PURE__ */ a(
             "input",
             {
               "aria-label": g.title || C,
               type: g.type === "boolean" ? "checkbox" : ["integer", "number"].includes(g.type) ? "number" : "text",
-              value: g.type === "boolean" ? void 0 : String(a[C] ?? ""),
-              checked: g.type === "boolean" ? !!a[C] : void 0,
+              value: g.type === "boolean" ? void 0 : String(n[C] ?? ""),
+              checked: g.type === "boolean" ? !!n[C] : void 0,
               min: g.minimum,
               max: g.maximum,
               minLength: g.minLength,
@@ -1151,15 +1151,15 @@ function ge({ conversationId: e, running: t }) {
         ] }, C);
       }),
       /* @__PURE__ */ d("div", { className: "reader-ai-agent-interaction-actions", children: [
-        /* @__PURE__ */ n("button", { type: "submit", disabled: c, children: "发送补充" }),
-        /* @__PURE__ */ n("button", { type: "button", disabled: c, onClick: () => void v({ action: "decline" }), children: "拒绝" }),
-        /* @__PURE__ */ n("button", { type: "button", disabled: c, onClick: () => void v({ action: "cancel" }), children: "取消" })
+        /* @__PURE__ */ a("button", { type: "submit", disabled: c, children: "发送补充" }),
+        /* @__PURE__ */ a("button", { type: "button", disabled: c, onClick: () => void v({ action: "decline" }), children: "拒绝" }),
+        /* @__PURE__ */ a("button", { type: "button", disabled: c, onClick: () => void v({ action: "cancel" }), children: "取消" })
       ] })
     ] }) : /* @__PURE__ */ d("div", { className: "reader-ai-agent-interaction-actions", children: [
-      (b = u.options) == null ? void 0 : b.map((C) => /* @__PURE__ */ n("button", { type: "button", disabled: c, onClick: () => void v({ option_id: C.optionId }), children: C.name }, C.optionId)),
-      /* @__PURE__ */ n("button", { type: "button", disabled: c, onClick: () => void v({}), children: "取消" })
+      (b = u.options) == null ? void 0 : b.map((C) => /* @__PURE__ */ a("button", { type: "button", disabled: c, onClick: () => void v({ option_id: C.optionId }), children: C.name }, C.optionId)),
+      /* @__PURE__ */ a("button", { type: "button", disabled: c, onClick: () => void v({}), children: "取消" })
     ] }),
-    p ? /* @__PURE__ */ n("p", { role: "alert", className: "reader-ai-connection-error", children: p }) : null
+    p ? /* @__PURE__ */ a("p", { role: "alert", className: "reader-ai-connection-error", children: p }) : null
   ] });
 }
 const J0 = {
@@ -1182,127 +1182,127 @@ function N2(e) {
 }
 function ee({ part: e, running: t }) {
   var l, c;
-  if (e.type === "notice") return /* @__PURE__ */ d("details", { className: "ai-activity-step ai-agent-notice", children: [
+  if (e.type === "notice") return /* @__PURE__ */ d("details", { className: "reader-ai-activity-step ai-agent-notice", children: [
     /* @__PURE__ */ d("summary", { children: [
-      /* @__PURE__ */ n(D2, { size: 14, "aria-hidden": "true" }),
-      /* @__PURE__ */ n("span", { children: e.title }),
-      /* @__PURE__ */ n(R, { size: 12, "aria-hidden": "true" })
+      /* @__PURE__ */ a(D2, { size: 14, "aria-hidden": "true" }),
+      /* @__PURE__ */ a("span", { children: e.title }),
+      /* @__PURE__ */ a(R, { size: 12, "aria-hidden": "true" })
     ] }),
-    e.text ? /* @__PURE__ */ n("div", { className: "ai-activity-detail", children: e.text }) : null
+    e.text ? /* @__PURE__ */ a("div", { className: "reader-ai-activity-detail", children: e.text }) : null
   ] });
-  const i = t && !["completed", "failed", "cancelled"].includes(e.status || ""), r = e.type === "reasoning" ? Y2 : e.type === "plan" ? $2 : /search/.test(e.tool || "") ? _2 : /read|list/.test(e.tool || "") ? I2 : X2, a = e.type === "reasoning" ? "思考过程" : e.type === "plan" ? "执行计划" : J0[e.tool || ""] || e.title || "执行工具";
-  return /* @__PURE__ */ d("details", { className: `ai-activity-step${i ? " is-active" : ""}`, children: [
+  const r = t && !["completed", "failed", "cancelled"].includes(e.status || ""), i = e.type === "reasoning" ? Y2 : e.type === "plan" ? $2 : /search/.test(e.tool || "") ? _2 : /read|list/.test(e.tool || "") ? I2 : X2, n = e.type === "reasoning" ? "思考过程" : e.type === "plan" ? "执行计划" : J0[e.tool || ""] || e.title || "执行工具";
+  return /* @__PURE__ */ d("details", { className: `reader-ai-activity-step${r ? " is-active" : ""}`, children: [
     /* @__PURE__ */ d("summary", { children: [
-      /* @__PURE__ */ n(r, { size: 15, "aria-hidden": "true" }),
-      /* @__PURE__ */ n("span", { className: "ai-activity-label", title: a, children: a }),
-      e.summary || i && e.type === "reasoning" && e.text ? /* @__PURE__ */ n("span", { className: "ai-activity-summary", children: e.summary || ((l = e.text) == null ? void 0 : l.slice(-90).replace(/\s+/g, " ")) }) : null,
-      /* @__PURE__ */ n("span", { className: "ai-activity-state", children: e.status === "failed" ? /* @__PURE__ */ n(D2, { size: 13, "aria-label": "执行失败" }) : i ? /* @__PURE__ */ n(t2, { size: 13, className: "reader-ai-spin", "aria-label": "进行中" }) : /* @__PURE__ */ n(U, { size: 13, "aria-label": "已完成" }) }),
-      e.duration_ms != null ? /* @__PURE__ */ n("span", { className: "ai-activity-time", children: p2(e.duration_ms) }) : null,
-      /* @__PURE__ */ n(R, { size: 13, className: "ai-details-chevron", "aria-hidden": "true" })
+      /* @__PURE__ */ a(i, { size: 15, "aria-hidden": "true" }),
+      /* @__PURE__ */ a("span", { className: "reader-ai-activity-label", title: n, children: n }),
+      e.summary || r && e.type === "reasoning" && e.text ? /* @__PURE__ */ a("span", { className: "reader-ai-activity-summary", children: e.summary || ((l = e.text) == null ? void 0 : l.slice(-90).replace(/\s+/g, " ")) }) : null,
+      /* @__PURE__ */ a("span", { className: "reader-ai-activity-state", children: e.status === "failed" ? /* @__PURE__ */ a(D2, { size: 13, "aria-label": "执行失败" }) : r ? /* @__PURE__ */ a(t2, { size: 13, className: "reader-ai-spin", "aria-label": "进行中" }) : /* @__PURE__ */ a(U, { size: 13, "aria-label": "已完成" }) }),
+      e.duration_ms != null ? /* @__PURE__ */ a("span", { className: "reader-ai-activity-time", children: p2(e.duration_ms) }) : null,
+      /* @__PURE__ */ a(R, { size: 13, className: "reader-ai-details-chevron", "aria-hidden": "true" })
     ] }),
-    /* @__PURE__ */ n("div", { className: "ai-activity-detail", children: e.type === "reasoning" ? /* @__PURE__ */ n("div", { className: "ai-reasoning-text", children: e.text }) : e.type === "plan" ? /* @__PURE__ */ n("ol", { className: "ai-plan-list", children: (c = e.entries) == null ? void 0 : c.map((s, p) => /* @__PURE__ */ d("li", { "data-status": s.status, children: [
-      s.status === "completed" ? /* @__PURE__ */ n(U, { size: 13, "aria-hidden": "true" }) : /* @__PURE__ */ n("span", { className: "ai-plan-dot" }),
-      /* @__PURE__ */ n("span", { children: s.content })
+    /* @__PURE__ */ a("div", { className: "reader-ai-activity-detail", children: e.type === "reasoning" ? /* @__PURE__ */ a("div", { className: "reader-ai-reasoning-text", children: e.text }) : e.type === "plan" ? /* @__PURE__ */ a("ol", { className: "reader-ai-plan-list", children: (c = e.entries) == null ? void 0 : c.map((s, p) => /* @__PURE__ */ d("li", { "data-status": s.status, children: [
+      s.status === "completed" ? /* @__PURE__ */ a(U, { size: 13, "aria-hidden": "true" }) : /* @__PURE__ */ a("span", { className: "reader-ai-plan-dot" }),
+      /* @__PURE__ */ a("span", { children: s.content })
     ] }, p)) }) : /* @__PURE__ */ d(S, { children: [
       e.input != null || e.input_preview ? /* @__PURE__ */ d(S, { children: [
-        /* @__PURE__ */ n("span", { className: "ai-detail-label", children: "输入" }),
-        /* @__PURE__ */ n("pre", { children: N2(e.input ?? e.input_preview) })
+        /* @__PURE__ */ a("span", { className: "reader-ai-detail-label", children: "输入" }),
+        /* @__PURE__ */ a("pre", { children: N2(e.input ?? e.input_preview) })
       ] }) : null,
       e.output != null || e.content != null ? /* @__PURE__ */ d(S, { children: [
-        /* @__PURE__ */ n("span", { className: "ai-detail-label", children: "结果" }),
-        /* @__PURE__ */ n("pre", { children: N2(e.output ?? e.content) })
+        /* @__PURE__ */ a("span", { className: "reader-ai-detail-label", children: "结果" }),
+        /* @__PURE__ */ a("pre", { children: N2(e.output ?? e.content) })
       ] }) : null,
-      !e.input && !e.input_preview && !e.output && !e.content ? /* @__PURE__ */ n("p", { children: i ? "正在执行，结果会在这里更新。" : e.summary || "执行已结束。" }) : null
+      !e.input && !e.input_preview && !e.output && !e.content ? /* @__PURE__ */ a("p", { children: r ? "正在执行，结果会在这里更新。" : e.summary || "执行已结束。" }) : null
     ] }) })
   ] });
 }
-function fe({ label: e, running: t, elapsedMs: i = 0 }) {
-  const [r, a] = k(i);
+function fe({ label: e, running: t, elapsedMs: r = 0 }) {
+  const [i, n] = k(r);
   return M(() => {
-    if (a(i), !t) return;
-    const l = Date.now() - i, c = setInterval(() => a(Date.now() - l), 1e3);
+    if (n(r), !t) return;
+    const l = Date.now() - r, c = setInterval(() => n(Date.now() - l), 1e3);
     return () => clearInterval(c);
-  }, [t, i]), !t && !i ? null : /* @__PURE__ */ d("div", { className: "ai-run-status", role: "status", "aria-live": "polite", children: [
-    t ? /* @__PURE__ */ n(t2, { size: 14, className: "reader-ai-spin", "aria-hidden": "true" }) : /* @__PURE__ */ n(K2, { size: 13, "aria-hidden": "true" }),
-    /* @__PURE__ */ n("span", { children: t ? e || "正在处理问题" : "耗时" }),
-    /* @__PURE__ */ n("span", { className: "ai-run-elapsed", children: p2(r) })
+  }, [t, r]), !t && !r ? null : /* @__PURE__ */ d("div", { className: "reader-ai-run-status", role: "status", "aria-live": "polite", children: [
+    t ? /* @__PURE__ */ a(t2, { size: 14, className: "reader-ai-spin", "aria-hidden": "true" }) : /* @__PURE__ */ a(K2, { size: 13, "aria-hidden": "true" }),
+    /* @__PURE__ */ a("span", { children: t ? e || "正在处理问题" : "耗时" }),
+    /* @__PURE__ */ a("span", { className: "reader-ai-run-elapsed", children: p2(i) })
   ] });
 }
-const Ce = U2(function({ parts: t = [], content: i, citations: r = [], streaming: a = !1, metrics: l, jobId: c, onJumpCitation: s }) {
-  if (!t.length) return /* @__PURE__ */ n(a2, { content: i, streaming: a, citations: r, jobId: c, onJumpCitation: s });
+const Ce = U2(function({ parts: t = [], content: r, citations: i = [], streaming: n = !1, metrics: l, jobId: c, onJumpCitation: s }) {
+  if (!t.length) return /* @__PURE__ */ a(n2, { content: r, streaming: n, citations: i, jobId: c, onJumpCitation: s });
   const p = t.map((o) => o.type).lastIndexOf("text"), m = [];
   return t.forEach((o, u) => {
     var f;
     o.type === "text" ? m.push({ key: o.id, parts: [o], textIndex: u }) : ((f = m.at(-1)) == null ? void 0 : f.textIndex) === void 0 && m.length ? m.at(-1).parts.push(o) : m.push({ key: o.id, parts: [o] });
-  }), /* @__PURE__ */ d("div", { className: "ai-turn-content", children: [
-    m.map((o) => o.textIndex != null ? /* @__PURE__ */ n(
-      a2,
+  }), /* @__PURE__ */ d("div", { className: "reader-ai-turn-content", children: [
+    m.map((o) => o.textIndex != null ? /* @__PURE__ */ a(
+      n2,
       {
         content: o.parts[0].text || "",
-        streaming: a && o.textIndex === p,
-        citations: r,
+        streaming: n && o.textIndex === p,
+        citations: i,
         citationFooterMax: o.textIndex === p ? 8 : 0,
         jobId: c,
         onJumpCitation: s
       },
       o.key
     ) : /* @__PURE__ */ d("div", { children: [
-      /* @__PURE__ */ d("details", { className: "ai-activity-group", "aria-label": "执行过程", open: a, children: [
-        /* @__PURE__ */ d("summary", { className: "ai-activity-group-head", children: [
-          /* @__PURE__ */ n($2, { size: 15, "aria-hidden": "true" }),
-          /* @__PURE__ */ n("span", { children: "思考与执行" }),
-          /* @__PURE__ */ d("span", { className: "ai-activity-summary", children: [
+      /* @__PURE__ */ d("details", { className: "reader-ai-activity-group", "aria-label": "执行过程", open: n, children: [
+        /* @__PURE__ */ d("summary", { className: "reader-ai-activity-group-head", children: [
+          /* @__PURE__ */ a($2, { size: 15, "aria-hidden": "true" }),
+          /* @__PURE__ */ a("span", { children: "思考与执行" }),
+          /* @__PURE__ */ d("span", { className: "reader-ai-activity-summary", children: [
             o.parts.length,
             " 个步骤"
           ] }),
-          /* @__PURE__ */ n(R, { size: 13, className: "ai-details-chevron", "aria-hidden": "true" })
+          /* @__PURE__ */ a(R, { size: 13, className: "reader-ai-details-chevron", "aria-hidden": "true" })
         ] }),
-        /* @__PURE__ */ n("div", { className: "ai-activity-list", children: o.parts.map((u) => /* @__PURE__ */ n(ee, { part: u, running: a }, u.id)) })
+        /* @__PURE__ */ a("div", { className: "reader-ai-activity-list", children: o.parts.map((u) => /* @__PURE__ */ a(ee, { part: u, running: n }, u.id)) })
       ] }),
       (() => {
         const u = [...new Set(o.parts.flatMap((f) => f.tool === "read_figure" && f.output && typeof f.output == "object" ? f.output.image_urls || [] : []))];
-        return u.length ? /* @__PURE__ */ d("details", { className: "ai-figure-gallery", children: [
+        return u.length ? /* @__PURE__ */ d("details", { className: "reader-ai-figure-gallery", children: [
           /* @__PURE__ */ d("summary", { children: [
-            /* @__PURE__ */ n(I2, { size: 14, "aria-hidden": "true" }),
+            /* @__PURE__ */ a(I2, { size: 14, "aria-hidden": "true" }),
             "查看 ",
             u.length,
             " 张原图",
-            /* @__PURE__ */ n(R, { size: 12, "aria-hidden": "true" })
+            /* @__PURE__ */ a(R, { size: 12, "aria-hidden": "true" })
           ] }),
-          /* @__PURE__ */ n(a2, { content: u.map((f, v) => `![图表 ${v + 1}](${f})`).join(`
+          /* @__PURE__ */ a(n2, { content: u.map((f, v) => `![图表 ${v + 1}](${f})`).join(`
 
-`), citations: r, jobId: c, citationFooterMax: 0 })
+`), citations: i, jobId: c, citationFooterMax: 0 })
         ] }) : null;
       })()
     ] }, o.key)),
-    !a && (l != null && l.usage) ? /* @__PURE__ */ d("details", { className: "ai-usage", children: [
+    !n && (l != null && l.usage) ? /* @__PURE__ */ d("details", { className: "reader-ai-usage", children: [
       /* @__PURE__ */ d("summary", { children: [
         "上下文与用量",
-        /* @__PURE__ */ n(R, { size: 12, "aria-hidden": "true" })
+        /* @__PURE__ */ a(R, { size: 12, "aria-hidden": "true" })
       ] }),
-      /* @__PURE__ */ n("dl", { className: "ai-usage-facts", children: Object.entries({
+      /* @__PURE__ */ a("dl", { className: "reader-ai-usage-facts", children: Object.entries({
         "输入 Token": l.usage.input_tokens ?? l.usage.prompt_tokens ?? l.usage.used,
         "输出 Token": l.usage.output_tokens ?? l.usage.completion_tokens,
         上下文上限: l.usage.size ?? l.usage.context_window,
         首段正文: l.first_text_ms != null ? p2(l.first_text_ms) : void 0
       }).filter(([, o]) => o != null).map(([o, u]) => /* @__PURE__ */ d("div", { children: [
-        /* @__PURE__ */ n("dt", { children: o }),
-        /* @__PURE__ */ n("dd", { children: String(u) })
+        /* @__PURE__ */ a("dt", { children: o }),
+        /* @__PURE__ */ a("dd", { children: String(u) })
       ] }, o)) })
     ] }) : null
   ] });
 });
 export {
-  i2 as A,
+  r2 as A,
   ge as a,
   l2 as b,
   pe as c,
-  a2 as d,
+  n2 as d,
   de as e,
   fe as f,
   Ce as g,
   ce as h,
-  r2 as i,
+  i2 as i,
   K as j,
   o2 as k,
   k2 as l,
@@ -1311,4 +1311,4 @@ export {
   Q0 as r,
   me as u
 };
-//# sourceMappingURL=AiTurnContent-DsLaqag-.js.map
+//# sourceMappingURL=AiTurnContent-D8ylgAX6.js.map

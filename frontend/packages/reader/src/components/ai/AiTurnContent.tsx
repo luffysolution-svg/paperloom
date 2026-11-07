@@ -16,31 +16,31 @@ function preview(value: unknown): string {
 }
 
 function Activity({ part, running }: { part: TurnPart; running: boolean }) {
-  if (part.type === "notice") return <details className="ai-activity-step ai-agent-notice"><summary><CircleAlert size={14} aria-hidden="true" /><span>{part.title}</span><ChevronDown size={12} aria-hidden="true" /></summary>{part.text ? <div className="ai-activity-detail">{part.text}</div> : null}</details>;
+  if (part.type === "notice") return <details className="reader-ai-activity-step ai-agent-notice"><summary><CircleAlert size={14} aria-hidden="true" /><span>{part.title}</span><ChevronDown size={12} aria-hidden="true" /></summary>{part.text ? <div className="reader-ai-activity-detail">{part.text}</div> : null}</details>;
   const active = running && !["completed", "failed", "cancelled"].includes(part.status || "");
   const Icon = part.type === "reasoning" ? Brain : part.type === "plan" ? ListChecks
     : /search/.test(part.tool || "") ? Search : /read|list/.test(part.tool || "") ? BookOpen : Wrench;
   const label = part.type === "reasoning" ? "思考过程" : part.type === "plan" ? "执行计划"
     : TOOL_NAMES[part.tool || ""] || part.title || "执行工具";
-  return <details className={`ai-activity-step${active ? " is-active" : ""}`}>
+  return <details className={`reader-ai-activity-step${active ? " is-active" : ""}`}>
     <summary>
       <Icon size={15} aria-hidden="true" />
-      <span className="ai-activity-label" title={label}>{label}</span>
-      {part.summary || (active && part.type === "reasoning" && part.text) ? <span className="ai-activity-summary">{part.summary || part.text?.slice(-90).replace(/\s+/g, " ")}</span> : null}
-      <span className="ai-activity-state">{part.status === "failed" ? <CircleAlert size={13} aria-label="执行失败" />
+      <span className="reader-ai-activity-label" title={label}>{label}</span>
+      {part.summary || (active && part.type === "reasoning" && part.text) ? <span className="reader-ai-activity-summary">{part.summary || part.text?.slice(-90).replace(/\s+/g, " ")}</span> : null}
+      <span className="reader-ai-activity-state">{part.status === "failed" ? <CircleAlert size={13} aria-label="执行失败" />
         : active ? <Loader2 size={13} className="reader-ai-spin" aria-label="进行中" />
         : <Check size={13} aria-label="已完成" />}</span>
-      {part.duration_ms != null ? <span className="ai-activity-time">{seconds(part.duration_ms)}</span> : null}
-      <ChevronDown size={13} className="ai-details-chevron" aria-hidden="true" />
+      {part.duration_ms != null ? <span className="reader-ai-activity-time">{seconds(part.duration_ms)}</span> : null}
+      <ChevronDown size={13} className="reader-ai-details-chevron" aria-hidden="true" />
     </summary>
-    <div className="ai-activity-detail">
-      {part.type === "reasoning" ? <div className="ai-reasoning-text">{part.text}</div>
-        : part.type === "plan" ? <ol className="ai-plan-list">{part.entries?.map((entry, i) => <li key={i} data-status={entry.status}>
-          {entry.status === "completed" ? <Check size={13} aria-hidden="true" /> : <span className="ai-plan-dot" />}<span>{entry.content}</span>
+    <div className="reader-ai-activity-detail">
+      {part.type === "reasoning" ? <div className="reader-ai-reasoning-text">{part.text}</div>
+        : part.type === "plan" ? <ol className="reader-ai-plan-list">{part.entries?.map((entry, i) => <li key={i} data-status={entry.status}>
+          {entry.status === "completed" ? <Check size={13} aria-hidden="true" /> : <span className="reader-ai-plan-dot" />}<span>{entry.content}</span>
         </li>)}</ol>
           : <>
-            {part.input != null || part.input_preview ? <><span className="ai-detail-label">输入</span><pre>{preview(part.input ?? part.input_preview)}</pre></> : null}
-            {part.output != null || part.content != null ? <><span className="ai-detail-label">结果</span><pre>{preview(part.output ?? part.content)}</pre></> : null}
+            {part.input != null || part.input_preview ? <><span className="reader-ai-detail-label">输入</span><pre>{preview(part.input ?? part.input_preview)}</pre></> : null}
+            {part.output != null || part.content != null ? <><span className="reader-ai-detail-label">结果</span><pre>{preview(part.output ?? part.content)}</pre></> : null}
             {!part.input && !part.input_preview && !part.output && !part.content ? <p>{active ? "正在执行，结果会在这里更新。" : part.summary || "执行已结束。"}</p> : null}
           </>}
     </div>
@@ -57,9 +57,9 @@ export function AiRunStatus({ label, running, elapsedMs = 0 }: { label?: string;
     return () => clearInterval(timer);
   }, [running, elapsedMs]);
   if (!running && !elapsedMs) return null;
-  return <div className="ai-run-status" role="status" aria-live="polite">
+  return <div className="reader-ai-run-status" role="status" aria-live="polite">
     {running ? <Loader2 size={14} className="reader-ai-spin" aria-hidden="true" /> : <Clock3 size={13} aria-hidden="true" />}
-    <span>{running ? label || "正在处理问题" : "耗时"}</span><span className="ai-run-elapsed">{seconds(elapsed)}</span>
+    <span>{running ? label || "正在处理问题" : "耗时"}</span><span className="reader-ai-run-elapsed">{seconds(elapsed)}</span>
   </div>;
 }
 
@@ -75,23 +75,23 @@ export const AiTurnContent = memo(function AiTurnContent({ parts = [], content, 
     else if (groups.at(-1)?.textIndex === undefined && groups.length) groups.at(-1)!.parts.push(part);
     else groups.push({ key: part.id, parts: [part] });
   });
-  return <div className="ai-turn-content">
+  return <div className="reader-ai-turn-content">
     {groups.map((group) => group.textIndex != null
       ? <AiMarkdownAnswer key={group.key} content={group.parts[0].text || ""} streaming={streaming && group.textIndex === lastText}
           citations={citations} citationFooterMax={group.textIndex === lastText ? 8 : 0} jobId={jobId} onJumpCitation={onJumpCitation} />
-      : <div key={group.key}><details className="ai-activity-group" aria-label="执行过程" open={streaming}>
-          <summary className="ai-activity-group-head"><ListChecks size={15} aria-hidden="true" /><span>思考与执行</span>
-            <span className="ai-activity-summary">{group.parts.length} 个步骤</span><ChevronDown size={13} className="ai-details-chevron" aria-hidden="true" /></summary>
-          <div className="ai-activity-list">{group.parts.map((part) => <Activity key={part.id} part={part} running={streaming} />)}</div>
+      : <div key={group.key}><details className="reader-ai-activity-group" aria-label="执行过程" open={streaming}>
+          <summary className="reader-ai-activity-group-head"><ListChecks size={15} aria-hidden="true" /><span>思考与执行</span>
+            <span className="reader-ai-activity-summary">{group.parts.length} 个步骤</span><ChevronDown size={13} className="reader-ai-details-chevron" aria-hidden="true" /></summary>
+          <div className="reader-ai-activity-list">{group.parts.map((part) => <Activity key={part.id} part={part} running={streaming} />)}</div>
         </details>{(() => {
           const images = [...new Set(group.parts.flatMap((part) => part.tool === "read_figure" && part.output && typeof part.output === "object"
             ? ((part.output as { image_urls?: string[] }).image_urls || []) : []))];
-          return images.length ? <details className="ai-figure-gallery"><summary><BookOpen size={14} aria-hidden="true" />查看 {images.length} 张原图<ChevronDown size={12} aria-hidden="true" /></summary>
+          return images.length ? <details className="reader-ai-figure-gallery"><summary><BookOpen size={14} aria-hidden="true" />查看 {images.length} 张原图<ChevronDown size={12} aria-hidden="true" /></summary>
             <AiMarkdownAnswer content={images.map((url, index) => `![图表 ${index + 1}](${url})`).join("\n\n")} citations={citations} jobId={jobId} citationFooterMax={0} />
           </details> : null;
         })()}</div>)}
-    {!streaming && metrics?.usage ? <details className="ai-usage"><summary>上下文与用量<ChevronDown size={12} aria-hidden="true" /></summary>
-      <dl className="ai-usage-facts">{Object.entries({ "输入 Token": metrics.usage.input_tokens ?? metrics.usage.prompt_tokens ?? metrics.usage.used,
+    {!streaming && metrics?.usage ? <details className="reader-ai-usage"><summary>上下文与用量<ChevronDown size={12} aria-hidden="true" /></summary>
+      <dl className="reader-ai-usage-facts">{Object.entries({ "输入 Token": metrics.usage.input_tokens ?? metrics.usage.prompt_tokens ?? metrics.usage.used,
         "输出 Token": metrics.usage.output_tokens ?? metrics.usage.completion_tokens,
         "上下文上限": metrics.usage.size ?? metrics.usage.context_window,
         "首段正文": metrics.first_text_ms != null ? seconds(metrics.first_text_ms) : undefined })
