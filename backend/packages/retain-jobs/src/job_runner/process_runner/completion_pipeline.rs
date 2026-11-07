@@ -104,7 +104,11 @@ fn attach_untranslated_content_warning(job: &mut JobRuntimeState, data_root: &st
         .get("dead_letter_count")
         .and_then(serde_json::Value::as_u64)
         .unwrap_or(0);
-    let count = kept.max(dead);
+    let unresolved = value
+        .get("unresolved_translation_count")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(kept);
+    let count = unresolved.max(dead);
     if count == 0 {
         return;
     }
@@ -156,6 +160,24 @@ mod tests {
         let detail = job.stage_detail.clone().unwrap_or_default();
         assert!(detail.contains("18"), "detail: {detail}");
         assert!(detail.contains("保留原文未翻译"), "detail: {detail}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn intentional_keep_origin_does_not_report_a_provider_failure() {
+        let root = std::env::temp_dir().join(format!(
+            "rust-api-intentional-origin-{}-{}",
+            std::process::id(),
+            fastrand::u64(..)
+        ));
+        write_diagnostics(
+            &root,
+            "job-1",
+            r#"{"status_summary":{"translated":8,"kept_origin":2},"unresolved_translation_count":0,"dead_letter_count":0}"#,
+        );
+        let mut job = warning_job("job-1");
+        attach_untranslated_content_warning(&mut job, &root);
+        assert_eq!(job.stage_detail.as_deref(), Some("任务完成"));
         let _ = std::fs::remove_dir_all(&root);
     }
 

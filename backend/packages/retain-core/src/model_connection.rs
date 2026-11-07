@@ -1,6 +1,10 @@
 //! Secret-free connection snapshot shared by the API, jobsd and durable jobs.
 use serde::{Deserialize, Serialize};
 
+pub fn default_api_protocol() -> String {
+    "openai".into()
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum Provider {
@@ -24,6 +28,8 @@ pub struct ModelConnection {
     pub id: String,
     pub revision: u64,
     pub provider: Provider,
+    #[serde(default = "default_api_protocol")]
+    pub api_protocol: String,
     pub base_url: String,
     pub model: String,
     pub credential_ref: String,

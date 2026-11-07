@@ -85,7 +85,7 @@ export function createServiceProfiles({
       name: validName(name),
       credentials: { ...credentialsStatePort.getCredentials() },
       translation: Object.fromEntries(
-        ["model", "baseUrl", "workers", "translationProvider", "translationProfiles"]
+        ["model", "baseUrl", "apiProtocol", "workers", "translationProvider", "translationProfiles"]
           .map((key) => [key, structuredClone(options[key])]),
       ),
       agent: agent === undefined

@@ -10,11 +10,12 @@ export interface WorkflowSubmitValues {
   ocrCredentialRef?: string;
   ocrToken?: string;
   translationCredentialRef?: string;
+  translationConnectionId?: string;
   modelApiKey?: string;
   selectedGlossaryId?: string;
 }
 
-export type UploadServiceOverrides = WorkflowSubmitValues & { model?: string; baseUrl?: string; workers?: number };
+export type UploadServiceOverrides = WorkflowSubmitValues & { model?: string; baseUrl?: string; apiProtocol?: "openai" | "openai_responses" | "anthropic"; workers?: number };
 
 export interface LoadGlossaryOptionsParams {
   force?: boolean;

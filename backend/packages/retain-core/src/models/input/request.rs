@@ -111,6 +111,7 @@ mod contract_tests {
         ModelConnection {
             id: "conn-contract-fixture".to_string(),
             revision: 1,
+            api_protocol: "openai".into(),
             provider: Provider::Qwen,
             base_url: "https://example.invalid".to_string(),
             model: "contract-fixture".to_string(),

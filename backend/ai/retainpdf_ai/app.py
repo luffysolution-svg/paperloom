@@ -23,6 +23,8 @@ from .runtime import AgentRuntime, PythonAgentRuntime, build_agent_runtime
 from .runtime_config_api import register_runtime_config_routes
 from .rust_client import RustApiClient
 from .tools import build_default_registry
+from .byoa_runtime import ConnectionManager
+from .connections import register_connection_routes
 
 __all__ = ["AskInput", "RuntimeConfigUpdate", "build_app"]
 
@@ -82,6 +84,7 @@ def build_app(
         else (runtime if runtime.capabilities.document_reading else None)
     )
     restart_runtime = restart_callback or _schedule_process_restart
+    connections = ConnectionManager(settings, rust, getattr(agent, "registry", None))
 
     app = FastAPI(title="retainpdf-ai", version=__version__)
 
@@ -113,6 +116,7 @@ def build_app(
         restart_runtime=restart_runtime,
         require_api_key=require_api_key,
     )
+    register_connection_routes(app, connections, require_api_key)
 
     ask_orchestrator = AskOrchestrator(
         settings=settings,
@@ -122,6 +126,7 @@ def build_app(
         # Keep the app-level symbols injectable for existing consumers/tests.
         chat_fn_builder=build_deepseek_chat_fn,
         confirmation_projector=_confirmation_requests,
+        connection_resolver=connections.resolve,
     )
 
     @app.post("/v1/ask", dependencies=[Depends(require_api_key)])
@@ -130,7 +135,8 @@ def build_app(
         # credential HTTPExceptions remain ordinary 4xx responses.
         prepared = ask_orchestrator.prepare(payload)
         if payload.stream:
-            control = RequestControl(settings.ai_request_deadline_s)
+            control = RequestControl(prepared.request_deadline_s)
+            connections.track_run(payload.run_id, control)
             return ControlledStreamingResponse(
                 ask_orchestrator.sse_events(payload, prepared, request_control=control),
                 control=control,

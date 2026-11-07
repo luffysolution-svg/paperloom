@@ -23,6 +23,7 @@ export async function withCurrentTranslationSecret(
   if (!jobId || (!apiKey && !credentialRef)) return body;
   try {
     const job = await fetchJobPayload(jobId, { apiPrefix, signal: AbortSignal.timeout(10_000) });
+    if ((job as any).request_payload?.translation?.connection_id) return body;
     const target = translation.base_url || (job as any).request_payload?.translation?.base_url;
     const current = loadDeveloperStoredConfig().baseUrl || defaultModelBaseUrl();
     if (!target || endpoint(target) !== endpoint(current)) return body;

@@ -37,7 +37,11 @@ def build_translation_review(
                     "translation_diagnostics": item.get("translation_diagnostics") or {},
                 }
             }
-            review = coordinator.review_batch([item], result)
+            review_item = item
+            if item.get("translation_unit_kind") == "group" and item.get("translated_text"):
+                # Unit output has already been distributed back to layout blocks.
+                review_item = {**item, "translation_unit_protected_source_text": item.get("protected_source_text") or item.get("source_text") or "", "group_protected_source_text": ""}
+            review = coordinator.review_batch([review_item], result)
             reviewed_item_count += review.reviewed_item_count
             for issue in review.issues:
                 payload = issue.as_dict()

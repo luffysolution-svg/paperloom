@@ -222,7 +222,10 @@ test("askLibraryAi:携带 X-API-Key,body 含 question/document_id/job_id/stream"
   assert.equal(options.method, "POST");
   assert.equal(options.headers["X-API-Key"], "test-key");
   assert.equal(options.headers["Content-Type"], "application/json");
-  assert.deepEqual(JSON.parse(options.body), {
+  const { run_id, ...body } = JSON.parse(options.body);
+  assert.equal(typeof run_id, "string");
+  assert.ok(run_id.length > 0);
+  assert.deepEqual(body, {
     question: "这篇讲什么?",
     document_id: "doc-9",
     job_id: "job-9",

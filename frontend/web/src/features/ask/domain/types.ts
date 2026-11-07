@@ -38,6 +38,7 @@ export type HomeAskMessage = {
   role: "user" | "assistant";
   content: string;
   citations?: HomeAskCitation[];
+  source?: string;
   progress?: string;
   /**
    * `cancelled` = 用户点了停止、回答只写了半截。

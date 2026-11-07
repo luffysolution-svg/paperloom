@@ -79,6 +79,7 @@ export function createWorkflowPayloadAssembly({
     return buildTranslationPayloadRequest({
       developerConfig,
       translationCredentialRef: submitValues.translationCredentialRef,
+      translationConnectionId: submitValues.translationConnectionId,
       modelApiKey: submitValues.modelApiKey,
       selectedGlossaryId: submitValues.selectedGlossaryId,
       constants,
@@ -130,7 +131,7 @@ export function createWorkflowPayloadAssembly({
   function collectRunPayload(): WorkflowRunPayload {
     const pageRanges = currentPageRanges();
     const overrides = getUploadServiceOverrides?.();
-    const developerConfig = { ...developerConfigWithDefaults(), ...(overrides ? { model: overrides.model, baseUrl: overrides.baseUrl, workers: overrides.workers } : {}) };
+    const developerConfig = { ...developerConfigWithDefaults(), ...(overrides ? { model: overrides.model, baseUrl: overrides.baseUrl, apiProtocol: overrides.apiProtocol, workers: overrides.workers } : {}) };
     const ocrOnly = isOcrOnlyMode();
     const workflow = ocrOnly ? WORKFLOW_OCR : developerConfig.workflow;
     const uploadState = getUploadState();

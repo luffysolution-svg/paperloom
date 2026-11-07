@@ -155,6 +155,7 @@ export function createBrowserCredentialSaveFlow({
         apiKey: values.modelApiKey,
         baseUrl: values.modelBaseUrl,
         model: values.modelName,
+        apiProtocol: values.apiProtocol,
         workers: values.translationWorkers,
       });
     }

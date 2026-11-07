@@ -9,7 +9,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import { askLibraryAi, createConversation } from "@/platform/api/index.js";
+import { askLibraryAi, createConversation, saveAiSelection, selectionForRequest } from "@/platform/api/index.js";
 import {
   resolveReaderAiConfig,
   sanitizeAssistantAnswer,
@@ -129,7 +129,8 @@ export function useHomeAskTurn({
     // 运行配置及密钥以本机后端的 runtime-config 为权威。浏览器里的旧配置
     // 只作为本次请求的可选覆盖；为空时让后端使用安全保存的凭据。
     const config = resolveReaderAiConfig();
-    const modelRequestOverrides = buildHomeAskModelRequestOverrides(config);
+    const selection = selectionForRequest(conversationIdRef.current);
+    const modelRequestOverrides = { ...buildHomeAskModelRequestOverrides(config), connectionId: selection.connectionId, connectionModel: selection.model, connectionOptions: { ...selection.options } };
 
     const userId = parentUser ? parentUser.id : makeId("u");
     const assistantId = makeId("a");
@@ -202,6 +203,7 @@ export function useHomeAskTurn({
         });
         requestConversationId = `${created?.conversation_id || ""}`.trim();
         if (!requestConversationId) throw new Error("创建 AI 会话失败，请重试。");
+        if (selection.connectionId) saveAiSelection(requestConversationId, selection, { updateDraft: false });
         setConversationId(requestConversationId);
         conversationIdRef.current = requestConversationId;
         saveConversationId(requestConversationId);
@@ -299,6 +301,7 @@ export function useHomeAskTurn({
         progress: "",
         status: "complete",
         incompleteReason: `${result?.incompleteReason || ""}`.trim(),
+        source: `${result?.source || ""}`.trim(),
       });
       void refreshSessions();
     } catch (error) {

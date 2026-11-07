@@ -617,6 +617,7 @@
         "devtools/tests/translation/test_executor_context.py",
         "devtools/tests/translation/test_formula_math_normalization.py",
         "devtools/tests/translation/test_garbled_reconstruction_outcomes.py",
+        "devtools/tests/translation/test_native_translation_protocols.py",
         "devtools/tests/translation/test_page_local_optimization.py",
         "devtools/tests/translation/test_placeholder_token_ownership.py",
         "devtools/tests/translation/test_prompt_input_snapshot.py",

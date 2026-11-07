@@ -24,10 +24,10 @@ import {
   Type,
   X,
 } from "lucide-react";
-import { MISSING_MODEL_API_KEY_MESSAGE } from "../../../external.js";
 import { armReaderAiClickShield, lockReaderAiNavigation } from "../../../external.js";
 import type { AiCitationLike } from "../../../external.js";
 import { AiMarkdownAnswer } from "../../ai/AiMarkdownAnswer.js";
+import { useAiComposerControl } from "../../ai/AiConnectionPicker.js";
 import type { ReaderAssistantMode } from "../../../shared/ai/ask-answerer.js";
 import {
   readerRegionContent,
@@ -143,6 +143,7 @@ export function AssistantMessageRow({
             <RefreshCw size={14} strokeWidth={2.2} aria-hidden />
           </ActionBarPrimitive.Reload>
         </ActionBarPrimitive.Root>
+        {message.metadata?.custom?.source ? <div className="reader-ai-answer-source">{String(message.metadata.custom.source)}</div> : null}
       </div>
     </MessagePrimitive.Root>
   );
@@ -285,6 +286,7 @@ export function AssistantComposer({
   selectionContext?: ReaderSelection | null;
   onClearSelectionContext?: () => void;
 }) {
+  const aiSelector = useAiComposerControl();
   return (
     <ComposerPrimitive.Root className="aui-composer" data-reader-ai-composer="">
       <div className="aui-composer-shell">
@@ -302,7 +304,7 @@ export function AssistantComposer({
           submitMode="enter"
         />
         <div className="aui-composer-toolbar">
-          <ModeSwitch mode={mode} disabled={isRunning || branchBusy} onChange={onModeChange} />
+          <div className="reader-ai-composer-leading">{aiSelector}<ModeSwitch mode={mode} disabled={isRunning || branchBusy} onChange={onModeChange} /></div>
           <div className="aui-composer-actions">
             {isRunning ? (
               <ComposerPrimitive.Cancel className="aui-send aui-send-stop" aria-label="停止生成">
@@ -322,10 +324,12 @@ export function AssistantComposer({
 }
 
 export function LockedComposer() {
+  const aiSelector = useAiComposerControl();
   return (
     <div className="aui-composer aui-composer-locked" role="alert">
-      <p className="aui-llm-lock-msg">{MISSING_MODEL_API_KEY_MESSAGE}</p>
-      <p className="aui-hint">请到首页「设置 → API 设置」填写模型 Key 后即可提问</p>
+      <p className="aui-llm-lock-msg">连接 AI 服务后即可提问</p>
+      <p className="aui-hint">选择已登录的本机 Agent，或添加模型 API。</p>
+      {aiSelector}
     </div>
   );
 }

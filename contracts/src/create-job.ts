@@ -95,6 +95,9 @@ export interface TranslationInput {
   api_key?: string;
   credential_ref?: string;
   model?: string;
+  connection_id?: string;
+  api_protocol?: "openai" | "openai_responses" | "anthropic";
+  thinking?: "auto" | "off" | "low" | "medium" | "high" | "max";
   base_url?: string;
   start_page?: number;
   end_page?: number;
@@ -113,6 +116,7 @@ export interface ModelConnection {
   id: string;
   revision: number;
   provider: "qwen" | "deepseek" | "openai_compatible";
+  api_protocol?: "openai" | "openai_responses" | "anthropic";
   base_url: string;
   model: string;
   credential_ref: string;

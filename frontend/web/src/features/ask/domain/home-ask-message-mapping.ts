@@ -88,11 +88,13 @@ export function nodesFromDetail(detail: ConversationDetailLike): {
     // 标成 complete——刷新之后，半截回答和被强制收尾的回答都会变成看起来正常的答案。
     const finish = `${item.message.status?.reason || ""}`.trim();
     const incomplete = item.message.status?.type === "incomplete" && finish;
+    const source = item.message.source;
     return {
       id: item.message.id,
       role: item.message.role,
       content: `${item.message.content || ""}`,
       citations: (item.message.citations || []) as HomeAskCitation[],
+      ...(source ? { source } : {}),
       status: (incomplete && finish === "cancelled" ? "cancelled" : "complete") as HomeAskMessage["status"],
       ...(incomplete && finish !== "cancelled" ? { incompleteReason: finish } : {}),
       ...(item.parentId ? { parentId: item.parentId } : {}),

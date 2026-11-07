@@ -170,6 +170,7 @@ class RetrievalAgent:
                     "role": "assistant",
                     "content": message.get("content") or "",
                     "tool_calls": tool_calls,
+                        **{k: v for k, v in message.items() if k in {"_responses_output", "_anthropic_content"}},
                 }
             )
             for call in tool_calls:

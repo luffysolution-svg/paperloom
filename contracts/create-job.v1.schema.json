@@ -105,6 +105,7 @@
         "id": { "type": "string" },
         "revision": { "type": "integer", "minimum": 0 },
         "provider": { "enum": ["qwen", "deepseek", "openai_compatible"] },
+        "api_protocol": { "type": "string", "enum": ["openai", "openai_responses", "anthropic"], "default": "openai" },
         "base_url": { "type": "string" },
         "model": { "type": "string" },
         "credential_ref": {
@@ -172,6 +173,9 @@
         "api_key": { "type": "string" },
         "credential_ref": { "type": "string" },
         "model": { "type": "string" },
+        "connection_id": { "type": "string" },
+        "api_protocol": { "type": "string", "enum": ["openai", "openai_responses", "anthropic"], "default": "openai" },
+        "thinking": { "type": "string", "enum": ["auto", "off", "low", "medium", "high", "max"], "default": "auto" },
         "base_url": { "type": "string" },
         "start_page": { "type": "integer" },
         "end_page": { "type": "integer" },

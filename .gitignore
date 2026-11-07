@@ -70,6 +70,7 @@ frontend/desktop/linux/
 frontend/desktop/win_jobid/
 /var/
 /tmp/
+/frontend/desktop/tmp/
 *.dmg
 *.AppImage
 backend/python/

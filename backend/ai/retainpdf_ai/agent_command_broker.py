@@ -55,6 +55,7 @@ class AgentCommandBroker:
         on_operation_event: Callable[[dict[str, Any]], None] | None = None,
         tool_registry: ToolRegistry | None = None,
         on_tool_event: Callable[[dict[str, Any]], None] | None = None,
+        host_only: bool = False,
     ) -> None:
         self._state_root = state_root.resolve()
         self._cli_command = cli_command
@@ -64,6 +65,7 @@ class AgentCommandBroker:
         self._on_operation_event = on_operation_event
         self._tool_registry = tool_registry
         self._on_tool_event = on_tool_event
+        self._host_only = host_only
         self._citations: dict[int, Any] = {}
         self._next_ref = 1
         self._turn_id = secrets.token_urlsafe(18)
@@ -141,7 +143,7 @@ class AgentCommandBroker:
         return dict(self._citations)
 
     def __enter__(self) -> Self:
-        if os.name != "posix":
+        if os.name != "posix" and not self._host_only:
             raise RuntimeError("fx command broker requires a Unix-domain socket")
         for path in (
             self._state_root,
@@ -149,12 +151,14 @@ class AgentCommandBroker:
             self._bin_dir,
             self._work_dir,
             self._request_dir,
-            self._socket_dir,
+            *((self._socket_dir,) if not self._host_only else ()),
         ):
             path.mkdir(parents=True, exist_ok=True, mode=0o700)
             if path.is_symlink() or not path.is_dir():
                 raise RuntimeError("fx broker directory is unsafe")
             path.chmod(0o700)
+        if self._host_only:
+            return self
         self._write_wrapper()
         listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         listener.bind(str(self._socket_path))
@@ -181,7 +185,8 @@ class AgentCommandBroker:
         if self._thread is not None:
             self._thread.join(timeout=1)
         shutil.rmtree(self._root, ignore_errors=True)
-        shutil.rmtree(self._socket_dir, ignore_errors=True)
+        if not self._host_only:
+            shutil.rmtree(self._socket_dir, ignore_errors=True)
 
     def approve_permission(self, params: dict[str, Any]) -> bool:
         options = params.get("options")
@@ -302,6 +307,7 @@ class AgentCommandBroker:
             _write_json_no_follow(request_path, command.request_payload)
             argv.extend(["--request", f"requests/{request_name}"])
         env = {
+            **{key: os.environ[key] for key in ("SystemRoot", "WINDIR", "TEMP", "TMP") if key in os.environ},
             "HOME": str(self._root),
             "PATH": os.defpath,
             "RETAINPDF_AGENT_API_URL": self._rust_api_url,
@@ -316,6 +322,7 @@ class AgentCommandBroker:
                 capture_output=True,
                 timeout=_CLI_TIMEOUT_SECONDS,
                 check=False,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
             )
         except subprocess.TimeoutExpired:
             return failure("retainpdf-agent timed out")

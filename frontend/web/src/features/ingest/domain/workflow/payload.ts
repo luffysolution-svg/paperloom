@@ -16,6 +16,7 @@ export interface WorkflowDeveloperConfig {
   mathMode?: TranslationInput["math_mode"];
   model?: string;
   baseUrl?: string;
+  apiProtocol?: "openai" | "openai_responses" | "anthropic";
   glossaryId?: string;
   workers?: number;
   batchSize?: number;
@@ -68,6 +69,7 @@ export interface BuildTranslationPayloadOptions {
   developerConfig: WorkflowDeveloperConfig;
   modelApiKey?: string;
   translationCredentialRef?: string;
+  translationConnectionId?: string;
   selectedGlossaryId?: string;
   constants: WorkflowPayloadConstants;
 }
@@ -120,6 +122,7 @@ export function buildOcrPayload({
 export function buildTranslationPayload({
   developerConfig,
   translationCredentialRef,
+  translationConnectionId,
   modelApiKey,
   selectedGlossaryId,
   constants,
@@ -129,7 +132,8 @@ export function buildTranslationPayload({
     math_mode: developerConfig.mathMode,
     model: developerConfig.model,
     base_url: developerConfig.baseUrl,
-    ...(modelApiKey?.trim()
+    api_protocol: developerConfig.apiProtocol || "openai",
+    ...(translationConnectionId ? { connection_id: translationConnectionId } : modelApiKey?.trim()
       ? { api_key: modelApiKey.trim() }
       : { credential_ref: `${translationCredentialRef || ""}`.trim() }),
     workers: developerConfig.workers,

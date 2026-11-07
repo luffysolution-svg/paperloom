@@ -9,6 +9,7 @@ type ModelListViewPort = {
 };
 
 type ModelListElements = {
+  translationProtocolSelect?: { value?: string } | null;
   apiKeyInput?: { value?: string } | null;
   modelBaseUrlInput?: { value?: string } | null;
 };
@@ -33,6 +34,7 @@ export function createTranslationModelListFlow({
     const elements = dialogElementsPort.elements();
     const apiKey = `${elements.apiKeyInput?.value || ""}`.trim();
     const baseUrl = `${elements.modelBaseUrlInput?.value || ""}`.trim();
+    const protocol = elements.translationProtocolSelect?.value || "openai";
     const provider = `${currentProvider() || inferTranslationProvider(baseUrl)}`.trim();
     if (!apiKey) {
       viewPort.setTranslationModels?.({
@@ -59,6 +61,7 @@ export function createTranslationModelListFlow({
       if (request !== requestId) return false;
       const current = dialogElementsPort.elements();
       if (`${current.apiKeyInput?.value || ""}`.trim() !== apiKey
+        || (current.translationProtocolSelect?.value || "openai") !== protocol
         || `${current.modelBaseUrlInput?.value || ""}`.trim() !== baseUrl) {
         clear();
         return false;
@@ -66,7 +69,7 @@ export function createTranslationModelListFlow({
       return true;
     }
     try {
-      const result = await listModels(apiPrefix, { api_key: apiKey, base_url: baseUrl });
+      const result = await listModels(apiPrefix, { api_key: apiKey, base_url: baseUrl, api_protocol: elements.translationProtocolSelect?.value || "openai" });
       if (!isCurrent()) return false;
       const models = Array.isArray((result as any)?.models)
         ? (result as any).models.filter((item) => typeof item === "string" && item.trim())

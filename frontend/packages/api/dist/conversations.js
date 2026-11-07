@@ -198,7 +198,7 @@ export function messagesToBranchItems(messages) {
                 ? { type: "incomplete", reason: finish }
                 : { type: "complete", reason: "stop" })
             : null;
-        items.push({ parentId: parent, message: { id: m.message_id, role, content: m.content || "", ...(citations ? { citations } : {}), ...(status ? { status } : {}) } });
+        items.push({ parentId: parent, message: { id: m.message_id, role, content: m.content || "", ...(m.model ? { source: m.model } : {}), ...(citations ? { citations } : {}), ...(status ? { status } : {}) } });
     }
     return items;
 }

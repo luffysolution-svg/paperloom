@@ -9,6 +9,7 @@ export type TranslationProfile = {
   baseUrl: string;
   model: string;
   workers: number;
+  apiProtocol: "openai" | "openai_responses" | "anthropic";
 };
 
 export function translationConfigError(baseUrl = "", model = "") {
@@ -46,6 +47,7 @@ export function translationProfileDefaults(providerId = "custom"): TranslationPr
   const definition = getTranslationProviderDefinition(providerId);
   return {
     apiKey: "",
+    apiProtocol: "openai",
     baseUrl: definition.baseUrl || "",
     model: definition.defaultModel || "",
     workers: Number(definition.defaultWorkers) || 5,
@@ -61,6 +63,8 @@ export function normalizeTranslationProfile(
   const workers = Number(candidate.workers);
   const maxWorkers = Number(definition.maxWorkers) || 100;
   return {
+    apiProtocol: ["openai", "openai_responses", "anthropic"].includes(String(candidate.apiProtocol))
+      ? candidate.apiProtocol as TranslationProfile["apiProtocol"] : "openai",
     apiKey: typeof candidate.apiKey === "string" ? candidate.apiKey : defaults.apiKey,
     baseUrl: providerId === "custom"
       ? `${candidate.baseUrl || defaults.baseUrl}`.trim()

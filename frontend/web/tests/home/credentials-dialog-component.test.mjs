@@ -707,8 +707,8 @@ test("接口设置只有一个弹窗：常规与首次配置共用设置中心 A
   assert.equal(byId("browser-credentials-save-btn").textContent, "更新当前方案");
   assert.equal(byId("browser-credentials-subtitle"), null, "常规入口不该出现首配引导语");
   assert.ok(
-    dom.window.document.querySelector(".credential-agent-section > .credential-agent-card"),
-    "常规入口展示 AI Agent 表单",
+    dom.window.document.querySelector(".credential-agent-section > .ai-connections-settings"),
+    "常规入口展示 AI 连接管理",
   );
 
   services.settingsHub.dialogStore.close();
@@ -792,7 +792,7 @@ test("凭据入口：设置 API 区内嵌工作台；#credential-gate-action 也
     [[true, false], [false, true]],
     "接口页按 OCR、翻译的纵向顺序排列",
   );
-  assert.ok(dom.window.document.querySelector(".credential-agent-section > .credential-agent-card"));
+  assert.ok(dom.window.document.querySelector(".ai-legacy-runtime .credential-agent-card"));
   assert.match(
     dom.window.document.querySelector(".credential-agent-beta")?.textContent || "",
     /Beta/i,
@@ -1198,7 +1198,7 @@ test("上传翻译：独立服务选择、模型拉取和实际提交使用同�
     const modelOption = (model) => [...document.querySelectorAll('[role="option"]')].find((item) => item.textContent === model);
     await waitFor(() => modelOption("qwen-pulled") && modelOption("qwen-alternate"), "拉取后自动展开完整列表，不按当前模型名称过滤");
     assert.equal(document.querySelector('datalist'), null, "模型选项不再使用浏览器过滤式 datalist");
-    assert.deepEqual(modelRequests, [{ api_key: "qwen-key", base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1" }]);
+    assert.deepEqual(modelRequests, [{ api_key: "qwen-key", api_protocol: "openai", base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1" }]);
     click(modelOption("qwen-alternate"));
     await waitFor(() => services.features.workflowFeature.collectRunPayload().translation.model === "qwen-alternate", "从列表选择另一个模型，写入任务配置");
     click(byId("submit-btn"));

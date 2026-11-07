@@ -31,7 +31,7 @@ impl AiGateway {
         })
     }
 
-    async fn send(
+    pub(crate) async fn send(
         &self,
         method: Method,
         path: &str,

@@ -76,9 +76,11 @@ export const CREATE_JOB_SECTION_FIELDS: Readonly<
   translation: [
     "accepted_ambiguous_request_risk",
     "api_key",
+    "api_protocol",
     "base_url",
     "batch_size",
     "classify_batch_size",
+    "connection_id",
     "context_mode",
     "credential_ref",
     "custom_rules_text",
@@ -99,6 +101,7 @@ export const CREATE_JOB_SECTION_FIELDS: Readonly<
     "rule_profile_name",
     "skip_title_translation",
     "start_page",
+    "thinking",
     "workers",
   ],
 };

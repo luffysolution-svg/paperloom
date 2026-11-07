@@ -22,6 +22,7 @@ for (const key of [
   });
 }
 globalThis.window = dom.window;
+Object.defineProperty(dom.window, "isSecureContext", { value: true, configurable: true });
 globalThis.localStorage = dom.window.localStorage;
 globalThis.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
 globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(0), 0);

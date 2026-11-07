@@ -94,8 +94,10 @@ def _resolve_hostname(hostname: str, *, request_label: str = "") -> None:
 
 def normalize_base_url(base_url: str) -> str:
     normalized = (base_url or DEFAULT_BASE_URL).strip().rstrip("/")
-    if normalized.endswith("/chat/completions"):
-        normalized = normalized[: -len("/chat/completions")]
+    for suffix in ("/chat/completions", "/responses", "/messages"):
+        if normalized.endswith(suffix):
+            normalized = normalized[:-len(suffix)]
+            break
     return normalized
 
 

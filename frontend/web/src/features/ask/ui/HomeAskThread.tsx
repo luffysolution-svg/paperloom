@@ -258,6 +258,7 @@ export function HomeAskThread({
                 onSwitchBranch={isRunning ? undefined : onSwitchBranch}
               />
             ) : null}
+            {m.source ? <div className="reader-ai-answer-source">{m.source}</div> : null}
             {operations.map((entry) => (
               <div key={entry.remote.operation_id} className="home-ask-msg-operation">
                 <AgentOperationCard

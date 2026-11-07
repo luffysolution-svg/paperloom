@@ -32,6 +32,8 @@ pub struct PaddleTokenValidationRequest {
 
 #[derive(Debug, Deserialize)]
 pub struct DeepSeekTokenValidationRequest {
+    #[serde(default = "retain_core::model_connection::default_api_protocol")]
+    pub api_protocol: String,
     pub api_key: String,
     #[serde(default)]
     pub base_url: String,
@@ -42,6 +44,8 @@ pub struct DeepSeekTokenValidationRequest {
 
 #[derive(Debug, Deserialize)]
 pub struct ModelListRequest {
+    #[serde(default = "retain_core::model_connection::default_api_protocol")]
+    pub api_protocol: String,
     pub api_key: String,
     #[serde(default)]
     pub base_url: String,

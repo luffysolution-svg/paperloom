@@ -60,7 +60,7 @@ class OpenAICompatibleAgentRuntime:
         self._settings = settings
         self._rust = rust
         self._reading_registry = reading_registry
-        self._chat = build_deepseek_chat_fn(settings)
+        self._chat = None
         registered_names = (
             {
                 str((spec.get("function") or {}).get("name") or "")
@@ -99,6 +99,8 @@ class OpenAICompatibleAgentRuntime:
         request_control: RequestControl | None = None,
     ) -> AskResult:
         emit = on_event or (lambda _event: None)
+        if chat_fn is None and self._chat is None:
+            self._chat = build_deepseek_chat_fn(self._settings)
         chat = chat_fn or self._chat
         conversation_id = conversation_id.strip()
         document_id = document_id.strip()
@@ -200,6 +202,7 @@ class OpenAICompatibleAgentRuntime:
                 ),
                 rust_api_url=self._settings.rust_api_base,
                 rust=self._rust,
+                host_only=True,
                 scope=BrokerScope(
                     conversation_id=conversation_id,
                     document_id=document_id,
@@ -237,6 +240,7 @@ class OpenAICompatibleAgentRuntime:
                         "role": "assistant",
                         "content": message.get("content") or "",
                         "tool_calls": tool_calls,
+                        **{k: v for k, v in message.items() if k in {"_responses_output", "_anthropic_content"}},
                     }
                 )
                 for call in tool_calls:

@@ -33,12 +33,23 @@ pub fn validate_provider_credentials(input: &CreateJobInput) -> Result<(), AppEr
 }
 
 pub fn validate_translation_credentials(input: &CreateJobInput) -> Result<(), AppError> {
+    if !["openai", "openai_responses", "anthropic"]
+        .contains(&input.translation.api_protocol.as_str())
+    {
+        return Err(AppError::bad_request("invalid translation.api_protocol"));
+    }
+    if !["auto", "off", "low", "medium", "high", "max"]
+        .contains(&input.translation.thinking.as_str())
+    {
+        return Err(AppError::bad_request("invalid translation.thinking"));
+    }
     if let Some(connection) = &input.translation.execution_connection {
         use crate::services::model_executor::ModelConnectionPolicy;
         connection
             .validate()
             .map_err(|_| AppError::bad_request("invalid translation.execution_connection"))?;
-        if connection.model != input.translation.model
+        if connection.api_protocol != input.translation.api_protocol
+            || connection.model != input.translation.model
             || connection.base_url.trim_end_matches('/')
                 != input.translation.base_url.trim_end_matches('/')
             || connection.credential_ref != input.translation.credential_ref

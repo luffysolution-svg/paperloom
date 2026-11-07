@@ -6,6 +6,7 @@ export interface CredentialDialogValues {
   modelApiKey: string;
   modelBaseUrl: string;
   modelName: string;
+  apiProtocol?: "openai" | "openai_responses" | "anthropic";
   translationWorkers: string;
   clearPaddleToken: boolean;
   clearMineruToken: boolean;
@@ -19,6 +20,7 @@ export interface CredentialDialogElementsLike {
   paddleInput?: { value?: string; dataset?: Record<string, string> } | null;
   mineruInput?: { value?: string; dataset?: Record<string, string> } | null;
   apiKeyInput?: { value?: string; dataset?: Record<string, string> } | null;
+  translationProtocolSelect?: { value?: string } | null;
   modelBaseUrlInput?: { value?: string } | null;
   modelNameInput?: { value?: string } | null;
   translationWorkersInput?: { value?: string } | null;
@@ -38,7 +40,7 @@ export interface BuildBrowserCredentialConfigOptions {
 }
 
 export interface BuildTaskOptionsFromDialogValuesOptions {
-  values: Pick<CredentialDialogValues, "modelName" | "modelBaseUrl" | "translationWorkers" | "mathMode">;
+  values: Pick<CredentialDialogValues, "modelName" | "modelBaseUrl" | "translationWorkers" | "mathMode" | "apiProtocol">;
   defaultModelBaseUrl?: () => string;
 }
 
@@ -53,6 +55,7 @@ export function readCredentialDialogValues({
     modelNameInput,
     translationWorkersInput,
     mathModeSelect,
+    translationProtocolSelect,
   } = elementsPort.elements();
   return {
     paddleToken: paddleInput?.value?.trim() || "",
@@ -60,6 +63,7 @@ export function readCredentialDialogValues({
     modelApiKey: apiKeyInput?.value?.trim() || "",
     modelBaseUrl: modelBaseUrlInput?.value?.trim() || "",
     modelName: modelNameInput?.value?.trim() || "",
+    apiProtocol: (translationProtocolSelect?.value || "openai") as CredentialDialogValues["apiProtocol"],
     translationWorkers: translationWorkersInput?.value?.trim() || "",
     clearPaddleToken: paddleInput?.dataset?.clearCredential === "1",
     clearMineruToken: mineruInput?.dataset?.clearCredential === "1",
@@ -89,6 +93,7 @@ export function buildTaskOptionsFromDialogValues({
 }: BuildTaskOptionsFromDialogValuesOptions) {
   return {
     model: values.modelName,
+    apiProtocol: values.apiProtocol || "openai",
     baseUrl: values.modelBaseUrl || defaultModelBaseUrl?.() || "",
     workers: Number(values.translationWorkers),
     mathMode: values.mathMode,

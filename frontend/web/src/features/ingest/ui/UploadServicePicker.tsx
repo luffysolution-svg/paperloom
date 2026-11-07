@@ -7,6 +7,7 @@ import { useHomeFeatures, useHomeSettingsHub, useHomeWorkflowDialog, useHomeWork
 import { useStoreSnapshot } from "@/ui/hooks/use-store.js";
 import { TRANSLATION_PROVIDER_OPTIONS } from "@/platform/config/providers.js";
 import { UploadModelPicker } from "./UploadModelPicker.jsx";
+import { AI_CONNECTIONS_CHANGED, fetchAiConnections } from "@retainpdf/api";
 
 export function UploadServicePicker() {
   const services = useOptionalCredentialsServices();
@@ -28,10 +29,19 @@ export function UploadServicePicker() {
     dialogElementsPort: { elements: () => ({
       apiKeyInput: { value: translationRef.current?.apiKey || "" },
       modelBaseUrlInput: { value: translationRef.current?.baseUrl || "" },
+      translationProtocolSelect: { value: translationRef.current?.apiProtocol || "openai" },
     }) },
     listModels,
     viewPort: { setTranslationModels: setModels },
   }), []);
+
+  useEffect(() => {
+    let active = true;
+    const load = () => void fetchAiConnections().then(() => { if (active) refresh((v) => v + 1); }).catch(() => {});
+    load();
+    document.addEventListener(AI_CONNECTIONS_CHANGED, load);
+    return () => { active = false; document.removeEventListener(AI_CONNECTIONS_CHANGED, load); };
+  }, []);
 
   useEffect(() => {
     const onChange = () => refresh((value) => value + 1);

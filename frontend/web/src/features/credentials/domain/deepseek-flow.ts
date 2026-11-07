@@ -57,6 +57,7 @@ export async function handleBrowserDeepSeekValidate({
     apiKeyInput,
     modelBaseUrlInput,
     modelNameInput,
+    translationProtocolSelect,
   } = viewPort.elements();
   const storedCredentials = credentialsStatePort.getCredentials?.() || {};
   const modelApiKey = apiKeyInput
@@ -99,6 +100,7 @@ export async function handleBrowserDeepSeekValidate({
     apiKey: modelApiKey,
     baseUrl,
     model: modelName,
+    apiProtocol: translationProtocolSelect?.value || "openai",
     validateDeepSeekToken,
     setDeepSeekValidationMessage: viewPort.setValidationMessage,
     showResult: false,

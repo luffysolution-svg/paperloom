@@ -97,6 +97,22 @@ def test_review_error_items_ignore_policy_keep_origin_issue() -> None:
     assert blocking_review_error_items(review) == []
 
 
+def test_distributed_continuation_tail_is_reviewed_against_its_own_source() -> None:
+    fragment = "are consistent with known rules for more stable perovskites and significantly reduce the search space for high throughput screening."
+    item = _item("p001-b008", fragment, "与寻找更稳定钙钛矿的已知规则一致，并显著缩小了高通量筛选的搜索空间。")
+    item.update(translation_unit_kind="group", translation_unit_protected_source_text="The full preceding discussion of crystal graph convolutional networks. " * 30 + fragment)
+    review = build_translation_review(translated_pages_map={0: [item]})
+    assert "truncated_translation" not in review["issue_summary"]
+
+
+def test_distributed_continuation_still_detects_an_incomplete_block() -> None:
+    source = "The experimental results describe the model architecture and prediction accuracy. " * 20
+    item = _item("p001-b007", source, "结果。")
+    item.update(translation_unit_kind="group", translation_unit_protected_source_text=source + "A following fragment.")
+    review = build_translation_review(translated_pages_map={0: [item]})
+    assert review["issue_summary"]["truncated_translation"] == 1
+
+
 def test_write_translation_review_round_trips_json() -> None:
     payload = {
         0: [

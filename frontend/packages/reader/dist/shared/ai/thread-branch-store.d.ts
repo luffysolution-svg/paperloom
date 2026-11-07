@@ -14,6 +14,7 @@ export type ThreadBranchMessage = {
     role: "user" | "assistant";
     content: string;
     progress?: string;
+    source?: string;
     citations?: ThreadBranchCitation[];
     status?: {
         type: string;

@@ -11,6 +11,7 @@ import { Check, ChevronDown, Code2, ExternalLink, Languages, PlugZap, Save, Tria
 import { Select as SelectPrimitive } from "radix-ui";
 import { SecretInput } from "./SecretInput.js";
 import { DesktopPrivateApiAccess } from "./DesktopPrivateApiAccess.js";
+import { API_PROTOCOL_LABELS } from "@retainpdf/api";
 
 const { browser: BROWSER_IDS } = CREDENTIAL_DOM_IDS;
 
@@ -59,9 +60,17 @@ export function TranslationPanel({ disabled = false }: { disabled?: boolean } = 
         <div className="credential-card-copy">
           <h3>{TRANSLATION_PROVIDER_DEFINITION.label}</h3>
         </div>
-        <span className="credential-card-tag">OpenAI 兼容</span>
+        <span className="credential-card-tag">三种 API 协议</span>
       </div>
       <div className="credential-translation-grid">
+        <label className="credential-translation-protocol-field">
+          <span className="developer-label">API 协议</span>
+          <select aria-label="翻译 API 协议" defaultValue="openai" disabled={locked}
+            ref={(node) => { elementsRef.translationProtocolSelect = node || null; }}
+            onChange={() => { handlers?.markDirty?.(); handlers?.resetDeepSeekValidation?.(); }}>
+            {Object.entries(API_PROTOCOL_LABELS).map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+          </select>
+        </label>
         <label className="credential-translation-provider-field">
           <span className="developer-label">API 服务</span>
           <SelectPrimitive.Root

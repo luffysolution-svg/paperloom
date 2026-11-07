@@ -31,12 +31,22 @@ pub(super) struct Outcome {
 fn usage(receipt: &mut Receipt, value: &Value) {
     let usage = &value["usage"];
     if usage.is_object() {
-        receipt.input_tokens = usage["prompt_tokens"].as_u64();
-        receipt.output_tokens = usage["completion_tokens"].as_u64();
-        receipt.reasoning_tokens = usage["completion_tokens_details"]["reasoning_tokens"].as_u64();
+        receipt.input_tokens = usage["prompt_tokens"]
+            .as_u64()
+            .or_else(|| usage["input_tokens"].as_u64())
+            .or(receipt.input_tokens);
+        receipt.output_tokens = usage["completion_tokens"]
+            .as_u64()
+            .or_else(|| usage["output_tokens"].as_u64())
+            .or(receipt.output_tokens);
+        receipt.reasoning_tokens = usage["completion_tokens_details"]["reasoning_tokens"]
+            .as_u64()
+            .or_else(|| usage["output_tokens_details"]["reasoning_tokens"].as_u64());
         receipt.cached_tokens = usage["prompt_tokens_details"]["cached_tokens"]
             .as_u64()
-            .or_else(|| usage["prompt_cache_hit_tokens"].as_u64());
+            .or_else(|| usage["prompt_cache_hit_tokens"].as_u64())
+            .or_else(|| usage["input_tokens_details"]["cached_tokens"].as_u64())
+            .or_else(|| usage["cache_read_input_tokens"].as_u64());
     }
 }
 
@@ -61,13 +71,17 @@ pub(super) async fn execute(
         let body = profile.body(request);
         loop {
             receipt.upstream_attempts += 1;
+            let request_builder = client.post(url.clone()).json(&body);
+            let request_builder = if profile.api_protocol == "anthropic" {
+                request_builder
+                    .header("x-api-key", secret)
+                    .header("anthropic-version", "2023-06-01")
+            } else {
+                request_builder.bearer_auth(secret)
+            };
             let response = match tokio::time::timeout(
                 Duration::from_millis(profile.deadlines.idle_ms),
-                client
-                    .post(url.clone())
-                    .bearer_auth(secret)
-                    .json(&body)
-                    .send(),
+                request_builder.send(),
             )
             .await
             {
@@ -134,6 +148,7 @@ pub(super) async fn execute(
             return match read_response(
                 response,
                 profile.streaming(),
+                &profile.api_protocol,
                 profile.deadlines.idle_ms,
                 start,
                 &mut receipt,
@@ -167,6 +182,7 @@ pub(super) async fn execute(
 async fn read_response(
     response: reqwest::Response,
     streaming: bool,
+    protocol: &str,
     idle_ms: u64,
     start: Instant,
     receipt: &mut Receipt,
@@ -214,6 +230,52 @@ async fn read_response(
                     return Err("provider_stream_error");
                 }
                 usage(receipt, &value);
+                if protocol != "openai" {
+                    let kind = value["type"].as_str().unwrap_or("");
+                    match kind {
+                        "error" | "response.failed" | "response.incomplete" => {
+                            return Err("provider_stream_error")
+                        }
+                        "response.output_text.delta" => {
+                            content.push_str(value["delta"].as_str().unwrap_or(""))
+                        }
+                        "response.completed" => {
+                            let response = &value["response"];
+                            if response["status"] != "completed" {
+                                return Err("response_not_complete");
+                            }
+                            usage(receipt, response);
+                            if response["output"].is_array() {
+                                content = native_content(response, protocol);
+                            }
+                            finish = Some("stop".into());
+                            done = true;
+                        }
+                        "message_start" => usage(receipt, &value["message"]),
+                        "content_block_delta" if value["delta"]["type"] == "text_delta" => {
+                            content.push_str(value["delta"]["text"].as_str().unwrap_or(""));
+                        }
+                        "message_delta" => {
+                            if matches!(
+                                value["delta"]["stop_reason"].as_str(),
+                                Some("end_turn" | "stop_sequence")
+                            ) {
+                                finish = Some("stop".into());
+                            }
+                        }
+                        "message_stop" => done = true,
+                        _ => {}
+                    }
+                    if !content.is_empty() {
+                        receipt
+                            .first_content_ms
+                            .get_or_insert_with(|| elapsed(start));
+                    }
+                    if done {
+                        break;
+                    }
+                    continue;
+                }
                 if let Some(text) = value["choices"][0]["delta"]["content"].as_str() {
                     if !text.is_empty() {
                         receipt
@@ -238,13 +300,29 @@ async fn read_response(
             return Err("provider_response_error");
         }
         usage(receipt, &value);
-        content = value["choices"][0]["message"]["content"]
-            .as_str()
-            .unwrap_or_default()
-            .to_owned();
-        finish = value["choices"][0]["finish_reason"]
-            .as_str()
-            .map(str::to_owned);
+        content = if protocol == "openai" {
+            value["choices"][0]["message"]["content"]
+                .as_str()
+                .unwrap_or_default()
+                .to_owned()
+        } else {
+            native_content(&value, protocol)
+        };
+        finish = if protocol == "openai" {
+            value["choices"][0]["finish_reason"]
+                .as_str()
+                .map(str::to_owned)
+        } else if (protocol == "openai_responses" && value["status"] == "completed")
+            || (protocol == "anthropic"
+                && matches!(
+                    value["stop_reason"].as_str(),
+                    Some("end_turn" | "stop_sequence")
+                ))
+        {
+            Some("stop".into())
+        } else {
+            None
+        };
         // Non-stream timing is whole-response latency, not first token latency.
     } else if !done {
         return Err("stream_missing_done");
@@ -257,4 +335,28 @@ async fn read_response(
     }
     receipt.content = Some(content);
     Ok(())
+}
+
+fn native_content(value: &Value, protocol: &str) -> String {
+    let mut text = String::new();
+    if protocol == "anthropic" {
+        if let Some(parts) = value["content"].as_array() {
+            for part in parts {
+                if part["type"] == "text" {
+                    text.push_str(part["text"].as_str().unwrap_or(""));
+                }
+            }
+        }
+    } else if let Some(items) = value["output"].as_array() {
+        for item in items {
+            if let Some(parts) = item["content"].as_array() {
+                for part in parts {
+                    if part["type"] == "output_text" {
+                        text.push_str(part["text"].as_str().unwrap_or(""));
+                    }
+                }
+            }
+        }
+    }
+    text
 }

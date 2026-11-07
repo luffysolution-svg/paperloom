@@ -401,11 +401,12 @@
 
 /* 有对话：消息区 + 底栏输入 */
 .home-ask-view.is-chat .home-ask-main {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .home-ask-scroll {
+  flex: 1 1 0;
   min-width: 0;
   min-height: 0;
   max-width: 100%;

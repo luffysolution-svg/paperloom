@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from retainpdf_pipeline.translate.llm.shared.model_wire import resolve_profile
+
 import hashlib
 import json
 from pathlib import Path
@@ -58,6 +60,8 @@ def build_translation_identity(
         "skip_title_translation": bool(request.skip_title_translation),
         "model": request.model,
         "base_url": request.base_url,
+        "api_protocol": resolve_profile(base_url=request.base_url, model=request.model).protocol,
+        "thinking": resolve_profile(base_url=request.base_url, model=request.model).thinking,
         "rule_profile_name": plan.policy_config.rule_profile_name,
         "custom_rules_text": plan.policy_config.custom_rules_text,
         "resolved_policy_sha256": _sha256_json(resolved_policy),

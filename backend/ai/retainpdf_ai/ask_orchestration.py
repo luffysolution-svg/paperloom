@@ -42,6 +42,10 @@ class PreparedAsk:
     content_source: str
     max_tool_rounds: int
 
+    @property
+    def request_deadline_s(self) -> float:
+        return self.settings.byoa_request_deadline_s if self.runtime_id.startswith("acp:") else self.settings.ai_request_deadline_s
+
 
 def _pending_terminal_event(events: "queue.Queue") -> dict | None:
     """宣布超时之前，先看看队列里是不是已经躺着一个终态事件。
@@ -59,7 +63,7 @@ def _pending_terminal_event(events: "queue.Queue") -> dict | None:
             event = events.get_nowait()
         except queue.Empty:
             return terminal
-        if isinstance(event, dict) and event.get("type") in {"done", "error"}:
+        if isinstance(event, dict) and event.get("type") in {"done", "error", "cancelled"}:
             return event
 
 
@@ -75,6 +79,7 @@ class AskOrchestrator:
         conversation_state: ConversationState,
         chat_fn_builder: ChatFnBuilder,
         confirmation_projector: ConfirmationProjector,
+        connection_resolver: Callable | None = None,
     ) -> None:
         self._settings = settings
         self._runtime = runtime
@@ -83,11 +88,17 @@ class AskOrchestrator:
         self._conversation_state = conversation_state
         self._chat_fn_builder = chat_fn_builder
         self._confirmation_projector = confirmation_projector
+        self._connection_resolver = connection_resolver
 
     def prepare(self, payload: AskInput) -> PreparedAsk:
         """Select a runtime and validate model credentials before responding."""
         route = resolve_assistant_mode(payload.assistant_mode, payload.question)
-        request_runtime, request_runtime_id = self._request_runtime(payload, route)
+        if payload.connection_id and self._connection_resolver:
+            request_runtime, request_settings = self._connection_resolver(payload)
+            request_runtime_id = request_runtime.runtime_id
+        else:
+            request_runtime, request_runtime_id = self._request_runtime(payload, route)
+            request_settings = self._resolve_llm_settings(payload, request_runtime)
         document_id = self._resolve_document_id(payload)
         content_source = self._content_source(
             request_runtime,
@@ -106,7 +117,7 @@ class AskOrchestrator:
         return PreparedAsk(
             runtime=request_runtime,
             runtime_id=request_runtime_id,
-            settings=self._resolve_llm_settings(payload, request_runtime),
+            settings=request_settings,
             route=route,
             content_source=content_source,
             max_tool_rounds=(
@@ -118,7 +129,7 @@ class AskOrchestrator:
 
     def ask(self, payload: AskInput, prepared: PreparedAsk) -> dict[str, Any]:
         """Execute one synchronous turn and durably persist its final result."""
-        control = RequestControl(self._settings.ai_request_deadline_s)
+        control = RequestControl(prepared.request_deadline_s)
         request_runtime = prepared.runtime
         chat_fn = self._request_chat_fn(payload, prepared, control)
         document_id = self._conversation_state.resolve_document_id(payload)
@@ -205,7 +216,7 @@ class AskOrchestrator:
         # The runtime loop is synchronous. A queue lets the HTTP response expose
         # tool events and final-answer deltas as soon as they are produced.
         events: queue.Queue[dict[str, Any] | None] = queue.Queue()
-        control = request_control or RequestControl(self._settings.ai_request_deadline_s)
+        control = request_control or RequestControl(prepared.request_deadline_s)
         control.add_cancel_callback(lambda: events.put(None))
         control.raise_if_stopped()
         request_runtime = prepared.runtime
@@ -367,13 +378,19 @@ class AskOrchestrator:
                     # 非终态事件（delta/heartbeat/tool）照旧丢弃并收口。
                     control.cancel("deadline_exceeded")
                     terminal_seen = True
-                    if isinstance(event, dict) and event.get("type") in {"done", "error"}:
+                    if isinstance(event, dict) and event.get("type") in {"done", "error", "cancelled"}:
                         yield self._encode_event(event)
                     else:
                         yield self._encode_event(public_error_event(AIRequestTimeout()))
                     break
                 if event is None:
                     if not terminal_seen:
+                        if control.cancelled:
+                            try:
+                                control.raise_if_stopped()
+                            except AIRequestError as exc:
+                                yield self._encode_event(public_error_event(exc))
+                            break
                         yield self._encode_event(
                             {
                                 "type": "error",
@@ -457,6 +474,7 @@ class AskOrchestrator:
                 "/"
             ),
             llm_model=payload.llm_model or self._settings.llm_model,
+            llm_api_protocol=payload.llm_api_protocol or self._settings.llm_api_protocol,
         )
 
     def _request_chat_fn(
@@ -488,9 +506,13 @@ class AskOrchestrator:
             parameter.kind == inspect.Parameter.VAR_KEYWORD
             for parameter in parameters.values()
         ):
-            return runtime.ask(question, **kwargs)
-        supported = {key: value for key, value in kwargs.items() if key in parameters}
-        return runtime.ask(question, **supported)
+            result = runtime.ask(question, **kwargs)
+        else:
+            supported = {key: value for key, value in kwargs.items() if key in parameters}
+            result = runtime.ask(question, **supported)
+        if getattr(runtime, "source_label", ""):
+            result.source_label = runtime.source_label
+        return result
 
     @staticmethod
     def _ensure_answer(result: Any) -> None:
@@ -573,6 +595,7 @@ class AskOrchestrator:
             "conversation_id": conversation_id,
             "request_message_id": request_message_id or payload.user_message_id.strip(),
             "agent_runtime": prepared.runtime_id,
+            "model": getattr(request_runtime, "source_label", ""),
             "capabilities": {
                 **request_runtime.capabilities.public_view(),
                 "document_operations": bool(
@@ -650,6 +673,8 @@ class AskOrchestrator:
         incomplete_reason = f"{getattr(result, 'incomplete_reason', '') or ''}".strip()
         if incomplete_reason:
             payload["incomplete_reason"] = incomplete_reason
+        if getattr(result, "source_label", ""):
+            payload["model"] = result.source_label
         if conversation_id:
             payload["conversation_id"] = conversation_id
         if memory:

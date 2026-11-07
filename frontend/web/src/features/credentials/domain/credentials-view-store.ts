@@ -23,6 +23,7 @@ export type HandlersBag = {
 export type CredentialsElementsRef = {
   apiKeyInput: HTMLInputElement | null;
   modelBaseUrlInput: HTMLInputElement | null;
+  translationProtocolSelect: HTMLSelectElement | null;
   modelNameInput: HTMLInputElement | null;
   translationWorkersInput: HTMLInputElement | null;
   mathModeSelect: HTMLSelectElement | null;
@@ -194,6 +195,7 @@ export function createCredentialsViewFeature({
   const elementsRef: CredentialsElementsRef = {
     apiKeyInput: null,
     modelBaseUrlInput: null,
+    translationProtocolSelect: null,
     modelNameInput: null,
     translationWorkersInput: null,
     mathModeSelect: null,
@@ -206,6 +208,7 @@ export function createCredentialsViewFeature({
       mineruInput: elementsRef.tokenInputs.mineru || null,
       apiKeyInput: elementsRef.apiKeyInput,
       modelBaseUrlInput: elementsRef.modelBaseUrlInput,
+      translationProtocolSelect: elementsRef.translationProtocolSelect,
       modelNameInput: elementsRef.modelNameInput,
       translationWorkersInput: elementsRef.translationWorkersInput,
       mathModeSelect: elementsRef.mathModeSelect,

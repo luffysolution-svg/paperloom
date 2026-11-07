@@ -20,7 +20,7 @@ const BOTTOM_THRESHOLD_PX = 48;
 export function useStickToBottom(
   containerRef: { current: HTMLElement | null },
   changeKey: unknown,
-  { streaming = false }: { streaming?: boolean } = {},
+  { streaming = false, enabled = true }: { streaming?: boolean; enabled?: boolean } = {},
 ): void {
   const pinnedRef = useRef(true);
 
@@ -29,6 +29,7 @@ export function useStickToBottom(
   ), []);
 
   useEffect(() => {
+    if (!enabled) return;
     const node = containerRef.current;
     if (!node) return undefined;
     const onScroll = () => {
@@ -38,7 +39,7 @@ export function useStickToBottom(
     // 初始状态按当前位置判定，而不是假设贴底——切回已有会话时内容可能已经很长。
     pinnedRef.current = isNearBottom(node);
     return () => node.removeEventListener("scroll", onScroll);
-  }, [containerRef, isNearBottom]);
+  }, [containerRef, isNearBottom, enabled]);
 
   useEffect(() => {
     const node = containerRef.current;
