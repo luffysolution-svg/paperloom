@@ -2,12 +2,14 @@ export type HomeAskReaderAiConfig = {
   apiKey?: string;
   baseUrl?: string;
   model?: string;
+  apiProtocol?: "openai" | "openai_responses" | "anthropic";
 };
 
 export type HomeAskModelRequestOverrides = {
   llmApiKey?: string;
   llmBaseUrl?: string;
   llmModel?: string;
+  llmApiProtocol?: "openai" | "openai_responses" | "anthropic";
 };
 
 /**
@@ -24,5 +26,6 @@ export function buildHomeAskModelRequestOverrides(
     llmApiKey: apiKey,
     llmBaseUrl: `${config?.baseUrl || ""}`.trim(),
     llmModel: `${config?.model || ""}`.trim(),
+    ...(config.apiProtocol ? { llmApiProtocol: config.apiProtocol } : {}),
   };
 }

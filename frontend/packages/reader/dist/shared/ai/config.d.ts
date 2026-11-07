@@ -26,6 +26,7 @@ export declare function resolveReaderAiConfig({ browserConfig, developerConfig, 
     baseUrl: string;
     model: string;
     provider: string;
+    apiProtocol?: "anthropic" | "openai_responses";
 };
 /** 是否已在设置中配置下游模型 API Key（对话前置门禁）。 */
 export declare function hasModelApiKey(browserConfig?: any): boolean;

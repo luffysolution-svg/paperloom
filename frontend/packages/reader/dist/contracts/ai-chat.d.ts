@@ -10,6 +10,7 @@ export type ReaderChatRequest = {
     context?: Record<string, unknown> | null;
 };
 export type ReaderAnswerResult = {
+    source?: string;
     /** 这一轮为什么不完整（"rounds_exhausted"）；空/缺席 = 正常答完。 */
     incompleteReason?: string;
     answer?: string;
@@ -25,6 +26,7 @@ export type ReaderAnswerResult = {
     }>;
 };
 export type ReaderAnswerer = {
+    getConversationId?: () => string;
     ensureLoaded?: (jobId?: string) => Promise<unknown>;
     answer: (options: Record<string, unknown>) => Promise<ReaderAnswerResult>;
 };

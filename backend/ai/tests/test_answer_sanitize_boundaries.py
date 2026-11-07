@@ -29,7 +29,7 @@ AI_ROOT = Path(__file__).resolve().parents[1]
 if str(AI_ROOT) not in sys.path:
     sys.path.insert(0, str(AI_ROOT))
 
-from retainpdf_ai.agent_evidence import Citation, sanitize_answer_text  # noqa: E402
+from retainpdf_ai.agent_evidence import Citation, StreamingAnswerSanitizer, referenced_citations, sanitize_answer_text  # noqa: E402
 
 
 def _citation(ref: int, block_id: str) -> Citation:
@@ -57,6 +57,25 @@ def test_body_text_that_merely_looks_like_a_block_id_survives() -> None:
         "图表 MD-7 见附录",
     ):
         assert sanitize_answer_text(source, CITATIONS) == source, f"正文被吃掉了：{source}"
+
+
+def test_known_reference_ranges_are_clickable_and_stream_without_rewriting_sent_text() -> None:
+    citations = {1: _citation(1, "p001-b001"), 2: _citation(2, "p001-b002")}
+    source = "已核实的结论。" * 15 + "见原文 [1–2]。"
+    expected = source.replace("[1–2]", "[1][2]")
+    assert sanitize_answer_text(source, citations) == expected
+    sanitizer = StreamingAnswerSanitizer(citations)
+    actual = "".join(sanitizer.feed(char) for char in source) + sanitizer.flush()
+    assert actual == expected
+    assert not sanitizer.diverged
+    assert [value.ref for value in referenced_citations(actual, citations)] == [1, 2]
+
+
+def test_reference_ranges_preserve_unknown_refs_math_code_and_markdown_links() -> None:
+    citations = {1: _citation(1, "p001-b001"), 2: _citation(2, "p001-b002")}
+    source = "[1–9] `$[1–2]$` $[1–2]$ [1–2](https://example.test) ![1–2](image.png)"
+    assert sanitize_answer_text(source, citations) == source
+    assert referenced_citations("未知引用 [1–9]", citations) == []
 
 
 def test_code_indentation_is_preserved() -> None:

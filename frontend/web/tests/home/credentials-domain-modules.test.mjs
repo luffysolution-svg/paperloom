@@ -77,6 +77,7 @@ test("translation profiles：hydrate 恢复存储 profile，缺 apiKey 时回落
   assert.equal(manager.getCurrentProvider(), "custom");
   assert.deepEqual(manager.getCurrentProfile(), {
     apiKey: "stored-key",
+    apiProtocol: "openai",
     baseUrl: "https://stored.example",
     model: "stored-model",
     workers: 9,

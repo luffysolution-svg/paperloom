@@ -18,6 +18,7 @@ import {
 
 type TranslationProfileElements = {
   apiKeyInput?: { value?: string } | null;
+  translationProtocolSelect?: { value?: string } | null;
   modelBaseUrlInput?: { value?: string } | null;
   modelNameInput?: { value?: string } | null;
   translationWorkersInput?: { value?: string } | null;
@@ -63,6 +64,7 @@ export function createTranslationProfiles({
         {
           ...(storedProfiles[currentTranslationProvider] || {}),
           apiKey: `${credentials.modelApiKey || ""}`,
+          apiProtocol: taskOptions.apiProtocol,
           baseUrl: `${taskOptions.baseUrl || ""}`,
           model: `${taskOptions.model || ""}`,
           workers: taskOptions.workers,
@@ -78,6 +80,7 @@ export function createTranslationProfiles({
       currentTranslationProvider,
       {
         apiKey: elements.apiKeyInput?.value || "",
+        apiProtocol: elements.translationProtocolSelect?.value || translationProfiles[currentTranslationProvider]?.apiProtocol || "openai",
         baseUrl: elements.modelBaseUrlInput?.value || "",
         model: elements.modelNameInput?.value || "",
         workers: elements.translationWorkersInput?.value || "",
@@ -99,6 +102,7 @@ export function createTranslationProfiles({
     const elements = dialogElementsPort.elements();
     currentTranslationProvider = provider;
     if (elements.apiKeyInput) elements.apiKeyInput.value = profile.apiKey;
+    if (elements.translationProtocolSelect) elements.translationProtocolSelect.value = profile.apiProtocol;
     if (elements.modelBaseUrlInput) {
       elements.modelBaseUrlInput.value = provider === "custom"
         ? (profile.baseUrl || lastCustomTranslationBaseUrl)

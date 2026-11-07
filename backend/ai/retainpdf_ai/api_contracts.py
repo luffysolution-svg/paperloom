@@ -23,6 +23,11 @@ class AskInput(BaseModel):
     llm_api_key: str = ""
     llm_base_url: str = ""
     llm_model: str = ""
+    llm_api_protocol: Literal["openai", "openai_responses", "anthropic"] | None = None
+    connection_id: str = Field(default="", max_length=128)
+    run_id: str = Field(default="", max_length=128)
+    connection_model: str = Field(default="", max_length=256)
+    connection_options: dict[str, str] = Field(default_factory=dict)
 
 
 class RuntimeConfigUpdate(BaseModel):

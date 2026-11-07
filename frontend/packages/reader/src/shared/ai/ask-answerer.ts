@@ -126,6 +126,9 @@ export function createReaderAskAnswerer({
     userMessageId = "",
     assistantMessageId = "",
     assistantMode = "reading",
+    connectionId,
+    connectionModel,
+    connectionOptions,
     /** 取消信号：中止 SSE；aborted 后不回写会话粘性（防旧流污染新会话） */
     signal = null,
   }: {
@@ -144,6 +147,9 @@ export function createReaderAskAnswerer({
     userMessageId?: string;
     assistantMessageId?: string;
     assistantMode?: ReaderAssistantMode;
+    connectionId?: string;
+    connectionModel?: string;
+    connectionOptions?: Record<string, string>;
     signal?: AbortSignal | null;
   } = {}): Promise<any> {
     const scopedQuestion = buildScopedQuestion({ context, question, resolveQuote, scope });
@@ -178,6 +184,9 @@ export function createReaderAskAnswerer({
       userMessageId: `${userMessageId || ""}`.trim(),
       assistantMessageId: `${assistantMessageId || ""}`.trim(),
       assistantMode,
+      connectionId,
+      connectionModel,
+      connectionOptions,
       onToolEvent,
       onProgressEvent,
       onAgentOperationEvent,
@@ -188,6 +197,7 @@ export function createReaderAskAnswerer({
       llmApiKey: apiKey,
       llmBaseUrl: `${config.baseUrl || ""}`.trim(),
       llmModel: `${config.model || ""}`.trim(),
+      ...(config.apiProtocol ? { llmApiProtocol: config.apiProtocol } : {}),
       signal,
     });
     const nextConversationId = `${(result as { conversationId?: string })?.conversationId || ""}`.trim();

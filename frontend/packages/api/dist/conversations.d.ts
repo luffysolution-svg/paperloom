@@ -79,6 +79,7 @@ export declare function messagesToBranchItems(messages: MessageRecord[]): Array<
         role: "user" | "assistant";
         content: string;
         citations?: unknown[];
+        source?: string;
         status?: {
             type: string;
             reason?: string;

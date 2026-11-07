@@ -29,6 +29,7 @@ export function snapshotFromTree(
         role: item.message.role,
         content: item.message.content,
         ...(item.message.progress ? { progress: item.message.progress } : {}),
+        ...(item.message.source ? { source: item.message.source } : {}),
         ...(item.message.citations?.length ? { citations: item.message.citations } : {}),
         ...(item.message.status
           ? {

@@ -58,6 +58,8 @@ def build_translation_identity(
         "skip_title_translation": bool(request.skip_title_translation),
         "model": request.model,
         "base_url": request.base_url,
+        "api_protocol": plan.connection_profile.protocol,
+        "thinking": plan.connection_profile.thinking,
         "rule_profile_name": plan.policy_config.rule_profile_name,
         "custom_rules_text": plan.policy_config.custom_rules_text,
         "resolved_policy_sha256": _sha256_json(resolved_policy),

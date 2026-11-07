@@ -150,6 +150,7 @@ test("runDeepSeekConnectivityCheck passes injected apiPrefix and model to DeepSe
     "/custom/api",
     {
       api_key: "sk-test",
+      api_protocol: "openai",
       base_url: "https://example.test/v1",
       model: "deepseek-flash",
     },

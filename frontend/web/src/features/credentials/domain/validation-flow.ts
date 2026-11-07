@@ -134,7 +134,7 @@ export function createCredentialValidationFlow({
 
   async function handleDeepSeekValidate() {
     const request = ++deepSeekValidationRequest;
-    const fields = ["apiKeyInput", "modelBaseUrlInput", "modelNameInput"];
+    const fields = ["apiKeyInput", "modelBaseUrlInput", "modelNameInput", "translationProtocolSelect"];
     const elements = deepSeekViewPort.elements();
     const inputs = fields.map((field) => elements[field]);
     const values = inputs.map((input) => `${input?.value || ""}`.trim());

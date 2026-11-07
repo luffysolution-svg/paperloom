@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, Copy, Pencil, RotateCcw } from "lucide-react";
 import type { HomeAskBranchNav } from "../domain/home-ask-branches.js";
+import { copyText } from "@/platform/utils/clipboard.js";
 
 /**
  * 一条回答下面的操作。阅读器那侧早就有复制与重新生成，主页此前一个都没有。
@@ -49,15 +50,18 @@ export function MessageActions({
   onSwitchBranch?: (messageId: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); }, []);
   const copy = useCallback(() => {
     const text = `${content || ""}`.trim();
     if (!text) return;
     // 剪贴板在非安全上下文或被拒权限时会 reject。复制失败不该让整条消息崩掉,
     // 也不该假装成功——按钮不变成对勾就是没复制上。
-    void navigator.clipboard?.writeText(text).then(
+    void copyText(text).then(
       () => {
         setCopied(true);
-        window.setTimeout(() => setCopied(false), 1600);
+        if (copyTimer.current) clearTimeout(copyTimer.current);
+        copyTimer.current = setTimeout(() => setCopied(false), 1600);
       },
       () => {},
     );

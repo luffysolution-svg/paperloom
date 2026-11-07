@@ -15,6 +15,7 @@ export function syncCredentialDialogFields({
     modelNameInput,
     translationWorkersInput,
     mathModeSelect,
+    translationProtocolSelect,
   } = elementsPort.elements();
 
   if (paddleInput) {
@@ -33,6 +34,7 @@ export function syncCredentialDialogFields({
     modelBaseUrlInput.value = taskOptions.baseUrl || defaultModelBaseUrl?.() || "";
     elementsPort.syncTranslationProvider?.(modelBaseUrlInput.value);
   }
+  if (translationProtocolSelect) translationProtocolSelect.value = taskOptions.apiProtocol || "openai";
   if (modelNameInput) {
     modelNameInput.value = taskOptions.model || "";
   }

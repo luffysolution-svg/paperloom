@@ -5,8 +5,8 @@ use crate::error::AppError;
 use crate::models::domain::now_iso;
 
 use super::types::{
-    DeepSeekBalanceInfoView, DeepSeekBalanceView, DeepSeekTokenValidationRequest, MineruTokenValidationView,
-    ModelListRequest, ModelListView,
+    DeepSeekBalanceInfoView, DeepSeekBalanceView, DeepSeekTokenValidationRequest,
+    MineruTokenValidationView, ModelListRequest, ModelListView,
 };
 use super::url_policy::validate_provider_base_url;
 
@@ -33,7 +33,7 @@ pub(crate) async fn validate_deepseek_token_view(
         return Err(AppError::bad_request("api_key is required"));
     }
 
-    let base_url = normalize_deepseek_base_url(&payload.base_url, &runtime);
+    let base_url = protocol_base_url(&payload.base_url, &payload.api_protocol, &runtime)?;
     validate_provider_base_url(&base_url, runtime.allow_private_urls)?;
     let checked_at = now_iso();
     let client = reqwest::Client::builder()
@@ -45,7 +45,9 @@ pub(crate) async fn validate_deepseek_token_view(
     let model = payload.model.trim();
     if model.is_empty() {
         let models_url = format!("{}/models", base_url.trim_end_matches('/'));
-        let response = client.get(&models_url).bearer_auth(api_key).send().await;
+        let response = authenticate(client.get(&models_url), api_key, &payload.api_protocol)
+            .send()
+            .await;
         let view = match response {
             Ok(resp) => classify_deepseek_probe_response(resp, base_url.clone(), checked_at).await,
             Err(err) => classify_deepseek_probe_transport_error(err, base_url.clone(), checked_at),
@@ -53,16 +55,23 @@ pub(crate) async fn validate_deepseek_token_view(
         return Ok(view);
     }
 
-    let chat_url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
-    let body = serde_json::json!({
-        "model": model,
-        "messages": [{"role": "user", "content": "ping"}],
-        "max_tokens": 1,
-        "stream": false,
-    });
-    let response = client
-        .post(&chat_url)
-        .bearer_auth(api_key)
+    let path = match payload.api_protocol.as_str() {
+        "anthropic" => "messages",
+        "openai_responses" => "responses",
+        _ => "chat/completions",
+    };
+    let chat_url = format!("{}/{path}", base_url.trim_end_matches('/'));
+    let body = if payload.api_protocol == "openai_responses" {
+        serde_json::json!({"model":model,"input":"Reply OK.","max_output_tokens":16,"store":false,"stream":false})
+    } else {
+        serde_json::json!({
+            "model": model,
+            "messages": [{"role": "user", "content": "ping"}],
+            "max_tokens": 1,
+            "stream": false,
+        })
+    };
+    let response = authenticate(client.post(&chat_url), api_key, &payload.api_protocol)
         .json(&body)
         .send()
         .await;
@@ -85,7 +94,7 @@ pub(crate) async fn list_models_view(
         return Err(AppError::bad_request("api_key is required"));
     }
 
-    let base_url = normalize_deepseek_base_url(&payload.base_url, &runtime);
+    let base_url = protocol_base_url(&payload.base_url, &payload.api_protocol, &runtime)?;
     validate_provider_base_url(&base_url, runtime.allow_private_urls)?;
     let checked_at = now_iso();
     let client = reqwest::Client::builder()
@@ -94,7 +103,9 @@ pub(crate) async fn list_models_view(
         .build()
         .map_err(|err| AppError::internal(format!("build model list client failed: {err}")))?;
     let models_url = format!("{}/models", base_url.trim_end_matches('/'));
-    let response = client.get(&models_url).bearer_auth(api_key).send().await;
+    let response = authenticate(client.get(&models_url), api_key, &payload.api_protocol)
+        .send()
+        .await;
     let response = match response {
         Ok(response) => response,
         Err(_err) => {
@@ -119,11 +130,25 @@ pub(crate) async fn list_models_view(
         } else if status_code == reqwest::StatusCode::NOT_FOUND
             || status_code == reqwest::StatusCode::METHOD_NOT_ALLOWED
         {
-            ("unsupported", "该 API 不提供模型列表，请手动填写模型名".to_string(), false)
-        } else if status_code.is_server_error() || status_code == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            ("network_error", "模型列表获取失败，请稍后重试".to_string(), true)
+            (
+                "unsupported",
+                "该 API 不提供模型列表，请手动填写模型名".to_string(),
+                false,
+            )
+        } else if status_code.is_server_error()
+            || status_code == reqwest::StatusCode::TOO_MANY_REQUESTS
+        {
+            (
+                "network_error",
+                "模型列表获取失败，请稍后重试".to_string(),
+                true,
+            )
         } else {
-            ("provider_error", format!("模型列表接口返回 {}", status_code.as_u16()), false)
+            (
+                "provider_error",
+                format!("模型列表接口返回 {}", status_code.as_u16()),
+                false,
+            )
         };
         return Ok(ModelListView {
             ok: false,
@@ -348,6 +373,40 @@ fn normalize_deepseek_base_url(raw: &str, runtime: &DeepSeekRuntimeConfig) -> St
         .strip_suffix("/chat/completions")
         .unwrap_or(base_url)
         .to_string()
+}
+
+fn protocol_base_url(
+    raw: &str,
+    protocol: &str,
+    runtime: &DeepSeekRuntimeConfig,
+) -> Result<String, AppError> {
+    if !["openai", "openai_responses", "anthropic"].contains(&protocol) {
+        return Err(AppError::bad_request("invalid api_protocol"));
+    }
+    let mut base = normalize_deepseek_base_url(raw, runtime);
+    for suffix in ["/responses", "/messages"] {
+        if base.ends_with(suffix) {
+            base.truncate(base.len() - suffix.len());
+        }
+    }
+    if protocol == "anthropic" && !base.ends_with("/v1") {
+        base.push_str("/v1");
+    }
+    Ok(base)
+}
+
+fn authenticate(
+    request: reqwest::RequestBuilder,
+    key: &str,
+    protocol: &str,
+) -> reqwest::RequestBuilder {
+    if protocol == "anthropic" {
+        request
+            .header("x-api-key", key)
+            .header("anthropic-version", "2023-06-01")
+    } else {
+        request.bearer_auth(key)
+    }
 }
 
 #[cfg(test)]

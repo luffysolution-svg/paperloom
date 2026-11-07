@@ -25,6 +25,7 @@ test("拉取模型返回结构化列表，并保留最新请求结果", async ()
   const fixtureData = fixture(async (_prefix, payload) => {
     assert.deepEqual(payload, {
       api_key: "sk-test",
+      api_protocol: "openai",
       base_url: "https://api.example.com/v1",
     });
     return { ok: true, summary: "已获取 2 个模型", models: ["model-b", "model-a", "model-a"] };

@@ -14,6 +14,10 @@ use crate::models::defaults::*;
 /// 前者 Python 只判 `== "sci"`，其余一律走 not-sci 分支，取值域是开的；
 /// 后者 `build_rule_profile_context` 有一条 `load_saved_rule_profile_text` 的
 /// 扩展分支（目前是空桩），上白名单等于把那个口子焊死。
+pub fn default_thinking() -> String {
+    "auto".into()
+}
+
 pub const TRANSLATION_MATH_MODES: &[&str] = &["direct_typst", "placeholder"];
 pub const TRANSLATION_CONTEXT_MODES: &[&str] = &["needed", "all", "off"];
 pub const TRANSLATION_GLOSSARY_MODES: &[&str] = &["matched", "all", "off"];
@@ -39,6 +43,9 @@ pub struct GlossaryEntryInput {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct TranslationInput {
+    /// Resolve once at submission; credentials and protocol are then frozen.
+    #[serde(default)]
+    pub connection_id: String,
     /// Full immutable snapshot, not a pointer to mutable frontend settings.
     /// Omitted for legacy jobs; it never contains an inline model API key.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -81,6 +88,10 @@ pub struct TranslationInput {
     pub model: String,
     #[serde(default)]
     pub base_url: String,
+    #[serde(default = "crate::model_connection::default_api_protocol")]
+    pub api_protocol: String,
+    #[serde(default = "default_thinking")]
+    pub thinking: String,
     #[serde(default)]
     pub start_page: i64,
     #[serde(default = "default_end_page")]
@@ -100,6 +111,7 @@ pub struct TranslationInput {
 impl Default for TranslationInput {
     fn default() -> Self {
         Self {
+            connection_id: String::new(),
             execution_connection: None,
             mode: default_mode(),
             math_mode: default_math_mode(),
@@ -120,6 +132,8 @@ impl Default for TranslationInput {
             credential_ref: String::new(),
             model: String::new(),
             base_url: String::new(),
+            api_protocol: "openai".into(),
+            thinking: "auto".into(),
             start_page: 0,
             end_page: default_end_page(),
             page_ranges: Vec::new(),
@@ -150,14 +164,17 @@ mod allowed_value_tests {
     /// 这四个集合的权威来源在 Python:`_normalize_*` 里那个 `if normalized in {...}`。
     /// Rust 只是把同一份集合提前到入口校验,两边漂了就等于「Rust 放行 / Python 静默改写」
     /// 或者反过来「Rust 拒绝一个 Python 明明支持的值」。所以直接读 Python 源码比对。
-    const CONTROL_CONTEXT_PY: &str =
-        include_str!("../../../../../pipeline/retainpdf_pipeline/translate/llm/shared/control_context.py");
+    const CONTROL_CONTEXT_PY: &str = include_str!(
+        "../../../../../pipeline/retainpdf_pipeline/translate/llm/shared/control_context.py"
+    );
 
     /// 从 `def _normalize_xxx(...)` 的函数体里抠出 `in {"a", "b"}` 的集合。
     fn python_normalizer_set(fn_name: &str) -> BTreeSet<String> {
         let start = CONTROL_CONTEXT_PY
             .find(&format!("def {fn_name}("))
-            .unwrap_or_else(|| panic!("control_context.py 里找不到 {fn_name} —— 函数改名了,这条测试已经失效"));
+            .unwrap_or_else(|| {
+                panic!("control_context.py 里找不到 {fn_name} —— 函数改名了,这条测试已经失效")
+            });
         let body = &CONTROL_CONTEXT_PY[start..];
         let open = body
             .find(" in {")
@@ -170,7 +187,10 @@ mod allowed_value_tests {
             .map(|item| item.trim().trim_matches('"').to_string())
             .filter(|item| !item.is_empty())
             .collect();
-        assert!(!set.is_empty(), "{fn_name} 解析出来是空集 —— 解析写法已失效");
+        assert!(
+            !set.is_empty(),
+            "{fn_name} 解析出来是空集 —— 解析写法已失效"
+        );
         set
     }
 
@@ -181,9 +201,21 @@ mod allowed_value_tests {
     #[test]
     fn mode_allowlists_match_the_python_normalizers() {
         for (fn_name, rust_values, field) in [
-            ("_normalize_context_mode", TRANSLATION_CONTEXT_MODES, "context_mode"),
-            ("_normalize_glossary_mode", TRANSLATION_GLOSSARY_MODES, "glossary_mode"),
-            ("_normalize_memory_mode", TRANSLATION_MEMORY_MODES, "memory_mode"),
+            (
+                "_normalize_context_mode",
+                TRANSLATION_CONTEXT_MODES,
+                "context_mode",
+            ),
+            (
+                "_normalize_glossary_mode",
+                TRANSLATION_GLOSSARY_MODES,
+                "glossary_mode",
+            ),
+            (
+                "_normalize_memory_mode",
+                TRANSLATION_MEMORY_MODES,
+                "memory_mode",
+            ),
         ] {
             assert_eq!(
                 rust_set(rust_values),
@@ -199,8 +231,16 @@ mod allowed_value_tests {
         let input = TranslationInput::default();
         for (value, allowed, field) in [
             (&input.math_mode, TRANSLATION_MATH_MODES, "math_mode"),
-            (&input.context_mode, TRANSLATION_CONTEXT_MODES, "context_mode"),
-            (&input.glossary_mode, TRANSLATION_GLOSSARY_MODES, "glossary_mode"),
+            (
+                &input.context_mode,
+                TRANSLATION_CONTEXT_MODES,
+                "context_mode",
+            ),
+            (
+                &input.glossary_mode,
+                TRANSLATION_GLOSSARY_MODES,
+                "glossary_mode",
+            ),
             (&input.memory_mode, TRANSLATION_MEMORY_MODES, "memory_mode"),
         ] {
             assert!(

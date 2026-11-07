@@ -1,0 +1,99 @@
+.credential-workbench .ai-connections-settings { container-type: inline-size; }
+.credential-workbench .credential-translation-protocol-field { grid-column: 1 / -1; display: grid; gap: 6px; }
+.credential-workbench .credential-translation-protocol-field select { min-height: 35px; padding: 6px 9px; width: 100%; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 7px; font-size: 12px; }
+.credential-workbench .ai-connections-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
+.credential-workbench .ai-connections-heading h3 { margin: 0; color: var(--ink); font-size: 16px; font-weight: 650; }
+.credential-workbench .ai-connections-heading p { margin: 7px 0 0; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.credential-workbench .ai-connections-heading .app-button { min-height: 32px; flex-shrink: 0; padding: 6px 12px; gap: 5px; font-size: 12px; }
+.credential-workbench .ai-service-chooser-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.credential-workbench .ai-service-chooser.has-saved { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
+.credential-workbench .ai-service-tabs { display: inline-flex; gap: 3px; padding: 3px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.credential-workbench .ai-service-tabs button { display: flex; justify-content: center; align-items: center; min-height: 32px; padding: 5px 16px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
+.credential-workbench .ai-service-tabs button[aria-selected="true"] { background: var(--paper); color: var(--ink); border-color: var(--line); font-weight: 600; box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 4%, transparent); }
+.credential-workbench .ai-service-intro { color: var(--muted); font-size: 12px; line-height: 1.7; margin: 15px 0 12px; }
+.credential-workbench .ai-service-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px 20px; }
+.credential-workbench .ai-service-choice { display: flex; align-items: center; gap: 12px; text-align: left; width: 100%; min-height: 66px; padding: 12px 9px; border: 0; border-radius: 7px; background: transparent; color: var(--ink); font: inherit; cursor: pointer; }
+.credential-workbench .ai-service-choice > span:not(.reader-ai-brand) { display: grid; flex: 1; min-width: 0; gap: 4px; }
+.credential-workbench .ai-service-choice strong { font-size: 13px; font-weight: 550; }
+.credential-workbench .ai-service-choice small { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.credential-workbench .ai-service-choice > svg:last-child { color: var(--muted); flex-shrink: 0; }
+.credential-workbench .ai-service-choice:hover { background: var(--surface); }
+.credential-workbench .ai-service-empty { margin: 0 0 16px; color: var(--muted); font-size: 12px; line-height: 1.8; }
+.credential-workbench .ai-service-all { margin-top: 16px; border-top: 1px solid var(--line); }
+.credential-workbench .ai-service-all > summary { padding: 14px 1px 5px; color: var(--muted); font-size: 12px; cursor: pointer; }
+.credential-workbench .ai-service-all[open] > summary { margin-bottom: 6px; }
+.credential-workbench .ai-service-text-button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 3px 0; min-height: 28px; color: var(--muted); border: 0; background: transparent; font: inherit; font-size: 12px; cursor: pointer; }
+.credential-workbench .ai-service-text-button:hover { color: var(--ink); }
+.credential-workbench .ai-service-custom { margin-top: 12px; font-size: 11px; }
+.credential-workbench .ai-saved-services { border-top: 1px solid var(--line); }
+.credential-workbench .ai-saved-service { display: flex; align-items: center; gap: 13px; min-height: 76px; width: 100%; padding: 15px 6px; text-align: left; color: var(--ink); border: 0; border-bottom: 1px solid var(--line); background: transparent; font: inherit; cursor: pointer; }
+.credential-workbench .ai-saved-service:hover { background: var(--surface); }
+.credential-workbench .ai-saved-service > span:not(.reader-ai-brand):not(.ai-service-state) { flex: 1; display: grid; gap: 5px; min-width: 0; }
+.credential-workbench .ai-saved-service strong { font-size: 13px; font-weight: 550; overflow-wrap: anywhere; }
+.credential-workbench .ai-saved-service small { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.credential-workbench .ai-saved-service > svg { color: var(--muted); flex-shrink: 0; }
+.credential-workbench .ai-service-state { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; color: var(--muted); font-size: 11px; }
+.credential-workbench .ai-service-state.is-ready { color: color-mix(in srgb, var(--ok) 50%, var(--ink)); }
+.credential-workbench .ai-service-editor { border-top: 1px solid var(--line); padding-top: 14px; }
+.credential-workbench .ai-service-back { display: inline-flex; gap: 6px; align-items: center; padding: 3px 0; min-height: 28px; margin-bottom: 20px; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
+.credential-workbench .ai-service-back:hover { color: var(--ink); }
+.credential-workbench .ai-service-identity { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 25px; }
+.credential-workbench .ai-service-identity > .reader-ai-brand { margin-top: 2px; }
+.credential-workbench .ai-service-identity h4 { margin: 0; font-size: 17px; font-weight: 600; line-height: 1.5; color: var(--ink); }
+.credential-workbench .ai-service-identity p { margin: 6px 0 0; font-size: 12px; line-height: 1.7; color: var(--muted); }
+.credential-workbench .ai-service-form { display: grid; gap: 20px; max-width: 500px; }
+.credential-workbench .ai-service-field { display: grid; align-content: start; gap: 8px; min-width: 0; font-size: 12px; color: var(--ink); }
+.credential-workbench .ai-service-field > span:first-child { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.credential-workbench .ai-service-field-label { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.credential-workbench .ai-service-field-label .ai-service-text-button { font-size: 11px; min-height: 20px; }
+.credential-workbench .ai-service-field small { color: var(--muted); font-size: 11px; line-height: 1.7; font-weight: 400; }
+.credential-workbench .ai-service-field a { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); text-decoration: none; font-size: 11px; }
+.credential-workbench .ai-service-field a:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.credential-workbench .ai-service-field input:not([type="checkbox"]), .credential-workbench .ai-service-field select, .credential-workbench .ai-service-field textarea { width: 100%; min-width: 0; min-height: 39px; padding: 9px 11px; background: var(--paper); color: var(--ink); border: 1px solid var(--line); border-radius: 7px; font: inherit; font-size: 12px; line-height: 1.6; caret-color: var(--accent); }
+.credential-workbench .ai-service-field input::placeholder, .credential-workbench .ai-service-field textarea::placeholder { color: var(--muted); opacity: 1; }
+.credential-workbench .ai-service-field input:focus, .credential-workbench .ai-service-field textarea:focus { outline: 1px solid var(--accent); outline-offset: 1px; }
+.credential-workbench .ai-service-field textarea { resize: vertical; }
+.credential-workbench .ai-service-field .credential-secret-field input { padding-right: 40px; }
+.credential-workbench .ai-service-field-hint { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.7; overflow-wrap: anywhere; }
+.credential-workbench .ai-service-agent-guide { font-size: 12px; line-height: 1.8; color: var(--muted); }
+.credential-workbench .ai-service-agent-guide > p { margin: 0 0 8px; }
+.credential-workbench .ai-service-agent-guide a { display: inline-flex; gap: 3px; align-items: center; color: var(--ink); text-decoration: underline; text-underline-offset: 4px; }
+.credential-workbench .ai-service-agent-guide details { margin-top: 16px; }
+.credential-workbench .ai-service-agent-guide summary { cursor: pointer; }
+.credential-workbench .ai-service-agent-guide details p { margin: 7px 0 0; overflow-wrap: anywhere; }
+.credential-workbench .ai-service-advanced { padding-top: 4px; color: var(--muted); font-size: 12px; }
+.credential-workbench .ai-service-advanced > summary { cursor: pointer; padding: 5px 0; }
+.credential-workbench .ai-service-advanced-fields { display: grid; gap: 17px; padding: 16px 0 0; }
+.credential-workbench .ai-service-clear-key { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11px; }
+.credential-workbench .ai-service-clear-key input { accent-color: var(--accent); }
+.credential-workbench .ai-service-editor-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 26px; }
+.credential-workbench .ai-service-editor-actions .app-button { min-height: 36px; padding: 7px 18px; gap: 7px; font-size: 12px; }
+.credential-workbench .ai-service-action-hint { color: var(--muted); font-size: 11px; }
+.credential-workbench .ai-service-remove { display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 6px; min-height: 32px; margin-left: auto; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 11px; cursor: pointer; }
+.credential-workbench .ai-service-remove:hover { color: color-mix(in srgb, var(--danger) 75%, var(--ink)); }
+.credential-workbench .ai-service-confirm { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 13px 0; color: var(--ink); font-size: 12px; line-height: 1.7; }
+.credential-workbench .ai-service-confirm button { min-height: 30px; padding: 4px 6px; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 12px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.credential-workbench .ai-service-confirm button:last-child { color: color-mix(in srgb, var(--danger) 75%, var(--ink)); }
+.credential-workbench .ai-service-notice { display: flex; align-items: flex-start; gap: 7px; margin: 15px 0 0; color: var(--muted); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.credential-workbench .ai-service-notice > svg { flex-shrink: 0; margin-top: 3px; }
+.credential-workbench .ai-service-notice.is-ready { color: color-mix(in srgb, var(--ok) 50%, var(--ink)); }
+.credential-workbench .ai-service-error { color: color-mix(in srgb, var(--danger) 75%, var(--ink)); font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; margin: 14px 0 0; }
+.credential-workbench .ai-service-error .ai-service-text-button { margin-left: 8px; }
+.credential-workbench .ai-service-auth { margin-top: 18px; font-size: 12px; line-height: 1.7; color: var(--muted); }
+.credential-workbench .ai-service-auth .app-button { margin: 0 8px 8px 0; font-size: 12px; }
+.credential-workbench .ai-settings-loading { display: flex; align-items: center; gap: 7px; padding: 18px 0; color: var(--muted); font-size: 12px; }
+.credential-workbench .ai-connections-settings :focus-visible { outline: 1px solid var(--accent); outline-offset: 3px; }
+.credential-workbench .ai-connections-settings :disabled { opacity: 0.55; cursor: not-allowed; }
+.credential-workbench .ai-legacy-runtime { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; }
+.credential-workbench .ai-legacy-runtime > summary { padding: 4px 0 10px; color: var(--muted); font-size: 12px; cursor: pointer; }
+.home-ask-main > .reader-ai-agent-interaction { flex-shrink: 0; }
+.home-ask-toolbar-leading { display: flex; flex: 1; min-width: 0; align-items: center; flex-wrap: wrap; gap: 4px 14px; }
+.home-ask-toolbar-leading .home-ask-scope-hint { padding-left: 4px; }
+@container (max-width: 440px) {
+  .credential-workbench .ai-connections-heading { align-items: flex-start; }
+  .credential-workbench .ai-connections-heading p { max-width: 24ch; }
+  .credential-workbench .ai-service-choices { grid-template-columns: minmax(0, 1fr); }
+  .credential-workbench .ai-service-choice { min-height: 61px; padding: 10px 4px; }
+  .credential-workbench .ai-service-action-hint { order: 3; width: 100%; }
+  .credential-workbench .ai-saved-service { gap: 10px; }
+}

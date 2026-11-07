@@ -3,6 +3,7 @@
 // 负责组合各子块；状态与交互逻辑见 use-home-ask-composer，
 // 副作用（document 监听 / CustomEvent）见 use-home-ask-composer-effects。
 
+import type { ReactNode } from "react";
 import { HomeAskComposerBanner } from "./HomeAskComposerBanner.js";
 import { HomeAskComposerChips } from "./HomeAskComposerChips.js";
 import { HomeAskComposerInput } from "./HomeAskComposerInput.js";
@@ -29,6 +30,7 @@ export type HomeAskComposerProps = {
   onStop?: () => void;
   /** hero：空态居中大输入；dock：对话底栏 */
   variant?: "hero" | "dock";
+  aiSelector?: ReactNode;
 };
 
 export function HomeAskComposer({
@@ -42,6 +44,7 @@ export function HomeAskComposer({
   quoteRequest = null,
   onStop,
   variant = "dock",
+  aiSelector,
 }: HomeAskComposerProps) {
   const {
     text,
@@ -122,6 +125,7 @@ export function HomeAskComposer({
         ) : null}
 
         <HomeAskComposerToolbar
+          aiSelector={aiSelector}
           scopeHint={scopeHint}
           isRunning={isRunning}
           canSend={canSend}

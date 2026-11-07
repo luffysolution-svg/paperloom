@@ -1,6 +1,7 @@
 // HomeAskComposer 底栏：范围提示 + 发送 / 停止
 
 import { ArrowUp, Square } from "lucide-react";
+import type { ReactNode } from "react";
 
 export type HomeAskComposerToolbarProps = {
   scopeHint: string;
@@ -8,6 +9,7 @@ export type HomeAskComposerToolbarProps = {
   canSend: boolean;
   onStop?: () => void;
   onSend: () => void;
+  aiSelector?: ReactNode;
 };
 
 export function HomeAskComposerToolbar({
@@ -16,10 +18,11 @@ export function HomeAskComposerToolbar({
   canSend,
   onStop,
   onSend,
+  aiSelector,
 }: HomeAskComposerToolbarProps) {
   return (
     <div className="home-ask-toolbar">
-      <span className="home-ask-scope-hint">{scopeHint}</span>
+      <div className="home-ask-toolbar-leading">{aiSelector}<span className="home-ask-scope-hint">{scopeHint}</span></div>
       {isRunning ? (
         <button
           type="button"

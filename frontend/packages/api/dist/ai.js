@@ -3,6 +3,7 @@
 import { API_PREFIX } from "./internal/runtime.js";
 import { buildApiHeaders, unwrapEnvelope } from "./internal/runtime.js";
 import { buildApiEndpoint } from "./http.js";
+import { emitAgentEvent, selectionForRequest, saveAiSelection } from "./agent-connections.js";
 export class AiAskError extends Error {
     status;
     constructor(message, status = 0) {
@@ -66,6 +67,7 @@ function normalizeDonePayload(payload = {}) {
         incompleteReason: `${payload?.incomplete_reason || payload?.["incompleteReason"] || ""}`.trim(),
         conversationId: `${payload?.conversation_id || payload?.conversationId || ""}`.trim(),
         agentRuntime: `${payload?.agent_runtime || payload?.["agentRuntime"] || ""}`.trim(),
+        ...(payload?.model ? { source: `${payload.model}`.trim() } : {}),
         operationRefs: normalizeOperationRefs(payload?.operation_refs || payload?.["operationRefs"]),
         confirmationMode: normalizeConfirmationMode(payload?.confirmation_mode || payload?.["confirmationMode"]),
         confirmationRequests: normalizeConfirmationRequests(payload?.confirmation_requests || payload?.["confirmationRequests"]),
@@ -110,6 +112,10 @@ export async function readAiAskStream(body, { onProgressEvent = null, onToolEven
         }
         if (event.type === "heartbeat")
             return;
+        if (["agent_connection", "agent_interaction", "agent_interaction_resolved"].includes(event.type)) {
+            emitAgentEvent(event);
+            return;
+        }
         if (event.type === "tool") {
             onToolEvent?.(event);
             return;
@@ -246,7 +252,7 @@ async function extractErrorMessage(resp) {
         return `${text || ""}`.replace(/\s+/g, " ").trim().slice(0, 240);
     }
 }
-export async function askLibraryAi({ question = "", documentId = "", jobId = "", conversationId = "", parentId = "", regenerate = false, userMessageId = "", assistantMessageId = "", onToolEvent = null, onProgressEvent = null, onAgentToolEvent = null, onAgentOperationEvent = null, onAgentConfirmationRequiredEvent = null, onAgentSessionEvent = null, onAnswerDelta = null, onCompress = null, signal = null, apiPrefix = API_PREFIX, fetchImpl = fetch, llmApiKey = "", llmBaseUrl = "", llmModel = "", confirmDocumentOperation = false, assistantMode = "auto", } = {}) {
+export async function askLibraryAi({ question = "", documentId = "", jobId = "", conversationId = "", parentId = "", regenerate = false, userMessageId = "", assistantMessageId = "", onToolEvent = null, onProgressEvent = null, onAgentToolEvent = null, onAgentOperationEvent = null, onAgentConfirmationRequiredEvent = null, onAgentSessionEvent = null, onAnswerDelta = null, onCompress = null, signal = null, apiPrefix = API_PREFIX, fetchImpl = fetch, llmApiKey = "", llmBaseUrl = "", llmModel = "", llmApiProtocol, connectionId, connectionModel, connectionOptions, confirmDocumentOperation = false, assistantMode = "auto", } = {}) {
     const trimmed = `${question}`.trim();
     if (!trimmed)
         throw new AiAskError("请输入问题。", 400);
@@ -283,44 +289,82 @@ export async function askLibraryAi({ question = "", documentId = "", jobId = "",
         payload.llm_base_url = `${llmBaseUrl}`.trim();
     if (`${llmModel || ""}`.trim())
         payload.llm_model = `${llmModel}`.trim();
-    const resp = await fetchImpl(buildApiEndpoint(apiPrefix, "ai/ask"), {
-        method: "POST",
-        headers: buildApiHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify(payload),
-        signal: signal,
-    });
-    if (!resp.ok) {
-        if (resp.status === 502)
-            throw new AiAskError("AI 服务未运行(502),请先启动 retainpdf-ai 服务。", 502);
-        const message = await extractErrorMessage(resp);
-        if (resp.status === 401) {
-            const hint = /X-API-Key|api key|invalid api key|Unauthorized/i.test(message) ? message : "服务鉴权失败：X-API-Key 无效或未配置（检查 runtime-config 的 xApiKey / 后端 auth 配置）。";
-            throw new AiAskError(`${hint}(${resp.status})`, 401);
+    if (llmApiProtocol)
+        payload.llm_api_protocol = llmApiProtocol;
+    const selected = selectionForRequest(normalizedConversationId);
+    const chosenConnectionId = connectionId ?? selected.connectionId;
+    const chosenModel = connectionModel ?? selected.model;
+    const chosenOptions = { ...(connectionOptions ?? selected.options) };
+    if (chosenConnectionId) {
+        payload.connection_id = chosenConnectionId;
+        payload.connection_model = chosenModel;
+        payload.connection_options = chosenOptions;
+        // Selected connections are backend snapshots; translation overrides have
+        // their own defaults and must not leak into an AI conversation.
+        if (chosenConnectionId !== "legacy") {
+            delete payload.llm_api_key;
+            delete payload.llm_base_url;
+            delete payload.llm_model;
+            delete payload.llm_api_protocol;
         }
-        if (resp.status === 400 && /LLM|模型\s*API\s*Key|api key/i.test(message)) {
-            throw new AiAskError(message.includes("凭据") || message.includes("设置") ? `${message}(${resp.status})` : `缺少模型 API Key：请到设置 → API 设置填写后再提问。(${resp.status})`, 400);
-        }
-        throw new AiAskError(`${message || "AI 问答请求失败,请稍后重试。"}(${resp.status})`, resp.status);
+        const existingCallback = onAgentSessionEvent;
+        onAgentSessionEvent = (event) => {
+            if (event.conversation_id && !normalizedConversationId)
+                saveAiSelection(event.conversation_id, { connectionId: chosenConnectionId, model: chosenModel, options: chosenOptions }, { updateDraft: false });
+            existingCallback?.(event);
+        };
     }
-    const contentType = `${resp.headers?.get?.("content-type") || ""}`.toLowerCase();
-    if (contentType.includes("application/json")) {
-        const result = normalizeDonePayload(unwrapEnvelope(await resp.json()));
-        for (const confirmation of result.confirmationRequests) {
-            onAgentConfirmationRequiredEvent?.({
-                type: "agent_confirmation_required",
-                ...confirmation,
-            });
+    const runId = aid || globalThis.crypto?.randomUUID?.() || `run-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    payload.run_id = runId;
+    const cancelRun = () => {
+        void fetchImpl(buildApiEndpoint(apiPrefix, `ai/connections/runs/${encodeURIComponent(runId)}/cancel`), {
+            method: "POST", headers: buildApiHeaders(), keepalive: true,
+        }).catch(() => { });
+    };
+    signal?.addEventListener("abort", cancelRun, { once: true });
+    try {
+        const resp = await fetchImpl(buildApiEndpoint(apiPrefix, "ai/ask"), {
+            method: "POST",
+            headers: buildApiHeaders({ "Content-Type": "application/json" }),
+            body: JSON.stringify(payload),
+            signal: signal,
+        });
+        if (!resp.ok) {
+            if (resp.status === 502)
+                throw new AiAskError("AI 服务未运行(502),请先启动 retainpdf-ai 服务。", 502);
+            const message = await extractErrorMessage(resp);
+            if (resp.status === 401) {
+                const hint = /X-API-Key|api key|invalid api key|Unauthorized/i.test(message) ? message : "服务鉴权失败：X-API-Key 无效或未配置（检查 runtime-config 的 xApiKey / 后端 auth 配置）。";
+                throw new AiAskError(`${hint}(${resp.status})`, 401);
+            }
+            if (resp.status === 400 && /LLM|模型\s*API\s*Key|api key/i.test(message)) {
+                throw new AiAskError(message.includes("凭据") || message.includes("设置") ? `${message}(${resp.status})` : `缺少模型 API Key：请到设置 → API 设置填写后再提问。(${resp.status})`, 400);
+            }
+            throw new AiAskError(`${message || "AI 问答请求失败,请稍后重试。"}(${resp.status})`, resp.status);
         }
-        return result;
+        const contentType = `${resp.headers?.get?.("content-type") || ""}`.toLowerCase();
+        if (contentType.includes("application/json")) {
+            const result = normalizeDonePayload(unwrapEnvelope(await resp.json()));
+            for (const confirmation of result.confirmationRequests) {
+                onAgentConfirmationRequiredEvent?.({
+                    type: "agent_confirmation_required",
+                    ...confirmation,
+                });
+            }
+            return result;
+        }
+        return await readAiAskStream(resp.body, {
+            onProgressEvent,
+            onToolEvent,
+            onAgentToolEvent,
+            onAgentOperationEvent,
+            onAgentConfirmationRequiredEvent,
+            onAgentSessionEvent,
+            onAnswerDelta,
+            onCompress,
+        });
     }
-    return readAiAskStream(resp.body, {
-        onProgressEvent,
-        onToolEvent,
-        onAgentToolEvent,
-        onAgentOperationEvent,
-        onAgentConfirmationRequiredEvent,
-        onAgentSessionEvent,
-        onAnswerDelta,
-        onCompress,
-    });
+    finally {
+        signal?.removeEventListener("abort", cancelRun);
+    }
 }

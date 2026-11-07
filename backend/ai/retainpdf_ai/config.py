@@ -85,17 +85,19 @@ class Settings:
     # LLM(DeepSeek 或兼容端点)
     llm_base_url: str = "https://api.deepseek.com/v1"
     llm_model: str = "deepseek-flash"
+    llm_api_protocol: str = "openai"
     llm_api_key: str = ""
     llm_credential_ref: str = ""
     llm_timeout_s: float = 60.0
     # agent 循环护栏
     max_tool_rounds: int = 6
-    reading_max_tool_rounds: int = 3
+    reading_max_tool_rounds: int = 6
     # 纯计算轮的额外预算。检索上限压得低是为了不让模型乱逛,但复杂问题的后半段是计算
     # (算 → 画图),被同一个上限砍断就只能拿半截结果硬答。全是本地计算工具的轮次改从
     # 这份预算里扣,总轮数仍被两者之和夹住。
     computation_round_bonus: int = 3
     ai_request_deadline_s: float = 90.0
+    byoa_request_deadline_s: float = 300.0
     ai_heartbeat_interval_s: float = 5.0
     # 追问建议:一轮答完之后多跑一次轻量调用。它要花钱、也让 done 晚一点,所以留一个
     # 关得掉的开关。关掉之后 done 里就不再有 followups 字段。
@@ -239,6 +241,7 @@ def load_settings() -> Settings:
             "RETAIN_AI_LLM_BASE_URL", "https://api.deepseek.com/v1"
         ).rstrip("/"),
         llm_model=os.environ.get("RETAIN_AI_LLM_MODEL", "deepseek-flash"),
+        llm_api_protocol=os.environ.get("RETAIN_AI_LLM_API_PROTOCOL", "openai"),
         llm_api_key=os.environ.get("RETAIN_AI_LLM_API_KEY", "").strip(),
         llm_credential_ref=os.environ.get("RETAIN_AI_LLM_CREDENTIAL_REF", "").strip(),
         llm_timeout_s=float(os.environ.get("RETAIN_AI_LLM_TIMEOUT_S", "60")),
@@ -249,13 +252,17 @@ def load_settings() -> Settings:
         reading_max_tool_rounds=max(
             1,
             min(
-                3,
-                int(os.environ.get("RETAIN_AI_READING_MAX_TOOL_ROUNDS", "3")),
+                8,
+                int(os.environ.get("RETAIN_AI_READING_MAX_TOOL_ROUNDS", "6")),
             ),
         ),
         ai_request_deadline_s=max(
             1.0,
             float(os.environ.get("RETAIN_AI_REQUEST_DEADLINE_SECS", "90")),
+        ),
+        byoa_request_deadline_s=max(
+            1.0,
+            float(os.environ.get("RETAIN_AI_BYOA_REQUEST_DEADLINE_SECS", "300")),
         ),
         ai_heartbeat_interval_s=max(
             1.0,

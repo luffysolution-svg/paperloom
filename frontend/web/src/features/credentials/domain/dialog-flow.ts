@@ -20,6 +20,7 @@ type UpdateCredentialGateOptions = {
 type DialogFlowElements = {
   dialog?: HTMLDialogElement | HTMLElement | boolean | null;
   apiKeyInput?: { value?: string } | null;
+  translationProtocolSelect?: HTMLSelectElement | null;
   modelBaseUrlInput?: { value?: string } | null;
   modelNameInput?: { value?: string } | null;
   translationWorkersInput?: { value?: string } | null;

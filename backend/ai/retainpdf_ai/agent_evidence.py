@@ -8,6 +8,7 @@ from typing import Any
 from .runtimes.contracts import Citation
 
 CITATION_RE = re.compile(r"\[(\d+)\]")
+CITATION_RANGE_RE = re.compile(r"(?<!!)\[(\d{1,4})\s*[-–]\s*(\d{1,4})\](?!\s*\()")
 BLOCK_ID_BRACKET_RE = re.compile(r"\[\s*(p\d+[-_]b\d+)\s*\]", re.IGNORECASE)
 BLOCK_ID_BARE_RE = re.compile(r"(?<![\w/])(p\d+[-_]b\d+)(?![\w/])", re.IGNORECASE)
 MARKDOWN_ID_BRACKET_RE = re.compile(r"\[\s*(md-\d+)\s*\]", re.IGNORECASE)
@@ -316,6 +317,13 @@ def sanitize_answer_text(answer: str, citations: dict[int, Citation]) -> str:
         return f"\x00CODE{len(code_slots) - 1}\x00"
 
     cleaned = CODE_SEGMENT_RE.sub(_stash_code, answer)
+    def expand_range(match: re.Match[str]) -> str:
+        start, end = map(int, match.groups())
+        refs = sorted(ref for ref in citations if start <= ref <= end)
+        return "".join(f"[{ref}]" for ref in refs) if refs and len(refs) == end - start + 1 else match.group(0)
+
+    parts = re.split(r"(\$\$[\s\S]*?\$\$|(?<!\\)\$(?:\\.|[^$\n])+?\$)", cleaned)
+    cleaned = "".join(part if index % 2 else CITATION_RANGE_RE.sub(expand_range, part) for index, part in enumerate(parts))
     cleaned = BLOCK_ID_BRACKET_RE.sub(replace_bracketed, cleaned)
     cleaned = BLOCK_ID_BARE_RE.sub(replace_bare, cleaned)
     cleaned = MARKDOWN_ID_BRACKET_RE.sub(replace_bracketed, cleaned)
@@ -426,7 +434,7 @@ def referenced_citations(
     #
     # 正文里那个 `[42]` 不动:学术文档里方括号数字很可能是原文自己的参考文献编号,
     # 按形状删除会破坏内容。
-    fabricated_only = bool(CITATION_RE.search(answer)) and not ordered_refs
+    fabricated_only = bool(CITATION_RE.search(answer) or CITATION_RANGE_RE.search(answer)) and not ordered_refs
     if not selected and citations and not fabricated_only:
         picked: list[Citation] = []
         anchors: set[tuple[str, int | str]] = set()

@@ -19,6 +19,7 @@ from retainpdf_pipeline.translate.llm.shared.prompt_building import build_single
 from retainpdf_pipeline.translate.llm.shared.response_parsing import extract_json_text
 from retainpdf_pipeline.translate.llm.shared.response_parsing import extract_single_item_translation_text
 from retainpdf_pipeline.translate.llm.shared.response_parsing import unwrap_translation_shell
+from retainpdf_pipeline.translate.llm.shared import model_wire as wire
 
 
 DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
@@ -76,9 +77,9 @@ def _body_bytes(body: dict[str, Any]) -> int:
     return len(json.dumps(body, ensure_ascii=False).encode("utf-8"))
 
 
-def _request_journal_key(*, base_url: str, body: dict[str, Any]) -> str:
+def _request_journal_key(*, base_url: str, body: dict[str, Any], request_url: str = "") -> str:
     canonical = json.dumps(
-        {"endpoint": chat_completions_url(base_url), "body": body},
+        {"endpoint": request_url or chat_completions_url(base_url), "body": body},
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
@@ -271,6 +272,8 @@ def request_chat_content(
     timeout: int = 120,
     request_label: str = "",
     max_attempts: int | None = None,
+    api_protocol: str | None = None,
+    thinking: str | None = None,
 ) -> str:
     from retainpdf_pipeline.translate.llm.shared.executor_context import execution_enabled, runtime
     if execution_enabled():
@@ -280,6 +283,15 @@ def request_chat_content(
     last_error: Exception | None = None
     request_stage = infer_stage_from_request_label(request_label)
     diagnostics = get_active_translation_run_diagnostics()
+    profile = wire.resolve_profile(base_url=base_url, model=model, protocol=api_protocol, thinking=thinking)
+    protocol = profile.protocol
+    candidates = (
+        wire.anthropic_thinking_candidates(profile.thinking) if protocol == "anthropic"
+        else wire.responses_thinking_candidates(model=model, base_url=base_url, thinking=profile.thinking) if protocol == "openai_responses"
+        else wire.openai_thinking_candidates(model=model, base_url=base_url, thinking=profile.thinking)
+    )
+    thinking_index = 0
+    active_temperature = None if wire.temperature_rejected(base_url=base_url, model=model) else temperature
     active_response_format = response_format
     if _supports_response_schema_fallback(active_response_format) and not _provider_supports_json_schema(
         model=model,
@@ -288,20 +300,26 @@ def request_chat_content(
         active_response_format = _fallback_response_format(active_response_format)
     attempted_schema_fallback = False
     accumulated_rate_limit_wait = 0
-    body: dict[str, Any] = {
-        "model": model,
-        "temperature": temperature,
-        "messages": messages,
-    }
-    # DashScope Qwen3.8 Flash defaults to thinking. Translation does not need
-    # this extra generation pass; leave other providers/models untouched.
-    if model.strip().lower() == "qwen3.8-flash" and _hostname_from_base_url(base_url) == "dashscope.aliyuncs.com":
-        body["enable_thinking"] = False
     use_stream = should_use_stream_responses()
-    if use_stream:
-        body["stream"] = True
-    if active_response_format is not None:
-        body["response_format"] = active_response_format
+
+    def build_body():
+        if protocol == "openai":
+            result = {"model": model, "messages": messages, **candidates[thinking_index]}
+            if active_temperature is not None:
+                result["temperature"] = active_temperature
+            if active_response_format is not None:
+                result["response_format"] = active_response_format
+        else:
+            builder = wire.anthropic_body if protocol == "anthropic" else wire.responses_body
+            result = builder(model=model, messages=messages, temperature=active_temperature,
+                             response_format=active_response_format, thinking_fields=candidates[thinking_index])
+        if use_stream:
+            result["stream"] = True
+        return result
+
+    body = build_body()
+    request_url = wire.anthropic_messages_url(base_url) if protocol == "anthropic" else wire.responses_url(base_url) if protocol == "openai_responses" else chat_completions_url(base_url)
+    request_headers = wire.anthropic_headers(api_key) if protocol == "anthropic" else build_headers(api_key)
 
     attempt_limit = max(1, int(max_attempts or HTTP_RETRY_ATTEMPTS))
     dns_retry_limit = max(attempt_limit, DNS_RETRY_MIN_ATTEMPTS)
@@ -339,7 +357,7 @@ def request_chat_content(
                 try:
                     diagnostics.record_request_dispatch(
                         diagnostics_request_id,
-                        request_key=_request_journal_key(base_url=base_url, body=body),
+                        request_key=_request_journal_key(base_url=base_url, body=body, request_url=request_url),
                     )
                 except BaseException:  # a request must never leave without its durable dispatch record
                     elapsed_ms = int(round((time.perf_counter() - started) * 1000))
@@ -360,12 +378,12 @@ def request_chat_content(
                     raise
             if request_label:
                 print(
-                    f"{request_label}: http attempt {attempt}/{attempt_limit} -> {model} {chat_completions_url(base_url)} timeout={timeout}s stream={use_stream}",
+                    f"{request_label}: http attempt {attempt}/{attempt_limit} -> {model} {request_url} timeout={timeout}s stream={use_stream}",
                     flush=True,
                 )
             response = get_session().post(
-                chat_completions_url(base_url),
-                headers=build_headers(api_key),
+                request_url,
+                headers=request_headers,
                 json=body,
                 timeout=timeout,
                 stream=use_stream,
@@ -377,14 +395,16 @@ def request_chat_content(
                 body=body,
                 use_stream=use_stream,
             )
-            if use_stream:
+            if use_stream and protocol != "openai":
+                content, usage = wire.read_text_stream(response.iter_lines(), protocol)
+            elif use_stream:
                 content, usage = _read_streaming_chat_content(response)
                 if not content.strip():
                     raise ValueError("Stream response did not contain any content.")
             else:
                 data: dict[str, Any] = response.json()
-                content = data["choices"][0]["message"]["content"]
-                usage = data.get("usage")
+                content = wire.anthropic_content(data) if protocol == "anthropic" else wire.responses_content(data) if protocol == "openai_responses" else data["choices"][0]["message"]["content"]
+                usage = wire.anthropic_usage(data) if protocol == "anthropic" else wire.responses_usage(data) if protocol == "openai_responses" else data.get("usage")
             if diagnostics is not None and isinstance(usage, dict):
                 diagnostics.record_token_usage(usage)
             if request_label:
@@ -430,6 +450,17 @@ def request_chat_content(
                     f"{request_label}: http failed attempt {attempt}/{attempt_limit} after {elapsed:.2f}s: {type(exc).__name__}: {exc}",
                     flush=True,
                 )
+            if status_code == 400 and exc.response is not None:
+                rejected = exc.response.text
+                if active_temperature is not None and wire.looks_like_temperature_rejection(rejected):
+                    active_temperature = None
+                    wire.remember_temperature_rejected(base_url=base_url, model=model)
+                    body = build_body()
+                    continue
+                if thinking_index + 1 < len(candidates) and wire.looks_like_thinking_rejection(rejected):
+                    thinking_index += 1
+                    body = build_body()
+                    continue
             if (
                 not attempted_schema_fallback
                 and _supports_response_schema_fallback(active_response_format)
@@ -439,10 +470,7 @@ def request_chat_content(
             ):
                 attempted_schema_fallback = True
                 active_response_format = _fallback_response_format(active_response_format)
-                if active_response_format is None:
-                    body.pop("response_format", None)
-                else:
-                    body["response_format"] = active_response_format
+                body = build_body()
                 if request_label:
                     print(f"{request_label}: response_format fallback json_schema -> json_object after 400", flush=True)
                 continue

@@ -1,7 +1,6 @@
-import { s as t } from "./config-CgaWliJ_.js";
-import { s as a, r as s } from "./answer-enhance-D8zK9znw.js";
-import { h as A, l as P, n as D } from "./markdown-payload-kK3ewW_I.js";
-const n = [
+import { s as t, a, r as s } from "./answer-enhance-DShVYmyb.js";
+import { h as u, l as A, n as P } from "./markdown-payload-kK3ewW_I.js";
+const l = [
   "isMockMode",
   "resolveResourceUrl",
   "fetchProtected",
@@ -32,7 +31,7 @@ const n = [
   "deleteFavorite",
   "credentialsPort",
   "askDocumentAi"
-], c = [
+], n = [
   "resolveMarkdownAssetUrl",
   "resolveReaderDownloadUrls",
   "resolveReaderDownloadName",
@@ -46,28 +45,28 @@ const n = [
   "askDocumentAi"
 ];
 let r = null;
-function i(e) {
+function c(e) {
   r = e, t({ credentialsPort: (e == null ? void 0 : e.credentialsPort) ?? null }), s(), e && a({
     fetchProtected: e.fetchProtected,
     resolveResourceUrl: e.resolveResourceUrl
   });
 }
-function R() {
+function i() {
   return r;
 }
-function f(e) {
+function R(e) {
   const o = r == null ? void 0 : r[e];
   if (o == null) throw new Error(`Reader adapter missing: ${String(e)} (call setReaderAdapters)`);
   return o;
 }
 export {
-  n as READER_ADAPTER_KEYS,
-  c as READER_REQUIRED_ADAPTER_KEYS,
-  R as getReaderAdapters,
-  A as hasMarkdownContent,
-  P as loadMarkdownPayloadWithFallback,
-  D as normalizeMarkdownPayload,
-  f as requireAdapter,
-  i as setReaderAdapters
+  l as READER_ADAPTER_KEYS,
+  n as READER_REQUIRED_ADAPTER_KEYS,
+  i as getReaderAdapters,
+  u as hasMarkdownContent,
+  A as loadMarkdownPayloadWithFallback,
+  P as normalizeMarkdownPayload,
+  R as requireAdapter,
+  c as setReaderAdapters
 };
 //# sourceMappingURL=adapters.js.map

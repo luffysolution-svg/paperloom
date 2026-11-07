@@ -93,6 +93,34 @@ async fn buffered_runtime_config_response(
         .into_response())
 }
 
+pub async fn connections(
+    gateway: &AiGateway,
+    headers: &HeaderMap,
+    method: reqwest::Method,
+    suffix: &str,
+    query: &str,
+    payload: Option<&Value>,
+) -> Result<Response, AppError> {
+    if !suffix
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b"/_-".contains(&b))
+    {
+        return Err(AppError::bad_request("invalid AI connection path"));
+    }
+    let mut path = format!("/v1/connections{suffix}");
+    if !query.is_empty() {
+        let revision = url::form_urlencoded::parse(query.as_bytes())
+            .find(|(key, _)| key == "expected_revision")
+            .and_then(|(_, value)| value.parse::<u64>().ok())
+            .ok_or_else(|| AppError::bad_request("expected_revision is required"))?;
+        path.push_str(&format!("?expected_revision={revision}"));
+    }
+    let upstream = gateway
+        .send(method, &path, forwarded_api_key(headers), payload)
+        .await?;
+    buffered_runtime_config_response(upstream).await
+}
+
 pub async fn get_runtime_config(
     gateway: &AiGateway,
     headers: &HeaderMap,

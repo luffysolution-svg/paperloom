@@ -22,6 +22,7 @@ export type ThreadBranchMessage = {
   role: "user" | "assistant";
   content: string;
   progress?: string;
+  source?: string;
   citations?: ThreadBranchCitation[];
   status?: {
     type: string;
@@ -113,6 +114,7 @@ function normalizeMessage(raw: unknown): ThreadBranchMessage | null {
     role,
     content: typeof (raw as any).content === "string" ? (raw as any).content : "",
     ...(progress ? { progress } : {}),
+    ...(typeof raw.source === "string" && raw.source ? { source: raw.source } : {}),
     ...(citations?.length ? { citations } : {}),
     ...(status ? { status } : {}),
   };

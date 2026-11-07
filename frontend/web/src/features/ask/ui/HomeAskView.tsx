@@ -12,7 +12,7 @@ import {
 import { useStoreSnapshot } from "@/ui/hooks/use-store.js";
 import { useHomeCredentialsStatePort } from "@/ui/context/home-services-context.js";
 import { HomeAskComposer } from "./HomeAskComposer.js";
-import { ServiceProfileSelect } from "@/features/credentials/index.js";
+import { AiConnectionPicker, AgentInteractionPanel, useAiConnection } from "@retainpdf/reader/ai";
 import { guideToCredentialSetup } from "./use-home-ask-composer.js";
 import { HomeAskSidebar } from "./HomeAskSidebar.js";
 import { HomeAskThread, HOME_ASK_SUGGESTIONS } from "./HomeAskThread.js";
@@ -66,6 +66,7 @@ export function HomeAskView() {
     renameSession,
   } = useHomeAskRuntime();
   const [scopes, setScopes] = useState<HomeAskScope[]>([]);
+  const aiConnection = useAiConnection(conversationId, isRunning);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(loadSidebarCollapsed);
   const [runtimeConfig, setRuntimeConfig] = useState<AgentRuntimeConfigView | null>(null);
   const [runtimeConfigLoading, setRuntimeConfigLoading] = useState(true);
@@ -146,18 +147,22 @@ export function HomeAskView() {
     const last = messages[messages.length - 1];
     return `${messages.length}:${last?.id || ""}:${last?.content?.length || 0}:${last?.progress || ""}`;
   }, [messages]);
-  useStickToBottom(threadScrollRef, threadChangeKey, { streaming: isRunning });
+  useStickToBottom(threadScrollRef, threadChangeKey, { streaming: isRunning, enabled: !empty });
 
   // 选中回答里的一段 → 浮出「引用」→ 进输入框，用户接着写要问什么。
   const { selection, clear: clearSelection } = useQuoteSelection(threadScrollRef);
   const [quoteRequest, setQuoteRequest] = useState<{ id: string; text: string } | null>(null);
 
-  const credentialGate = resolveAgentRuntimeCredentialGate({
+  const legacyCredentialGate = resolveAgentRuntimeCredentialGate({
     config: runtimeConfig,
     loading: runtimeConfigLoading,
     error: runtimeConfigError,
     legacyModelKeyConfigured: hasModelApiKey(),
   });
+  const credentialGate = aiConnection.loading ? { blocked: false, message: "" }
+    : aiConnection.configured ? { blocked: false, message: "" }
+    : aiConnection.blocked ? { blocked: true, message: aiConnection.selected ? "此连接还未配置 API Key，请打开设置补充。" : "连接已不可用，请选择其他连接。" }
+    : legacyCredentialGate;
   const displayedRuntime = agentRuntime || runtimeConfig?.active_runtime || "";
 
   return (
@@ -189,8 +194,8 @@ export function HomeAskView() {
       />
 
       <div className="home-ask-main">
-        <ServiceProfileSelect disabled={isRunning} />
-        {displayedRuntime ? (
+        <AgentInteractionPanel conversationId={conversationId} running={isRunning} />
+        {displayedRuntime && !aiConnection.selected ? (
           <div className="home-ask-runtime-badge" role="status">
             {agentRuntimeModeLabel(activeAgentRuntimeMode(displayedRuntime))}
           </div>
@@ -202,6 +207,8 @@ export function HomeAskView() {
             </div>
             <h2 className="home-ask-empty-title">随时待命，有什么可以帮你？</h2>
             <HomeAskComposer
+              disabled={aiConnection.loading}
+              aiSelector={<AiConnectionPicker controller={aiConnection} disabled={isRunning || sessionBusy} />}
               isRunning={isRunning}
               credentialBlocked={credentialGate.blocked}
               credentialMessage={credentialGate.message}
@@ -221,7 +228,7 @@ export function HomeAskView() {
                     key={item.prompt}
                     type="button"
                     className="home-ask-suggestion"
-                    disabled={isRunning}
+                    disabled={isRunning || aiConnection.loading}
                     onClick={() => {
                       // 缺凭据不锁推荐问题：点击走发送时刻的统一引导（横幅按钮直达设置）。
                       if (credentialGate.blocked) {
@@ -249,6 +256,11 @@ export function HomeAskView() {
                 // 到那时 selection 已经没了。
                 onPointerDown={(event) => {
                   event.preventDefault();
+                  setQuoteRequest({ id: `q-${Date.now()}`, text: selection.text });
+                  clearSelection();
+                }}
+                onClick={(event) => {
+                  if (event.detail !== 0) return;
                   setQuoteRequest({ id: `q-${Date.now()}`, text: selection.text });
                   clearSelection();
                 }}
@@ -282,6 +294,8 @@ export function HomeAskView() {
               />
             </div>
             <HomeAskComposer
+              disabled={aiConnection.loading}
+              aiSelector={<AiConnectionPicker controller={aiConnection} disabled={isRunning || sessionBusy} />}
               isRunning={isRunning}
               credentialBlocked={credentialGate.blocked}
               credentialMessage={credentialGate.message}

@@ -166,6 +166,33 @@ async fn ai_proxy_forwards_all_routes_and_authenticates_before_upstream() {
         ("POST", "/api/v1/ai/ask", "/v1/ask"),
         ("GET", "/api/v1/ai/runtime-config", "/v1/runtime-config"),
         ("PUT", "/api/v1/ai/runtime-config", "/v1/runtime-config"),
+        ("GET", "/api/v1/ai/connections", "/v1/connections"),
+        ("PUT", "/api/v1/ai/connections", "/v1/connections"),
+        (
+            "DELETE",
+            "/api/v1/ai/connections/example?expected_revision=1",
+            "/v1/connections/example",
+        ),
+        (
+            "POST",
+            "/api/v1/ai/connections/example/probe",
+            "/v1/connections/example/probe",
+        ),
+        (
+            "POST",
+            "/api/v1/ai/connections/example/authenticate",
+            "/v1/connections/example/authenticate",
+        ),
+        (
+            "POST",
+            "/api/v1/ai/connections/interactions/interaction-1",
+            "/v1/connections/interactions/interaction-1",
+        ),
+        (
+            "POST",
+            "/api/v1/ai/connections/runs/run-1/cancel",
+            "/v1/connections/runs/run-1/cancel",
+        ),
     ] {
         let app = upstream.app();
         let before = calls.load(Ordering::SeqCst);

@@ -1,5 +1,6 @@
 import type { AgentConfirmationMode } from "./agent-runtime-settings.js";
 import type { AgentOperationStatus } from "./document-operations.js";
+import { type ApiProtocol } from "./agent-connections.js";
 export type { AgentConfirmationMode } from "./agent-runtime-settings.js";
 export declare class AiAskError extends Error {
     status: number;
@@ -70,7 +71,7 @@ export type AiAskStreamCallbacks = {
     onCompress?: ((event: any) => void) | null;
 };
 export declare function readAiAskStream(body: ReadableStream<Uint8Array>, { onProgressEvent, onToolEvent, onAgentToolEvent, onAgentOperationEvent, onAgentConfirmationRequiredEvent, onAgentSessionEvent, onAnswerDelta, onCompress, }?: AiAskStreamCallbacks): Promise<any>;
-export declare function askLibraryAi({ question, documentId, jobId, conversationId, parentId, regenerate, userMessageId, assistantMessageId, onToolEvent, onProgressEvent, onAgentToolEvent, onAgentOperationEvent, onAgentConfirmationRequiredEvent, onAgentSessionEvent, onAnswerDelta, onCompress, signal, apiPrefix, fetchImpl, llmApiKey, llmBaseUrl, llmModel, confirmDocumentOperation, assistantMode, }?: {
+export declare function askLibraryAi({ question, documentId, jobId, conversationId, parentId, regenerate, userMessageId, assistantMessageId, onToolEvent, onProgressEvent, onAgentToolEvent, onAgentOperationEvent, onAgentConfirmationRequiredEvent, onAgentSessionEvent, onAnswerDelta, onCompress, signal, apiPrefix, fetchImpl, llmApiKey, llmBaseUrl, llmModel, llmApiProtocol, connectionId, connectionModel, connectionOptions, confirmDocumentOperation, assistantMode, }?: {
     question?: string;
     documentId?: string;
     jobId?: string;
@@ -79,6 +80,10 @@ export declare function askLibraryAi({ question, documentId, jobId, conversation
     regenerate?: boolean;
     userMessageId?: string;
     assistantMessageId?: string;
+    llmApiProtocol?: ApiProtocol;
+    connectionId?: string;
+    connectionModel?: string;
+    connectionOptions?: Record<string, string>;
     onToolEvent?: ((e: any) => void) | null;
     onProgressEvent?: ((e: {
         type: "progress";

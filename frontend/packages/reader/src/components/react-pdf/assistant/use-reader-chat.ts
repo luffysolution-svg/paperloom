@@ -25,6 +25,7 @@ export function storeMessagesToChat(
     metadata: message.role === "assistant"
       ? {
         citations: message.citations || [],
+        ...(message.source ? { source: message.source } : {}),
         progress: message.progress || "",
         status: message.status?.type === "running"
           ? "running"
@@ -52,6 +53,7 @@ export function chatMessageToStore(message: ReaderChatMessage): ReaderAskStoreMe
     content: message.role === "assistant" ? content : text,
     ...(message.role === "assistant" ? {
       citations: metadata.citations || [],
+      ...(metadata.source ? { source: metadata.source } : {}),
       progress: metadata.progress || "",
       // 「答完了但没做完」和「中断/出错」是两回事:正文是完整的一段话,只是背后的
       // 工作被轮次预算截断了。所以它走 incomplete + 具体原因,而不是 error。

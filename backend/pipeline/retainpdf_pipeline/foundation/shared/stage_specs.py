@@ -206,6 +206,8 @@ class TranslateStageParams:
     model: str
     base_url: str
     credential_ref: str
+    api_protocol: str = "openai"
+    thinking: str = "auto"
 
 
 @dataclass(frozen=True)
@@ -298,6 +300,8 @@ class TranslateStageSpec:
             .lower(),
             model=str(params_payload.get("model", "") or ""),
             base_url=str(params_payload.get("base_url", "") or ""),
+            api_protocol=str(params_payload.get("api_protocol") or "openai"),
+            thinking=str(params_payload.get("thinking") or "auto"),
             credential_ref=str(params_payload.get("credential_ref", "") or ""),
         )
         return cls(
@@ -495,6 +499,8 @@ class ProviderStageTranslationParams:
     model: str
     base_url: str
     credential_ref: str
+    api_protocol: str = "openai"
+    thinking: str = "auto"
 
 
 @dataclass(frozen=True)
@@ -639,6 +645,8 @@ class ProviderStageSpec:
             .lower(),
             model=str(translation_payload.get("model", "") or ""),
             base_url=str(translation_payload.get("base_url", "") or ""),
+            api_protocol=str(translation_payload.get("api_protocol") or "openai"),
+            thinking=str(translation_payload.get("thinking") or "auto"),
             credential_ref=str(translation_payload.get("credential_ref", "") or ""),
         )
         render = ProviderStageRenderParams(
@@ -728,6 +736,8 @@ class BookStageTranslationParams:
     model: str
     base_url: str
     credential_ref: str
+    api_protocol: str = "openai"
+    thinking: str = "auto"
 
 
 @dataclass(frozen=True)
@@ -846,6 +856,8 @@ class BookStageSpec:
             .lower(),
             model=str(translation_payload.get("model", "") or ""),
             base_url=str(translation_payload.get("base_url", "") or ""),
+            api_protocol=str(translation_payload.get("api_protocol") or "openai"),
+            thinking=str(translation_payload.get("thinking") or "auto"),
             credential_ref=str(translation_payload.get("credential_ref", "") or ""),
         )
         render = BookStageRenderParams(

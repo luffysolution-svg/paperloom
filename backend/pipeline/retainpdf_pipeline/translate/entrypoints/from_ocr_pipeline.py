@@ -67,6 +67,8 @@ def _args_from_spec(spec: BookStageSpec) -> SimpleNamespace:
         api_key=resolve_credential_ref(spec.translation.credential_ref),
         model=spec.translation.model,
         base_url=spec.translation.base_url,
+        api_protocol=spec.translation.api_protocol,
+        thinking=spec.translation.thinking,
         render_mode=spec.render.render_mode,
         compile_workers=spec.render.compile_workers,
         typst_font_family=spec.render.typst_font_family,
@@ -88,6 +90,8 @@ def main() -> None:
     spec = BookStageSpec.load(Path(args.spec))
     stage_spec_schema_version = spec.schema_version
     args = _args_from_spec(spec)
+    from retainpdf_pipeline.translate.llm.shared.model_wire import register_connection
+    register_connection(base_url=args.base_url, model=args.model, protocol=args.api_protocol, thinking=args.thinking)
     layout.apply_layout_tuning(
         body_font_size_factor=args.body_font_size_factor,
         body_leading_factor=args.body_leading_factor,

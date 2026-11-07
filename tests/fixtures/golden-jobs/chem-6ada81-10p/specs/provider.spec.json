@@ -48,6 +48,8 @@
   },
   "stage": "provider",
   "translation": {
+    "api_protocol": "openai",
+    "thinking": "auto",
     "base_url": "https://api.deepseek.com/v1",
     "batch_size": 1,
     "classify_batch_size": 12,

@@ -30,6 +30,7 @@ PaperLoom 是目前唯一面向图片型 / 扫描版 PDF、支持保留排版翻
 - **翻译 PDF，并保留版面。** 支持可编辑 PDF、图片型和扫描版 PDF，处理多栏正文、图片、表格和复杂公式。
 - **集中管理文献。** 书库、合集、收藏、任务中心和原文／译文对照阅读都在同一个界面里。
 - **围绕文档问问题。** 可以总结论文、梳理方法、解释公式；回答带文档引用，点击引用回到原文页码。PDF Agent 提供需要明确授权的文档操作。
+- **使用自己的 Agent 或 API。** 复用已登录的本机 Agent，或连接 OpenAI Chat Completions、Responses、Anthropic Messages API；每个对话可选择服务和模型。支持 Agentero 同目录的 16 个 Agent 预设，详见 [BYOA / BYOK 配置](docs/core/ai-runtime/BYOA_BYOK.md)。
 - **从 Zotero 导入，再把译文写回。** 支持批量导入；Zotero 10+ 可单篇或批量保存译文 PDF，重复写回更新原附件。
 - **保存到 Obsidian。** 单篇或批量导出中文笔记、可选原文笔记、图片和译文 PDF，带文献信息、来源链接和互链。
 - **迁移与备份资料库。** 在“设置 → 数据与备份”导出／导入资料库 ZIP，或手动备份到 WebDAV；恢复在重启后生效，并保留恢复前数据。详见[操作说明](docs/core/api/backups.md)。

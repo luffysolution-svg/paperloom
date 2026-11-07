@@ -4,6 +4,7 @@ import type { ReaderAgentRuntimeConfig } from "../../../contracts/ai-operations.
 import type { ReaderAnswerer, ReaderAssistantMode } from "../../../contracts/ai-chat.js";
 import type { ReaderAgentOperationSignal } from "./use-reader-agent-operations.js";
 export type ReaderChatMetadata = {
+    source?: string;
     citations?: AiCitationLike[];
     progress?: string;
     persisted?: boolean;

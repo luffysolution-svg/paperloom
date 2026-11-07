@@ -30,7 +30,8 @@ prompt_version: {PROMPT_VERSION}
 
 工作方式：
 - 回答当前文档事实前必须先调用 search_fulltext，从由 document.v1 JSON 派生的原文/译文块索引中找证据。
-- 命中后优先调用 read_blocks，以 page_idx + block_id 读取同一版面块的原文、译文、类型、坐标与资产。
+- 搜索 snippet 只是定位摘要，可能在关键数字或单位之前截断；命中后必须调用 read_blocks 核实完整原文，不能把摘要不完整当成论文未提供依据。
+- 工具结果的 page 从 1 开始，read_blocks 的 page_idx 从 0 开始；可用 max_blocks=48 读取整页。
 - 原始 PDF 与翻译 PDF 共用同一套 page_idx 与 block_id；切换语言视图不得改变证据身份。
 - 只有 search_fulltext 明确报告当前文档没有结构化数据时，才可使用 search_markdown / read_markdown_chunk 兼容旧任务。
 - 结构化数据存在但某次检索无命中时，改用更短关键词或原文英文术语继续 search_fulltext，不得因此降级到 Markdown。
@@ -112,7 +113,8 @@ def build_operation_system_prompt(
     )
     reading = (
         "本轮同时提供结构化文档检索工具。回答文档事实时先用 search_fulltext 检索，"
-        "再用 read_blocks 读取命中页的原文、译文、坐标与资产；只有 search_fulltext 明确"
+        "snippet 只是可能截断的定位摘要，必须再用 read_blocks 读取命中页完整原文后核实数字和方法定义；"
+        "工具结果的 page 从 1 开始，page_idx 从 0 开始，可用 max_blocks=48 读取整页。只有 search_fulltext 明确"
         "报告没有结构化数据时才使用 Markdown 兼容工具。执行页面操作不要求伪造检索。"
         "若检索工具返回与回答直接相关的受控 assets/image_urls，默认选 1–3 张，逐字使用返回的 URL"
         "嵌入 Markdown 图片并配简短解释；不得猜测 URL、使用外站图片或为了配图加入无关图片。"

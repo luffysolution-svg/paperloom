@@ -110,6 +110,11 @@
         "llm_base_url": {
           "type": "string"
         },
+        "llm_api_protocol": {"type": ["string", "null"], "enum": ["openai", "openai_responses", "anthropic", null]},
+        "run_id": { "type": "string", "maxLength": 128 },
+        "connection_id": {"type": "string", "maxLength": 128},
+        "connection_model": {"type": "string", "maxLength": 256},
+        "connection_options": {"type": "object", "additionalProperties": {"type": "string"}},
         "llm_model": {
           "type": "string"
         }
@@ -246,6 +251,7 @@
         "request_message_id": {
           "type": "string"
         },
+        "model": { "type": "string" },
         "agent_runtime": {
           "type": "string",
           "minLength": 1
@@ -479,6 +485,7 @@
           "type": "string",
           "description": "auto-create 时回传"
         },
+        "model": { "type": "string" },
         "agent_runtime": {
           "type": "string",
           "description": "本轮实际使用的 runtime 标识；旧服务可省略"
@@ -600,6 +607,9 @@
     "SseEventType": {
       "type": "string",
       "enum": [
+        "agent_connection",
+        "agent_interaction",
+        "agent_interaction_resolved",
         "progress",
         "heartbeat",
         "tool",

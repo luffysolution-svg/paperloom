@@ -484,6 +484,8 @@ def build_default_registry(settings: Settings, rust: RustApiClient) -> ToolRegis
                         item["image_urls"] = images
             enriched_hits.append(item)
         payload: dict[str, Any] = {"hits": enriched_hits}
+        if enriched_hits:
+            payload["hint"] = "命中片段仅用于定位，可能截断。请用 read_blocks 读取命中页的完整原文后核实结论；page_idx = page - 1，可用 max_blocks=48 读取整页。"
         if document_id:
             payload["document_id"] = document_id
         if structured_data_available is not None:

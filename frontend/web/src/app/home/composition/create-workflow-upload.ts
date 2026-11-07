@@ -127,8 +127,10 @@ export function createWorkflowAndUpload({
       ocrCredentialRef: ocr.credentialRef,
       modelApiKey: translation.apiKey,
       translationCredentialRef: translation.credentialRef,
+      translationConnectionId: translation.connectionId,
       model: model.trim(),
       baseUrl: translation.baseUrl,
+      apiProtocol: translation.apiProtocol,
       workers: translation.workers,
     };
   }
@@ -168,7 +170,7 @@ export function createWorkflowAndUpload({
       const selected = getUploadServiceOverrides();
       if (selected) {
         return Boolean((selected.ocrToken || selected.ocrCredentialRef)
-          && (isOcrOnly() || (selected.baseUrl && selected.model && (selected.modelApiKey || selected.translationCredentialRef))));
+          && (isOcrOnly() || (selected.baseUrl && selected.model && (selected.modelApiKey || selected.translationCredentialRef || selected.translationConnectionId))));
       }
       if (isOcrOnly()) {
         const credentials = credentialsStatePort.getCredentials();

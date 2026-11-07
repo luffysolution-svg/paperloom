@@ -3,6 +3,7 @@ import type {
   UIMessage,
   UIMessageChunk,
 } from "ai";
+import { selectionForRequest } from "@retainpdf/api";
 import type { AiCitationLike } from "../../../shared/ai/answer-enhance.js";
 import { normalizeAiCitations } from "../../../shared/ai/answer-enhance.js";
 import { sanitizeAssistantAnswer } from "../../../shared/ai/sanitize-answer.js";
@@ -12,6 +13,7 @@ import type { ReaderChatRequest, ReaderAnswerer, ReaderAssistantMode } from "../
 import type { ReaderAgentOperationSignal } from "./use-reader-agent-operations.js";
 
 export type ReaderChatMetadata = {
+  source?: string;
   citations?: AiCitationLike[];
   progress?: string;
   persisted?: boolean;
@@ -104,6 +106,8 @@ export class RetainPdfChatTransport implements ChatTransport<ReaderChatMessage> 
     const textPartId = `${assistantMessageId}-text`;
     const remoteAnswerer = this.options.getRemoteAnswerer();
     const localAnswerer = this.options.getLocalAnswerer?.() || null;
+    const selected = selectionForRequest(remoteAnswerer?.getConversationId?.() || "");
+    const connection = { connectionId: selected.connectionId, connectionModel: selected.model, connectionOptions: { ...selected.options } };
 
     if (!remoteAnswerer && !localAnswerer) {
       throw new Error("问答暂不可用：请确认已打开任务阅读器。");
@@ -156,6 +160,7 @@ export class RetainPdfChatTransport implements ChatTransport<ReaderChatMessage> 
             try {
               result = await answerer.answer({
                 question,
+                ...connection,
                 assistantMode,
                 scope: requestScope,
                 context: requestContext,
@@ -297,6 +302,7 @@ export class RetainPdfChatTransport implements ChatTransport<ReaderChatMessage> 
               progress: "",
               status: "complete",
               incompleteReason: `${result?.incompleteReason || ""}`.trim(),
+              source: `${result?.source || ""}`.trim(),
             });
             enqueue({ type: "finish-step" });
             enqueue({ type: "finish", finishReason: "stop", messageMetadata: metadata });

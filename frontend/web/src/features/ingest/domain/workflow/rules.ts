@@ -29,6 +29,7 @@ export function buildDeveloperConfigWithDefaults({
     mathMode: normalizeMathMode(source.mathMode),
     model: source.model || defaultModelName(),
     baseUrl: source.baseUrl || defaultModelBaseUrl(),
+    apiProtocol: ["openai", "openai_responses", "anthropic"].includes(source.apiProtocol) ? source.apiProtocol : "openai",
     glossaryId: `${source.glossaryId || source.glossary_id || ""}`.trim(),
     workers: positiveInteger(source.workers, defaults.workers),
     batchSize: positiveInteger(source.batchSize, defaults.batchSize),

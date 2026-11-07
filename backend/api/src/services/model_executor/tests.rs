@@ -53,6 +53,7 @@ fn profile(url: &str) -> ModelConnection {
     ModelConnection {
         id: "qwen-main".into(),
         revision: 1,
+        api_protocol: "openai".into(),
         provider: Provider::Qwen,
         base_url: url.into(),
         model: "qwen3.8-flash".into(),
@@ -106,6 +107,59 @@ async fn terminal(executor: &ModelExecutor, job: &str, token: &str, id: &str) ->
 }
 fn successful() -> Value {
     json!({"choices":[{"message":{"content":"translated"},"finish_reason":"stop"}],"usage":{"prompt_tokens":12,"completion_tokens":9,"completion_tokens_details":{"reasoning_tokens":3}}})
+}
+
+#[tokio::test]
+async fn native_protocols_execute_with_their_own_wire_and_usage() {
+    for protocol in ["openai_responses", "anthropic"] {
+        for streaming in [false, true] {
+            let handler_protocol = protocol;
+            let app = Router::new().route(if protocol == "anthropic" { "/v1/messages" } else { "/v1/responses" }, post(move |headers: HeaderMap, Json(body): Json<Value>| async move {
+                assert_eq!(body["stream"], streaming);
+                let response = if handler_protocol == "anthropic" {
+                    assert_eq!(headers["x-api-key"], "test-secret-not-a-real-key");
+                    assert!(!headers.contains_key("authorization"));
+                    assert!(body["max_tokens"].as_u64().unwrap() > 0);
+                    json!({"stop_reason":"end_turn","content":[{"type":"text","text":"译文"}],"usage":{"input_tokens":12,"output_tokens":9,"cache_read_input_tokens":3}})
+                } else {
+                    assert_eq!(headers["authorization"], "Bearer test-secret-not-a-real-key");
+                    assert_eq!(body["store"], false);
+                    assert!(body["input"].is_array());
+                    json!({"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"译文"}]}],"usage":{"input_tokens":12,"output_tokens":9,"input_tokens_details":{"cached_tokens":3}}})
+                };
+                if !streaming { return Json(response).into_response(); }
+                let events = if handler_protocol == "anthropic" {
+                    vec![json!({"type":"message_start","message":{"usage":{"input_tokens":12,"cache_read_input_tokens":3}}}),
+                        json!({"type":"content_block_delta","delta":{"type":"text_delta","text":"译文"}}),
+                        json!({"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":9,"cache_read_input_tokens":3}}), json!({"type":"message_stop"})]
+                } else { vec![json!({"type":"response.output_text.delta","delta":"译文"}),json!({"type":"response.completed","response":response})] };
+                let data = events.iter().map(|event| format!("data: {event}\n\n")).collect::<String>();
+                ([("content-type", "text/event-stream")], data).into_response()
+            }));
+            let (url, task) = server(app).await;
+            let f = Fixture::new();
+            let mut p = profile(&url);
+            p.api_protocol = protocol.into();
+            p.stream = Some(streaming);
+            let token = f.executor.register_job("j", &p, 60).unwrap();
+            f.executor
+                .submit("j", &token, request("native"))
+                .await
+                .unwrap();
+            let op = terminal(&f.executor, "j", &token, "native").await;
+            assert_eq!(
+                op.status, "succeeded",
+                "{protocol} stream={streaming}: {:?}",
+                op.result
+            );
+            let result = op.result.unwrap();
+            assert_eq!(result["content"], "译文");
+            assert_eq!(result["input_tokens"], 12);
+            assert_eq!(result["output_tokens"], 9);
+            assert_eq!(result["cached_tokens"], 3);
+            task.abort();
+        }
+    }
 }
 
 #[test]

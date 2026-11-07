@@ -83,6 +83,8 @@ def _args_from_spec(spec: TranslateStageSpec) -> SimpleNamespace:
         api_key=resolve_credential_ref(spec.params.credential_ref),
         model=spec.params.model,
         base_url=spec.params.base_url,
+        api_protocol=spec.params.api_protocol,
+        thinking=spec.params.thinking,
     )
 
 
@@ -97,6 +99,8 @@ def main() -> None:
     spec = TranslateStageSpec.load(Path(args.spec))
     stage_spec_schema_version = spec.schema_version
     args = _args_from_spec(spec)
+    from retainpdf_pipeline.translate.llm.shared.model_wire import register_connection
+    register_connection(base_url=args.base_url, model=args.model, protocol=args.api_protocol, thinking=args.thinking)
     job_dirs = job_dirs_from_explicit_args(args)
     enable_job_log_capture(job_dirs.logs_dir, prefix="translate-only")
     event_writer = PipelineEventWriter(

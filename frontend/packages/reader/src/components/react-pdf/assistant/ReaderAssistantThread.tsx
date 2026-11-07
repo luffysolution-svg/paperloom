@@ -35,6 +35,8 @@ const EMPTY_AGENT_OPERATIONS = Object.freeze({
 });
 
 export type ReaderAssistantThreadProps = {
+  connectionConfigured?: boolean;
+  connectionBlocked?: boolean;
   jobId?: string;
   messages?: readonly ReaderAskStoreMessage[];
   citationsByMessageId?: Record<string, AiCitationLike[]>;
@@ -88,6 +90,8 @@ function assistantStatus(
 }
 
 export function ReaderAssistantThread({
+  connectionConfigured = false,
+  connectionBlocked = false,
   jobId = "",
   messages = EMPTY_MESSAGES,
   citationsByMessageId = EMPTY_CITATIONS,
@@ -121,11 +125,12 @@ export function ReaderAssistantThread({
     };
   }, []);
 
-  const missingLlmKey = !hasModelApiKey() && !agentOperations.runtimeCredentialConfigured;
+  const missingLlmKey = connectionBlocked || (!connectionConfigured && !hasModelApiKey() && !agentOperations.runtimeCredentialConfigured);
   const runtimeMessages = useMemo<ThreadMessageLike[]>(() => messages.map((message) => ({
     id: message.id,
     role: message.role,
     content: contentByMessageId[message.id] || message.content || "",
+    ...(message.source ? { metadata: { custom: { source: message.source } } } : {}),
     ...(message.role === "assistant"
       ? { status: assistantStatus(message, streamingAssistantId, isRunning) }
       : {}),

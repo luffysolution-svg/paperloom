@@ -35,6 +35,7 @@ from retainpdf_pipeline.translate.workflow.checkpoint.store import (
 from retainpdf_pipeline.translate.workflow.execution import (
     TranslationExecutionRequest,
 )
+from retainpdf_pipeline.translate.llm.shared.model_wire import ConnectionProfile
 
 
 def _request(source_json: Path, output_dir: Path, *, model: str = "test-model") -> TranslationExecutionRequest:
@@ -49,6 +50,7 @@ def _request(source_json: Path, output_dir: Path, *, model: str = "test-model") 
 
 def _plan():
     return SimpleNamespace(
+        connection_profile=ConnectionProfile(),
         start=0,
         stop=0,
         glossary_entries=[],
@@ -444,6 +446,16 @@ def test_read_after_validating_checkpoint_cannot_change_page_hash(tmp_path: Path
         (output_dir / TRANSLATION_CHECKPOINT_FILE_NAME).read_text(encoding="utf-8")
     )
     assert committed["status"] == "complete"
+
+
+@pytest.mark.parametrize("profile", [ConnectionProfile("openai_responses", "auto"), ConnectionProfile("anthropic", "auto"), ConnectionProfile("openai", "high")])
+def test_checkpoint_identity_uses_the_plans_frozen_connection(tmp_path: Path, profile) -> None:
+    source_json = tmp_path / "document.v1.json"
+    source_json.write_text("{}", encoding="utf-8")
+    request = _request(source_json, tmp_path / "translated")
+    first_plan, second_plan = _plan(), _plan()
+    second_plan.connection_profile = profile
+    assert build_translation_identity(request, first_plan)["fingerprint"] != build_translation_identity(request, second_plan)["fingerprint"]
 
 
 def test_fingerprint_mismatch_releases_checkpoint_lease(tmp_path: Path) -> None:

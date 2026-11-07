@@ -86,6 +86,9 @@ pub trait ModelConnectionPolicy {
 
 impl ModelConnectionPolicy for ModelConnection {
     fn validate(&self) -> Result<url::Url> {
+        if !["openai", "openai_responses", "anthropic"].contains(&self.api_protocol.as_str()) {
+            bail!("unsupported model API protocol");
+        }
         if !identifier(&self.id)
             || self.model.trim().is_empty()
             || self.model.len() > 256
@@ -128,12 +131,22 @@ impl ModelConnectionPolicy for ModelConnection {
         {
             bail!("endpoint must be HTTP(S), without credentials, query or fragment");
         }
-        let base_path = url.path().trim_end_matches('/');
-        let path = if base_path.ends_with("/chat/completions") {
-            base_path.to_owned()
-        } else {
-            format!("{base_path}/chat/completions")
+        let mut base_path = url.path().trim_end_matches('/').to_owned();
+        for suffix in ["/chat/completions", "/responses", "/messages"] {
+            if base_path.ends_with(suffix) {
+                base_path.truncate(base_path.len() - suffix.len());
+                break;
+            }
+        }
+        if self.api_protocol == "anthropic" && !base_path.ends_with("/v1") {
+            base_path.push_str("/v1");
+        }
+        let suffix = match self.api_protocol.as_str() {
+            "anthropic" => "/messages",
+            "openai_responses" => "/responses",
+            _ => "/chat/completions",
         };
+        let path = format!("{base_path}{suffix}");
         url.set_path(&path);
         Ok(url)
     }
@@ -144,6 +157,62 @@ impl ModelConnectionPolicy for ModelConnection {
     }
 
     fn body(&self, request: &ModelRequest) -> Value {
+        if self.api_protocol != "openai" {
+            let mut instructions = request
+                .messages
+                .iter()
+                .filter(|m| m.role == "system")
+                .map(|m| m.content.clone())
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            let turns: Vec<_> = request
+                .messages
+                .iter()
+                .filter(|m| m.role != "system")
+                .collect();
+            if self.api_protocol == "openai_responses" {
+                let mut body = json!({"model": self.model, "instructions": instructions, "input": turns, "store": false, "stream": self.streaming()});
+                if let Some(limit) = request.max_tokens {
+                    body["max_output_tokens"] = json!(limit);
+                }
+                if let Some(format) = &request.response_format {
+                    body["text"] = json!({"format": if format["type"] == "json_schema" {
+                        let mut schema = format["json_schema"].clone();
+                        schema["type"] = json!("json_schema");
+                        schema
+                    } else { format.clone() }});
+                }
+                match self.thinking {
+                    Thinking::Off => body["reasoning"] = json!({"effort": "none"}),
+                    Thinking::On => body["reasoning"] = json!({"effort": "medium"}),
+                    _ => {}
+                }
+                return body;
+            }
+            if let Some(format) = &request.response_format {
+                if format["type"] != "text" {
+                    instructions.push_str("\n只输出 JSON，遵循以下格式：\n");
+                    instructions.push_str(&format.to_string());
+                }
+            }
+            let mut merged: Vec<Value> = Vec::new();
+            for turn in turns {
+                if let Some(last) = merged.last_mut().filter(|m| m["role"] == turn.role) {
+                    last["content"] = json!(format!(
+                        "{}\n\n{}",
+                        last["content"].as_str().unwrap_or(""),
+                        turn.content
+                    ));
+                } else {
+                    merged.push(json!({"role": turn.role, "content": turn.content}));
+                }
+            }
+            let mut body = json!({"model": self.model, "system": instructions, "messages": merged, "max_tokens": request.max_tokens.unwrap_or(16384), "stream": self.streaming()});
+            if self.thinking == Thinking::On {
+                body["thinking"] = json!({"type": "adaptive"});
+            }
+            return body;
+        }
         let mut body = json!({"model":self.model,"messages":request.messages,"temperature":request.temperature,"stream":self.streaming()});
         if self.streaming() {
             body["stream_options"] = json!({"include_usage":true});

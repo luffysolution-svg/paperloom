@@ -16,7 +16,7 @@ type CredentialsPort = { getCredentials?: () => { modelApiKey?: string } | null 
 
 let _credentialsPort: CredentialsPort | null = null;
 let _loadBrowserStoredConfig: () => { modelApiKey?: string } | null = () => null;
-let _loadDeveloperStoredConfig: () => { baseUrl?: string; model?: string } | null = () => null;
+let _loadDeveloperStoredConfig: () => { baseUrl?: string; model?: string; apiProtocol?: string } | null = () => null;
 let _defaultModelBaseUrl: () => string = () => "";
 let _defaultModelName: () => string = () => "";
 
@@ -67,13 +67,14 @@ export function readSettingsModelApiKey(
 export function resolveReaderAiConfig({
   browserConfig = _loadBrowserStoredConfig(),
   developerConfig = _loadDeveloperStoredConfig(),
-}: { browserConfig?: any; developerConfig?: any } = {}): { apiKey: string; baseUrl: string; model: string; provider: string } {
+}: { browserConfig?: any; developerConfig?: any } = {}): { apiKey: string; baseUrl: string; model: string; provider: string; apiProtocol?: "anthropic" | "openai_responses" } {
   // 模型 Key：仅用户设置；baseUrl / model 可回退 runtime 默认（非密钥）
   return {
     apiKey: readSettingsModelApiKey(browserConfig),
     baseUrl: firstNonEmpty(developerConfig?.baseUrl, _defaultModelBaseUrl()),
     model: firstNonEmpty(developerConfig?.model, _defaultModelName()),
     provider: "deepseek",
+    ...(developerConfig?.apiProtocol === "anthropic" || developerConfig?.apiProtocol === "openai_responses" ? { apiProtocol: developerConfig.apiProtocol } : {}),
   };
 }
 

@@ -176,8 +176,8 @@ export async function forkConversationFromPath(
   return { conversation: { ...conversation, head_id: items[items.length - 1]?.message.id || "", message_count: items.length }, items };
 }
 
-export function messagesToBranchItems(messages: MessageRecord[]): Array<{ parentId: string | null; message: { id: string; role: "user" | "assistant"; content: string; citations?: unknown[]; status?: { type: string; reason?: string } } }> {
-  const items: Array<{ parentId: string | null; message: { id: string; role: "user" | "assistant"; content: string; citations?: unknown[]; status?: { type: string; reason?: string } } }> = [];
+export function messagesToBranchItems(messages: MessageRecord[]): Array<{ parentId: string | null; message: { id: string; role: "user" | "assistant"; content: string; citations?: unknown[]; source?: string; status?: { type: string; reason?: string } } }> {
+  const items: Array<{ parentId: string | null; message: { id: string; role: "user" | "assistant"; content: string; citations?: unknown[]; source?: string; status?: { type: string; reason?: string } } }> = [];
   // 记忆压缩的摘要以 role="assistant" 落库（Rust 只接受 user/assistant），而且必须留在
   // 链上——下一条 user 消息以它为 parent，压缩后的上下文靠它延续。但它不是回答:第 13
   // 轮起用户会在聊天里看到一条自己没问过的、机器生成的「【对话摘要】…」。
@@ -215,7 +215,7 @@ export function messagesToBranchItems(messages: MessageRecord[]): Array<{ parent
         ? { type: "incomplete", reason: finish }
         : { type: "complete", reason: "stop" })
       : null;
-    items.push({ parentId: parent, message: { id: m.message_id, role, content: m.content || "", ...(citations ? { citations } : {}), ...(status ? { status } : {}) } });
+    items.push({ parentId: parent, message: { id: m.message_id, role, content: m.content || "", ...(m.model ? { source: m.model } : {}), ...(citations ? { citations } : {}), ...(status ? { status } : {}) } });
   }
   return items;
 }

@@ -50,6 +50,7 @@ export interface RunOcrTokenValidationOptions {
 }
 
 export interface RunDeepSeekConnectivityCheckOptions {
+  apiProtocol?: string;
   apiPrefix?: string;
   apiKey?: string;
   baseUrl?: string;
@@ -168,6 +169,7 @@ export async function runOcrTokenValidation({
 }
 
 export async function runDeepSeekConnectivityCheck({
+  apiProtocol = "openai",
   apiPrefix,
   apiKey,
   baseUrl,
@@ -193,6 +195,7 @@ export async function runDeepSeekConnectivityCheck({
       api_key: modelApiKey,
       base_url: modelBaseUrl,
       model: modelName,
+      api_protocol: apiProtocol,
     }));
     if (showResult) {
       setDeepSeekValidationMessage(

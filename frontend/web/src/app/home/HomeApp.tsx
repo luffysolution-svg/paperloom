@@ -211,6 +211,11 @@ function SettingsDialogSlot() {
     const detail = event?.detail || {};
     settingsHub?.dialogStore?.open?.({ tab: "api", setupMode: Boolean(detail.setupMode) });
   });
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("settings") === "api") {
+      settingsHub?.dialogStore?.open?.({ tab: "api" });
+    }
+  }, [settingsHub]);
 
   return (
     <SettingsDialog

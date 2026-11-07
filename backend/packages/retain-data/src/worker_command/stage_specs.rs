@@ -131,6 +131,8 @@ pub(crate) fn write_translate_stage_spec(
             "memory_mode": request.translation.memory_mode,
             "model": request.translation.model,
             "base_url": request.translation.base_url,
+            "api_protocol": request.translation.api_protocol,
+            "thinking": request.translation.thinking,
             "credential_ref": credential_ref,
             // 这里曾经还写 4 个 render_prewarm_* key（输出路径 / render_mode /
             // pdf_compress_dpi / source_cleanup_strategy）。阶段解耦之后 render
@@ -272,6 +274,8 @@ pub(crate) fn write_provider_stage_spec(
             "memory_mode": request.translation.memory_mode,
             "model": request.translation.model,
             "base_url": request.translation.base_url,
+            "api_protocol": request.translation.api_protocol,
+            "thinking": request.translation.thinking,
             "credential_ref": translation_credential_ref,
         },
         "render": {
