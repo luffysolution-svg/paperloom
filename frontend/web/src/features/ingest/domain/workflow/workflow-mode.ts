@@ -14,7 +14,7 @@ import {
 } from "./rules.js";
 import { resolveSubmitControlState } from "./submit-controls.js";
 import { resolveTranslationBudgetState } from "./budget.js";
-import type { WorkflowViewPortLike } from "./contracts.js";
+import type { UploadServiceOverrides, WorkflowViewPortLike } from "./contracts.js";
 import type { WorkflowDeveloperConfig } from "./payload.js";
 import type { WorkflowConfigPortLike } from "./contracts.js";
 import type { WorkflowConstants } from "./contracts.js";
@@ -42,6 +42,7 @@ export interface CreateWorkflowModeControllerOptions {
     refreshSubmitControls?: () => void;
   }) => void;
   loadGlossaryOptions: () => void;
+  getUploadServiceOverrides?: () => UploadServiceOverrides | null;
 }
 
 export function createWorkflowModeController({
@@ -62,6 +63,7 @@ export function createWorkflowModeController({
   hasBrowserCredentials,
   updateCredentialGatePort,
   loadGlossaryOptions,
+  getUploadServiceOverrides,
 }: CreateWorkflowModeControllerOptions) {
   const { WORKFLOW_BOOK, WORKFLOW_TRANSLATE, WORKFLOW_RENDER } = constants;
   const WORKFLOW_OCR = (constants as { WORKFLOW_OCR?: string }).WORKFLOW_OCR || "ocr";
@@ -118,7 +120,8 @@ export function createWorkflowModeController({
     }
     const developerConfig = getDeveloperConfig() || {};
     const modelBaseUrl = `${
-      (developerConfig as { baseUrl?: unknown }).baseUrl
+      getUploadServiceOverrides?.()?.baseUrl
+      || (developerConfig as { baseUrl?: unknown }).baseUrl
       || defaultModelBaseUrl()
       || ""
     }`;

@@ -51,8 +51,8 @@ export function CredentialsWorkbench() {
       const manager = feature.serviceProfiles;
       const { profiles, activeId } = manager.getState();
       const active = profiles.find((profile) => profile.id === activeId);
-      if (!setupMode && (profileName !== undefined || active)) {
-        await manager.save(profileName ?? active!.name, profileName === undefined ? activeId : undefined,
+      if (!setupMode) {
+        await manager.save(profileName ?? active?.name ?? "默认方案", profileName === undefined ? active?.id : undefined,
           agentRef.current?.getProfile() ?? active?.agent ?? null);
       }
     } catch (error) {
@@ -89,7 +89,7 @@ export function CredentialsWorkbench() {
     ? "正在保存…"
     : savedPulse
       ? "已保存"
-      : setupMode ? "保存并启动" : "保存设置";
+      : setupMode ? "保存并启动" : "更新当前方案";
 
   const saveAction = (
     <DialogFooter className="credential-dialog-actions credential-document-actions">

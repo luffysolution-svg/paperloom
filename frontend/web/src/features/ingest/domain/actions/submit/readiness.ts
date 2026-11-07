@@ -47,7 +47,7 @@ export function handleSubmitReadinessBlock({
       setText("error-box", "请先完成首次配置。");
       return true;
     case SUBMIT_BLOCK_REASONS.MISSING_CREDENTIALS:
-      setText("error-box", "请先填写当前 OCR Provider 凭证。");
+      setText("error-box", "请先补全本次任务所需的接口设置。");
       openBrowserCredentialsDialog?.();
       return true;
     case SUBMIT_BLOCK_REASONS.MISSING_UPLOAD:

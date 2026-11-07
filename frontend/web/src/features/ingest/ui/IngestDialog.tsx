@@ -34,10 +34,11 @@ import {
   useHomeLibrary,
   useHomeUploadStatePort,
   useHomeWorkflowDialog,
+  useHomeWorkflowViewActions,
+  useHomeFeatures,
 } from "@/ui/context/home-services-context.js";
 import { useDialogReturnFocus } from "@/ui/hooks/use-dialog-return-focus.js";
 import { WorkflowPanel } from "./WorkflowPanel.jsx";
-import { ServiceProfileSelect } from "@/features/credentials/index.js";
 
 // statusCardSlot 已移除：进度不再进本弹窗。
 export function IngestDialog({
@@ -50,9 +51,18 @@ export function IngestDialog({
   const library = useHomeLibrary();
   const workflowDialog = useHomeWorkflowDialog();
   const bridge = useHomeBridge();
+  const workflowActions = useHomeWorkflowViewActions();
+  const features = useHomeFeatures();
   const dialog = useStoreSnapshot(dialogStore);
   const open = Boolean(dialog.open);
   const { onCloseAutoFocus } = useDialogReturnFocus(open);
+
+  useEffect(() => {
+    if (!open) {
+      workflowActions.setTaskServiceSelection(null);
+      features.workflowFeature?.refreshSubmitControls?.();
+    }
+  }, [open, workflowActions, features]);
 
   // <html> 级样式钩子在 React 根之外，用 effect 同步（卸载时清理）。
   useEffect(() => {
@@ -168,11 +178,10 @@ export function IngestDialog({
           >
             <DialogHeader className="translation-workflow-head is-upload-head">
               <DialogTitle asChild>
-                <h2 id={TRANSLATION_WORKFLOW_DIALOG.ids.title} className="sr-only">
+                <h2 id={TRANSLATION_WORKFLOW_DIALOG.ids.title}>
                   {TRANSLATION_WORKFLOW_DIALOG.copy.uploadTitle}
                 </h2>
               </DialogTitle>
-              <ServiceProfileSelect />
               <DialogCloseButton
                 id={TRANSLATION_WORKFLOW_DIALOG.ids.closeButton}
               />

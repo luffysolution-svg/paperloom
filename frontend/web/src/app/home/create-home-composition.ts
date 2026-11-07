@@ -144,6 +144,7 @@ export function createHomeComposition({
     processingChoicePort: {
       resetProcessingChoice: () => {
         workflowView.setOcrOnly(false);
+        workflowView.setTaskServiceSelection(null);
         uploadView.closeTranslationOptions();
       },
     },

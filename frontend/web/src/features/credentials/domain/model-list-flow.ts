@@ -55,12 +55,19 @@ export function createTranslationModelListFlow({
     viewPort.setTranslationModels?.({
       items: [], loading: true, tone: "pending", message: "正在拉取模型…", provider, baseUrl,
     });
+    function isCurrent() {
+      if (request !== requestId) return false;
+      const current = dialogElementsPort.elements();
+      if (`${current.apiKeyInput?.value || ""}`.trim() !== apiKey
+        || `${current.modelBaseUrlInput?.value || ""}`.trim() !== baseUrl) {
+        clear();
+        return false;
+      }
+      return true;
+    }
     try {
       const result = await listModels(apiPrefix, { api_key: apiKey, base_url: baseUrl });
-      const current = dialogElementsPort.elements();
-      const currentKey = `${current.apiKeyInput?.value || ""}`.trim();
-      const currentBaseUrl = `${current.modelBaseUrlInput?.value || ""}`.trim();
-      if (request !== requestId || currentKey !== apiKey || currentBaseUrl !== baseUrl) return false;
+      if (!isCurrent()) return false;
       const models = Array.isArray((result as any)?.models)
         ? (result as any).models.filter((item) => typeof item === "string" && item.trim())
         : [];
@@ -77,7 +84,7 @@ export function createTranslationModelListFlow({
       });
       return ok;
     } catch (error) {
-      if (request !== requestId) return false;
+      if (!isCurrent()) return false;
       viewPort.setTranslationModels?.({
         items: [],
         loading: false,

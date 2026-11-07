@@ -234,6 +234,7 @@ function mountWorkflowHarness({
   developerConfig: savedDeveloperConfig,
   uploadState = { uploadId: "upload-1", uploadedPageCount: 12 },
   pageRanges = "2-4",
+  getUploadServiceOverrides,
   viewPort,
   submitValues = {
     ocrProvider: "paddle",
@@ -261,6 +262,7 @@ function mountWorkflowHarness({
     defaultPaddleToken: () => "paddle-default",
     defaultOcrProvider: () => "paddle",
     defaultModelApiKey: () => "model-default",
+    getUploadServiceOverrides,
     defaultFileLabel: "选择 PDF",
     normalizeWorkflow: (value) => value || "book",
     normalizeMathMode: (value) => value || "direct_typst",
@@ -317,6 +319,31 @@ test("collectRunPayload builds book submit payload from resolved workflow inputs
   assert.equal("api_key" in payload.translation, false);
   assert.equal(payload.translation.glossary_id, "glossary-selected");
   assert.equal(payload.render.compile_workers, 5);
+});
+
+test("上传临时选择进入请求，馆藏翻译和全局默认配置不受影响", () => {
+  const saved = developerConfig();
+  let overrides = {
+    ocrProvider: "mineru", ocrToken: "temporary-ocr", ocrCredentialRef: "",
+    modelApiKey: "temporary-key", translationCredentialRef: "",
+    model: "temporary-model", baseUrl: "https://temporary.example/v1", workers: 3,
+  };
+  const feature = mountWorkflowHarness({ developerConfig: saved, getUploadServiceOverrides: () => overrides });
+  const payload = feature.collectRunPayload();
+  assert.equal(payload.ocr.provider, "mineru");
+  assert.equal(payload.ocr.mineru_token, "temporary-ocr");
+  assert.equal(payload.translation.api_key, "temporary-key");
+  assert.equal(payload.translation.model, "temporary-model");
+  assert.equal(payload.translation.base_url, "https://temporary.example/v1");
+  assert.equal(payload.translation.workers, 3);
+  assert.equal(feature.currentBudgetState().visible, false, "其他服务不显示 DeepSeek 余额");
+  const book = feature.buildTranslateJobConfig("");
+  assert.equal(book.ocr.provider, "paddle");
+  assert.equal(book.translation.model, saved.model);
+  assert.equal(book.translation.credential_ref, "cred_translation");
+  overrides = null;
+  assert.equal(feature.collectRunPayload().translation.model, saved.model);
+  assert.equal(saved.model, "deepseek-chat");
 });
 
 test("collectRunPayload builds render-only payload from artifact source", () => {

@@ -145,7 +145,7 @@ test("HomeApp：契约 id、idle 链、工作流对话框事件契约与交互",
   assert.equal(dialog.dataset.open, "1");
   assert.equal(dialog.classList.contains("is-upload-mode"), true);
   assert.equal(byId("translation-workflow-title").textContent, "添加 PDF");
-  assert.equal(byId("translation-workflow-title").classList.contains("sr-only"), true, "上传标题只供无障碍读取");
+  assert.equal(byId("translation-workflow-title").classList.contains("sr-only"), false, "上传标题与本次任务配置一起可见");
   assert.equal(byId("translation-workflow-desc"), null, "上传副标题不再渲染");
   assert.equal(dom.window.document.documentElement.classList.contains("translation-workflow-open"), true);
   await waitFor(() => byId("library-add-pdf-btn").getAttribute("aria-expanded") === "true", "触发按钮 aria 同步");

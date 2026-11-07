@@ -2,12 +2,15 @@
 import type { GlossariesFeature } from "@/features/glossaries/index.js";
 import type { TranslateDocumentPayload } from "@/features/library/index.js";
 import type { mountBrowserCredentialsFeature } from "@/features/credentials/index.js";
+import type { UploadServiceOverrides } from "@/features/ingest/domain.js";
 
 export type WorkflowFeature = {
   applyWorkflowMode: () => void;
   buildOcrJobConfig: (pageRanges?: string) => Record<string, unknown>;
   buildTranslateJobConfig: (pageRanges?: string) => TranslateDocumentPayload | Record<string, unknown>;
   collectRunPayload: () => unknown;
+  getUploadServiceOverrides?: () => UploadServiceOverrides | null;
+  hasUploadCredentials?: () => boolean;
   currentRenderSourceJobId: () => string;
   currentWorkflow: () => string;
   currentBudgetState: (workflow?: string) => unknown;

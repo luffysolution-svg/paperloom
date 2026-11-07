@@ -18,7 +18,7 @@ export function useCredentialSave(action: (() => Promise<boolean>) | undefined, 
         const active = profileState?.profiles?.find((profile) => profile.id === profileState.activeId);
         if (manager && active) {
           void manager.save(active.name, active.id).catch(() => {
-            toast.error("当前配置方案同步失败，请点击“保存设置”重试");
+            toast.error("当前配置方案同步失败，请点击“更新当前方案”重试");
           });
         }
         toast.success(successMessage);

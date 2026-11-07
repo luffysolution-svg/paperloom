@@ -39,7 +39,7 @@ export function ServiceProfileManager({ disabled, onSave }: {
   return (
     <section className="credential-service-profile-manager" aria-label="配置方案管理" aria-busy={Boolean(working)}>
       <h3>配置方案</h3>
-      <p>保存 OCR、翻译和 AI Agent 的组合。修改后点「保存设置」更新当前方案，或另存为新方案。</p>
+      <p>保存 OCR、翻译和 AI Agent 的组合。修改后点「更新当前方案」，或另存为新方案并启用。</p>
       <ServiceProfileSelect disabled={locked} />
       <div className="credential-service-profile-actions">
         <label>

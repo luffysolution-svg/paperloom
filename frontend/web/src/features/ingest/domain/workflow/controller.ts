@@ -21,6 +21,7 @@ import { createWorkflowModeController } from "./workflow-mode.js";
 import { createDeveloperDialogController } from "./developer-dialog-controller.js";
 import { createWorkflowPayloadAssembly } from "./payload-assembly.js";
 import type {
+  UploadServiceOverrides,
   LoadGlossaryOptionsParams,
   WorkflowConfigPortLike,
   WorkflowConstants,
@@ -70,6 +71,7 @@ export interface MountWorkflowFeatureOptions {
   apiPrefix?: string;
   setText?: (id: string, value?: string) => void;
   isOcrOnly?: () => boolean;
+  getUploadServiceOverrides?: () => UploadServiceOverrides | null;
 }
 
 export function mountWorkflowFeature({
@@ -101,6 +103,7 @@ export function mountWorkflowFeature({
   apiPrefix,
   setText,
   isOcrOnly,
+  getUploadServiceOverrides,
 }: MountWorkflowFeatureOptions) {
   const defaults = resolveWorkflowDefaults(constants);
 
@@ -150,6 +153,7 @@ export function mountWorkflowFeature({
     hasBrowserCredentials,
     updateCredentialGatePort,
     loadGlossaryOptions,
+    getUploadServiceOverrides,
   });
 
   const dialog = createDeveloperDialogController({
@@ -182,6 +186,7 @@ export function mountWorkflowFeature({
     defaultPaddleToken,
     defaultModelApiKey,
     readSubmitValues,
+    getUploadServiceOverrides,
   });
 
   return {
@@ -189,6 +194,8 @@ export function mountWorkflowFeature({
     buildOcrJobConfig: payload.buildOcrJobConfig,
     buildTranslateJobConfig: payload.buildTranslateJobConfig,
     collectRunPayload: payload.collectRunPayload,
+    getUploadServiceOverrides,
+    hasUploadCredentials: () => Boolean(hasBrowserCredentials?.()),
     currentRenderSourceJobId: mode.currentRenderSourceJobId,
     currentWorkflow: mode.currentWorkflow,
     currentBudgetState: mode.currentBudgetState,

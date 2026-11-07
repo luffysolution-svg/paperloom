@@ -328,16 +328,34 @@ test("配置方案：另存为保留原方案，全局保存更新 Agent，切�
     select.dispatchEvent(new Event("change", { bubbles: true }));
     await waitFor(() => byId("browser-api-key").value === "translation-a" && agentKey().value === "agent-updated", "切换同时还原三组配置");
     assert.equal(byId("browser-mineru-token").value, "mineru-a");
+    const agentUpdatesBeforeUpload = updates.length;
     services.settingsHub.dialogStore.close();
     await waitFor(() => !byId("app-settings-dialog"), "关闭设置");
     services.workflowDialog.openUpload();
-    await waitFor(() => document.querySelector('.credential-service-profile-picker select'), "翻译窗口方案入口");
-    const quick = document.querySelector('.credential-service-profile-picker select');
+    await waitFor(() => document.querySelector('[aria-label="本次任务配置方案"]'), "翻译窗口方案入口");
+    const quick = document.querySelector('[aria-label="本次任务配置方案"]');
     quick.value = secondId;
     quick.dispatchEvent(new Event("change", { bubbles: true }));
-    await waitFor(() => manager.getState().activeId === secondId, "翻译窗口一键切换");
-    assert.equal(services.features.workflowFeature.buildTranslateJobConfig("").translation.api_key, "translation-b");
-    assert.equal(savedAgent.llm_api_key, "agent-b");
+    await waitFor(() => services.features.workflowFeature.collectRunPayload().translation.api_key === "translation-b", "本次任务使用所选方案");
+    assert.equal(manager.getState().activeId, firstId, "临时方案不改全局默认");
+    assert.equal(services.features.workflowFeature.buildTranslateJobConfig("").translation.api_key, "translation-a", "馆藏翻译继续使用全局设置");
+    assert.equal(savedAgent.llm_api_key, "agent-updated", "上传窗口不切换 AI Agent");
+
+    const ocrSelect = document.querySelector('[aria-label="本次任务 OCR 服务"]');
+    ocrSelect.value = "current:mineru";
+    ocrSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    await waitFor(() => services.features.workflowFeature.collectRunPayload().ocr.provider === "mineru", "独立切换 OCR");
+    const modelInput = document.querySelector('[aria-label="本次任务翻译模型"]');
+    typeInput(modelInput, "custom-model");
+    await waitFor(() => services.features.workflowFeature.collectRunPayload().translation.model === "custom-model", "独立指定模型");
+    const payload = services.features.workflowFeature.collectRunPayload();
+    assert.equal(payload.ocr.mineru_token, "mineru-a", "OCR 使用独立选择的凭据");
+    assert.equal(payload.translation.api_key, "translation-b", "修改 OCR 不改变翻译服务");
+    assert.equal(manager.getState().profiles.find((item) => item.id === firstId).credentials.modelApiKey, "translation-a");
+    assert.equal(updates.length, agentUpdatesBeforeUpload, "临时切换不调用 Agent 保存接口");
+    services.workflowDialog.close();
+    await waitFor(() => services.stores.workflowView.getSnapshot().taskServiceSelection === null, "关闭上传窗口清除临时选择");
+    assert.equal(services.features.workflowFeature.collectRunPayload().translation.api_key, "translation-a");
   } finally {
     root.unmount(); services.dispose(); host.remove(); globalThis.fetch = previousFetch;
   }
@@ -681,7 +699,7 @@ test("接口设置只有一个弹窗：常规与首次配置共用设置中心 A
   await waitFor(() => byId("app-settings-dialog") !== null, "常规打开设置中心");
   await waitFor(() => byId("browser-api-key") !== null, "API 区内嵌工作台");
   assert.equal(byId("browser-credentials-dialog"), null, "常规不再弹独立接口设置窗");
-  assert.equal(byId("browser-credentials-save-btn").textContent, "保存设置");
+  assert.equal(byId("browser-credentials-save-btn").textContent, "更新当前方案");
   assert.equal(byId("browser-credentials-subtitle"), null, "常规入口不该出现首配引导语");
   assert.ok(
     dom.window.document.querySelector(".credential-agent-section > .credential-agent-card"),
@@ -742,7 +760,7 @@ test("凭据入口：设置 API 区内嵌工作台；#credential-gate-action 也
   await waitFor(() => byId("browser-api-key") !== null, "API 区内嵌凭据工作台挂载");
   assert.ok(byId("browser-credentials-save-btn"), "内嵌工作台带保存按钮");
   assert.equal(byId("browser-credentials-tabs"), null, "API 页面不再嵌套二级 Tab");
-  assert.equal(byId("browser-credentials-save-btn").textContent, "保存设置");
+  assert.equal(byId("browser-credentials-save-btn").textContent, "更新当前方案");
   assert.equal(byId("browser-job-math-mode"), null, "API 页面不再展示公式处理方式");
   const translationKeyInput = byId("browser-api-key");
   const showTranslationKey = dom.window.document.querySelector('[aria-label="显示翻译 API Key"]');
@@ -1132,6 +1150,66 @@ async function prepareUploadedPdf(services) {
   services.features.workflowFeature.applyWorkflowMode();
   await waitFor(() => !byId("submit-btn").disabled, "直接翻译可用");
 }
+
+test("上传翻译：独立服务选择、模型拉取和实际提交使用同一组临时配置", async () => {
+  const submission = captureJobSubmissions();
+  const jobFetch = globalThis.fetch;
+  const modelRequests = [];
+  const ocrChecks = [];
+  globalThis.fetch = async (url, options = {}) => {
+    if (!`${url}`.endsWith("/providers/models")) return jobFetch(url, options);
+    modelRequests.push(JSON.parse(options.body));
+    return new Response(JSON.stringify({ code: 0, data: { ok: true, models: ["qwen-pulled"], summary: "已获取 1 个模型" } }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+  const services = createServices({
+    initialDesktopMode: true,
+    loadPersistedBrowserConfig: () => ({ paddleToken: "main-ocr", mineruToken: "other-ocr", modelApiKey: "main-key" }),
+    loadPersistedDeveloperConfig: () => ({
+      model: "main-model", baseUrl: "https://api.deepseek.com/v1",
+      translationProfiles: { qwen: { apiKey: "qwen-key", baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", model: "qwen-default", workers: 20 } },
+    }),
+    validateOcrToken: async (_prefix, provider, token) => {
+      ocrChecks.push({ provider, token });
+      return { ok: true, status: "valid" };
+    },
+  });
+  const { host, root } = await mountHome(services);
+  const opened = [];
+  services.library.actions.openBookDetail = (payload) => opened.push(payload);
+  try {
+    await prepareUploadedPdf(services);
+    const choose = (label, value) => {
+      const select = document.querySelector(`[aria-label="${label}"]`);
+      select.value = value;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+    choose("本次任务 OCR 服务", "current:mineru");
+    choose("本次任务翻译服务", "provider:qwen");
+    await waitFor(() => byId("upload-translation-model").value === "qwen-default", "切服务后回填对应模型");
+    click(document.querySelector('[aria-label="拉取本次翻译服务的模型"]'));
+    await waitFor(() => document.querySelector('#upload-translation-models option[value="qwen-pulled"]'), "拉取到所选服务的模型");
+    assert.deepEqual(modelRequests, [{ api_key: "qwen-key", base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1" }]);
+    typeInput(byId("upload-translation-model"), "qwen-pulled");
+    await waitFor(() => services.features.workflowFeature.collectRunPayload().translation.model === "qwen-pulled", "模型写入任务选择");
+    click(byId("submit-btn"));
+    await waitFor(() => opened.length, "提交成功并打开文档进度");
+    assert.equal(submission.requests.length, 1);
+    const sent = submission.requests[0];
+    assert.equal(sent.ocr.provider, "mineru");
+    assert.equal(sent.ocr.mineru_token, "other-ocr");
+    assert.equal(sent.translation.api_key, "qwen-key");
+    assert.equal(sent.translation.model, "qwen-pulled");
+    assert.equal(sent.translation.base_url, "https://dashscope.aliyuncs.com/compatible-mode/v1");
+    assert.equal(sent.translation.workers, 20);
+    await waitFor(() => ocrChecks.length, "OCR 预检使用本次选择");
+    assert.deepEqual(ocrChecks, [{ provider: "mineru", token: "other-ocr" }]);
+    assert.equal(defaultCredentialsStatePort.getCredentials().modelApiKey, "main-key");
+    assert.equal(defaultCredentialsStatePort.getCredentials().ocrProvider, "paddle");
+    assert.equal(services.features.workflowFeature.buildTranslateJobConfig("").translation.model, "main-model");
+  } finally {
+    root.unmount(); services.dispose(); host.remove(); submission.restore();
+  }
+});
 
 test("桌面翻译：已保存凭据时首次点击直接提交并打开进度", async () => {
   const submission = captureJobSubmissions();

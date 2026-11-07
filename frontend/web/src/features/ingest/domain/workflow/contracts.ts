@@ -14,6 +14,8 @@ export interface WorkflowSubmitValues {
   selectedGlossaryId?: string;
 }
 
+export type UploadServiceOverrides = WorkflowSubmitValues & { model?: string; baseUrl?: string; workers?: number };
+
 export interface LoadGlossaryOptionsParams {
   force?: boolean;
   selectedId?: string;

@@ -7,7 +7,7 @@ import {
   TRANSLATION_PROVIDER_OPTIONS,
 } from "@/platform/config/providers.js";
 import { validationIcon } from "../domain/validation-icon.js";
-import { Check, ChevronDown, Code2, ExternalLink, Languages, PlugZap, TriangleAlert } from "lucide-react";
+import { Check, ChevronDown, Code2, ExternalLink, Languages, PlugZap, Save, TriangleAlert } from "lucide-react";
 import { Select as SelectPrimitive } from "radix-ui";
 import { SecretInput } from "./SecretInput.js";
 import { DesktopPrivateApiAccess } from "./DesktopPrivateApiAccess.js";
@@ -225,7 +225,7 @@ export function TranslationPanel({ disabled = false }: { disabled?: boolean } = 
       <div className="credential-card-footer">
         <div className="credential-card-actions">
           <button type="button" className="app-button secondary" disabled={locked}
-            aria-busy={saving} onClick={() => void save()}>{saving ? "正在保存…" : "保存翻译 API"}</button>
+            aria-busy={saving} onClick={() => void save()}><Save aria-hidden="true" />{saving ? "正在保存…" : "保存翻译 API"}</button>
           <button
             type="button"
             className="app-button secondary"

@@ -144,6 +144,7 @@ export function buildHomeServices({
     workflowViewActions: {
       setSelectedGlossaryId: views.workflowView.setSelectedGlossaryId,
       setOcrOnly: views.workflowView.setOcrOnly,
+      setTaskServiceSelection: views.workflowView.setTaskServiceSelection,
       isOcrOnly: views.workflowView.isOcrOnly,
     },
     workflowDialog: views.workflowDialog,

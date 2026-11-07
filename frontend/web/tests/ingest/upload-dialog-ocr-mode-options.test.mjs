@@ -104,6 +104,8 @@ test("从「翻译」切到「仅 OCR」时，已展开的翻译选项面板不�
     () => services.stores.workflowView.getSnapshot().ocrOnly === true,
     "切换到仅 OCR 模式",
   );
+  await waitFor(() => !dom.window.document.querySelector('[aria-label="本次任务翻译服务"]'), "仅 OCR 不显示翻译服务和模型");
+  assert.ok(dom.window.document.querySelector('[aria-label="本次任务 OCR 服务"]'));
   assert.equal(
     services.stores.uploadView.getSnapshot().translationOptionsOpen,
     false,

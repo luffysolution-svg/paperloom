@@ -119,12 +119,30 @@ export function createAppActions({
       currentRenderSourceJobId: () => workflow().currentRenderSourceJobId(),
       currentBudgetState: (w?: string) => {
         if (isOcrOnly()) return { visible: false, blocking: false, tone: "", message: "", topUpUrl: "" } as any;
+        const selected = workflow().getUploadServiceOverrides?.();
+        const current = selected && creds().getTaskServiceCatalog().resolve().translation;
+        // 自动余额预检只使用它所属账户的缓存，不能拿默认 Key 检查临时账户。
+        if (selected && current && (selected.modelApiKey !== current.apiKey || selected.translationCredentialRef !== current.credentialRef)) {
+          return { visible: false, blocking: false };
+        }
         return workflow().currentBudgetState(w) as any;
       },
       collectRunPayload: () => workflow().collectRunPayload(),
       validateBeforeSubmit: () => upload().validatePageRanges() ?? true,
-      ensureOcrCredentialsReady: (options?: unknown) => creds().ensureOcrCredentialsReady(options),
+      ensureOcrCredentialsReady: (options?: Record<string, unknown>) => {
+        const selected = workflow().getUploadServiceOverrides?.();
+        if (!selected) return creds().ensureOcrCredentialsReady(options);
+        if (selected.ocrCredentialRef && !selected.ocrToken) return Promise.resolve(true);
+        return creds().ensureOcrCredentialsReady({ ...options, credentials: {
+          ocrProvider: selected.ocrProvider || "paddle",
+          ocrCredentialRef: selected.ocrCredentialRef || "",
+          paddleToken: selected.ocrProvider === "paddle" ? selected.ocrToken || "" : "",
+          mineruToken: selected.ocrProvider === "mineru" ? selected.ocrToken || "" : "",
+          modelApiKey: "", translationCredentialRef: "",
+        } });
+      },
       hasBrowserCredentials: () => {
+        if (workflow().hasUploadCredentials) return workflow().hasUploadCredentials();
         if (isOcrOnly()) return creds().hasOcrCredentials();
         return Boolean(creds().hasBrowserCredentials());
       },

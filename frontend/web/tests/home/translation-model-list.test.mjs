@@ -48,6 +48,18 @@ test("模型拉取期间配置发生变化时丢弃旧响应", async () => {
   fixtureData.elements.modelBaseUrlInput.value = "https://other.example/v1";
   resolve({ ok: true, models: ["stale-model"] });
   assert.equal(await pending, false);
-  assert.equal(fixtureData.states.at(-1).loading, true);
+  assert.equal(fixtureData.states.at(-1).loading, false);
+  assert.deepEqual(fixtureData.states.at(-1).items, []);
+});
+
+test("配置变化后失败的旧请求不会留下错误或锁住拉取按钮", async () => {
+  let reject;
+  const f = fixture(() => new Promise((_resolve, fail) => { reject = fail; }));
+  const pending = f.flow.fetchModels();
+  f.elements.apiKeyInput.value = "new-key";
+  reject(new Error("old-key unauthorized"));
+  assert.equal(await pending, false);
+  assert.equal(f.states.at(-1).loading, false);
+  assert.equal(f.states.at(-1).tone, "");
 });
 

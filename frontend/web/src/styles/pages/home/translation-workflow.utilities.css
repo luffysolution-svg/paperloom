@@ -184,26 +184,163 @@
   }
 }
 
-.translation-workflow-head .credential-service-profile-picker {
-  flex: 1;
+.translation-workflow-head.is-upload-head h2 {
   margin-right: auto;
+  font-size: 15px;
 }
 
-.translation-workflow-head .credential-service-profile-picker label {
-  flex-wrap: nowrap;
+.upload-service-picker {
+  display: grid;
+  gap: 12px;
+  padding: 2px 0 4px;
 }
 
-.translation-workflow-head .credential-service-profile-picker label > span {
+.upload-service-presets {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.upload-service-presets > label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.upload-service-presets > label > span {
   flex: none;
+  white-space: nowrap;
+}
+
+.upload-service-scope {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.upload-service-presets select {
+  max-width: 220px;
+}
+
+.upload-service-manage {
+  flex: none;
+  margin-left: auto;
+  padding: 4px 0;
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.upload-service-manage:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+.upload-service-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: 10px;
+}
+
+.upload-service-fields.is-ocr-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.upload-service-fields > label,
+.upload-service-model {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.upload-service-picker select,
+.upload-service-model-input {
+  min-width: 0;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.upload-service-picker select {
+  padding: 0 10px;
+  width: 100%;
+}
+
+.upload-service-model-input {
+  display: flex;
+  align-items: center;
+}
+
+.upload-service-model-input input {
+  width: 100%;
+  min-width: 0;
+  padding-inline: 10px 0;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+}
+
+.upload-service-model-input button {
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  height: 34px;
+  border-radius: 9px;
   color: var(--muted);
 }
 
-.translation-workflow-head .credential-service-profile-picker select {
-  width: 180px;
-  min-width: 0;
-  height: 36px;
-  border-radius: 10px;
-  font-size: 13px;
+.upload-service-model-input button:hover:not(:disabled) {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.upload-service-model-input svg {
+  width: 14px;
+  height: 14px;
+}
+
+.upload-service-picker select:focus-visible,
+.upload-service-picker button:focus-visible,
+.upload-service-picker input:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.upload-service-picker :disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.upload-service-message {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.upload-service-message.is-error {
+  color: var(--warn);
+}
+
+@media (max-width: 600px) {
+  .upload-service-presets {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .upload-service-fields {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .upload-service-model {
+    grid-column: 1 / -1;
+  }
 }
 
 @utility translation-workflow-head-copy {

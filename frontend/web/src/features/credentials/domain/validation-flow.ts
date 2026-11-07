@@ -5,6 +5,7 @@ import { runOcrTokenValidation } from "./validation.js";
 import { getOcrProviderDefinition } from "@/platform/config/providers.js";
 import { handleBrowserDeepSeekValidate as runBrowserDeepSeekValidate } from "./deepseek-flow.js";
 import { ensureOcrCredentialValidationReady } from "./ocr-readiness-flow.js";
+import type { CredentialsFields } from "./state.js";
 import {
   ocrTokenFromDialogValues,
   readCredentialDialogValues,
@@ -26,6 +27,7 @@ type DeepSeekViewPort = {
 };
 
 export interface EnsureOcrReadyOptions {
+  credentials?: CredentialsFields;
   onMissingToken?: () => void;
   onInvalidToken?: (result?: { ok?: boolean } | null) => void;
 }
@@ -71,14 +73,15 @@ export function createCredentialValidationFlow({
   async function ensureOcrReady({
     onMissingToken,
     onInvalidToken,
+    credentials,
   }: EnsureOcrReadyOptions = {}) {
-    const provider = access.currentOcrProvider();
+    const provider = credentials?.ocrProvider || access.currentOcrProvider();
     const readiness = await ensureOcrCredentialValidationReady({
       apiPrefix,
       state,
       providerId: provider,
-      credentials: access.readCurrentCredentials(),
-      defaultPaddleToken,
+      credentials: credentials || access.readCurrentCredentials(),
+      defaultPaddleToken: credentials ? () => "" : defaultPaddleToken,
       validateOcrToken,
       setOcrValidationMessage: viewPort.setOcrValidationMessage,
       showResult: !runtimeEnv.isDesktopMode(),

@@ -165,6 +165,7 @@ export type HomeServicesViews = {
     store: AppStore;
     setSelectedGlossaryId: (id: string) => unknown;
     setOcrOnly: (value: boolean) => unknown;
+    setTaskServiceSelection: (selection: Record<string, string> | null) => unknown;
     isOcrOnly: () => boolean;
   };
   statusArea: StatusAreaBag;

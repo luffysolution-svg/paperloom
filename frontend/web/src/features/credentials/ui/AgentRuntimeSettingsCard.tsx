@@ -7,7 +7,6 @@ import {
   type AgentRuntimeConfigUpdate,
 } from "@/platform/api/index.js";
 import { Bot, FlaskConical, Save } from "lucide-react";
-import { DialogFooter } from "@/ui/components/dialog.js";
 import { FormStatusLine } from "@/ui/components/form-status-line.js";
 import {
   activeMode,
@@ -284,18 +283,20 @@ export function AgentRuntimeSettingsCard({ ref }: { ref?: Ref<AgentRuntimeSettin
         busy={busy}
       />
 
-      <DialogFooter className="credential-agent-actions">
-        <FormStatusLine status={message ? statusState : null} className="credential-agent-runtime-message" />
-        <button
-          type="button"
-          className="app-button secondary credential-agent-save-button"
-          onClick={() => void save()}
-          disabled={busy}
-        >
-          <Save aria-hidden="true" />
-          {saving ? "正在保存…" : restarting ? "重启中…" : "保存 AI Agent"}
-        </button>
-      </DialogFooter>
+      <div className="credential-card-footer">
+        <div className="credential-card-actions credential-agent-actions">
+          <button
+            type="button"
+            className="app-button secondary credential-agent-save-button"
+            onClick={() => void save()}
+            disabled={busy}
+          >
+            <Save aria-hidden="true" />
+            {saving ? "正在保存…" : restarting ? "重启中…" : "保存 AI Agent"}
+          </button>
+          <FormStatusLine status={message ? statusState : null} className="credential-agent-runtime-message" />
+        </div>
+      </div>
     </section>
   );
 }

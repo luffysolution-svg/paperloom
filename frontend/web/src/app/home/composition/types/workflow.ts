@@ -15,6 +15,7 @@ export type UploadViewActions = {
 export type WorkflowViewActions = {
   setSelectedGlossaryId: (id: string) => unknown;
   setOcrOnly: (value: boolean) => unknown;
+  setTaskServiceSelection: (selection: Record<string, string> | null) => unknown;
   isOcrOnly: () => boolean;
 };
 

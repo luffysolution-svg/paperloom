@@ -111,6 +111,7 @@ export type HomeUploadViewStoreValue = HomeReadStore & { actions?: any };
 export type HomeWorkflowViewActionsValue = {
   setSelectedGlossaryId: (id: string) => unknown;
   setOcrOnly: (value: boolean) => unknown;
+  setTaskServiceSelection: (selection: Record<string, string> | null) => unknown;
   isOcrOnly: () => boolean;
 };
 

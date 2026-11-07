@@ -1,5 +1,4 @@
 import { dialogDataset } from "./translation-profile.js";
-import { inferTranslationProvider } from "@/platform/config/providers.js";
 import {
   defaultCredentialsStatePort,
 } from "./default-state-port.js";
@@ -10,6 +9,7 @@ import { createTranslationProfiles } from "./translation-profiles.js";
 import { createCredentialDialogFlow } from "./dialog-flow.js";
 import { createBrowserCredentialSaveFlow } from "./save-flow.js";
 import { createServiceProfiles } from "./service-profiles.js";
+import { createTaskServiceAccess } from "./task-service-catalog.js";
 import { createCredentialValidationFlow } from "./validation-flow.js";
 import { createTranslationModelListFlow } from "./model-list-flow.js";
 import type {
@@ -93,6 +93,7 @@ export interface OpenBrowserCredentialsDialogOptions {
 }
 
 export interface EnsureOcrCredentialsReadyOptions {
+  credentials?: CredentialsFields;
   onMissingToken?: () => void;
   onInvalidToken?: (result?: ProviderValidationResult | null) => void;
 }
@@ -357,16 +358,12 @@ export function mountBrowserCredentialsFeature({
 
   return {
     serviceProfiles,
-    getTranslationConfig: () => {
-      const options = (getTaskOptions?.() || {}) as Record<string, unknown>;
-      const baseUrl = `${options.baseUrl || defaultModelBaseUrl?.() || ""}`.trim();
-      return {
-        provider: `${options.translationProvider || inferTranslationProvider(baseUrl)}`.trim(),
-        model: `${options.model || ""}`.trim(),
-        workers: Number(options.workers) || 0,
-        baseUrl,
-      };
-    },
+    ...createTaskServiceAccess({
+      getCredentials: access.readCurrentCredentials,
+      getTaskOptions,
+      getProfiles: () => serviceProfiles.getState().profiles,
+      defaultPaddleToken, defaultModelApiKey, defaultModelBaseUrl,
+    }),
     activateCredentialTab: dialogFlow.activateCredentialTab,
     ready: () => credentialReferencesReady,
     ensureOcrCredentialsReady: validation.ensureOcrReady,

@@ -10,9 +10,11 @@
 export { CredentialsWorkbench } from "./ui/CredentialsWorkbench.jsx";
 export { ServiceProfileSelect } from "./ui/ServiceProfileSelect.js";
 export { TranslationConfigSummary } from "./ui/TranslationConfigSummary.jsx";
+export type { TaskServiceCatalog, TaskServiceSelection } from "./domain/task-service-catalog.js";
+export { createTranslationModelListFlow } from "./domain/model-list-flow.js";
 export { HiddenCredentialInputs } from "./ui/HiddenCredentialInputs.jsx";
 export { AgentRuntimeSettingsCard } from "./ui/AgentRuntimeSettingsCard.jsx";
-export { CredentialsProvider, useCredentialsServices } from "./ui/credentials-context.jsx";
+export { CredentialsProvider, useCredentialsServices, useOptionalCredentialsServices } from "./ui/credentials-context.jsx";
 export type { CredentialsServices } from "./ui/credentials-context.jsx";
 export { useCredentialsController } from "./ui/useCredentialsController.js";
 export {
