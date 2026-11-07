@@ -1,9 +1,12 @@
 import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
+import { type TurnPart, type TurnMetrics } from "@retainpdf/api";
 import type { AiCitationLike } from "../../../shared/ai/answer-enhance.js";
 import type { ReaderAgentRuntimeConfig } from "../../../contracts/ai-operations.js";
 import type { ReaderAnswerer, ReaderAssistantMode } from "../../../contracts/ai-chat.js";
 import type { ReaderAgentOperationSignal } from "./use-reader-agent-operations.js";
 export type ReaderChatMetadata = {
+    parts?: TurnPart[];
+    metrics?: TurnMetrics;
     source?: string;
     citations?: AiCitationLike[];
     progress?: string;

@@ -1,3 +1,4 @@
+import type { TurnPart, TurnMetrics } from "@retainpdf/api";
 /** 与 answer-enhance / runtime 中的引用形状兼容；此处用宽松结构避免循环依赖。 */
 export type ThreadBranchCitation = {
     ref?: number | string;
@@ -16,6 +17,8 @@ export type ThreadBranchMessage = {
     progress?: string;
     source?: string;
     citations?: ThreadBranchCitation[];
+    parts?: TurnPart[];
+    metrics?: TurnMetrics;
     status?: {
         type: string;
         reason?: string;

@@ -3,9 +3,6 @@ import type { AiCitationLike } from "../../../external.js";
 import type { ReaderAssistantMode } from "../../../shared/ai/ask-answerer.js";
 import { type ReaderSelection } from "../../../shared/data/reader-regions.js";
 export declare function assistantMessageText(message: Pick<MessageState, "content">): string;
-export declare function ThinkingRow({ label }: {
-    label: string;
-}): import("react").JSX.Element;
 export declare function UserMessageRow({ message }: {
     message: MessageState;
 }): import("react").JSX.Element;

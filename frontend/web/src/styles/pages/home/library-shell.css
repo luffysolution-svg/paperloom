@@ -110,6 +110,13 @@ body.is-soft-reader-open {
   border: 0;
   border-radius: 0;
   box-shadow: none;
+  @media (max-width: 680px) {
+    flex-wrap: wrap;
+    gap: 8px;
+    & .library-topbar-spacer { display: none; }
+    & .library-top-tabs-root { flex-basis: 100%; display: flex; justify-content: center; min-width: 0; }
+    & .library-top-tab { min-height: 44px; }
+  }
 }
 
 @utility library-header-actions {

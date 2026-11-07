@@ -85,6 +85,11 @@ export async function removeAiConnection(id, revision) {
 }
 export const probeAiConnection = (id, options = {}) => request(`/${encodeURIComponent(id)}/probe`, "POST", options);
 export const authenticateAiConnection = (id, method) => request(`/${encodeURIComponent(id)}/authenticate`, "POST", { method_id: method });
+export const fetchAiAuthentication = (id) => request(`/${encodeURIComponent(id)}/authenticate`);
+export const cancelAiAuthentication = (id) => request(`/${encodeURIComponent(id)}/authenticate`, "DELETE");
+export const fetchAgentInteractions = (id) => request(`/interactions?conversation_id=${encodeURIComponent(id)}`);
+export const fetchActiveAiRuns = (id) => request(`/runs?conversation_id=${encodeURIComponent(id)}`);
+export const cancelAiRun = (id) => request(`/runs/${encodeURIComponent(id)}/cancel`, "POST");
 export const answerAgentInteraction = (id, answer) => request(`/interactions/${encodeURIComponent(id)}`, "POST", answer);
 export function emitAgentEvent(event) {
     if (typeof document !== "undefined")

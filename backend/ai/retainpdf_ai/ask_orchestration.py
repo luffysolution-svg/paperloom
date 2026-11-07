@@ -26,6 +26,9 @@ from .request_control import (
 )
 from .request_routing import RouteDecision, resolve_assistant_mode
 from .runtimes.contracts import AgentRuntime
+from .runtimes.contracts import AskResult, Citation
+from .turn_events import TurnTranscript
+from .image_inputs import image_inputs
 
 ChatFnBuilder = Callable[..., Any]
 ConfirmationProjector = Callable[[Any, str], list[dict[str, Any]]]
@@ -93,6 +96,7 @@ class AskOrchestrator:
     def prepare(self, payload: AskInput) -> PreparedAsk:
         """Select a runtime and validate model credentials before responding."""
         route = resolve_assistant_mode(payload.assistant_mode, payload.question)
+        image_inputs(payload.attachments)
         if payload.connection_id and self._connection_resolver:
             request_runtime, request_settings = self._connection_resolver(payload)
             request_runtime_id = request_runtime.runtime_id
@@ -159,6 +163,8 @@ class AskOrchestrator:
                 max_tool_rounds=prepared.max_tool_rounds,
                 content_source=prepared.content_source,
                 request_control=control,
+                attachments=payload.attachments,
+                scope_document_ids=payload.scope_document_ids,
                 **self._operation_arguments(
                     payload, request_runtime, request_message_id
                 ),
@@ -206,16 +212,19 @@ class AskOrchestrator:
     ) -> Iterator[str]:
         """Yield the existing SSE protocol while work runs in a host thread."""
         # Emit immediately, before conversation persistence or model setup.
-        yield self._encode_event(
+        transcript = TurnTranscript(payload.run_id or payload.assistant_message_id)
+        yield self._encode_event(transcript.accept(
             {
                 "type": "progress",
                 "stage": "routing",
                 "message": "正在判断任务类型",
             }
-        )
+        ))
         # The runtime loop is synchronous. A queue lets the HTTP response expose
         # tool events and final-answer deltas as soon as they are produced.
         events: queue.Queue[dict[str, Any] | None] = queue.Queue()
+        def emit(event):
+            events.put(transcript.accept(event))
         control = request_control or RequestControl(prepared.request_deadline_s)
         control.add_cancel_callback(lambda: events.put(None))
         control.raise_if_stopped()
@@ -232,15 +241,19 @@ class AskOrchestrator:
             if request_runtime.capabilities.model_transport == "runtime_managed"
             else self._build_chat_fn(
                 prepared.settings,
-                on_delta=lambda text: events.put({"type": "answer_delta", "text": text}),
+                on_delta=lambda text: emit({"type": "answer_delta", "text": text}),
+                on_event=emit,
                 request_control=control,
             )
         )
 
         def run() -> None:
+            request_message_id = ""
+            checkpoint_stop = threading.Event()
+            checkpoint_thread = None
             try:
                 if compress_event:
-                    events.put(compress_event)
+                    emit(compress_event)
                 request_message_id, request_persisted = (
                     self._conversation_state.persist_agent_request_message(
                         conversation_id,
@@ -249,7 +262,13 @@ class AskOrchestrator:
                         chain_parent_id=summary_id,
                     )
                 )
-                events.put(
+                def checkpoint():
+                    while not checkpoint_stop.wait(2):
+                        self._conversation_state.checkpoint_turn(conversation_id, payload, request_runtime, request_message_id, transcript)
+                if payload.assistant_message_id and request_message_id:
+                    checkpoint_thread = threading.Thread(target=checkpoint, daemon=True)
+                    checkpoint_thread.start()
+                emit(
                     self._agent_session_event(
                         payload,
                         prepared,
@@ -259,7 +278,7 @@ class AskOrchestrator:
                     )
                 )
                 if prepared.route.resolved_mode == "reading":
-                    events.put(
+                    emit(
                         {
                             "type": "progress",
                             "stage": "retrieval",
@@ -272,7 +291,9 @@ class AskOrchestrator:
                     conversation_id=conversation_id,
                     document_id=document_id,
                     job_id=payload.job_id.strip(),
-                    on_event=events.put,
+                    on_event=emit,
+                    scope_document_ids=payload.scope_document_ids,
+                    attachments=payload.attachments,
                     chat_fn=chat_fn,
                     history=history,
                     max_tool_rounds=prepared.max_tool_rounds,
@@ -285,21 +306,20 @@ class AskOrchestrator:
                 for confirmation in self._confirmation_projector(
                     result, self._settings.agent_confirmation_mode
                 ):
-                    events.put(
+                    emit(
                         {
                             "type": "agent_confirmation_required",
                             **confirmation,
                         }
                     )
-                # 这一句**故意**排在 persist_turn 前面:用户点停止,这一轮就当没发生过,
-                # 不留半截回答。ai_messages.finish_reason 里那个 "cancelled" 因此是留给
-                # 将来的,当前没有任何写入方——别看到那个值就以为中断会落库。
-                #
-                # 已知缺口:agent 轮次(有文档操作/持久计算能力的)会在工具跑之前先把
-                # 提问落库(persist_agent_request_message),操作要挂在那个 message_id 上。
-                # 那种轮次被取消时,会剩一条没有回答的提问;要抹掉它得先有删除单条消息
-                # 的接口,而且只能在确实没有 operation 引用它的时候删。
+                checkpoint_stop.set()
+                if checkpoint_thread:
+                    checkpoint_thread.join(timeout=10)
                 control.raise_if_stopped()
+                snapshot = transcript.snapshot(status="complete", answer=result.answer)
+                result.parts, result.metrics = snapshot["parts"], snapshot["metrics"]
+                result.tool_trace = transcript.trace(result.tool_trace, answer=result.answer)
+                emit({"type": "progress", "stage": "saving", "message": "正在保存回答"})
                 persisted = request_persisted and self._conversation_state.persist_turn(
                     conversation_id,
                     payload,
@@ -323,7 +343,7 @@ class AskOrchestrator:
                 followups = self._followup_suggestions(
                     payload, prepared, result, control
                 )
-                events.put(
+                emit(
                     {
                         "type": "done",
                         **self._result_payload(
@@ -337,8 +357,20 @@ class AskOrchestrator:
                     }
                 )
             except Exception as exc:  # noqa: BLE001 - SSE serializes runtime errors
-                events.put(public_error_event(exc))
+                checkpoint_stop.set()
+                if checkpoint_thread:
+                    checkpoint_thread.join(timeout=10)
+                status = "cancelled" if public_error_event(exc)["type"] == "cancelled" else "error"
+                transcript.metrics["error"] = public_error_event(exc)["message"]
+                snapshot = transcript.snapshot(status=status)
+                partial = AskResult(answer=transcript.answer, citations=[Citation(**c) for c in transcript.citations],
+                                    tool_trace=transcript.trace(status=status), incomplete_reason=status,
+                                    parts=snapshot["parts"], metrics=snapshot["metrics"])
+                persisted = self._conversation_state.persist_turn(conversation_id, payload, partial, request_runtime,
+                    chain_parent_id=summary_id, prepersisted_user_id=request_message_id) if conversation_id else False
+                emit({**public_error_event(exc), **snapshot, "persisted": persisted})
             finally:
+                checkpoint_stop.set()
                 control.finish()
                 events.put(None)
 
@@ -660,6 +692,8 @@ class AskOrchestrator:
             "citations": [asdict(citation) for citation in result.citations],
             "tool_trace": result.tool_trace,
             "rounds": result.rounds,
+            "parts": getattr(result, "parts", []),
+            "metrics": getattr(result, "metrics", {}),
             "persisted": persisted,
             "agent_runtime": request_runtime_id,
             "operation_refs": list(getattr(result, "operation_refs", []) or []),

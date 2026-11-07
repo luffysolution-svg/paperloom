@@ -62,6 +62,9 @@ function normalizeDonePayload(payload = {}) {
         answer: `${payload?.answer || ""}`,
         citations: Array.isArray(payload?.citations) ? payload.citations : [],
         toolTrace: Array.isArray(payload?.tool_trace) ? payload.tool_trace : [],
+        parts: Array.isArray(payload?.parts) ? payload.parts : [],
+        metrics: payload?.metrics || {},
+        memory: payload?.memory || {},
         rounds: Number(payload?.rounds) || 0,
         // 回答为什么不完整。正常答完时后端整个字段缺席，所以这里是空串。
         incompleteReason: `${payload?.incomplete_reason || payload?.["incompleteReason"] || ""}`.trim(),
@@ -88,7 +91,7 @@ function parseSseEvent(line = "") {
         return null;
     }
 }
-export async function readAiAskStream(body, { onProgressEvent = null, onToolEvent = null, onAgentToolEvent = null, onAgentOperationEvent = null, onAgentConfirmationRequiredEvent = null, onAgentSessionEvent = null, onAnswerDelta = null, onCompress = null, } = {}) {
+export async function readAiAskStream(body, { onTurnEvent = null, onProgressEvent = null, onToolEvent = null, onAgentToolEvent = null, onAgentOperationEvent = null, onAgentConfirmationRequiredEvent = null, onAgentSessionEvent = null, onAnswerDelta = null, onCompress = null, } = {}) {
     if (!body || typeof body.getReader !== "function")
         throw new AiAskError("AI 服务响应格式异常,请重试。");
     const reader = body.getReader();
@@ -102,6 +105,7 @@ export async function readAiAskStream(body, { onProgressEvent = null, onToolEven
         const event = parseSseEvent(line);
         if (!event || typeof event !== "object")
             return;
+        onTurnEvent?.(event);
         if (event.type === "progress") {
             onProgressEvent?.({
                 type: "progress",
@@ -252,7 +256,7 @@ async function extractErrorMessage(resp) {
         return `${text || ""}`.replace(/\s+/g, " ").trim().slice(0, 240);
     }
 }
-export async function askLibraryAi({ question = "", documentId = "", jobId = "", conversationId = "", parentId = "", regenerate = false, userMessageId = "", assistantMessageId = "", onToolEvent = null, onProgressEvent = null, onAgentToolEvent = null, onAgentOperationEvent = null, onAgentConfirmationRequiredEvent = null, onAgentSessionEvent = null, onAnswerDelta = null, onCompress = null, signal = null, apiPrefix = API_PREFIX, fetchImpl = fetch, llmApiKey = "", llmBaseUrl = "", llmModel = "", llmApiProtocol, connectionId, connectionModel, connectionOptions, confirmDocumentOperation = false, assistantMode = "auto", } = {}) {
+export async function askLibraryAi({ onTurnEvent = null, scopeDocumentIds = [], attachments = [], forceCompress = false, question = "", documentId = "", jobId = "", conversationId = "", parentId = "", regenerate = false, userMessageId = "", assistantMessageId = "", onToolEvent = null, onProgressEvent = null, onAgentToolEvent = null, onAgentOperationEvent = null, onAgentConfirmationRequiredEvent = null, onAgentSessionEvent = null, onAnswerDelta = null, onCompress = null, signal = null, apiPrefix = API_PREFIX, fetchImpl = fetch, llmApiKey = "", llmBaseUrl = "", llmModel = "", llmApiProtocol, connectionId, connectionModel, connectionOptions, confirmDocumentOperation = false, assistantMode = "auto", } = {}) {
     const trimmed = `${question}`.trim();
     if (!trimmed)
         throw new AiAskError("请输入问题。", 400);
@@ -316,6 +320,9 @@ export async function askLibraryAi({ question = "", documentId = "", jobId = "",
     }
     const runId = aid || globalThis.crypto?.randomUUID?.() || `run-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     payload.run_id = runId;
+    payload.scope_document_ids = scopeDocumentIds;
+    payload.attachments = attachments;
+    payload.force_compress = forceCompress;
     const cancelRun = () => {
         void fetchImpl(buildApiEndpoint(apiPrefix, `ai/connections/runs/${encodeURIComponent(runId)}/cancel`), {
             method: "POST", headers: buildApiHeaders(), keepalive: true,
@@ -354,6 +361,7 @@ export async function askLibraryAi({ question = "", documentId = "", jobId = "",
             return result;
         }
         return await readAiAskStream(resp.body, {
+            onTurnEvent,
             onProgressEvent,
             onToolEvent,
             onAgentToolEvent,

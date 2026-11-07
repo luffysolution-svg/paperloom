@@ -35,6 +35,10 @@ for line in sys.stdin:
     if method == "initialize":
         result = {"protocolVersion": 1, "agentCapabilities": {"loadSession": True}, "authMethods": [{"id": "local", "name": "Local login"}]}
     elif method == "authenticate":
+        if os.environ.get("FAKE_ACP_AUTH_HANG"):
+            while sys.stdin.readline():
+                pass
+            break
         result = {}
     elif method in {"session/new", "session/load"}:
         servers = params.get("mcpServers", [])
@@ -75,6 +79,7 @@ for line in sys.stdin:
         for text in ("Evidence ", "[1]"):
             send({"method": "session/update", "params": {"sessionId": session_id, "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": text}}}})
         result = {"stopReason": "end_turn"}
+        loaded = True
     elif method == "session/cancel":
         continue
     else:

@@ -11,7 +11,7 @@
 // - use-home-ask-operation-signals.ts Agent 操作信号日志
 // 本文件只负责组合，并保持对外导出名/返回形状不变。
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { patchConversation } from "@/platform/api/index.js";
 import {
   loadConversationId,
@@ -49,9 +49,20 @@ export function useHomeAskRuntime() {
   const nodesRef = useRef<HomeAskMessage[]>(nodes);
   nodesRef.current = nodes;
 
-  const patchMessage = useCallback((id: string, patch: Partial<HomeAskMessage>) => {
-    setNodes((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+  const pending = useRef(new Map<string, Partial<HomeAskMessage>>());
+  const patchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flushPatches = useCallback(() => {
+    if (patchTimer.current) clearTimeout(patchTimer.current);
+    patchTimer.current = null;
+    const patches = new Map(pending.current); pending.current.clear();
+    if (patches.size) setNodes((prev) => prev.map((message) => patches.has(message.id) ? { ...message, ...patches.get(message.id) } : message));
   }, []);
+  useEffect(() => () => { if (patchTimer.current) clearTimeout(patchTimer.current); }, []);
+  const patchMessage = useCallback((id: string, patch: Partial<HomeAskMessage>) => {
+    pending.current.set(id, { ...pending.current.get(id), ...patch });
+    if (patch.status && patch.status !== "streaming") flushPatches();
+    else if (!patchTimer.current) patchTimer.current = setTimeout(flushPatches, 32);
+  }, [flushPatches]);
 
   /** 追加节点并把 head 移到最后一个——新答案永远是当前显示的那一版。 */
   const appendNodes = useCallback((added: HomeAskMessage[]) => {
@@ -128,7 +139,7 @@ export function useHomeAskRuntime() {
     messages,
     branches,
     switchBranch,
-    isRunning: turn.isRunning,
+    isRunning: turn.isRunning || sessions.remoteRunning,
     conversationId,
     sessions: sessions.sessions,
     sessionsLoading: sessions.sessionsLoading,
@@ -136,7 +147,7 @@ export function useHomeAskRuntime() {
     agentRuntime,
     operationSignals: signals.operationSignals,
     send: turn.send,
-    stop: turn.stop,
+    stop: sessions.remoteRunning ? sessions.stopRemote : turn.stop,
     newSession,
     switchSession: sessions.switchSession,
     removeSession: sessions.removeSession,

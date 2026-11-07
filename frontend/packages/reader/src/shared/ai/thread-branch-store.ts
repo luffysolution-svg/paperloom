@@ -2,6 +2,7 @@
 // 仅依赖 conversation-store 的 storage 键，纯 localStorage
 
 import { loadStoredConversationId } from "./conversation-store.js";
+import type { TurnPart, TurnMetrics } from "@retainpdf/api";
 
 const STORAGE_PREFIX = "retainpdf.reader.ai.thread-branch.v1:";
 
@@ -24,6 +25,8 @@ export type ThreadBranchMessage = {
   progress?: string;
   source?: string;
   citations?: ThreadBranchCitation[];
+  parts?: TurnPart[];
+  metrics?: TurnMetrics;
   status?: {
     type: string;
     reason?: string;
@@ -116,6 +119,7 @@ function normalizeMessage(raw: unknown): ThreadBranchMessage | null {
     ...(progress ? { progress } : {}),
     ...(typeof raw.source === "string" && raw.source ? { source: raw.source } : {}),
     ...(citations?.length ? { citations } : {}),
+    ...(Array.isArray(raw.parts) ? { parts: raw.parts as TurnPart[], metrics: raw.metrics as TurnMetrics } : {}),
     ...(status ? { status } : {}),
   };
 }

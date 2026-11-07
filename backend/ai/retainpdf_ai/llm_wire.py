@@ -9,6 +9,23 @@ from .request_control import AIStreamIncomplete, RequestControl
 PROTOCOLS = ("openai", "openai_responses", "anthropic")
 
 
+def content_blocks(content, protocol):
+    if not isinstance(content, list):
+        return content if protocol == "openai_responses" else [{"type": "text", "text": content}] if content else []
+    blocks = []
+    for part in content:
+        if part.get("type") == "text":
+            blocks.append({"type": "input_text" if protocol == "openai_responses" else "text", "text": part["text"]})
+        elif part.get("type") == "image_url":
+            url = part["image_url"]["url"]
+            if protocol == "openai_responses":
+                blocks.append({"type": "input_image", "image_url": url})
+            else:
+                header, data = url.split(",", 1)
+                blocks.append({"type": "image", "source": {"type": "base64", "media_type": header[5:].split(";", 1)[0], "data": data}})
+    return blocks
+
+
 def endpoint(base_url: str, protocol: str) -> str:
     base = base_url.strip().rstrip("/")
     for suffix in ("/chat/completions", "/responses", "/messages"):
@@ -45,7 +62,7 @@ def request_body(protocol: str, model: str, messages: list[dict], tools: list[di
                 turns.append({"type": "function_call_output", "call_id": message["tool_call_id"], "output": message.get("content") or ""})
             else:
                 if message.get("content"):
-                    turns.append({"role": role, "content": message["content"]})
+                    turns.append({"role": role, "content": content_blocks(message["content"], protocol)})
                 for call in message.get("tool_calls") or []:
                     turns.append({"type": "function_call", "call_id": call["id"], **call["function"]})
         else:
@@ -54,7 +71,7 @@ def request_body(protocol: str, model: str, messages: list[dict], tools: list[di
             else:
                 content = message.get("_anthropic_content")
                 if content is None:
-                    content = [{"type": "text", "text": message["content"]}] if message.get("content") else []
+                    content = content_blocks(message.get("content"), protocol)
                     for call in message.get("tool_calls") or []:
                         content.append({"type": "tool_use", "id": call["id"], "name": call["function"]["name"], "input": json.loads(call["function"]["arguments"])})
                 turn = {"role": role, "content": content}
@@ -104,7 +121,7 @@ def response_message(protocol: str, data: dict) -> dict:
     return result
 
 
-def stream_message(protocol: str, lines: Iterable, on_delta: Callable | None, control: RequestControl | None) -> dict:
+def stream_message(protocol: str, lines: Iterable, on_delta: Callable | None, control: RequestControl | None, on_event: Callable | None = None) -> dict:
     """Use completed provider items as truth; retain signed/encrypted reasoning."""
     output: dict[int, dict] = {}
     blocks: dict[int, dict] = {}
@@ -130,6 +147,8 @@ def stream_message(protocol: str, lines: Iterable, on_delta: Callable | None, co
         if protocol == "openai_responses":
             if kind == "response.output_text.delta":
                 piece = event.get("delta") or ""
+            elif kind == "response.reasoning_summary_text.delta" and on_event:
+                on_event({"type": "reasoning_delta", "text": event.get("delta", "")})
             elif kind == "response.output_item.added" and event.get("item", {}).get("type") == "function_call":
                 has_tools = True
                 pending.clear()
@@ -137,6 +156,8 @@ def stream_message(protocol: str, lines: Iterable, on_delta: Callable | None, co
                 output[event["output_index"]] = event["item"]
             elif kind == "response.completed":
                 completed = event["response"]
+                if on_event and completed.get("usage"):
+                    on_event({"type": "usage", "usage": completed["usage"]})
                 break
         else:
             index = event.get("index", 0)
@@ -156,14 +177,18 @@ def stream_message(protocol: str, lines: Iterable, on_delta: Callable | None, co
                     block[field] = block.get(field, "") + (value or "")
                 if delta.get("type") == "text_delta":
                     piece = delta.get("text") or ""
+                elif delta.get("type") == "thinking_delta" and on_event:
+                    on_event({"type": "reasoning_delta", "text": delta.get("thinking", "")})
             elif kind == "message_delta":
                 stop_reason = event.get("delta", {}).get("stop_reason")
+                if on_event and event.get("usage"):
+                    on_event({"type": "usage", "usage": event["usage"]})
             elif kind == "message_stop":
                 stopped = True
                 break
         if piece and not has_tools:
             pending.append(piece)
-            if on_delta and sum(map(len, pending)) >= 64:
+            if on_delta and (on_event or sum(map(len, pending)) >= 64):
                 on_delta("".join(pending))
                 pending.clear()
     if protocol == "openai_responses":

@@ -33,6 +33,8 @@ class AskResult:
     # (见 followups.py 开头对这条路径的取舍说明)。runtime 自己填了就以它为准。
     followups: list[str] = field(default_factory=list)
     source_label: str = ""
+    parts: list[dict[str, Any]] = field(default_factory=list)
+    metrics: dict[str, Any] = field(default_factory=dict)
 
 
 ChatFn = Callable[[list[dict[str, Any]], list[dict[str, Any]]], dict[str, Any]]

@@ -1,8 +1,8 @@
 // 主页 AI 消息列表：轻量 markdown 预览 + 引用跳阅读器
 
-import { useState } from "react";
-import { AlertTriangle, BookOpen, CircleSlash, FlaskConical, ListTree, Loader2, Pencil, Sparkles } from "lucide-react";
-import { AiMarkdownAnswer, type AiCitationLike } from "@retainpdf/reader/ai";
+import { memo, useLayoutEffect, useRef, useState } from "react";
+import { AlertTriangle, BookOpen, CircleSlash, FlaskConical, ListTree, Pencil, Sparkles } from "lucide-react";
+import { AiTurnContent, AiRunStatus, type AiCitationLike } from "@retainpdf/reader/ai";
 import { buildReaderUrl } from "@/platform/navigation/pages.js";
 import { navigateToReader } from "@/features/reader/domain.js";
 import type { HomeAskCitation, HomeAskMessage } from "../domain/types.js";
@@ -57,7 +57,7 @@ function openCitation(citation: HomeAskCitation) {
   navigateToReader(url);
 }
 
-function AssistantBody({
+const AssistantBody = memo(function AssistantBody({
   message,
 }: {
   message: HomeAskMessage;
@@ -66,18 +66,16 @@ function AssistantBody({
   const bodyText = `${message.content || ""}`;
   const citations = (message.citations || []) as AiCitationLike[];
   return (
-    <AiMarkdownAnswer
+    <div className="home-ask-md"><AiTurnContent
+      parts={message.parts}
+      metrics={message.metrics}
       content={bodyText}
       streaming={streaming}
       citations={citations}
-      className="home-ask-md"
-      streamingClassName="home-ask-md-streaming"
-      pendingClassName="home-ask-md-pending"
-      finalClassName="home-ask-md-final"
       onJumpCitation={(citation) => openCitation(citation as HomeAskCitation)}
-    />
+    /></div>
   );
-}
+});
 
 export type HomeAskThreadProps = {
   messages: HomeAskMessage[];
@@ -101,6 +99,7 @@ export type HomeAskThreadProps = {
   onSwitchBranch?: (messageId: string) => void;
   /** 改写某条历史提问，另开一个分支重新作答。 */
   onEditQuestion?: (userMessageId: string, question: string) => void;
+  revealMessageId?: string;
 };
 
 export function HomeAskThread({
@@ -114,8 +113,25 @@ export function HomeAskThread({
   branches = {},
   onSwitchBranch,
   onEditQuestion,
+  revealMessageId = "",
 }: HomeAskThreadProps) {
   const [editingId, setEditingId] = useState("");
+  const [visibleCount, setVisibleCount] = useState(60);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const anchorRef = useRef<{ top: number; height: number } | null>(null);
+  useLayoutEffect(() => {
+    const node = rootRef.current?.closest<HTMLElement>(".home-ask-scroll");
+    if (node && anchorRef.current) node.scrollTop = anchorRef.current.top + node.scrollHeight - anchorRef.current.height;
+    anchorRef.current = null;
+  }, [visibleCount]);
+  useLayoutEffect(() => {
+    if (!revealMessageId) return;
+    const index = messages.findIndex((message) => message.id === revealMessageId);
+    if (index < 0) return;
+    if (messages.length - index > visibleCount) setVisibleCount(messages.length - index);
+    const frame = requestAnimationFrame(() => document.getElementById(`ask-${revealMessageId}`)?.scrollIntoView({ block: "center", behavior: "smooth" }));
+    return () => cancelAnimationFrame(frame);
+  }, [revealMessageId, messages.length, visibleCount]);
   const empty = messages.length === 0;
   // 操作卡片按「触发它的那条请求消息」归位,而不是全部堆在线程最底部。
   // 多轮对话里堆在最后会让人看不出哪张卡对应哪次请求。
@@ -136,15 +152,20 @@ export function HomeAskThread({
   }
 
   return (
-    <div className="home-ask-thread" role="log" aria-live="polite">
-      {messages.map((m) => {
+    <div ref={rootRef} className="home-ask-thread" role="log" aria-live="polite">
+      {messages.length > visibleCount ? <button className="home-ask-load-earlier" type="button" onClick={() => {
+        const node = rootRef.current?.closest<HTMLElement>(".home-ask-scroll");
+        if (node) anchorRef.current = { top: node.scrollTop, height: node.scrollHeight };
+        setVisibleCount((count) => count + 40);
+      }}>载入更早的对话（{messages.length - visibleCount} 条）</button> : null}
+      {messages.slice(-visibleCount).map((m) => {
         if (m.role === "user") {
           // 会话首问没有父节点，服务端造不出第二个根，所以改不了——不给入口，
           // 而不是给一个点了没反应的按钮。
           const canEdit = Boolean(onEditQuestion) && Boolean(m.parentId) && !isRunning;
           const branch = branches[m.id];
           return (
-            <div key={m.id} className="home-ask-msg home-ask-msg-user">
+            <div key={m.id} id={`ask-${m.id}`} className="home-ask-msg home-ask-msg-user">
               {editingId === m.id ? (
                 <QuestionEditor
                   initial={m.rawQuestion || m.content || ""}
@@ -157,6 +178,7 @@ export function HomeAskThread({
               ) : (
                 <>
                   <div className="home-ask-msg-bubble">
+                    {m.attachments?.length ? <div className="home-ask-message-images">{m.attachments.map((image, index) => <img key={index} src={`data:${image.mime_type};base64,${image.data}`} alt={image.name || "附图"} />)}</div> : null}
                     <div className="home-ask-md-plain">{m.content}</div>
                   </div>
                   {branch || canEdit ? (
@@ -183,7 +205,7 @@ export function HomeAskThread({
           );
         }
         const streaming = m.status === "streaming";
-        const hasBody = Boolean(m.content?.trim());
+        const hasBody = Boolean(m.content?.trim() || m.parts?.length);
         const failed = m.status === "error";
         // 用户点停止、只写了半截。它是一等状态，不再靠正文里那句斜体标记来认。
         const interrupted = m.status === "cancelled";
@@ -201,19 +223,8 @@ export function HomeAskThread({
         const canEditAsked = Boolean(onEditQuestion) && Boolean(asked?.parentId) && !isRunning;
         const operations = operationsFor(m.id);
         return (
-          <div key={m.id} className="home-ask-msg home-ask-msg-assistant">
-            {streaming && m.progress ? (
-              <div className="home-ask-thinking" role="status">
-                <Loader2 className="home-ask-spin" size={13} strokeWidth={2.4} aria-hidden />
-                <span>{m.progress}</span>
-              </div>
-            ) : null}
-            {streaming && !m.progress && !hasBody ? (
-              <div className="home-ask-thinking" role="status">
-                <Loader2 className="home-ask-spin" size={13} strokeWidth={2.4} aria-hidden />
-                <span>思考中…</span>
-              </div>
-            ) : null}
+          <div key={m.id} id={`ask-${m.id}`} className="home-ask-msg home-ask-msg-assistant">
+            {streaming ? <AiRunStatus label={m.progress} running elapsedMs={m.metrics?.elapsed_ms || 0} /> : null}
             {hasBody || failed ? (
               <div
                 className={`home-ask-msg-bubble${failed ? " is-error" : ""}${interrupted ? " is-interrupted" : ""}`}
@@ -227,14 +238,10 @@ export function HomeAskThread({
             {interrupted ? (
               <div className="home-ask-msg-interrupted" role="status">
                 <CircleSlash size={13} strokeWidth={2.2} aria-hidden />
-                {/* 停止时服务端在落库之前就抛出了(raise_if_stopped 排在 persist_turn
-                    前面),所以这半截回答只活在这个页面里。刷新就没了——用户有权在
-                    刷新之前知道这件事,而不是回来发现整轮消失了。
-                    「复制」就在下面那条操作条上,所以指过去而不是另加一个按钮。 */}
                 <span>
                   {hasBody
-                    ? "已中断，回答只写了一半；它不会保存，刷新后就没了——要留就先复制"
-                    : "已中断，还没开始作答；这一轮不会保存"}
+                    ? m.persisted === false ? "已中断，这段内容尚未保存，可先复制" : m.persisted ? "已中断，已生成的内容保留在对话中" : "已中断，正在保存已生成的内容"
+                    : "已中断，尚未生成回答"}
                 </span>
               </div>
             ) : null}
@@ -259,6 +266,9 @@ export function HomeAskThread({
               />
             ) : null}
             {m.source ? <div className="reader-ai-answer-source">{m.source}</div> : null}
+            {failed && m.errorText && m.content !== m.errorText ? <p className="home-ask-turn-error" role="alert">{m.errorText}</p> : null}
+            {m.status === "complete" && m.persisted === false ? <p className="home-ask-turn-error" role="status">本轮尚未保存，请先复制需要保留的内容。</p> : null}
+            {m.status === "complete" && m.metrics?.elapsed_ms ? <AiRunStatus running={false} elapsedMs={m.metrics.elapsed_ms} /> : null}
             {operations.map((entry) => (
               <div key={entry.remote.operation_id} className="home-ask-msg-operation">
                 <AgentOperationCard

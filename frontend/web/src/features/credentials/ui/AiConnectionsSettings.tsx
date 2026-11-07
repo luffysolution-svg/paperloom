@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { ArrowLeft, ArrowUpRight, Check, ChevronRight, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
 import {
-  API_PROTOCOL_LABELS, authenticateAiConnection, fetchAiConnections, probeAiConnection, removeAiConnection,
+  API_PROTOCOL_LABELS, authenticateAiConnection, fetchAiAuthentication, cancelAiAuthentication, fetchAiConnections, probeAiConnection, removeAiConnection,
   saveAiConnection, saveAiSelection, type AgentPreset, type AiConnection, type AiConnectionCatalog, type AiConnectionProbe, type ApiProtocol,
 } from "@retainpdf/api";
 import { AiBrandMark, AiModelSelect, AI_PROVIDERS, aiConnectionBrand, aiConnectionName, agentBrand, connectionProvider, isVisibleAiConnection, rememberAgentOptions, type AiProvider } from "@retainpdf/reader/ai";
@@ -224,10 +224,22 @@ export function AiConnectionsSettings() {
       </div>
       {probe?.auth_methods?.length && !probe.ready ? <div className="ai-service-auth"><p>需要先完成 Agent 登录。可以在原 CLI 登录，也可使用以下方式：</p>{probe.auth_methods.map((method) => <button type="button" className="app-button secondary" key={method.id} disabled={locked} onClick={async () => {
         setBusy("auth"); setError("");
-        try { await authenticateAiConnection(draft.id, method.id); setNotice("已完成认证请求，请重新连接。"); }
+        try {
+          let result = await authenticateAiConnection(draft.id, method.id);
+          setNotice(result.message);
+          while (active.current && result.status === "authenticating") {
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            result = await fetchAiAuthentication(draft.id);
+          }
+          if (!active.current) return;
+          setResults((prev) => ({ ...prev, [draft.id]: result }));
+          if (result.ready) { rememberAgentOptions(draft.id, result.config_options || []); setNotice(result.message); }
+          else if (result.status !== "cancelled") setError(result.message);
+          else setNotice(result.message);
+        }
         catch (err) { setError((err as Error).message); }
         finally { setBusy(""); }
-      }}>{method.name}</button>)}</div> : null}
+      }}>{method.name}</button>)}{busy === "auth" ? <button type="button" className="app-button secondary" onClick={() => void cancelAiAuthentication(draft.id)}>取消登录</button> : null}</div> : null}
       <div className="ai-service-editor-actions">
         {needsInstall ? <button type="button" className="app-button" disabled={locked} onClick={async () => { setBusy("scan"); setError(""); try { setCatalog(await fetchAiConnections()); setNotice("检测已更新。"); } catch (err) { setError((err as Error).message); } finally { setBusy(""); } }}><RefreshCw size={14} />重新检测</button>
           : <button type="button" className="app-button" disabled={locked || modelLoading} onClick={() => void save()}>{locked ? <Loader2 size={14} className="reader-ai-spin" /> : null}{busy === "save" ? "正在保存…" : busy === "verify" ? "正在连接…" : draft.kind === "byok" ? "保存并验证" : `连接${preset ? ` ${preset.name}` : " Agent"}`}</button>}

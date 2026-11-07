@@ -1,4 +1,4 @@
-"""Standalone MCP stdio / CLI bridge. Only a per-run capability enters the CLI."""
+"""Standalone MCP stdio / CLI transport; the host binds tools to the active turn."""
 import argparse
 import json
 import os

@@ -15,9 +15,11 @@ const ComposerControl = createContext<ReactNode>(null);
 export const AiComposerControlProvider = ComposerControl.Provider;
 export const useAiComposerControl = () => useContext(ComposerControl);
 const optionCache = new Map<string, AgentConfigOption[]>();
-export function rememberAgentOptions(id: string, options: AgentConfigOption[]) {
+const capabilityCache = new Map<string, Record<string, any>>();
+export function rememberAgentOptions(id: string, options: AgentConfigOption[], capabilities?: Record<string, any>) {
   optionCache.set(id, options);
-  document.dispatchEvent(new CustomEvent(AI_AGENT_EVENT, { detail: { type: "agent_connection", connection_id: id, config_options: options } }));
+  if (capabilities) capabilityCache.set(id, capabilities);
+  document.dispatchEvent(new CustomEvent(AI_AGENT_EVENT, { detail: { type: "agent_connection", connection_id: id, config_options: options, capabilities } }));
 }
 
 function initialSelection(id: string): AiConnectionSelection {
@@ -31,6 +33,7 @@ export function useAiConnection(conversationId: string, locked = false) {
   const [catalog, setCatalog] = useState<AiConnectionCatalog | null>(null);
   const [selection, setSelection] = useState(() => initialSelection(conversationId));
   const [options, setOptions] = useState<AgentConfigOption[]>([]);
+  const [capabilities, setCapabilities] = useState<Record<string, any> | undefined>();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [browserKey, setBrowserKey] = useState(hasModelApiKey);
@@ -64,18 +67,20 @@ export function useAiConnection(conversationId: string, locked = false) {
   }, [catalog, selection.connectionId, selected, browserKey, conversationId]);
   useEffect(() => {
     setOptions(optionCache.get(selection.connectionId) || []);
+    setCapabilities(capabilityCache.get(selection.connectionId));
     const update = (event: Event) => {
       const detail = (event as CustomEvent).detail;
       if (detail?.type !== "agent_connection" || detail.connection_id !== selection.connectionId) return;
       if (detail.conversation_id && detail.conversation_id !== conversationId) return;
       const next = detail.config_options || [];
       optionCache.set(selection.connectionId, next); setOptions(next);
+      if (detail.capabilities) { capabilityCache.set(selection.connectionId, detail.capabilities); setCapabilities(detail.capabilities); }
     };
     document.addEventListener(AI_AGENT_EVENT, update);
     return () => document.removeEventListener(AI_AGENT_EVENT, update);
   }, [selection.connectionId, conversationId]);
   const configured = Boolean(selected && (selected.kind === "byoa" || selected.api_key_configured || (selected.legacy_inherited && browserKey)));
-  return { catalog, connections, selection, selected, options, error, loading, configured, blocked: Boolean(catalog && !configured),
+  return { catalog, connections, selection, selected, options, capabilities, error, loading, configured, blocked: Boolean(catalog && !configured),
     change: (next: AiConnectionSelection) => { setSelection(next); saveAiSelection(conversationId, next); } };
 }
 
@@ -114,7 +119,7 @@ export function AiConnectionPicker({ controller, disabled = false, onManage }: {
     setProbing(true); setNotice("");
     try {
       const result = await probeAiConnection(connection.id);
-      rememberAgentOptions(connection.id, result.config_options || []);
+      rememberAgentOptions(connection.id, result.config_options || [], result.capabilities);
       if (!result.ready) setNotice(result.message);
     } catch (err) { setNotice((err as Error).message); }
     finally { setProbing(false); }

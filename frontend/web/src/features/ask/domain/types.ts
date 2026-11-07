@@ -34,6 +34,11 @@ export type HomeAskCitation = {
 };
 
 export type HomeAskMessage = {
+  parts?: TurnPart[];
+  metrics?: TurnMetrics;
+  persisted?: boolean;
+  errorText?: string;
+  attachments?: Record<string, any>[];
   id: string;
   role: "user" | "assistant";
   content: string;
@@ -75,3 +80,4 @@ export type HomeAskMessage = {
 export function scopeKey(s: HomeAskScope): string {
   return `${s.kind}:${s.id}`;
 }
+import type { TurnPart, TurnMetrics } from "@/platform/api/index.js";

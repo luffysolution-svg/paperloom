@@ -7,7 +7,7 @@ import { jsxs as z, jsx as p, Fragment as kt } from "react/jsx-runtime";
 import { useMemo as q, useState as L, useEffect as $, useCallback as k, useRef as x, useLayoutEffect as Fe, memo as rn, forwardRef as mo, useImperativeHandle as on, createContext as an, useContext as sn, useSyncExternalStore as po, useId as cn, Suspense as ho, lazy as ln } from "react";
 import { requireAdapter as ye, getReaderAdapters as le } from "./adapters.js";
 import { resolveReaderDownloadName as go, createReaderServerFavoritesPort as bo, resolveReaderDownloadUrls as yo, READER_PROGRESS_COPY as Re, trimString as it, READER_DOWNLOAD_ACTIONS as vo, disabledReason as wo } from "./runtime/state.js";
-import { d as So } from "./ask-answerer-BdU294ED.js";
+import { d as So } from "./ask-answerer-CU7UxZb4.js";
 import "@retainpdf/api/conversations";
 import { r as Po, b as Io } from "./page-config-Ct7qR5rm.js";
 import { c as Ro, n as To, f as Dt, h as _n, a as Eo, b as Mo, i as Pr, p as Nt, g as Ir, r as Rr, j as On, e as Ao } from "./reader-regions-DsePY7B_.js";
@@ -6655,7 +6655,7 @@ function cl() {
     /* @__PURE__ */ p("download-toast", { style: { display: "none" }, "aria-hidden": "true", ref: e })
   ] });
 }
-const ll = ln(() => import("./ReaderFavoritesPanel-BrkFExu2.js").then((e) => ({ default: e.ReaderFavoritesPanel }))), dl = ln(() => import("./ReaderMarkdownPanel-CeyhfoyV.js").then((e) => ({ default: e.ReaderMarkdownPanel }))), ul = ln(() => import("./ReaderAiPanel-D74M2ri2.js").then((e) => ({ default: e.ReaderAiPanel })));
+const ll = ln(() => import("./ReaderFavoritesPanel-BLrLYsLu.js").then((e) => ({ default: e.ReaderFavoritesPanel }))), dl = ln(() => import("./ReaderMarkdownPanel-MVxNAYzm.js").then((e) => ({ default: e.ReaderMarkdownPanel }))), ul = ln(() => import("./ReaderAiPanel-Dek4KZby.js").then((e) => ({ default: e.ReaderAiPanel })));
 function Ht(e) {
   const t = x(!1);
   return e && (t.current = !0), t.current;
@@ -6896,4 +6896,4 @@ export {
   Ol as j,
   _l as r
 };
-//# sourceMappingURL=ReaderApp-DczAps1w.js.map
+//# sourceMappingURL=ReaderApp-DfDVOaOp.js.map

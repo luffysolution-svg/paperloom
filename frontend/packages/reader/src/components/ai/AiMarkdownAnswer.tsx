@@ -58,6 +58,7 @@ export function AiMarkdownAnswer({
     if (!root || !bodyText) return;
     const bubble = root.parentElement;
     if (!(bubble instanceof HTMLElement)) return;
+    if (citationFooterMax === 0) return;
     if (streaming) {
       bubble.querySelector(".reader-ai-citations")?.remove();
       return;

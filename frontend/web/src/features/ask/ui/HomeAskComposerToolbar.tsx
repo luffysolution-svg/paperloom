@@ -10,6 +10,7 @@ export type HomeAskComposerToolbarProps = {
   onStop?: () => void;
   onSend: () => void;
   aiSelector?: ReactNode;
+  attachmentControl?: ReactNode;
 };
 
 export function HomeAskComposerToolbar({
@@ -19,10 +20,11 @@ export function HomeAskComposerToolbar({
   onStop,
   onSend,
   aiSelector,
+  attachmentControl,
 }: HomeAskComposerToolbarProps) {
   return (
     <div className="home-ask-toolbar">
-      <div className="home-ask-toolbar-leading">{aiSelector}<span className="home-ask-scope-hint">{scopeHint}</span></div>
+      <div className="home-ask-toolbar-leading">{attachmentControl}{aiSelector}<span className="home-ask-scope-hint">{scopeHint}</span></div>
       {isRunning ? (
         <button
           type="button"

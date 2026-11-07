@@ -1,7 +1,9 @@
 // 主页 AI 问答：Notion 式 —— 左历史侧栏（可折叠）+ 中空态居中 / 对话流
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Quote, Sparkles } from "lucide-react";
+import { ArrowDown, Quote, Sparkles } from "lucide-react";
+import { HomeAskThreadToolbar } from "./HomeAskThreadToolbar.js";
+import { loadConversationScopes, saveConversationScopes } from "../domain/home-ask-conversation-storage.js";
 import { CREDENTIALS_CHANGED_EVENT } from "@retainpdf/reader/runtime/ai";
 // hasModelApiKey 依赖 features/reader/domain 顶层注册的适配器，不可直连包。
 import { hasModelApiKey } from "@/features/reader/domain.js";
@@ -65,7 +67,16 @@ export function HomeAskView() {
     removeSession,
     renameSession,
   } = useHomeAskRuntime();
-  const [scopes, setScopes] = useState<HomeAskScope[]>([]);
+  const [scopes, setScopes] = useState<HomeAskScope[]>(() => loadConversationScopes(conversationId));
+  const scopesOwner = useRef(conversationId);
+  const changeScopes = (next: HomeAskScope[]) => { setScopes(next); saveConversationScopes(conversationId, next); };
+  useEffect(() => {
+    if (scopesOwner.current === conversationId) return;
+    if (conversationId && !scopesOwner.current && isRunning) saveConversationScopes(conversationId, scopes);
+    else setScopes(loadConversationScopes(conversationId));
+    scopesOwner.current = conversationId;
+  }, [conversationId, isRunning, scopes]);
+  const [revealMessageId, setRevealMessageId] = useState("");
   const aiConnection = useAiConnection(conversationId, isRunning);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(loadSidebarCollapsed);
   const [runtimeConfig, setRuntimeConfig] = useState<AgentRuntimeConfigView | null>(null);
@@ -145,9 +156,9 @@ export function HomeAskView() {
   // 而切换会话这种整体替换也会变，正好覆盖两种场景。
   const threadChangeKey = useMemo(() => {
     const last = messages[messages.length - 1];
-    return `${messages.length}:${last?.id || ""}:${last?.content?.length || 0}:${last?.progress || ""}`;
+    return `${messages.length}:${last?.id || ""}:${last?.content?.length || 0}:${last?.parts?.length || 0}:${last?.parts?.at(-1)?.text?.length || 0}:${last?.progress || ""}`;
   }, [messages]);
-  useStickToBottom(threadScrollRef, threadChangeKey, { streaming: isRunning, enabled: !empty });
+  const { atBottom, scrollToBottom } = useStickToBottom(threadScrollRef, threadChangeKey, { streaming: isRunning, enabled: !empty, scopeKey: conversationId });
 
   // 选中回答里的一段 → 浮出「引用」→ 进输入框，用户接着写要问什么。
   const { selection, clear: clearSelection } = useQuoteSelection(threadScrollRef);
@@ -194,6 +205,9 @@ export function HomeAskView() {
       />
 
       <div className="home-ask-main">
+        {!empty ? <HomeAskThreadToolbar title={sessions.find((s) => s.id === conversationId)?.title || messages.find((m) => m.role === "user")?.content || "文献对话"}
+          messages={messages} running={isRunning} onCompress={() => void send("请概括目前讨论的要点，保留重要文献引用。", scopes, { forceCompress: true })}
+          onFind={setRevealMessageId} /> : null}
         <AgentInteractionPanel conversationId={conversationId} running={isRunning} />
         {displayedRuntime && !aiConnection.selected ? (
           <div className="home-ask-runtime-badge" role="status">
@@ -205,17 +219,19 @@ export function HomeAskView() {
             <div className="home-ask-empty-mascot" aria-hidden>
               <Sparkles size={22} strokeWidth={1.85} />
             </div>
-            <h2 className="home-ask-empty-title">随时待命，有什么可以帮你？</h2>
+            <h2 className="home-ask-empty-title">一起读懂文献</h2>
+            <p className="home-ask-empty-description">引用文献或合集，追问方法、图表与证据。</p>
             <HomeAskComposer
               disabled={aiConnection.loading}
               aiSelector={<AiConnectionPicker controller={aiConnection} disabled={isRunning || sessionBusy} />}
+              imageSupported={aiConnection.selected?.kind !== "byoa" || aiConnection.capabilities?.promptCapabilities?.image !== false}
               isRunning={isRunning}
               credentialBlocked={credentialGate.blocked}
               credentialMessage={credentialGate.message}
               scopes={scopes}
-              onScopesChange={setScopes}
-              onSend={(q) => {
-                void send(q, scopes);
+              onScopesChange={changeScopes}
+              onSend={(q, attachments) => {
+                void send(q, scopes, { attachments });
               }}
               onStop={stop}
               variant="hero"
@@ -272,6 +288,7 @@ export function HomeAskView() {
             <div className="home-ask-scroll" ref={threadScrollRef}>
               <HomeAskThread
                 messages={messages}
+                revealMessageId={revealMessageId}
                 isRunning={isRunning}
                 operationsByRequestMessage={agentOperations.byRequestMessage}
                 loadCandidate={agentOperations.loadCandidate}
@@ -293,16 +310,18 @@ export function HomeAskView() {
                 }}
               />
             </div>
+            {!atBottom ? <button type="button" className="home-ask-jump-bottom" onClick={scrollToBottom}><ArrowDown size={14} aria-hidden="true" />回到最新</button> : null}
             <HomeAskComposer
               disabled={aiConnection.loading}
               aiSelector={<AiConnectionPicker controller={aiConnection} disabled={isRunning || sessionBusy} />}
+              imageSupported={aiConnection.selected?.kind !== "byoa" || aiConnection.capabilities?.promptCapabilities?.image !== false}
               isRunning={isRunning}
               credentialBlocked={credentialGate.blocked}
               credentialMessage={credentialGate.message}
               scopes={scopes}
-              onScopesChange={setScopes}
-              onSend={(q) => {
-                void send(q, scopes);
+              onScopesChange={changeScopes}
+              onSend={(q, attachments) => {
+                void send(q, scopes, { attachments });
               }}
               quoteRequest={quoteRequest}
               onStop={stop}

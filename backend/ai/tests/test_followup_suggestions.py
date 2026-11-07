@@ -399,16 +399,8 @@ def test_incomplete_reason_is_in_the_contract():
     assert "incomplete_reason" not in schema["definitions"]["DonePayload"].get("required", [])
 
 
-def test_a_stopped_turn_is_not_persisted():
-    """用户点停止 = 这一轮当没发生过,不留半截回答。
-
-    这是产品决定,不是疏漏。ai_messages.finish_reason 里那个 "cancelled" 因此
-    目前没有任何写入方——别看到那个值就以为中断会落库。这条测试在这里,是为了
-    不让人顺手「把它修好」。
-
-    交错是真实发生的:模型已经把回答流完、结果也拿到了,而请求在落库之前被取消。
-    sse_events 收 request_control,所以这个缝是公开的,不用为测试另开口子。
-    """
+def test_a_stopped_turn_is_persisted_as_an_interrupted_turn():
+    """Stopping retains the streamed snapshot without committing a late complete answer."""
     orchestrator, prepared, _ = _make(Runtime(_result()), REPLY)
     state = orchestrator._conversation_state
     control = RequestControl(30)
@@ -425,4 +417,4 @@ def test_a_stopped_turn_is_not_persisted():
     prepared.runtime.ask = cancel_then_answer
     list(orchestrator.sse_events(payload, prepared, request_control=control))
 
-    assert getattr(state, "persisted", 0) == 0, "被停止的那一轮落库了"
+    assert getattr(state, "persisted", 0) == 1

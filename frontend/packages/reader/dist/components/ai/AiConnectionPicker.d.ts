@@ -2,13 +2,14 @@ import { type ReactNode } from "react";
 import { type AgentConfigOption, type AiConnectionCatalog, type AiConnectionSelection } from "@retainpdf/api";
 export declare const AiComposerControlProvider: import("react").Provider<ReactNode>;
 export declare const useAiComposerControl: () => ReactNode;
-export declare function rememberAgentOptions(id: string, options: AgentConfigOption[]): void;
+export declare function rememberAgentOptions(id: string, options: AgentConfigOption[], capabilities?: Record<string, any>): void;
 export declare function useAiConnection(conversationId: string, locked?: boolean): {
     catalog: AiConnectionCatalog;
     connections: import("@retainpdf/api").AiConnection[];
     selection: AiConnectionSelection;
     selected: import("@retainpdf/api").AiConnection;
     options: AgentConfigOption[];
+    capabilities: Record<string, any>;
     error: string;
     loading: boolean;
     configured: boolean;

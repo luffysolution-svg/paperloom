@@ -4,6 +4,7 @@ export const TOOL_EVENT_LABELS: Record<string, string> = {
   read_markdown_chunk: "阅读 Markdown 片段",
   list_documents: "确认文档信息",
   read_blocks: "阅读相关段落",
+  read_figure: "查看图表原图",
   search_favorites: "查找收藏",
   search_fulltext: "检索文档内容",
   calculate_expression: "计算表达式",
