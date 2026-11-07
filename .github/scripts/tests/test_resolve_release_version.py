@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import sys
+import tomllib
 
 import pytest
 
@@ -11,6 +13,15 @@ REPO_ROOT = SCRIPTS_ROOT.parents[1]
 sys.path.insert(0, str(SCRIPTS_ROOT))
 
 from resolve_release_version import resolve_release_version
+
+
+def test_product_and_python_release_versions_are_aligned() -> None:
+    product = json.loads((REPO_ROOT / "package.json").read_text(encoding="utf-8"))["version"]
+    desktop = json.loads((REPO_ROOT / "frontend/desktop/package.json").read_text(encoding="utf-8"))["version"]
+    assert desktop == product
+    for manifest in ("backend/pyproject.toml", "backend/pipeline/pyproject.toml"):
+        version = tomllib.loads((REPO_ROOT / manifest).read_text(encoding="utf-8"))["project"]["version"]
+        assert version == product, f"{manifest}: {version} != product {product}"
 
 
 @pytest.mark.parametrize(

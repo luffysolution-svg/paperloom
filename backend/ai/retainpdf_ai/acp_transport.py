@@ -149,7 +149,7 @@ class AcpClient:
                 self._pending.pop(id, None)
 
     def initialize(self, control):
-        result = self.call("initialize", {"protocolVersion": 1, "clientInfo": {"name": "paperloom", "version": "0.2.1"},
+        result = self.call("initialize", {"protocolVersion": 1, "clientInfo": {"name": "paperloom", "version": "0.2.2"},
             "clientCapabilities": {"fs": {"readTextFile": False, "writeTextFile": False}, "terminal": False,
                 "auth": {"terminal": os.name == "nt"}, "elicitation": {"form": {}}, "session": {"notices": {}}}}, control)
         if result.get("protocolVersion") != 1:
