@@ -280,14 +280,17 @@
 .upload-service-model-input input {
   width: 100%;
   min-width: 0;
-  padding-inline: 10px 0;
+  height: 100%;
+  padding: 0 10px;
+  border-radius: inherit;
   background: transparent;
   border: 0;
   color: inherit;
   font: inherit;
 }
 
-.upload-service-model-input button {
+.upload-service-model-refresh,
+.upload-model-list-toggle {
   display: grid;
   place-items: center;
   flex: 0 0 34px;
@@ -296,21 +299,92 @@
   color: var(--muted);
 }
 
-.upload-service-model-input button:hover:not(:disabled) {
+.upload-service-model-refresh:hover:not(:disabled),
+.upload-model-list-toggle:hover:not(:disabled) {
   background: var(--bg);
   color: var(--ink);
 }
 
-.upload-service-model-input svg {
+.upload-service-model-input svg,
+.upload-model-option svg {
   width: 14px;
   height: 14px;
 }
 
 .upload-service-picker select:focus-visible,
-.upload-service-picker button:focus-visible,
-.upload-service-picker input:focus-visible {
+.upload-service-picker button:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
+}
+
+.upload-service-model-input:focus-within {
+  outline: 1px solid var(--ink);
+  outline-offset: -1px;
+}
+
+.upload-service-model-input input:focus,
+.upload-service-model-input button:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.upload-model-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 1 1 auto;
+  gap: 6px;
+  min-width: 0;
+  height: 100%;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.upload-model-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-model-trigger > svg {
+  flex: none;
+  color: var(--muted);
+}
+
+.upload-model-options {
+  width: max(220px, var(--radix-select-trigger-width));
+  max-width: min(360px, calc(100vw - 24px));
+}
+
+.upload-model-viewport {
+  max-height: min(280px, var(--radix-select-content-available-height));
+  overflow-y: auto;
+}
+
+.upload-model-list-label {
+  padding: 5px 7px 7px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.upload-model-option {
+  overflow-wrap: anywhere;
+}
+
+.upload-model-option.is-manual {
+  gap: 7px;
+  color: var(--muted);
+}
+
+.upload-model-separator {
+  height: 1px;
+  margin: 4px;
+  background: var(--line);
 }
 
 .upload-service-picker :disabled {

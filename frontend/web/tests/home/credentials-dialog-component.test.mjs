@@ -9,7 +9,7 @@ import { JSDOM } from "jsdom";
 // 术语表/更新两个 tab 的占位 id 契约。
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/index.html" });
-for (const key of ["window", "document", "DocumentFragment", "HTMLElement", "HTMLButtonElement", "HTMLFormElement", "HTMLInputElement", "CustomEvent", "Event", "KeyboardEvent", "MouseEvent", "Node", "MutationObserver", "NodeFilter"]) {
+for (const key of ["window", "document", "DocumentFragment", "Element", "SVGElement", "HTMLElement", "HTMLButtonElement", "HTMLFormElement", "HTMLInputElement", "CustomEvent", "Event", "KeyboardEvent", "MouseEvent", "Node", "MutationObserver", "NodeFilter"]) {
   Object.defineProperty(globalThis, key, {
     value: dom.window[key] ?? dom.window,
     writable: true,
@@ -25,6 +25,7 @@ globalThis.requestAnimationFrame = (callback) => setTimeout(() => callback(0), 0
 // 像 requestAnimationFrame 一样被复制到裸 global 上,这里一并补上。
 globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
 globalThis.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
+dom.window.HTMLElement.prototype.scrollIntoView = () => {};
 globalThis.IS_REACT_ACT_ENVIRONMENT = false;
 
 const { createRoot } = await import("react-dom/client");
@@ -345,7 +346,11 @@ test("配置方案：另存为保留原方案，全局保存更新 Agent，切�
     ocrSelect.value = "current:mineru";
     ocrSelect.dispatchEvent(new Event("change", { bubbles: true }));
     await waitFor(() => services.features.workflowFeature.collectRunPayload().ocr.provider === "mineru", "独立切换 OCR");
-    const modelInput = document.querySelector('[aria-label="本次任务翻译模型"]');
+    document.querySelector('[aria-label="本次任务翻译模型"]').dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    await waitFor(() => [...document.querySelectorAll('[role="option"]')].some((item) => item.textContent === "手动输入模型名称"), "打开完整模型列表");
+    click([...document.querySelectorAll('[role="option"]')].find((item) => item.textContent === "手动输入模型名称"));
+    await waitFor(() => document.querySelector('input[aria-label="本次任务翻译模型"]'), "切换到手动输入模型");
+    const modelInput = document.querySelector('input[aria-label="本次任务翻译模型"]');
     typeInput(modelInput, "custom-model");
     await waitFor(() => services.features.workflowFeature.collectRunPayload().translation.model === "custom-model", "独立指定模型");
     const payload = services.features.workflowFeature.collectRunPayload();
@@ -1159,7 +1164,7 @@ test("上传翻译：独立服务选择、模型拉取和实际提交使用同�
   globalThis.fetch = async (url, options = {}) => {
     if (!`${url}`.endsWith("/providers/models")) return jobFetch(url, options);
     modelRequests.push(JSON.parse(options.body));
-    return new Response(JSON.stringify({ code: 0, data: { ok: true, models: ["qwen-pulled"], summary: "已获取 1 个模型" } }), { status: 200, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ code: 0, data: { ok: true, models: ["qwen-pulled", "qwen-alternate"], summary: "已获取 2 个模型" } }), { status: 200, headers: { "Content-Type": "application/json" } });
   };
   const services = createServices({
     initialDesktopMode: true,
@@ -1185,12 +1190,17 @@ test("上传翻译：独立服务选择、模型拉取和实际提交使用同�
     };
     choose("本次任务 OCR 服务", "current:mineru");
     choose("本次任务翻译服务", "provider:qwen");
-    await waitFor(() => byId("upload-translation-model").value === "qwen-default", "切服务后回填对应模型");
+    await waitFor(() => byId("upload-translation-model").textContent.includes("qwen-default"), "切服务后回填对应模型");
+    const unconfiguredOpenAi = [...document.querySelector('[aria-label="本次任务翻译服务"]').options].find((item) => item.textContent === "OpenAI（未配置）");
+    assert.ok(unconfiguredOpenAi, "服务菜单说明其他支持的提供商，不能让用户以为只有 DeepSeek");
+    assert.equal(unconfiguredOpenAi.disabled, true, "未配置服务不能复用其他服务的 Key");
     click(document.querySelector('[aria-label="拉取本次翻译服务的模型"]'));
-    await waitFor(() => document.querySelector('#upload-translation-models option[value="qwen-pulled"]'), "拉取到所选服务的模型");
+    const modelOption = (model) => [...document.querySelectorAll('[role="option"]')].find((item) => item.textContent === model);
+    await waitFor(() => modelOption("qwen-pulled") && modelOption("qwen-alternate"), "拉取后自动展开完整列表，不按当前模型名称过滤");
+    assert.equal(document.querySelector('datalist'), null, "模型选项不再使用浏览器过滤式 datalist");
     assert.deepEqual(modelRequests, [{ api_key: "qwen-key", base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1" }]);
-    typeInput(byId("upload-translation-model"), "qwen-pulled");
-    await waitFor(() => services.features.workflowFeature.collectRunPayload().translation.model === "qwen-pulled", "模型写入任务选择");
+    click(modelOption("qwen-alternate"));
+    await waitFor(() => services.features.workflowFeature.collectRunPayload().translation.model === "qwen-alternate", "从列表选择另一个模型，写入任务配置");
     click(byId("submit-btn"));
     await waitFor(() => opened.length, "提交成功并打开文档进度");
     assert.equal(submission.requests.length, 1);
@@ -1198,7 +1208,7 @@ test("上传翻译：独立服务选择、模型拉取和实际提交使用同�
     assert.equal(sent.ocr.provider, "mineru");
     assert.equal(sent.ocr.mineru_token, "other-ocr");
     assert.equal(sent.translation.api_key, "qwen-key");
-    assert.equal(sent.translation.model, "qwen-pulled");
+    assert.equal(sent.translation.model, "qwen-alternate");
     assert.equal(sent.translation.base_url, "https://dashscope.aliyuncs.com/compatible-mode/v1");
     assert.equal(sent.translation.workers, 20);
     await waitFor(() => ocrChecks.length, "OCR 预检使用本次选择");

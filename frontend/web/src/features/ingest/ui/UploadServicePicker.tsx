@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { RefreshCw } from "lucide-react";
 import { createTranslationModelListFlow, useOptionalCredentialsServices, type TaskServiceCatalog, type TaskServiceSelection } from "@/features/credentials/index.js";
 import { API_PREFIX } from "@/platform/config/api-constants.js";
 import { listModels } from "@/platform/api/index.js";
 import { CREDENTIALS_CHANGED_EVENT } from "@/platform/contracts/credentials-contract.js";
 import { useHomeFeatures, useHomeSettingsHub, useHomeWorkflowDialog, useHomeWorkflowViewActions, useHomeWorkflowViewStore } from "@/ui/context/home-services-context.js";
 import { useStoreSnapshot } from "@/ui/hooks/use-store.js";
+import { TRANSLATION_PROVIDER_OPTIONS } from "@/platform/config/providers.js";
+import { UploadModelPicker } from "./UploadModelPicker.jsx";
 
 export function UploadServicePicker() {
   const services = useOptionalCredentialsServices();
@@ -43,6 +44,8 @@ export function UploadServicePicker() {
   const locked = Boolean(workflow.submitBusy);
   const ocrOnly = Boolean(workflow.ocrOnly);
   const modelOptions = [...new Set([...selected.translation.models, ...(models.items || [])])];
+  const unconfiguredProviders = TRANSLATION_PROVIDER_OPTIONS.filter((provider) =>
+    !catalog.translations.some((service) => service.provider === provider.id));
 
   function change(patch: TaskServiceSelection) {
     actions.setTaskServiceSelection({
@@ -98,17 +101,16 @@ export function UploadServicePicker() {
               change({ translationId: service.id, model: service.model });
             }}>
               {catalog.translations.map((item) => <option key={item.id} value={item.id} disabled={!item.configured}>{item.label}{item.configured ? "" : "（未配置）"}</option>)}
+              {unconfiguredProviders.length ? <optgroup label="其他服务（请先在管理接口中配置）">
+                {unconfiguredProviders.map((provider) => <option key={provider.id} value={`unconfigured:${provider.id}`} disabled>{provider.label}（未配置）</option>)}
+              </optgroup> : null}
             </select>
           </label>
           <div className="upload-service-model">
             <label htmlFor="upload-translation-model">翻译模型</label>
-            <div className="upload-service-model-input">
-              <input id="upload-translation-model" aria-label="本次任务翻译模型" type="text" list="upload-translation-models" value={selected.model} placeholder="选择或输入模型" disabled={locked} onChange={(event) => change({ model: event.target.value })} />
-              <datalist id="upload-translation-models">{modelOptions.map((model) => <option key={model} value={model} />)}</datalist>
-              <button type="button" aria-label="拉取本次翻译服务的模型" title="拉取可用模型" disabled={locked || models.loading || !selected.translation.apiKey} aria-busy={Boolean(models.loading)} onClick={() => void modelFlow.fetchModels()}>
-                <RefreshCw aria-hidden="true" className={models.loading ? "animate-spin motion-reduce:animate-none" : ""} />
-              </button>
-            </div>
+            <UploadModelPicker serviceId={selected.translation.id} value={selected.model} models={modelOptions}
+              disabled={locked} loading={Boolean(models.loading)} canFetch={Boolean(selected.translation.apiKey)}
+              onChange={(model) => change({ model })} onFetch={() => modelFlow.fetchModels()} />
           </div>
         </> : null}
       </div>
