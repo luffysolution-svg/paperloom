@@ -594,6 +594,7 @@
         "devtools/tests/test_document_operation_boundaries.py",
         "devtools/tests/test_external_tools.py",
         "devtools/tests/test_extract_pipeline_requirements.py",
+        "devtools/tests/test_native_translation_http.py",
         "devtools/tests/test_output_root_isolation.py",
         "devtools/tests/test_package_versions.py",
         "devtools/tests/test_repair_mineru_cross_page.py",
