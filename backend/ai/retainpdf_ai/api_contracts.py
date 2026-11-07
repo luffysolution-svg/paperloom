@@ -28,6 +28,8 @@ class AskInput(BaseModel):
     run_id: str = Field(default="", max_length=128)
     connection_model: str = Field(default="", max_length=256)
     connection_options: dict[str, str] = Field(default_factory=dict)
+    scope_document_ids: list[str] = Field(default_factory=list, max_length=100)
+    attachments: list[dict] = Field(default_factory=list, max_length=4)
 
 
 class RuntimeConfigUpdate(BaseModel):

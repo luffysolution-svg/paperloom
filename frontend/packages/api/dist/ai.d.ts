@@ -1,6 +1,7 @@
 import type { AgentConfirmationMode } from "./agent-runtime-settings.js";
 import type { AgentOperationStatus } from "./document-operations.js";
 import { type ApiProtocol } from "./agent-connections.js";
+import type { TurnEvent } from "./turn-parts.js";
 export type { AgentConfirmationMode } from "./agent-runtime-settings.js";
 export declare class AiAskError extends Error {
     status: number;
@@ -57,6 +58,7 @@ export type AgentConfirmationRequiredEvent = AgentConfirmationRequest & {
     type: "agent_confirmation_required";
 };
 export type AiAskStreamCallbacks = {
+    onTurnEvent?: ((event: TurnEvent) => void) | null;
     onProgressEvent?: ((event: {
         type: "progress";
         stage: "routing" | "retrieval";
@@ -70,8 +72,8 @@ export type AiAskStreamCallbacks = {
     onAnswerDelta?: ((full: string, chunk: string) => void) | null;
     onCompress?: ((event: any) => void) | null;
 };
-export declare function readAiAskStream(body: ReadableStream<Uint8Array>, { onProgressEvent, onToolEvent, onAgentToolEvent, onAgentOperationEvent, onAgentConfirmationRequiredEvent, onAgentSessionEvent, onAnswerDelta, onCompress, }?: AiAskStreamCallbacks): Promise<any>;
-export declare function askLibraryAi({ question, documentId, jobId, conversationId, parentId, regenerate, userMessageId, assistantMessageId, onToolEvent, onProgressEvent, onAgentToolEvent, onAgentOperationEvent, onAgentConfirmationRequiredEvent, onAgentSessionEvent, onAnswerDelta, onCompress, signal, apiPrefix, fetchImpl, llmApiKey, llmBaseUrl, llmModel, llmApiProtocol, connectionId, connectionModel, connectionOptions, confirmDocumentOperation, assistantMode, }?: {
+export declare function readAiAskStream(body: ReadableStream<Uint8Array>, { onTurnEvent, onProgressEvent, onToolEvent, onAgentToolEvent, onAgentOperationEvent, onAgentConfirmationRequiredEvent, onAgentSessionEvent, onAnswerDelta, onCompress, }?: AiAskStreamCallbacks): Promise<any>;
+export declare function askLibraryAi({ onTurnEvent, scopeDocumentIds, attachments, forceCompress, question, documentId, jobId, conversationId, parentId, regenerate, userMessageId, assistantMessageId, onToolEvent, onProgressEvent, onAgentToolEvent, onAgentOperationEvent, onAgentConfirmationRequiredEvent, onAgentSessionEvent, onAnswerDelta, onCompress, signal, apiPrefix, fetchImpl, llmApiKey, llmBaseUrl, llmModel, llmApiProtocol, connectionId, connectionModel, connectionOptions, confirmDocumentOperation, assistantMode, }?: {
     question?: string;
     documentId?: string;
     jobId?: string;
@@ -84,6 +86,10 @@ export declare function askLibraryAi({ question, documentId, jobId, conversation
     connectionId?: string;
     connectionModel?: string;
     connectionOptions?: Record<string, string>;
+    onTurnEvent?: ((event: TurnEvent) => void) | null;
+    scopeDocumentIds?: string[];
+    attachments?: Record<string, unknown>[];
+    forceCompress?: boolean;
     onToolEvent?: ((e: any) => void) | null;
     onProgressEvent?: ((e: {
         type: "progress";

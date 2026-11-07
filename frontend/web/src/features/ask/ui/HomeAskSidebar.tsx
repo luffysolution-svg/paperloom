@@ -76,7 +76,8 @@ export function HomeAskSidebar({
   onRename,
 }: HomeAskSidebarProps) {
   const [pendingDelete, setPendingDelete] = useState<HomeAskSession | null>(null);
-  const groups = groupSessions(sessions);
+  const [query, setQuery] = useState("");
+  const groups = groupSessions(sessions.filter((s) => s.title.toLocaleLowerCase().includes(query.toLocaleLowerCase())));
   const [editingId, setEditingId] = useState("");
   const [editTitle, setEditTitle] = useState("");
   const editInputRef = useRef<HTMLInputElement | null>(null);
@@ -172,6 +173,7 @@ export function HomeAskSidebar({
       </div>
 
       <div className="home-ask-sidebar-scroll">
+        <input type="search" className="home-ask-history-search" aria-label="搜索对话标题" placeholder="搜索对话" value={query} onChange={(event) => setQuery(event.target.value)} />
         {loading && sessions.length === 0 ? (
           <p className="home-ask-sidebar-empty">加载历史…</p>
         ) : sessions.length === 0 ? (

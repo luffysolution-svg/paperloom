@@ -1,7 +1,7 @@
 {
   "name": "retain-pdf-monorepo",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "workspaces": [
     "frontend/web",
     "frontend/desktop",

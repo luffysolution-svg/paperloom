@@ -184,6 +184,18 @@ def register_connection_routes(app, manager, require_api_key):
     def authenticate(connection_id: str, payload: dict):
         return {"code": 0, "data": manager.authenticate(connection_id, payload)}
 
+    @app.get("/v1/connections/{connection_id}/authenticate", dependencies=deps)
+    def authentication_status(connection_id: str):
+        return {"code": 0, "data": manager.authentication_status(connection_id)}
+
+    @app.delete("/v1/connections/{connection_id}/authenticate", dependencies=deps)
+    def cancel_authentication(connection_id: str):
+        return {"code": 0, "data": manager.cancel_authentication(connection_id)}
+
+    @app.get("/v1/connections/interactions", dependencies=deps)
+    def pending_interactions(conversation_id: str):
+        return {"code": 0, "data": manager.interactions.list_pending(conversation_id)}
+
     @app.post("/v1/connections/interactions/{interaction_id}", dependencies=deps)
     def interaction(interaction_id: str, payload: dict):
         manager.interactions.respond(interaction_id, payload)
@@ -192,3 +204,7 @@ def register_connection_routes(app, manager, require_api_key):
     @app.post("/v1/connections/runs/{run_id}/cancel", dependencies=deps)
     def cancel_run(run_id: str):
         return {"code": 0, "data": {"cancelled": manager.cancel_run(run_id)}}
+
+    @app.get("/v1/connections/runs", dependencies=deps)
+    def active_runs(conversation_id: str):
+        return {"code": 0, "data": manager.list_runs(conversation_id)}

@@ -10,6 +10,7 @@ import {
   type SetStateAction,
 } from "react";
 import { askLibraryAi, createConversation, saveAiSelection, selectionForRequest } from "@/platform/api/index.js";
+import { applyTurnEvent, type TurnPart } from "@/platform/api/index.js";
 import {
   resolveReaderAiConfig,
   sanitizeAssistantAnswer,
@@ -21,6 +22,7 @@ import { operationSignalsFromResult } from "../domain/home-ask-operation-signal.
 import { makeId } from "../domain/home-ask-ids.js";
 import { classifyTurnFailure } from "../domain/home-ask-turn-failure.js";
 import { saveConversationId } from "../domain/home-ask-conversation-storage.js";
+import { waitForStoppedMessage } from "../domain/home-ask-cancel-snapshot.js";
 import type { HomeAskCitation, HomeAskMessage, HomeAskScope } from "../domain/types.js";
 
 type EnqueueOperationSignal = (params: {
@@ -93,7 +95,7 @@ export function useHomeAskTurn({
   const send = useCallback(async (
     rawQuestion: string,
     scopes: HomeAskScope[] = [],
-    { regenerateOf = "", editOf = "" }: { regenerateOf?: string; editOf?: string } = {},
+    { regenerateOf = "", editOf = "", attachments = [], forceCompress = false }: { regenerateOf?: string; editOf?: string; attachments?: Record<string, unknown>[]; forceCompress?: boolean } = {},
   ) => {
     const question = `${rawQuestion || ""}`.trim();
     if (!question || runningRef.current) return;
@@ -117,6 +119,7 @@ export function useHomeAskTurn({
       ? findTurnUserMessage(priorMessages, regenerateOf)
       : null;
     if (regenerating && !parentUser) return;
+    if (!attachments.length) attachments = parentUser?.attachments || editedFrom?.attachments || [];
     // 重新生成失败时把原答案放回去——它在服务端还在（成了兄弟分支），但视图里已经被
     // 换掉了，不还原就等于点一次重试把看得见的答案弄丢了。
     const priorAssistant = regenerating
@@ -169,6 +172,7 @@ export function useHomeAskTurn({
           id: userId,
           role: "user",
           content: displayUser,
+          attachments,
           status: "complete",
           rawQuestion: question,
           ...(headId ? { parentId: headId } : {}),
@@ -217,8 +221,19 @@ export function useHomeAskTurn({
       if (!regenerating && scopedQuestion !== displayUser) {
         patchMessage(userId, { prompt: scopedQuestion });
       }
-      let answerStarted = false;
+      let parts: TurnPart[] = [];
       const result = await askLibraryAi({
+        scopeDocumentIds: resolvedDocs.map((d) => d.id),
+        attachments,
+        forceCompress,
+        onTurnEvent: (event) => {
+          if (abort.signal.aborted) return;
+          const next = applyTurnEvent(parts, event);
+          if (next !== parts) { parts = next; patchMessage(assistantId, { parts }); }
+          if (event.type === "citations") patchMessage(assistantId, { citations: event.citations });
+          if (event.type === "progress") patchMessage(assistantId, { progress: event.message });
+          if (event.type === "compress") patchMessage(assistantId, { progress: "已压缩早期对话，继续处理问题" });
+        },
         question: scopedQuestion,
         documentId: primaryDoc?.id || "",
         jobId: primaryDoc?.job_id || "",
@@ -230,7 +245,7 @@ export function useHomeAskTurn({
         ...modelRequestOverrides,
         signal: abort.signal,
         onToolEvent: (event) => {
-          if (abort.signal.aborted || answerStarted) return;
+          if (abort.signal.aborted) return;
           patchMessage(assistantId, {
             progress: describeToolEvent(event),
             status: "streaming",
@@ -262,7 +277,6 @@ export function useHomeAskTurn({
         },
         onAnswerDelta: (fullText: string) => {
           if (abort.signal.aborted) return;
-          answerStarted = true;
           const cleaned = sanitizeAssistantAnswer(fullText || "", []);
           const show = cleaned.trim() ? cleaned : `${fullText || ""}`;
           patchMessage(assistantId, {
@@ -302,6 +316,9 @@ export function useHomeAskTurn({
         status: "complete",
         incompleteReason: `${result?.incompleteReason || ""}`.trim(),
         source: `${result?.source || ""}`.trim(),
+        parts: result.parts?.length ? result.parts : parts,
+        metrics: result.metrics,
+        persisted: result.persisted,
       });
       void refreshSessions();
     } catch (error) {
@@ -324,15 +341,18 @@ export function useHomeAskTurn({
             progress: "",
             status: "cancelled",
           });
+          // The HTTP stream is closed; confirm the terminal snapshot through Rust.
+          const saved = await waitForStoppedMessage(conversationIdRef.current, assistantId);
+          patchMessage(assistantId, saved ? { ...saved, persisted: true } : { persisted: false });
         }
       } else {
         // 重新生成失败时错误就停在这一版上。它和原答案是兄弟，切换器给出 « 1/2 »，
         // 一键就能切回原来那版——两条不可能同时显示，它们共用一个父节点。
         patchMessage(assistantId, {
-          content: failure.message,
+          content: messagesRef.current.find((message) => message.id === assistantId)?.content || failure.message,
+          errorText: failure.message,
           progress: "",
           status: "error",
-          citations: [],
         });
       }
     } finally {

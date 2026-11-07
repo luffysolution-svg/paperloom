@@ -115,6 +115,7 @@ export function createReaderAskAnswerer({
     scope = "document",
     context = null,
     onToolEvent = null,
+    onTurnEvent = null,
     onProgressEvent = null,
     onAgentOperationEvent = null,
     onAgentConfirmationRequiredEvent = null,
@@ -136,6 +137,7 @@ export function createReaderAskAnswerer({
     scope?: string;
     context?: any;
     onToolEvent?: ((e: any) => void) | null;
+    onTurnEvent?: ((e: any) => void) | null;
     onProgressEvent?: ((e: { type: "progress"; stage: "routing" | "retrieval"; message: string }) => void) | null;
     onAgentOperationEvent?: ((e: any) => void) | null;
     onAgentConfirmationRequiredEvent?: ((e: any) => void) | null;
@@ -188,10 +190,14 @@ export function createReaderAskAnswerer({
       connectionModel,
       connectionOptions,
       onToolEvent,
+      onTurnEvent,
       onProgressEvent,
       onAgentOperationEvent,
       onAgentConfirmationRequiredEvent,
-      onAgentSessionEvent,
+      onAgentSessionEvent: (event: any) => {
+        if (!signal?.aborted && event?.conversation_id) rememberConversationId(event.conversation_id, documentId);
+        onAgentSessionEvent?.(event);
+      },
       onAnswerDelta,
       onCompress,
       llmApiKey: apiKey,

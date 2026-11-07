@@ -1,0 +1,37 @@
+.reader-ai-turn-content { min-width: 0; color: var(--ink, #242729); font-size: 15px; line-height: 1.8; }
+.reader-ai-turn-content > :not(:last-child) { margin-bottom: 18px; }
+.reader-ai-activity-group { padding-block: 5px; }
+.reader-ai-activity-group-head { display: flex; align-items: center; gap: 9px; min-height: 34px; color: var(--muted, #62696d); font-size: 13px; cursor: pointer; list-style: none; border-radius: 6px; }
+.reader-ai-activity-group-head::-webkit-details-marker { display: none; }.reader-ai-activity-group-head:hover { color: var(--ink, #242729); }
+.reader-ai-activity-group-head:focus-visible { outline: 2px solid var(--accent, #526d60); outline-offset: 3px; }
+.reader-ai-activity-group[open] > summary .reader-ai-details-chevron { transform: rotate(180deg); }.reader-ai-activity-list { display: grid; gap: 2px; margin: 5px 0 4px 2px; }
+.reader-ai-activity-step { min-width: 0; color: var(--muted, #62696d); font-size: 13px; }
+.reader-ai-activity-step summary { display: flex; align-items: center; gap: 9px; min-height: 36px; padding: 5px 8px; border-radius: 6px; cursor: pointer; list-style: none; }
+.reader-ai-activity-step summary::-webkit-details-marker { display: none; }
+.reader-ai-activity-step summary:hover { background: color-mix(in srgb, var(--ink, #242729) 4%, transparent); }
+.reader-ai-activity-step summary:focus-visible, .reader-ai-usage summary:focus-visible { outline: 2px solid var(--accent, #526d60); outline-offset: 3px; }
+.reader-ai-activity-label { color: var(--ink, #242729); flex-shrink: 1; font-weight: 500; min-width: 0; max-width: 65%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.reader-ai-activity-summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.reader-ai-activity-state { display: flex; margin-left: auto; color: var(--accent, #526d60); }
+.reader-ai-activity-time, .reader-ai-run-elapsed { font-variant-numeric: tabular-nums; font-size: 12px; white-space: nowrap; }
+.reader-ai-details-chevron { flex-shrink: 0; transition: transform 150ms ease-out; }
+.reader-ai-activity-step[open] > summary .reader-ai-details-chevron { transform: rotate(180deg); }
+.reader-ai-activity-detail { margin: 4px 8px 12px 30px; padding-left: 15px; border-left: 1px solid color-mix(in srgb, var(--ink, #242729) 14%, transparent); overflow-wrap: anywhere; }
+.reader-ai-reasoning-text { white-space: pre-wrap; max-height: 300px; overflow-y: auto; padding-right: 10px; line-height: 1.75; }
+.reader-ai-activity-detail pre, .reader-ai-usage pre { max-height: 240px; overflow: auto; white-space: pre-wrap; font-size: 12px; line-height: 1.6; }
+.reader-ai-detail-label { display: block; margin-top: 12px; color: var(--ink, #242729); font-weight: 550; }
+.reader-ai-plan-list { list-style: none; margin: 0; padding: 2px 0; display: grid; gap: 9px; }
+.reader-ai-plan-list li { display: flex; gap: 9px; align-items: baseline; }
+.reader-ai-plan-list li[data-status="completed"] { color: var(--muted, #62696d); }
+.reader-ai-plan-dot { width: 6px; height: 6px; flex-shrink: 0; border: 1px solid currentColor; border-radius: 50%; }
+.reader-ai-run-status { display: flex; align-items: center; gap: 8px; min-height: 28px; margin-bottom: 8px; font-size: 13px; color: var(--muted, #62696d); }
+.reader-ai-run-elapsed { margin-left: 4px; }
+.reader-ai-turn-error { color: var(--danger, #a53232); font-size: 13px; line-height: 1.7; margin-bottom: 10px; }
+.reader-ai-usage { font-size: 12px; color: var(--muted, #62696d); margin-top: 12px; }
+.reader-ai-usage summary { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.reader-ai-figure-gallery { margin: 5px 0 12px; }.reader-ai-figure-gallery > summary { display: inline-flex; align-items: center; gap: 7px; color: var(--muted, #62696d); font-size: 13px; cursor: pointer; min-height: 34px; }
+.reader-ai-figure-gallery img { max-height: 440px; width: auto; max-width: 100%; object-fit: contain; }.reader-ai-figure-gallery > summary:focus-visible { outline: 2px solid var(--accent, #526d60); outline-offset: 3px; }
+.reader-ai-usage-facts { display: flex; flex-wrap: wrap; gap: 12px 24px; padding-block: 8px; }
+.reader-ai-usage-facts dt { color: var(--muted, #62696d); }.reader-ai-usage-facts dd { margin: 3px 0 0; color: var(--ink, #242729); font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .reader-ai-details-chevron { transition: none; } }
+@media (max-width: 640px) { .reader-ai-activity-step summary, .reader-ai-activity-group-head, .reader-ai-figure-gallery > summary { min-height: 44px; } .reader-ai-activity-summary { display: none; } }

@@ -1,6 +1,7 @@
 // conversations — pure (mock branches removed, runtime via internal)
 import { API_PREFIX, buildApiHeaders, unwrapEnvelope } from "./internal/runtime.js";
 import { buildApiEndpoint } from "./http.js";
+import { timelineFromTrace } from "./turn-parts.js";
 
 export type ConversationRecord = {
   conversation_id: string;
@@ -215,7 +216,8 @@ export function messagesToBranchItems(messages: MessageRecord[]): Array<{ parent
         ? { type: "incomplete", reason: finish }
         : { type: "complete", reason: "stop" })
       : null;
-    items.push({ parentId: parent, message: { id: m.message_id, role, content: m.content || "", ...(m.model ? { source: m.model } : {}), ...(citations ? { citations } : {}), ...(status ? { status } : {}) } });
+    const timeline = timelineFromTrace(m.tool_trace_json);
+    items.push({ parentId: parent, message: { id: m.message_id, role, content: m.content || "", ...timeline, ...(m.model ? { source: m.model } : {}), ...(citations ? { citations } : {}), ...(status ? { status } : {}) } } as any);
   }
   return items;
 }

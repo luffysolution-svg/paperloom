@@ -14,7 +14,7 @@ export type AiConnection = {
 export type AgentPreset = { id: string; name: string; command: string; args: string[]; host: string; install: string; hint: string; installed: boolean; host_installed: boolean; can_prepare?: boolean };
 export type AgentConfigOption = { id: string; name: string; description?: string; category?: string; currentValue: string; type: string; options: ({ value: string; name: string } | { group: string; name: string; options: { value: string; name: string }[] })[] };
 export type AiConnectionCatalog = { revision: number; connections: AiConnection[]; presets: AgentPreset[] };
-export type AiConnectionProbe = { ready: boolean; status: string; message: string; models?: string[]; config_options?: AgentConfigOption[]; auth_methods?: { id: string; name: string; description?: string }[] };
+export type AiConnectionProbe = { ready: boolean; status: string; message: string; models?: string[]; config_options?: AgentConfigOption[]; capabilities?: Record<string, any>; auth_methods?: { id: string; name: string; description?: string; type?: string; args?: string[]; env?: Record<string, string> }[] };
 export type AiConnectionSelection = { connectionId: string; model: string; options: Record<string, string> };
 export const AI_CONNECTIONS_CHANGED = "paperloom:ai-connections-changed";
 export const AI_SELECTION_CHANGED = "paperloom:ai-selection-changed";
@@ -94,7 +94,12 @@ export async function removeAiConnection(id: string, revision: number) {
   return result;
 }
 export const probeAiConnection = (id: string, options: { prepare?: boolean; fresh?: boolean; models_only?: boolean } = {}) => request<AiConnectionProbe>(`/${encodeURIComponent(id)}/probe`, "POST", options);
-export const authenticateAiConnection = (id: string, method: string) => request(`/${encodeURIComponent(id)}/authenticate`, "POST", { method_id: method });
+export const authenticateAiConnection = (id: string, method: string) => request<AiConnectionProbe>(`/${encodeURIComponent(id)}/authenticate`, "POST", { method_id: method });
+export const fetchAiAuthentication = (id: string) => request<AiConnectionProbe>(`/${encodeURIComponent(id)}/authenticate`);
+export const cancelAiAuthentication = (id: string) => request<AiConnectionProbe>(`/${encodeURIComponent(id)}/authenticate`, "DELETE");
+export const fetchAgentInteractions = (id: string) => request<any[]>(`/interactions?conversation_id=${encodeURIComponent(id)}`);
+export const fetchActiveAiRuns = (id: string) => request<{ run_id: string; elapsed_ms: number }[]>(`/runs?conversation_id=${encodeURIComponent(id)}`);
+export const cancelAiRun = (id: string) => request(`/runs/${encodeURIComponent(id)}/cancel`, "POST");
 export const answerAgentInteraction = (id: string, answer: Record<string, unknown>) => request(`/interactions/${encodeURIComponent(id)}`, "POST", answer);
 
 export function emitAgentEvent(event: Record<string, unknown>) {

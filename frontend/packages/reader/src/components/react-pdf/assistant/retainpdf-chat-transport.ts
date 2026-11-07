@@ -3,7 +3,7 @@ import type {
   UIMessage,
   UIMessageChunk,
 } from "ai";
-import { selectionForRequest } from "@retainpdf/api";
+import { selectionForRequest, applyTurnEvent, type TurnPart, type TurnMetrics } from "@retainpdf/api";
 import type { AiCitationLike } from "../../../shared/ai/answer-enhance.js";
 import { normalizeAiCitations } from "../../../shared/ai/answer-enhance.js";
 import { sanitizeAssistantAnswer } from "../../../shared/ai/sanitize-answer.js";
@@ -13,6 +13,8 @@ import type { ReaderChatRequest, ReaderAnswerer, ReaderAssistantMode } from "../
 import type { ReaderAgentOperationSignal } from "./use-reader-agent-operations.js";
 
 export type ReaderChatMetadata = {
+  parts?: TurnPart[];
+  metrics?: TurnMetrics;
   source?: string;
   citations?: AiCitationLike[];
   progress?: string;
@@ -158,7 +160,15 @@ export class RetainPdfChatTransport implements ChatTransport<ReaderChatMessage> 
             let usedFallback = false;
             let result: Awaited<ReturnType<ReaderAnswerer["answer"]>>;
             try {
+              let parts: TurnPart[] = [];
               result = await answerer.answer({
+                onTurnEvent: (event: any) => {
+                  parts = applyTurnEvent(parts, event);
+                  if (parts.length) updateMetadata({ parts });
+                  if (event.type === "citations") updateMetadata({ citations: event.citations });
+                  if (event.metrics) updateMetadata({ metrics: event.metrics });
+                  if (event.type === "done") updateMetadata({ metrics: event.metrics, parts: event.parts || parts });
+                },
                 question,
                 ...connection,
                 assistantMode,
@@ -200,12 +210,12 @@ export class RetainPdfChatTransport implements ChatTransport<ReaderChatMessage> 
                   this.options.onAgentOperationSignal?.({ operationId });
                 },
                 onToolEvent: (event: unknown) => {
-                  if (streamedAnswer || abortSignal?.aborted) return;
+                  if (abortSignal?.aborted) return;
                   const progress = describeToolEvent(event as any);
                   if (progress) updateMetadata({ progress });
                 },
                 onProgressEvent: (event: unknown) => {
-                  if (streamedAnswer || abortSignal?.aborted) return;
+                  if (abortSignal?.aborted) return;
                   const message = `${(event as { message?: string })?.message || ""}`.trim();
                   if (message) updateMetadata({ progress: message });
                 },

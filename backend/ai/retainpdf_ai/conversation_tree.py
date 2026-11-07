@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+import json
 
 
 def visible_path(
@@ -65,6 +66,10 @@ def transcript_from_detail(
         content = str(message.get("content") or "")
         if role not in {"user", "assistant"} or not content.strip():
             continue
+        try:
+            attachments = next((entry.get("items", []) for entry in json.loads(message.get("tool_trace_json") or "[]") if isinstance(entry, dict) and entry.get("type") == "attachments"), [])
+        except (ValueError, TypeError):
+            attachments = []
         transcript.append(
             {
                 "role": role,
@@ -72,6 +77,7 @@ def transcript_from_detail(
                 "message_id": str(message.get("message_id") or ""),
                 "parent_id": str(message.get("parent_id") or ""),
                 "citations_json": message.get("citations_json") or "[]",
+                **({"attachments": attachments} if attachments and role == "user" else {}),
             }
         )
     return transcript

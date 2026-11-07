@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ShieldCheck } from "lucide-react";
-import { AI_AGENT_EVENT, answerAgentInteraction } from "@retainpdf/api";
+import { AI_AGENT_EVENT, answerAgentInteraction, fetchAgentInteractions } from "@retainpdf/api";
 
 export function AgentInteractionPanel({ conversationId, running }: { conversationId: string; running: boolean }) {
   const [pending, setPending] = useState<any[]>([]);
@@ -9,6 +9,8 @@ export function AgentInteractionPanel({ conversationId, running }: { conversatio
   const [error, setError] = useState("");
   useEffect(() => {
     setPending([]); setAnswers({}); setError("");
+    let active = true;
+    if (conversationId) void fetchAgentInteractions(conversationId).then((items) => { if (active) setPending(items); }).catch(() => {});
     const receive = (event: Event) => {
       const detail = (event as CustomEvent).detail;
       if (!detail || detail.conversation_id !== conversationId) return;
@@ -19,9 +21,8 @@ export function AgentInteractionPanel({ conversationId, running }: { conversatio
       }
     };
     document.addEventListener(AI_AGENT_EVENT, receive);
-    return () => document.removeEventListener(AI_AGENT_EVENT, receive);
-  }, [conversationId]);
-  useEffect(() => { if (!running) setPending([]); }, [running]);
+    return () => { active = false; document.removeEventListener(AI_AGENT_EVENT, receive); };
+  }, [conversationId, running]);
   const current = pending[0];
   useEffect(() => {
     const fields = current?.request?.requestedSchema?.properties || {};
@@ -29,7 +30,7 @@ export function AgentInteractionPanel({ conversationId, running }: { conversatio
       Object.hasOwn(field, "default") ? [[name, field.default]] : field.type === "boolean" ? [[name, false]] : []));
     setAnswers(initial); setError("");
   }, [current?.interaction_id]);
-  if (!current || !running) return null;
+  if (!current) return null;
   const request = current.request;
   const properties: Record<string, any> = request.requestedSchema?.properties || {};
 

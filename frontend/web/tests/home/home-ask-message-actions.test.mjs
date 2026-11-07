@@ -379,26 +379,22 @@ describe("提前收尾的提示", () => {
 });
 
 
-describe("中断的回答不会被保存这件事", () => {
-  /**
-   * 停止时服务端在落库之前就抛出了（raise_if_stopped 排在 persist_turn 前面），
-   * 所以半截回答只活在当前页面里。刷新回来整轮都不见了——用户有权在刷新之前知道，
-   * 而不是回来才发现。
-   */
+describe("中断回答的保存状态", () => {
   const cancelled = (content) => ([
     { id: "u1", role: "user", content: "问题" },
-    { id: "a1", role: "assistant", content, status: "cancelled", parentId: "u1" },
+    { id: "a1", role: "assistant", content, status: "cancelled", parentId: "u1", persisted: true },
   ]);
 
-  it("有半截正文时说清楚它不会保存", () => {
+  it("确认保存后说明内容已保留", () => {
     const view = render({ messages: cancelled("写了一半的回答") });
     const badge = textOf(view.host.querySelector(".home-ask-msg-interrupted"));
-    assert.ok(badge.includes("不会保存"), `提示没有说保存的事：${badge}`);
+    assert.ok(badge.includes("保留在对话中"), `提示没有说保存的事：${badge}`);
     view.unmount();
   });
 
-  it("指向已有的「复制」，而不是另加一个按钮", () => {
-    const view = render({ messages: cancelled("写了一半的回答") });
+  it("保存失败时指向已有的复制按钮", () => {
+    const messages = cancelled("写了一半的回答"); messages[1].persisted = false;
+    const view = render({ messages });
     const badge = textOf(view.host.querySelector(".home-ask-msg-interrupted"));
     assert.ok(badge.includes("复制"), `没有告诉用户怎么留住它：${badge}`);
     // 而「复制」确实就在下面的操作条上。
@@ -409,7 +405,7 @@ describe("中断的回答不会被保存这件事", () => {
   it("一个字都没出来时不提「复制」——没有东西可复制", () => {
     const view = render({ messages: cancelled("") });
     const badge = textOf(view.host.querySelector(".home-ask-msg-interrupted"));
-    assert.ok(badge.includes("不会保存"));
+    assert.ok(badge.includes("尚未生成回答"));
     assert.ok(!badge.includes("复制"), `没有正文却让人去复制：${badge}`);
     view.unmount();
   });

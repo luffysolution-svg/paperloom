@@ -8,6 +8,8 @@ import {
 
 export type ReaderAskStoreMessage = Omit<ThreadBranchMessage, "citations"> & {
   citations?: AiCitationLike[];
+  parts?: import("@retainpdf/api").TurnPart[];
+  metrics?: import("@retainpdf/api").TurnMetrics;
 };
 
 export type ReaderAskTreeItem = {
@@ -28,6 +30,7 @@ export function snapshotFromTree(
         id: item.message.id,
         role: item.message.role,
         content: item.message.content,
+        ...(item.message.parts ? { parts: item.message.parts, metrics: item.message.metrics } : {}),
         ...(item.message.progress ? { progress: item.message.progress } : {}),
         ...(item.message.source ? { source: item.message.source } : {}),
         ...(item.message.citations?.length ? { citations: item.message.citations } : {}),

@@ -59,3 +59,12 @@ test("aborted 的旧流禁止回写会话粘性(P0-4)", async () => {
     "aborted 不得写 storage 粘性",
   );
 });
+test("first session event preserves the new conversation even if its first answer fails", async () => {
+  const answerer = makeAnswerer(async (args) => {
+    args.onAgentSessionEvent({ conversation_id: "conv-first-error" });
+    throw new Error("upstream interrupted");
+  }, "job-first-error");
+  await assert.rejects(answerer.answer({ question: "问" }), /upstream interrupted/);
+  assert.equal(answerer.getConversationId(), "conv-first-error");
+  assert.equal(loadStoredConversationId({ jobId: "job-first-error", documentId: "doc-job-first-error" }), "conv-first-error");
+});

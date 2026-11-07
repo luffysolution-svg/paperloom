@@ -73,7 +73,7 @@ export async function resolveScopesForAsk(scopes: HomeAskScope[]): Promise<{
         }
       }
     } catch {
-      // 合集展开失败时仍靠 prompt 里的合集名提示模型
+      throw new Error(`无法读取合集「${s.title}」，请重试后再发送。`);
     }
   }
 

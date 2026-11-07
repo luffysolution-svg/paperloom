@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Callable, Iterable
 from typing import Any
 
@@ -18,6 +19,7 @@ def assemble_streaming_message(
     lines: Iterable[str | bytes],
     on_delta: Callable[[str], None] | None = None,
     request_control: RequestControl | None = None,
+    on_event: Callable | None = None,
 ) -> dict[str, Any]:
     """Assemble an SSE response into the non-streaming assistant shape."""
     content_parts: list[str] = []
@@ -25,7 +27,7 @@ def assemble_streaming_message(
     saw_tool_calls = False
     # The model may emit prose before tool calls. Hold a small prefix until the
     # turn is classified so that tool-call preambles never leak as answer text.
-    holdback_chars = 64
+    holdback_chars = 0 if on_event else 64
     pending: list[str] = []
     pending_flushed = False
     done = False
@@ -62,6 +64,8 @@ def assemble_streaming_message(
         if not isinstance(choices, list):
             raise AIStreamIncomplete()
         if not choices:
+            if on_event and chunk.get("usage"):
+                on_event({"type": "usage", "usage": chunk["usage"]})
             continue
         if not isinstance(choices[0], dict):
             raise AIStreamIncomplete()
@@ -74,6 +78,8 @@ def assemble_streaming_message(
         delta = choice.get("delta") or {}
         if not isinstance(delta, dict):
             raise AIStreamIncomplete()
+        if on_event and isinstance(delta.get("reasoning_content") or delta.get("reasoning"), str):
+            on_event({"type": "reasoning_delta", "text": delta.get("reasoning_content") or delta.get("reasoning")})
         delta_tool_calls = delta.get("tool_calls") or []
         if not isinstance(delta_tool_calls, list):
             raise AIStreamIncomplete()
@@ -109,6 +115,12 @@ def assemble_streaming_message(
                     slot["function"]["name"] += function["name"]
                 if function.get("arguments"):
                     slot["function"]["arguments"] += function["arguments"]
+                if on_event and slot["id"] and slot["function"]["name"]:
+                    now = time.monotonic()
+                    if now - slot.get("_preview_at", 0) >= 0.12:
+                        on_event({"type": "agent_tool", "tool_call_id": slot["id"], "tool": slot["function"]["name"],
+                                  "status": "pending", "input_preview": slot["function"]["arguments"][:4096]})
+                        slot["_preview_at"] = now
         piece = delta.get("content")
         if piece is not None and not isinstance(piece, str):
             raise AIStreamIncomplete()
@@ -132,7 +144,7 @@ def assemble_streaming_message(
         "content": "".join(content_parts),
     }
     if tool_calls:
-        message["tool_calls"] = [tool_calls[index] for index in sorted(tool_calls)]
+        message["tool_calls"] = [{k: v for k, v in tool_calls[index].items() if not k.startswith("_")} for index in sorted(tool_calls)]
     return message
 
 
@@ -160,6 +172,7 @@ def build_deepseek_chat_fn(
     *,
     on_delta: Callable[[str], None] | None = None,
     request_control: RequestControl | None = None,
+    on_event: Callable | None = None,
 ) -> ChatFn:
     """Build the request-scoped OpenAI-compatible chat function."""
     http = client or httpx.Client(timeout=settings.llm_timeout_s)
@@ -248,9 +261,9 @@ def build_deepseek_chat_fn(
                                 _emit(cleaned)
 
                     if protocol == "openai":
-                        message = assemble_streaming_message(response.iter_lines(), streamed_on_delta, request_control)
+                        message = assemble_streaming_message(response.iter_lines(), streamed_on_delta, request_control, on_event)
                     else:
-                        message = llm_wire.stream_message(protocol, response.iter_lines(), streamed_on_delta, request_control)
+                        message = llm_wire.stream_message(protocol, response.iter_lines(), streamed_on_delta, request_control, on_event)
                     if (
                         raw_on_delta is not None
                         and delta_sanitizer is not None

@@ -86,7 +86,14 @@ def build_app(
     restart_runtime = restart_callback or _schedule_process_restart
     connections = ConnectionManager(settings, rust, getattr(agent, "registry", None))
 
-    app = FastAPI(title="retainpdf-ai", version=__version__)
+    from contextlib import asynccontextmanager
+    @asynccontextmanager
+    async def lifespan(_app):
+        try:
+            yield
+        finally:
+            connections.sessions.close()
+    app = FastAPI(title="retainpdf-ai", version=__version__, lifespan=lifespan)
 
     def require_api_key(request: Request) -> None:
         if not settings.api_keys:
@@ -136,7 +143,7 @@ def build_app(
         prepared = ask_orchestrator.prepare(payload)
         if payload.stream:
             control = RequestControl(prepared.request_deadline_s)
-            connections.track_run(payload.run_id, control)
+            connections.track_run(payload.run_id, control, payload.conversation_id)
             return ControlledStreamingResponse(
                 ask_orchestrator.sse_events(payload, prepared, request_control=control),
                 control=control,

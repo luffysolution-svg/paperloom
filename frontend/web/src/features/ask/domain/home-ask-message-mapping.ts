@@ -1,6 +1,7 @@
 // 服务端消息/工具事件 → 主页 AI 消息模型（纯映射）
 
 import { messagesToBranchItems, type MessageRecord } from "@/platform/api/index.js";
+import { timelineFromTrace, attachmentsFromTrace } from "@/platform/api/index.js";
 import type { HomeAskCitation, HomeAskMessage } from "./types.js";
 import { makeId } from "./home-ask-ids.js";
 
@@ -89,13 +90,20 @@ export function nodesFromDetail(detail: ConversationDetailLike): {
     const finish = `${item.message.status?.reason || ""}`.trim();
     const incomplete = item.message.status?.type === "incomplete" && finish;
     const source = item.message.source;
+    const original = records.find((record) => record.message_id === item.message.id);
+    const timeline = timelineFromTrace(original?.tool_trace_json);
     return {
       id: item.message.id,
       role: item.message.role,
       content: `${item.message.content || ""}`,
       citations: (item.message.citations || []) as HomeAskCitation[],
+      parts: timeline.parts,
+      metrics: timeline.metrics,
+      persisted: true,
+      errorText: timeline.metrics?.error,
+      attachments: attachmentsFromTrace(original?.tool_trace_json),
       ...(source ? { source } : {}),
-      status: (incomplete && finish === "cancelled" ? "cancelled" : "complete") as HomeAskMessage["status"],
+      status: (finish === "cancelled" || finish === "running" ? "cancelled" : finish === "error" ? "error" : "complete") as HomeAskMessage["status"],
       ...(incomplete && finish !== "cancelled" ? { incompleteReason: finish } : {}),
       ...(item.parentId ? { parentId: item.parentId } : {}),
     };

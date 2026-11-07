@@ -25,6 +25,19 @@ class AcpClient:
     def __init__(self, connection, *, on_update=None, on_request=None, extra_env=None):
         self.connection = connection
         env = {**os.environ, **connection.env, **(extra_env or {})}
+        if connection.preset == "codex-acp":
+            # Add the app workflow to this process without editing the user's CLI files.
+            config = json.loads(env.get("CODEX_CONFIG") or "{}")
+            instructions = (
+                "You are embedded in PaperLoom, a local paper reader. For questions about papers already in the app, "
+                "use the supplied paperloom MCP tools directly: search_fulltext, read_blocks and read_figure. "
+                "The app has already imported and indexed these papers. A short in-app question does not require "
+                "a literature-search, document-conversion or manuscript-writing workflow. Do not install or update "
+                "components or search other libraries unless the user asks. Read figures through read_figure before "
+                "claiming visual analysis. Keep progress brief and match the user's requested answer length."
+            )
+            config["developer_instructions"] = (config.get("developer_instructions", "") + "\n" + instructions).strip()
+            env["CODEX_CONFIG"] = json.dumps(config, ensure_ascii=False)
         # Native ACP agents use local HTTP services; preserve proxies and bypass loopback.
         bypass = [part.strip() for key in ("NO_PROXY", "no_proxy") for part in env.get(key, "").split(",") if part.strip()]
         env["NO_PROXY"] = ",".join(dict.fromkeys([*bypass, "127.0.0.1", "localhost", "::1"]))
@@ -136,8 +149,9 @@ class AcpClient:
                 self._pending.pop(id, None)
 
     def initialize(self, control):
-        result = self.call("initialize", {"protocolVersion": 1, "clientInfo": {"name": "paperloom", "version": "0.2.0"},
-            "clientCapabilities": {"fs": {"readTextFile": False, "writeTextFile": False}, "terminal": False, "elicitation": {"form": {}}}}, control)
+        result = self.call("initialize", {"protocolVersion": 1, "clientInfo": {"name": "paperloom", "version": "0.2.1"},
+            "clientCapabilities": {"fs": {"readTextFile": False, "writeTextFile": False}, "terminal": False,
+                "auth": {"terminal": os.name == "nt"}, "elicitation": {"form": {}}, "session": {"notices": {}}}}, control)
         if result.get("protocolVersion") != 1:
             raise AcpError("version", "此 Agent 未协商到 ACP v1，请更新适配器。")
         return result

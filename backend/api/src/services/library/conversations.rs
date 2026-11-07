@@ -219,7 +219,13 @@ pub fn append_message(
     if !matches!(payload.role.as_str(), "user" | "assistant") {
         return Err(AppError::bad_request("role must be user or assistant"));
     }
-    if payload.content.trim().is_empty() {
+    if payload.content.trim().is_empty()
+        && !(payload.role == "assistant"
+            && matches!(
+                payload.finish_reason.as_str(),
+                "running" | "cancelled" | "error"
+            ))
+    {
         return Err(AppError::bad_request("content must not be empty"));
     }
     let conversation = deps

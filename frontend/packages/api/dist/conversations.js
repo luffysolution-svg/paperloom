@@ -1,6 +1,7 @@
 // conversations — pure (mock branches removed, runtime via internal)
 import { API_PREFIX, buildApiHeaders, unwrapEnvelope } from "./internal/runtime.js";
 import { buildApiEndpoint } from "./http.js";
+import { timelineFromTrace } from "./turn-parts.js";
 async function apiJson(path, options = {}, apiPrefix = API_PREFIX) {
     const url = path.startsWith("http") ? path : buildApiEndpoint(apiPrefix, path.replace(/^\//, ""));
     const headers = buildApiHeaders({ "Content-Type": "application/json", ...options.headers });
@@ -198,7 +199,8 @@ export function messagesToBranchItems(messages) {
                 ? { type: "incomplete", reason: finish }
                 : { type: "complete", reason: "stop" })
             : null;
-        items.push({ parentId: parent, message: { id: m.message_id, role, content: m.content || "", ...(m.model ? { source: m.model } : {}), ...(citations ? { citations } : {}), ...(status ? { status } : {}) } });
+        const timeline = timelineFromTrace(m.tool_trace_json);
+        items.push({ parentId: parent, message: { id: m.message_id, role, content: m.content || "", ...timeline, ...(m.model ? { source: m.model } : {}), ...(citations ? { citations } : {}), ...(status ? { status } : {}) } });
     }
     return items;
 }

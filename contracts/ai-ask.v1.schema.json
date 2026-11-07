@@ -115,6 +115,8 @@
         "connection_id": {"type": "string", "maxLength": 128},
         "connection_model": {"type": "string", "maxLength": 256},
         "connection_options": {"type": "object", "additionalProperties": {"type": "string"}},
+        "scope_document_ids": {"type": "array", "items": {"type": "string"}, "maxItems": 100},
+        "attachments": {"type": "array", "items": {"type": "object"}, "maxItems": 4},
         "llm_model": {
           "type": "string"
         }
@@ -217,7 +219,10 @@
           "enum": [
             "running",
             "completed",
-            "failed"
+            "failed",
+            "pending",
+            "in_progress",
+            "cancelled"
           ]
         },
         "summary": {
@@ -450,6 +455,8 @@
         "persisted"
       ],
       "properties": {
+        "parts": {"type": "array", "items": {"type": "object"}},
+        "metrics": {"type": "object"},
         "answer": {
           "type": "string",
           "minLength": 1
@@ -548,7 +555,11 @@
           "type": "string",
           "enum": [
             "routing",
-            "retrieval"
+            "retrieval",
+            "connecting",
+            "session",
+            "thinking",
+            "saving"
           ]
         },
         "message": {
@@ -618,6 +629,11 @@
         "agent_operation",
         "agent_confirmation_required",
         "answer_delta",
+        "reasoning_delta",
+        "agent_plan",
+        "agent_notice",
+        "citations",
+        "usage",
         "compress",
         "done",
         "error",

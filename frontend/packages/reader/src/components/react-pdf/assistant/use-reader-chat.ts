@@ -25,6 +25,8 @@ export function storeMessagesToChat(
     metadata: message.role === "assistant"
       ? {
         citations: message.citations || [],
+        parts: message.parts,
+        metrics: message.metrics,
         ...(message.source ? { source: message.source } : {}),
         progress: message.progress || "",
         status: message.status?.type === "running"
@@ -53,6 +55,8 @@ export function chatMessageToStore(message: ReaderChatMessage): ReaderAskStoreMe
     content: message.role === "assistant" ? content : text,
     ...(message.role === "assistant" ? {
       citations: metadata.citations || [],
+      parts: metadata.parts,
+      metrics: metadata.metrics,
       ...(metadata.source ? { source: metadata.source } : {}),
       progress: metadata.progress || "",
       // 「答完了但没做完」和「中断/出错」是两回事:正文是完整的一段话,只是背后的

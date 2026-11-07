@@ -61,10 +61,14 @@ export type AiConnectionProbe = {
     message: string;
     models?: string[];
     config_options?: AgentConfigOption[];
+    capabilities?: Record<string, any>;
     auth_methods?: {
         id: string;
         name: string;
         description?: string;
+        type?: string;
+        args?: string[];
+        env?: Record<string, string>;
     }[];
 };
 export type AiConnectionSelection = {
@@ -89,6 +93,14 @@ export declare const probeAiConnection: (id: string, options?: {
     fresh?: boolean;
     models_only?: boolean;
 }) => Promise<AiConnectionProbe>;
-export declare const authenticateAiConnection: (id: string, method: string) => Promise<unknown>;
+export declare const authenticateAiConnection: (id: string, method: string) => Promise<AiConnectionProbe>;
+export declare const fetchAiAuthentication: (id: string) => Promise<AiConnectionProbe>;
+export declare const cancelAiAuthentication: (id: string) => Promise<AiConnectionProbe>;
+export declare const fetchAgentInteractions: (id: string) => Promise<any[]>;
+export declare const fetchActiveAiRuns: (id: string) => Promise<{
+    run_id: string;
+    elapsed_ms: number;
+}[]>;
+export declare const cancelAiRun: (id: string) => Promise<unknown>;
 export declare const answerAgentInteraction: (id: string, answer: Record<string, unknown>) => Promise<unknown>;
 export declare function emitAgentEvent(event: Record<string, unknown>): void;

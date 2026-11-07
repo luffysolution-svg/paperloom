@@ -1,6 +1,8 @@
 import { messagesToBranchItems, type AiCitationLike, type ThreadBranchMessage, type ThreadBranchSnapshot } from "../../../external.js";
 export type ReaderAskStoreMessage = Omit<ThreadBranchMessage, "citations"> & {
     citations?: AiCitationLike[];
+    parts?: import("@retainpdf/api").TurnPart[];
+    metrics?: import("@retainpdf/api").TurnMetrics;
 };
 export type ReaderAskTreeItem = {
     parentId: string | null;

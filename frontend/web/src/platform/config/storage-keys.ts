@@ -15,6 +15,7 @@ export const UPDATE_CHECK_CACHE_STORAGE_KEY = "retainpdf:update-check:v1";
 
 /** ask：主页粘性会话 id（localStorage）。 */
 export const HOME_ASK_CONVERSATION_STORAGE_KEY = "retainpdf.home.ai.conversation.v1";
+export const HOME_ASK_SCOPES_STORAGE_KEY = "paperloom.home.ask.scopes.v1";
 
 /** ask：agent operation 幂等键前缀（sessionStorage）。 */
 export const AGENT_OPERATION_ACTION_KEY_PREFIX = "retainpdf.agent-operation.action-key.v1:";

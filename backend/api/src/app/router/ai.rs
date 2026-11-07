@@ -22,7 +22,17 @@ pub(super) fn routes() -> Router<AppState> {
         )
         .route(
             "/api/v1/ai/connections/:id/authenticate",
-            post(ai_proxy::connections_proxy),
+            post(ai_proxy::connections_proxy)
+                .get(ai_proxy::connections_proxy)
+                .delete(ai_proxy::connections_proxy),
+        )
+        .route(
+            "/api/v1/ai/connections/interactions",
+            get(ai_proxy::connections_proxy),
+        )
+        .route(
+            "/api/v1/ai/connections/runs",
+            get(ai_proxy::connections_proxy),
         )
         .route(
             "/api/v1/ai/connections/interactions/:id",

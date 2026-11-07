@@ -7,3 +7,4 @@ export { AiBrandMark } from "./components/ai/AiBrandMark.js";
 export { AiModelSelect } from "./components/ai/AiModelSelect.js";
 export { AI_PROVIDERS, aiConnectionBrand, aiConnectionName, agentBrand, connectionProvider, isVisibleAiConnection } from "./shared/ai/service-presets.js";
 export type { AiBrandKey, AiProvider } from "./shared/ai/service-presets.js";
+export { AiTurnContent, AiRunStatus } from "./components/ai/AiTurnContent.js";

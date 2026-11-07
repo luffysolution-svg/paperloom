@@ -40,6 +40,7 @@ READING_TOOL_NAMES = frozenset(
         "list_documents",
         "search_fulltext",
         "read_blocks",
+        "read_figure",
         "search_favorites",
         "search_markdown",
         "read_markdown_chunk",
@@ -235,6 +236,9 @@ def agent_tool_event(
         event["summary"] = summary
     if result and result.get("calculation_id"):
         event["calculation_id"] = str(result["calculation_id"])
+    if result:
+        # Keep the card useful without duplicating entire pages in the stream.
+        event["output"] = {k: v for k, v in result.items() if k in {"summary", "error", "count", "total", "page", "page_idx", "document_id", "job_id", "image_urls", "calculation_id"}}
     return event
 
 

@@ -335,13 +335,21 @@ impl Db {
             |row| row.get(0),
         )?;
         let parent = parent_id.trim();
-        tx.execute(
+        let changed = tx.execute(
             r#"
             INSERT INTO ai_messages (
                 message_id, conversation_id, seq, role, content,
                 citations_json, tool_trace_json, model, created_at, parent_id,
                 finish_reason
             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            ON CONFLICT(message_id) DO UPDATE SET
+                content = excluded.content, citations_json = excluded.citations_json,
+                tool_trace_json = excluded.tool_trace_json, model = excluded.model,
+                finish_reason = excluded.finish_reason
+            WHERE ai_messages.conversation_id = excluded.conversation_id
+              AND ai_messages.role = 'assistant' AND excluded.role = 'assistant'
+              AND ai_messages.parent_id = excluded.parent_id
+              AND ai_messages.finish_reason = 'running'
             "#,
             params![
                 message_id,
@@ -357,6 +365,10 @@ impl Db {
                 finish_reason.trim(),
             ],
         )?;
+        anyhow::ensure!(
+            changed == 1,
+            "message already completed or identity changed"
+        );
         if set_head {
             tx.execute(
                 "UPDATE ai_conversations SET updated_at = ?1, head_id = ?2 WHERE conversation_id = ?3",
@@ -376,19 +388,8 @@ impl Db {
             )?;
         }
         tx.commit()?;
-        Ok(MessageRecord {
-            message_id: message_id.to_string(),
-            conversation_id: conversation_id.to_string(),
-            seq: next_seq,
-            role: role.to_string(),
-            content: content.to_string(),
-            citations_json: citations_json.to_string(),
-            tool_trace_json: tool_trace_json.to_string(),
-            model: model.to_string(),
-            created_at: now,
-            parent_id: parent.to_string(),
-            finish_reason: finish_reason.trim().to_string(),
-        })
+        self.get_message(conversation_id, message_id)?
+            .context("message missing after append")
     }
 
     /// 原子 fork：单事务内创建会话并批量写入 path（根→叶），失败整体回滚不留孤儿。
@@ -500,4 +501,71 @@ fn row_to_message(row: &rusqlite::Row<'_>) -> rusqlite::Result<MessageRecord> {
         parent_id: row.get(9).unwrap_or_default(),
         finish_reason: row.get(10).unwrap_or_default(),
     })
+}
+
+#[cfg(test)]
+mod turn_checkpoint_tests {
+    use super::*;
+
+    #[test]
+    fn checkpoint_updates_one_message_and_cannot_overwrite_a_terminal_turn() {
+        let root =
+            std::env::temp_dir().join(format!("retain-turn-checkpoint-{}", fastrand::u64(..)));
+        let db = Db::new(root.join("jobs.db"), root.clone());
+        db.init().unwrap();
+        db.create_conversation("c", "Checkpoint", None).unwrap();
+        db.append_message("c", "u", "user", "question", "[]", "[]", "", "", true, "")
+            .unwrap();
+        let first = db
+            .append_message(
+                "c",
+                "a",
+                "assistant",
+                "part",
+                "[]",
+                "[]",
+                "m",
+                "u",
+                true,
+                "running",
+            )
+            .unwrap();
+        let final_message = db
+            .append_message(
+                "c",
+                "a",
+                "assistant",
+                "complete",
+                "[]",
+                "[]",
+                "m",
+                "u",
+                true,
+                "",
+            )
+            .unwrap();
+        assert_eq!(first.seq, final_message.seq);
+        assert_eq!(first.created_at, final_message.created_at);
+        assert_eq!(db.list_messages("c", 20).unwrap().len(), 2);
+        assert!(db
+            .append_message(
+                "c",
+                "a",
+                "assistant",
+                "late",
+                "[]",
+                "[]",
+                "m",
+                "u",
+                true,
+                "running"
+            )
+            .is_err());
+        assert_eq!(
+            db.get_message("c", "a").unwrap().unwrap().content,
+            "complete"
+        );
+        drop(db);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }

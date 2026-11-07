@@ -18,6 +18,8 @@ from .prompts import build_reading_system_prompt
 from .request_control import RequestControl
 from .runtimes.contracts import AskResult, ChatFn, Citation
 from .tools import ToolRegistry
+from .image_inputs import image_inputs, chat_images
+from dataclasses import asdict
 from .chart_tools import CHART_TOOL_NAMES
 from .unified_tools import (
     CALCULATION_TOOL_NAMES,
@@ -27,7 +29,7 @@ from .unified_tools import (
 
 SYSTEM_PROMPT = build_reading_system_prompt()
 MARKDOWN_TOOL_NAMES = frozenset({"search_markdown", "read_markdown_chunk"})
-STRUCTURED_READING_TOOL_NAMES = frozenset({"search_fulltext", "read_blocks"})
+STRUCTURED_READING_TOOL_NAMES = frozenset({"search_fulltext", "read_blocks", "read_figure"})
 # 本地、确定性、不出网的工具。它们是"拿到证据之后"的加工步骤,不是检索。
 COMPUTATION_TOOL_NAMES = frozenset((*CALCULATION_TOOL_NAMES, *CHART_TOOL_NAMES))
 DOCUMENT_READING_TOOL_NAMES = frozenset(
@@ -71,9 +73,12 @@ class RetrievalAgent:
         max_tool_rounds: int | None = None,
         content_source: str = "auto",
         request_control: RequestControl | None = None,
+        scope_document_ids: list | None = None,
+        attachments: list | None = None,
     ) -> AskResult:
         emit = on_event or (lambda event: None)
         chat = chat_fn or self._chat
+        registry = self._registry.scoped(scope_document_ids)
         scoped_document_id = document_id.strip()
         scoped_job_id = job_id.strip()
         messages = _initial_messages(
@@ -82,12 +87,15 @@ class RetrievalAgent:
             job_id=scoped_job_id,
             history=history,
         )
+        images = image_inputs(attachments)
+        if images:
+            messages[-1]["content"] = [{"type": "text", "text": question}, *chat_images(images)]
         citations: dict[int, Citation] = {}
         trace: list[dict[str, Any]] = []
         calculation_refs: dict[str, dict[str, Any]] = {}
         next_ref = 1
         tool_specs = tool_specs_for_scope(
-            self._registry,
+            registry,
             scoped_document_id,
             scoped_job_id,
             content_source=content_source,
@@ -120,6 +128,7 @@ class RetrievalAgent:
         computation_left = self._computation_round_bonus
         round_index = 0
 
+        pending_images = []
         while True:
             round_index += 1
             if request_control is not None:
@@ -128,6 +137,9 @@ class RetrievalAgent:
             # 注定被丢弃的正文不推给浏览器,否则用户会看到「废弃答案 + 真答案」拼接,
             # 而且下面那句「尚未完成文档检索」的护栏文案永远排在它后面。
             will_discard_bare_answer = requires_document_search and not searched_document
+            if pending_images:
+                messages.append({"role": "user", "content": [{"type": "text", "text": "刚才工具返回的原始图表，请结合图注分析。"}, *chat_images(pending_images)]})
+                pending_images = []
             # 清洗器按轮新建:它累积的是**这一轮**的原文,而最终答案也只来自一轮。
             # 引用映射此刻已经齐了——最终答案那一轮按定义不再调工具，所以
             # citations 在它开始流之前就不会再变。
@@ -216,8 +228,9 @@ class RetrievalAgent:
                     )
                 if name in DOCUMENT_SEARCH_TOOL_NAMES:
                     searched_document = True
-                emit(agent_tool_event(name, call_id, "running"))
-                result = self._registry.invoke(name, arguments)
+                emit({**agent_tool_event(name, call_id, "running"), "input": arguments})
+                result = registry.invoke(name, arguments)
+                pending_images.extend(result.pop("_images", []))
                 calculation_id = str(result.get("calculation_id") or "").strip()
                 if calculation_id:
                     calculation_refs[calculation_id] = {
@@ -229,6 +242,8 @@ class RetrievalAgent:
                         result.get("structured_data_available") is False
                     )
                 next_ref = assign_refs(result, citations, next_ref)
+                if citations:
+                    emit({"type": "citations", "citations": [asdict(c) for c in citations.values()]})
                 emit(
                     agent_tool_event(
                         name,
@@ -332,7 +347,8 @@ def _initial_messages(
         role = str(turn.get("role") or "")
         content = str(turn.get("content") or "").strip()
         if role in {"user", "assistant"} and content:
-            messages.append({"role": role, "content": content})
+            previous_images = image_inputs(turn.get("attachments")) if role == "user" else []
+            messages.append({"role": role, "content": [{"type": "text", "text": content}, *chat_images(previous_images)] if previous_images else content})
     messages.append({"role": "user", "content": user_content})
     return messages
 
@@ -501,14 +517,14 @@ def scope_tool_arguments(
         return scoped
     if not document_id:
         return scoped
-    if name in {"search_fulltext", "search_favorites", "list_documents", "read_blocks"}:
+    if name in {"search_fulltext", "search_favorites", "list_documents", "read_blocks", "read_figure"}:
         scoped["document_id"] = document_id
     if name == "search_fulltext" and job_id:
         # Internal scope only: the tool uses this to decide whether the exact
         # reader job has a document.v1 artifact.  Rust full-text search remains
         # document scoped.
         scoped["job_id"] = job_id
-    if name == "read_blocks" and job_id and not str(scoped.get("job_id") or "").strip():
+    if name in {"read_blocks", "read_figure"} and job_id and not str(scoped.get("job_id") or "").strip():
         scoped["job_id"] = job_id
     return scoped
 

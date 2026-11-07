@@ -15,7 +15,6 @@ import {
   Copy,
   GitBranch,
   Image,
-  Loader2,
   RefreshCw,
   Sigma,
   Sparkles,
@@ -26,7 +25,8 @@ import {
 } from "lucide-react";
 import { armReaderAiClickShield, lockReaderAiNavigation } from "../../../external.js";
 import type { AiCitationLike } from "../../../external.js";
-import { AiMarkdownAnswer } from "../../ai/AiMarkdownAnswer.js";
+import { AiTurnContent, AiRunStatus } from "../../ai/AiTurnContent.js";
+import type { TurnPart, TurnMetrics } from "@retainpdf/api";
 import { useAiComposerControl } from "../../ai/AiConnectionPicker.js";
 import type { ReaderAssistantMode } from "../../../shared/ai/ask-answerer.js";
 import {
@@ -40,15 +40,6 @@ export function assistantMessageText(message: Pick<MessageState, "content">): st
     .map((part) => part.text)
     .join("\n")
     .trim();
-}
-
-export function ThinkingRow({ label }: { label: string }) {
-  return (
-    <div className="aui-thinking" role="status" aria-live="polite">
-      <Loader2 className="aui-spin" size={14} strokeWidth={2.4} aria-hidden />
-      <span>{label || "思考中…"}</span>
-    </div>
-  );
 }
 
 export function UserMessageRow({ message }: { message: MessageState }) {
@@ -89,8 +80,11 @@ export function AssistantMessageRow({
   return (
     <MessagePrimitive.Root className="aui-msg aui-msg-assistant" data-role="assistant">
       <div className="aui-msg-stack">
-        {streaming && progress ? <ThinkingRow label={progress} /> : null}
-        {streaming && !progress && !content ? <ThinkingRow label="思考中…" /> : null}
+        {streaming ? <AiRunStatus running label={progress} elapsedMs={(message.metadata?.custom?.metrics as TurnMetrics | undefined)?.elapsed_ms || 0} /> : null}
+        {message.status?.type === "incomplete" && message.status.reason === "cancelled" ? <div className="reader-ai-run-status" role="status">已中断，已生成的内容保留在对话中</div> : null}
+        {!streaming && message.status?.type === "incomplete" && message.status.reason === "error" ? <div className="reader-ai-turn-error" role="alert">
+          {String((message.metadata?.custom?.metrics as TurnMetrics | undefined)?.error || "本轮未完成，请重新生成或检查连接设置。")}
+        </div> : null}
         {/* 轮次预算用尽、模型被强制收尾。它写出来的话语气照常,不标出来就看不出。
             阅读模式的预算(3)比主页(6)更紧,这一侧其实更容易撞上。
             只认识的原因才渲染——将来契约多一种值时,宁可不显示也别瞎解释一句。 */}
@@ -99,19 +93,17 @@ export function AssistantMessageRow({
             检索与计算的步数已用尽，这个回答是提前收尾的——追问一句可以让它接着做。
           </div>
         ) : null}
-        {content ? (
+        {content || (message.metadata?.custom?.parts as TurnPart[] | undefined)?.length ? (
           <div className="aui-msg-bubble">
-            <AiMarkdownAnswer
+            <div className="aui-md"><AiTurnContent
+              parts={message.metadata?.custom?.parts as TurnPart[] | undefined}
+              metrics={message.metadata?.custom?.metrics as TurnMetrics | undefined}
               content={content}
               streaming={streaming}
               citations={citations}
               jobId={jobId}
-              className="aui-md"
-              streamingClassName="aui-md-streaming"
-              pendingClassName="aui-md-pending"
-              finalClassName="aui-md-final"
               onJumpCitation={onJumpCitation}
-            />
+            /></div>
           </div>
         ) : null}
         <ActionBarPrimitive.Root

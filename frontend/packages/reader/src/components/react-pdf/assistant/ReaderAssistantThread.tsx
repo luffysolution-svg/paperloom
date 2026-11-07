@@ -130,7 +130,7 @@ export function ReaderAssistantThread({
     id: message.id,
     role: message.role,
     content: contentByMessageId[message.id] || message.content || "",
-    ...(message.source ? { metadata: { custom: { source: message.source } } } : {}),
+    metadata: { custom: { source: message.source, parts: message.parts, metrics: message.metrics } },
     ...(message.role === "assistant"
       ? { status: assistantStatus(message, streamingAssistantId, isRunning) }
       : {}),

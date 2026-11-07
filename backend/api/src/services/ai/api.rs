@@ -109,11 +109,24 @@ pub async fn connections(
     }
     let mut path = format!("/v1/connections{suffix}");
     if !query.is_empty() {
-        let revision = url::form_urlencoded::parse(query.as_bytes())
-            .find(|(key, _)| key == "expected_revision")
-            .and_then(|(_, value)| value.parse::<u64>().ok())
-            .ok_or_else(|| AppError::bad_request("expected_revision is required"))?;
-        path.push_str(&format!("?expected_revision={revision}"));
+        if method == reqwest::Method::GET && matches!(suffix, "/runs" | "/interactions") {
+            let conversation_id = url::form_urlencoded::parse(query.as_bytes())
+                .find(|(key, _)| key == "conversation_id")
+                .map(|(_, value)| value.into_owned())
+                .filter(|value| !value.is_empty() && value.len() <= 128)
+                .ok_or_else(|| AppError::bad_request("conversation_id is required"))?;
+            let encoded = url::form_urlencoded::Serializer::new(String::new())
+                .append_pair("conversation_id", &conversation_id)
+                .finish();
+            path.push('?');
+            path.push_str(&encoded);
+        } else {
+            let revision = url::form_urlencoded::parse(query.as_bytes())
+                .find(|(key, _)| key == "expected_revision")
+                .and_then(|(_, value)| value.parse::<u64>().ok())
+                .ok_or_else(|| AppError::bad_request("expected_revision is required"))?;
+            path.push_str(&format!("?expected_revision={revision}"));
+        }
     }
     let upstream = gateway
         .send(method, &path, forwarded_api_key(headers), payload)

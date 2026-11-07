@@ -54,6 +54,8 @@ class PythonAgentRuntime:
         max_tool_rounds: int | None = None,
         content_source: str = "auto",
         request_control: Any | None = None,
+        scope_document_ids: list | None = None,
+        attachments: list | None = None,
     ) -> AskResult:
         del confirmed
         arguments = {
@@ -65,6 +67,8 @@ class PythonAgentRuntime:
             "max_tool_rounds": max_tool_rounds,
             "content_source": content_source,
             "request_control": request_control,
+            "scope_document_ids": scope_document_ids,
+            "attachments": attachments,
         }
         parameters = inspect.signature(self._agent.ask).parameters
         arguments = {

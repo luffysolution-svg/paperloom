@@ -185,6 +185,7 @@ class ConversationState:
                     conversation_id,
                     role="user",
                     content=payload.question.strip(),
+                    tool_trace_json=json.dumps([{"type": "attachments", "items": payload.attachments}], ensure_ascii=False) if payload.attachments else "[]",
                     parent_id=parent_hint,
                     message_id=payload.user_message_id.strip(),
                     set_head=True,
@@ -216,22 +217,19 @@ class ConversationState:
         chain_parent_id: str = "",
     ) -> tuple[str, bool]:
         """Persist the user request before durable Agent tools can run."""
-        if not (
-            request_runtime.capabilities.document_operations
-            or request_runtime.capabilities.durable_calculations
-        ):
-            return "", True
         parent_hint = chain_parent_id.strip() or payload.parent_id.strip()
         if payload.regenerate:
             return parent_hint, bool(parent_hint)
         if not conversation_id or self._store is None:
             return "", False
+
         requested_id = payload.user_message_id.strip()
         try:
             user_message = self._store.append_conversation_message(
                 conversation_id,
                 role="user",
                 content=payload.question.strip(),
+                tool_trace_json=json.dumps([{"type": "attachments", "items": payload.attachments}], ensure_ascii=False) if payload.attachments else "[]",
                 parent_id=parent_hint,
                 message_id=requested_id,
                 set_head=True,
@@ -245,6 +243,19 @@ class ConversationState:
                 return requested_id, True
             print(f"[retainpdf-ai] pre-persist Agent request failed: {exc}", flush=True)
             return "", False
+
+    def checkpoint_turn(self, conversation_id, payload, runtime, user_id, transcript):
+        if not self._store or not conversation_id or not user_id or not payload.assistant_message_id:
+            return
+        snapshot = transcript.snapshot()
+        try:
+            self._store.append_conversation_message(conversation_id, role="assistant", content=transcript.answer,
+                parent_id=user_id, message_id=payload.assistant_message_id, finish_reason="running", set_head=True,
+                model=getattr(runtime, "source_label", "") or runtime.runtime_id,
+                citations_json=json.dumps(transcript.citations, ensure_ascii=False),
+                tool_trace_json=json.dumps([{"type": "turn_timeline", **snapshot}], ensure_ascii=False))
+        except Exception:
+            pass  # The final write reports persistence failure to the client.
 
     def _matches_existing_request(
         self,

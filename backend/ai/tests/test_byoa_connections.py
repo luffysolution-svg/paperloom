@@ -109,7 +109,14 @@ def test_subprocess_agent_context_tools_permissions_model_and_resume(tmp_path, p
     recorded = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
     workdirs = [r["params"]["cwd"] for r in recorded if r.get("method") in {"session/new", "session/load"}]
     assert all(Path(value).is_relative_to(tmp_path / "agent-runtime/byoa/workspaces") for value in workdirs) if preset == "pi" else all(Path(value) == tmp_path for value in workdirs)
-    assert sum(r.get("method") == "session/load" for r in recorded) == 1
+    assert sum(r.get("method") == "initialize" for r in recorded) == 1
+    assert sum(r.get("method") == "session/new" for r in recorded) == 1
+    assert not any(r.get("method") == "session/load" for r in recorded)
+    # A process loss still restores the native session on the next turn.
+    next(iter(manager.sessions.sessions.values())).client.close()
+    runtime.ask("continue after restart", history=history, conversation_id="c-1", document_id="doc-1", job_id="job-1", on_event=emit)
+    restarted = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+    assert sum(r.get("method") == "session/load" for r in restarted) == 1
     assert any(r.get("method") == "session/set_config_option" and r["params"]["value"] == "model-b" for r in recorded)
     assert all(r["userprofile"] == os.environ.get("USERPROFILE") for r in recorded if "method" in r)
     assert any(r.get("permission_reply", {}).get("result", {}).get("outcome", {}).get("optionId") == "yes" for r in recorded)
@@ -274,3 +281,31 @@ def test_agent_local_http_bypasses_proxy_and_preserves_existing_exceptions(tmp_p
         assert captured[0]["HTTP_PROXY"] == "http://proxy.example:8080"
     finally:
         client.close()
+def test_authentication_completes_only_after_a_fresh_session_probe(tmp_path):
+    manager = ConnectionManager(replace(Settings(), data_root=tmp_path), None, None)
+    manager.store.write(Connection(id="auth", name="Test", kind="byoa", command=sys.executable,
+        args=[str(PEER)], cwd=str(tmp_path)), 0)
+    result = manager.authenticate("auth", {"method_id": "local"})
+    deadline = time.monotonic() + 5
+    while result["status"] == "authenticating" and time.monotonic() < deadline:
+        time.sleep(0.02)
+        result = manager.authentication_status("auth")
+    assert result["ready"] is True
+    assert result["status"] == "ready"
+    assert result["config_options"]
+    manager.sessions.close()
+
+
+def test_pending_authentication_can_be_cancelled(tmp_path):
+    manager = ConnectionManager(replace(Settings(), data_root=tmp_path), None, None)
+    manager.store.write(Connection(id="auth", name="Test", kind="byoa", command=sys.executable,
+        args=[str(PEER)], cwd=str(tmp_path), env={"FAKE_ACP_AUTH_HANG": "1"}), 0)
+    manager.authenticate("auth", {"method_id": "local"})
+    manager.cancel_authentication("auth")
+    deadline = time.monotonic() + 5
+    result = manager.authentication_status("auth")
+    while result["status"] == "authenticating" and time.monotonic() < deadline:
+        time.sleep(0.02)
+        result = manager.authentication_status("auth")
+    assert result["status"] == "cancelled"
+    manager.sessions.close()

@@ -1,5 +1,5 @@
 import { n as R } from "./markdown-payload-kK3ewW_I.js";
-import { l as h } from "./ask-answerer-BdU294ED.js";
+import { l as h } from "./ask-answerer-CU7UxZb4.js";
 function T(t = null) {
   return R(t).content.trim();
 }
@@ -47,7 +47,7 @@ function L(t, r) {
   ].join(`
 `) : "我没有在当前 Markdown 里找到足够相关的片段。可以换一个更具体的问题，或确认这个任务已经生成 Markdown。";
 }
-function Q({
+function G({
   loadMarkdownPayload: t,
   maxSections: r = 3
 } = {}) {
@@ -62,7 +62,7 @@ function Q({
     const C = B(`${c} ${d != null && d.page ? `第 ${d.page} 页` : ""}`), S = O(m).map((a) => ({
       ...a,
       score: v(a, C)
-    })).sort((a, p) => p.score - a.score).filter((a, p) => a.score > 0 || p < r).slice(0, r);
+    })).sort((a, g) => g.score - a.score).filter((a, g) => a.score > 0 || g < r).slice(0, r);
     return {
       answer: L(c, S),
       citations: S.map((a) => a.title),
@@ -78,12 +78,12 @@ const F = /\[\s*(p\d+[-_]b\d+)\s*\]/gi, D = new RegExp("(?<![\\w/])(p\\d+[-_]b\\
 function $(t) {
   return `${t || ""}`.trim().toLowerCase().replace(/_/g, "-");
 }
-const w = /```[\s\S]*?(?:```|$)|`[^`\n]+`/g, j = "CODE_", _ = "";
-function G(t, r = []) {
+const x = /```[\s\S]*?(?:```|$)|`[^`\n]+`/g, j = "CODE_", _ = "";
+function U(t, r = []) {
   let e = `${t || ""}`;
   if (!e) return "";
   const n = [];
-  e = e.replace(w, (i) => {
+  e = e.replace(x, (i) => {
     const s = `${j}${n.length}${_}`;
     return n.push(i), s;
   });
@@ -107,14 +107,14 @@ function G(t, r = []) {
   )), e;
 }
 const k = "retainpdf.reader.ai.thread-branch.v1:";
-function g(t) {
+function p(t) {
   return typeof t == "string" ? { jobId: `${t || ""}`.trim(), documentId: "" } : {
     jobId: `${(t == null ? void 0 : t.jobId) || ""}`.trim(),
     documentId: `${(t == null ? void 0 : t.documentId) || ""}`.trim()
   };
 }
 function l(t, r = "") {
-  const { jobId: e, documentId: n } = g(t), o = n ? "doc" : "job", i = n || e || "anonymous", s = `${r || ""}`.trim();
+  const { jobId: e, documentId: n } = p(t), o = n ? "doc" : "job", i = n || e || "anonymous", s = `${r || ""}`.trim();
   return s ? `${k}${o}:${i}:conv:${s}` : `${k}${o}:${i}`;
 }
 function y() {
@@ -127,17 +127,17 @@ function y() {
 function f(t) {
   return !!t && typeof t == "object" && !Array.isArray(t);
 }
-function x(t) {
+function N(t) {
   if (!f(t) || typeof t.type != "string") return;
   const r = typeof t.reason == "string" ? t.reason : void 0;
   return r ? { type: t.type, reason: r } : { type: t.type };
 }
-function N(t) {
+function X(t) {
   if (!f(t)) return null;
   const r = `${t.id || ""}`.trim(), e = t.role === "user" || t.role === "assistant" ? t.role : null;
   if (!r || !e) return null;
   const n = Array.isArray(t.citations) ? t.citations : void 0, o = typeof t.progress == "string" ? t.progress : void 0;
-  let i = x(t.status);
+  let i = N(t.status);
   return (i == null ? void 0 : i.type) === "running" && (i = { type: "incomplete", reason: "cancelled" }), {
     id: r,
     role: e,
@@ -145,17 +145,18 @@ function N(t) {
     ...o ? { progress: o } : {},
     ...typeof t.source == "string" && t.source ? { source: t.source } : {},
     ...n != null && n.length ? { citations: n } : {},
+    ...Array.isArray(t.parts) ? { parts: t.parts, metrics: t.metrics } : {},
     ...i ? { status: i } : {}
   };
 }
-function X(t) {
+function J(t) {
   var i;
   if (!f(t) || t.version !== 1 || !Array.isArray(t.items))
     return null;
   const r = [];
   for (const s of t.items) {
     if (!f(s)) continue;
-    const c = N(s.message);
+    const c = X(s.message);
     if (!c) continue;
     const u = s.parentId === null || s.parentId === void 0 ? null : `${s.parentId}`.trim() || null;
     r.push({ parentId: u, message: c });
@@ -167,7 +168,7 @@ function X(t) {
 function I(t, r) {
   if (!t) return null;
   try {
-    const e = X(JSON.parse(t));
+    const e = J(JSON.parse(t));
     if (!e) return null;
     const n = `${e.conversationId || ""}`.trim();
     return n && r && n !== r ? null : e;
@@ -175,7 +176,7 @@ function I(t, r) {
     return null;
   }
 }
-function A(t, r, e, n) {
+function z(t, r, e, n) {
   const o = {
     version: 1,
     headId: n.headId,
@@ -187,15 +188,15 @@ function A(t, r, e, n) {
 function E(t, r, e, n, o) {
   try {
     const i = l(r, e);
-    A(t, r, e, n), o && o !== i && t.removeItem(o);
+    z(t, r, e, n), o && o !== i && t.removeItem(o);
   } catch {
   }
 }
-function U(t, r = "") {
+function q(t, r = "") {
   const e = y();
   if (!e) return null;
   try {
-    const n = g(t), o = e.getItem(l(n, r)), i = I(o, r);
+    const n = p(t), o = e.getItem(l(n, r)), i = I(o, r);
     if (i) return i;
     if (n.documentId && n.jobId) {
       const c = { jobId: n.jobId }, u = I(
@@ -234,13 +235,13 @@ function U(t, r = "") {
     return null;
   }
 }
-function q(t, r, e = "") {
+function w(t, r, e = "") {
   const n = y();
   if (!n) return;
-  const o = g(t);
+  const o = p(t);
   if (!(!o.documentId && !o.jobId || !r.items.length))
     try {
-      A(n, o, e, r);
+      z(n, o, e, r);
     } catch {
     }
 }
@@ -248,7 +249,7 @@ function H(t, r = "") {
   const e = y();
   if (e)
     try {
-      const n = g(t);
+      const n = p(t);
       e.removeItem(l(n, r)), n.documentId && n.jobId && e.removeItem(l({ jobId: n.jobId }, r)), r || (e.removeItem(l(n)), n.documentId && n.jobId && e.removeItem(l({ jobId: n.jobId })));
     } catch {
     }
@@ -263,11 +264,11 @@ function P(t) {
     i.add(o.message.id), n.push(o.message), o = o.parentId ? r.get(o.parentId) : void 0;
   return n.reverse();
 }
-const z = 600;
+const A = 600;
 function V(t) {
   const r = `${t || ""}`.replace(/\r\n?/g, `
 `).trim();
-  return r ? `${(r.length > z ? `${r.slice(0, z).trimEnd()}…（已截断）` : r).split(`
+  return r ? `${(r.length > A ? `${r.slice(0, A).trimEnd()}…（已截断）` : r).split(`
 `).map((o) => o.trim() ? `> ${o}` : ">").join(`
 `)}
 
@@ -280,15 +281,15 @@ function W(t, r) {
   return n ? `${e}${n}` : e;
 }
 export {
-  z as M,
-  Q as a,
+  A as M,
+  G as a,
   V as b,
   H as c,
-  q as d,
-  U as l,
+  w as d,
+  q as l,
   W as m,
-  G as s,
+  U as s,
   l as t,
   P as v
 };
-//# sourceMappingURL=answer-quote-iOOg1onX.js.map
+//# sourceMappingURL=answer-quote-CYnPOEkM.js.map

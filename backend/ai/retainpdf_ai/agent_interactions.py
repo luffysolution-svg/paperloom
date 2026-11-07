@@ -13,7 +13,8 @@ class Interactions:
     def ask(self, kind, params, *, connection, conversation_id, emit, control):
         id = secrets.token_urlsafe(24)
         ready = threading.Event()
-        slot = {"event": ready, "response": None, "kind": kind, "params": params}
+        slot = {"event": ready, "response": None, "kind": kind, "params": params, "conversation_id": conversation_id,
+                "connection_name": connection.name}
         with self.lock:
             self.pending[id] = slot
         emit({"type": "agent_interaction", "interaction_id": id, "kind": kind, "connection_name": connection.name,
@@ -67,3 +68,9 @@ class Interactions:
                                 raise HTTPException(400, "多选值无效")
             slot["response"] = response
             slot["event"].set()
+
+    def list_pending(self, conversation_id):
+        with self.lock:
+            return [{"type": "agent_interaction", "interaction_id": id, "kind": slot["kind"], "request": slot["params"],
+                     "conversation_id": conversation_id, "connection_name": slot["connection_name"]}
+                    for id, slot in self.pending.items() if slot["conversation_id"] == conversation_id and not slot["event"].is_set()]

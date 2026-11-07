@@ -511,7 +511,7 @@ def test_ask_endpoint_streams_sse_events():
         for line in response.iter_lines():
             if line.startswith("data: "):
                 events.append(json.loads(line[len("data: "):]))
-    assert events[0] == {
+    assert {key: events[0][key] for key in ("type", "stage", "message")} == {
         "type": "progress",
         "stage": "routing",
         "message": "正在判断任务类型",
@@ -707,7 +707,7 @@ def test_stream_rejects_empty_done_answer_with_structured_error():
             if line.startswith("data: ")
         ]
 
-    assert events[-1] == {
+    assert {key: events[-1][key] for key in ("type", "code", "message", "retryable")} == {
         "type": "error",
         "code": "AI_EMPTY_RESPONSE",
         "message": "模型未返回有效回答，请重试",

@@ -7,6 +7,7 @@ import { buildApiEndpoint } from "./http.js";
 import type { AgentConfirmationMode } from "./agent-runtime-settings.js";
 import type { AgentOperationStatus } from "./document-operations.js";
 import { emitAgentEvent, selectionForRequest, saveAiSelection, type ApiProtocol } from "./agent-connections.js";
+import type { TurnEvent } from "./turn-parts.js";
 
 export type { AgentConfirmationMode } from "./agent-runtime-settings.js";
 
@@ -79,6 +80,7 @@ export type AgentConfirmationRequiredEvent = AgentConfirmationRequest & {
 };
 
 export type AiAskStreamCallbacks = {
+  onTurnEvent?: ((event: TurnEvent) => void) | null;
   onProgressEvent?: ((event: { type: "progress"; stage: "routing" | "retrieval"; message: string }) => void) | null;
   onToolEvent?: ((event: any) => void) | null;
   onAgentToolEvent?: ((event: AgentToolEvent) => void) | null;
@@ -140,6 +142,9 @@ function normalizeDonePayload(payload: any = {}) {
     answer: `${payload?.answer || ""}`,
     citations: Array.isArray(payload?.citations) ? payload.citations : [],
     toolTrace: Array.isArray(payload?.tool_trace) ? payload.tool_trace : [],
+    parts: Array.isArray(payload?.parts) ? payload.parts : [],
+    metrics: payload?.metrics || {},
+    memory: payload?.memory || {},
     rounds: Number(payload?.rounds) || 0,
     // 回答为什么不完整。正常答完时后端整个字段缺席，所以这里是空串。
     incompleteReason: `${payload?.incomplete_reason || payload?.["incompleteReason"] || ""}`.trim(),
@@ -164,6 +169,7 @@ function parseSseEvent(line = "") {
 }
 
 export async function readAiAskStream(body: ReadableStream<Uint8Array>, {
+  onTurnEvent = null,
   onProgressEvent = null,
   onToolEvent = null,
   onAgentToolEvent = null,
@@ -185,6 +191,7 @@ export async function readAiAskStream(body: ReadableStream<Uint8Array>, {
   function handleLine(line: string) {
     const event: any = parseSseEvent(line);
     if (!event || typeof event !== "object") return;
+    onTurnEvent?.(event);
     if (event.type === "progress") {
       onProgressEvent?.({
         type: "progress",
@@ -315,6 +322,10 @@ async function extractErrorMessage(resp: Response): Promise<string> {
 }
 
 export async function askLibraryAi({
+  onTurnEvent = null,
+  scopeDocumentIds = [],
+  attachments = [],
+  forceCompress = false,
   question = "",
   documentId = "",
   jobId = "",
@@ -346,6 +357,7 @@ export async function askLibraryAi({
 }: {
   question?: string; documentId?: string; jobId?: string; conversationId?: string; parentId?: string; regenerate?: boolean; userMessageId?: string; assistantMessageId?: string;
   llmApiProtocol?: ApiProtocol; connectionId?: string; connectionModel?: string; connectionOptions?: Record<string, string>;
+  onTurnEvent?: ((event: TurnEvent)=>void)|null; scopeDocumentIds?: string[]; attachments?: Record<string, unknown>[]; forceCompress?: boolean;
   onToolEvent?: ((e:any)=>void)|null; onProgressEvent?: ((e:{ type:"progress"; stage:"routing"|"retrieval"; message:string })=>void)|null; onAgentToolEvent?: ((e:AgentToolEvent)=>void)|null; onAgentOperationEvent?: ((e:AgentOperationEvent)=>void)|null; onAgentConfirmationRequiredEvent?: ((e:AgentConfirmationRequiredEvent)=>void)|null; onAgentSessionEvent?: ((e:AgentSessionEvent)=>void)|null; onAnswerDelta?: ((full:string, chunk:string)=>void)|null; onCompress?: ((e:any)=>void)|null; signal?: AbortSignal | null; apiPrefix?: string; fetchImpl?: typeof fetch; llmApiKey?: string; llmBaseUrl?: string; llmModel?: string; confirmDocumentOperation?: boolean; assistantMode?: AiAssistantMode;
 } = {}): Promise<any> {
   const trimmed = `${question}`.trim();
@@ -397,6 +409,9 @@ export async function askLibraryAi({
   }
   const runId = aid || globalThis.crypto?.randomUUID?.() || `run-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   payload.run_id = runId;
+  if (scopeDocumentIds.length) payload.scope_document_ids = scopeDocumentIds;
+  if (attachments.length) payload.attachments = attachments;
+  if (forceCompress) payload.force_compress = true;
   const cancelRun = () => {
     void fetchImpl(buildApiEndpoint(apiPrefix, `ai/connections/runs/${encodeURIComponent(runId)}/cancel`), {
       method: "POST", headers: buildApiHeaders(), keepalive: true,
@@ -434,6 +449,7 @@ export async function askLibraryAi({
       return result;
     }
     return await readAiAskStream(resp.body as any, {
+      onTurnEvent,
       onProgressEvent,
       onToolEvent,
       onAgentToolEvent,
