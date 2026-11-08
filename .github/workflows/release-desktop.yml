@@ -203,7 +203,7 @@ jobs:
         shell: pwsh
         env:
           RETAIN_PDF_VERSION: ${{ steps.version.outputs.version }}
-        run: npm run dist:win32-installer
+        run: python ../../ops/release/build_with_github_assets.py npm run dist:win32-installer
 
       - name: Report Windows package sizes
         working-directory: frontend/desktop
@@ -438,7 +438,7 @@ jobs:
         env:
           RETAIN_PDF_VERSION: ${{ steps.version.outputs.version }}
           RETAIN_PDF_DESKTOP_PLATFORM: linux
-        run: npm run dist:linux
+        run: python3 ../../ops/release/build_with_github_assets.py npm run dist:linux
 
       - name: Report Linux package sizes
         working-directory: frontend/desktop
@@ -997,7 +997,7 @@ jobs:
           RETAIN_PDF_DESKTOP_PLATFORM: darwin
           RETAIN_PDF_BUNDLE_MAC_PYTHON: "1"
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: npm run dist:mac
+        run: python3 ../../ops/release/build_with_github_assets.py npm run dist:mac
 
       - name: Report macOS package sizes
         working-directory: frontend/desktop
