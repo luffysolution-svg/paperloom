@@ -41,6 +41,7 @@ RUN uv export \
 FROM python:3.11-slim-bookworm AS typstsrc
 
 COPY ops/release/download_github_asset.py /usr/local/bin/download_github_asset.py
+COPY ops/release/github-assets.json /usr/local/bin/github-assets.json
 
 ARG TYPST_VERSION=0.15.1
 ARG CMARKER_VERSION=0.1.10

@@ -5,23 +5,41 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import time
+from urllib.error import HTTPError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
+
+
+ASSET_PINS = json.loads(Path(__file__).with_name("github-assets.json").read_text(encoding="utf-8"))
+
+
+def github_response(request: Request):
+    for attempt in range(3):
+        try:
+            return urlopen(request, timeout=60)
+        except HTTPError as error:
+            if error.code not in (502, 503, 504) or attempt == 2:
+                raise
+            error.close()
+            time.sleep(2 ** attempt)
 
 
 def download_release_asset(repository: str, tag: str, name: str, destination: Path) -> None:
     api = f"https://api.github.com/repos/{repository}/releases"
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "PaperLoom-Release"}
-    with urlopen(Request(f"{api}/tags/{quote(tag, safe='')}", headers=headers), timeout=60) as response:
-        release = json.load(response)
-    asset = next((item for item in release["assets"] if item["name"] == name), None)
+    asset = ASSET_PINS.get(repository, {}).get(tag, {}).get(name)
+    if asset is None:
+        with github_response(Request(f"{api}/tags/{quote(tag, safe='')}", headers=headers)) as response:
+            release = json.load(response)
+        asset = next((item for item in release["assets"] if item["name"] == name), None)
     if asset is None:
         raise ValueError(f"GitHub release asset not found: {repository}@{tag}/{name}")
     headers["Accept"] = "application/octet-stream"
     request = Request(f"{api}/assets/{int(asset['id'])}", headers=headers)
     digest = hashlib.sha256()
     size = 0
-    with urlopen(request, timeout=60) as response, destination.open("wb") as output:
+    with github_response(request) as response, destination.open("wb") as output:
         while chunk := response.read(1024 * 1024):
             output.write(chunk)
             digest.update(chunk)
