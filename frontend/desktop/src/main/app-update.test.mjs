@@ -24,8 +24,8 @@ async function fixture(t, options = {}) {
   const release = {
     tag_name: "v0.2.0", name: "feat update", body: "release notes", draft: false, prerelease: false,
     html_url: "https://github.com/luffysolution-svg/paperloom/releases/tag/v0.2.0",
-    assets: [...filenames, "SHA256SUMS.txt"].map((name) => ({
-      name, size: name === "SHA256SUMS.txt" ? 500 : content.length,
+    assets: [...filenames, "SHA256SUMS.txt"].map((name, index) => ({
+      id: index + 1, name, size: name === "SHA256SUMS.txt" ? 500 : content.length,
       browser_download_url: `https://github.com/luffysolution-svg/paperloom/releases/download/v0.2.0/${name}`,
     })),
   };
@@ -34,8 +34,11 @@ async function fixture(t, options = {}) {
   let activeJobs = false;
   const fetchImpl = async (url, init) => {
     calls.push(url);
+    const response = await options.fetchResponse?.(url, init);
+    if (response) return response;
     if (url.endsWith("/latest")) return Response.json(release);
-    if (url.endsWith("SHA256SUMS.txt")) return new Response(filenames.map((name) => `${checksum}  ${name}`).join("\n"));
+    const selected = release.assets.find((item) => url === `https://api.github.com/repos/luffysolution-svg/paperloom/releases/assets/${item.id}`);
+    if (url.endsWith("SHA256SUMS.txt") || selected?.name === "SHA256SUMS.txt") return new Response(filenames.map((name) => `${checksum}  ${name}`).join("\n"));
     return options.downloadResponse ? options.downloadResponse(init) : new Response(content);
   };
   const settings = {
@@ -76,6 +79,105 @@ for (const [platform, arch, portableFile, expectedName, expectedMode] of [
     }
   });
 }
+
+for (const status of [502, 503, 504]) {
+  test(`checking retries a temporary HTTP ${status} once`, async (t) => {
+    let attempts = 0;
+    const f = await fixture(t, { fetchResponse: (url) => {
+      if (url.endsWith("/latest") && ++attempts === 1) return new Response("gateway failure", { status });
+    } });
+    assert.equal((await f.updater.check()).status, "available");
+    assert.equal(attempts, 2);
+  });
+}
+
+test("HTTP 504 on checksum and installer downloads falls back to the official asset API", async (t) => {
+  const cancelled = [];
+  const f = await fixture(t, { fetchResponse: (url, init) => {
+    if (url.startsWith("https://github.com/")) {
+      return new Response(new ReadableStream({ cancel: () => { cancelled.push(url); } }), { status: 504 });
+    }
+    assert.equal(init.headers.Accept, url.endsWith("/latest") ? "application/vnd.github+json" : "application/octet-stream");
+  } });
+  await f.updater.check();
+  assert.equal((await f.updater.download()).status, "downloaded");
+  const [installer] = f.release.assets;
+  const checksum = f.release.assets.at(-1);
+  assert.deepEqual(f.calls.slice(1), [
+    checksum.browser_download_url,
+    `https://api.github.com/repos/luffysolution-svg/paperloom/releases/assets/${checksum.id}`,
+    installer.browser_download_url,
+    `https://api.github.com/repos/luffysolution-svg/paperloom/releases/assets/${installer.id}`,
+  ]);
+  assert.deepEqual(cancelled, [checksum.browser_download_url, installer.browser_download_url]);
+  assert.deepEqual(await fs.readFile(path.join(f.root, "updates", installer.name)), f.content);
+  assert.deepEqual(f.opened, []);
+});
+
+test("persistent gateway failures stop after two version requests", async (t) => {
+  const f = await fixture(t, { fetchResponse: () => new Response("gateway failure", { status: 504 }) });
+  const state = await f.updater.check();
+  assert.equal(state.status, "error");
+  assert.match(state.error, /检查更新.*HTTP 504/);
+  assert.equal(f.calls.length, 2);
+});
+
+for (const name of ["SHA256SUMS.txt", "PaperLoom-Windows-0.2.0-Setup.exe"]) {
+  test(`persistent gateway failures for ${name} retain a manual retry and remove partial files`, async (t) => {
+    const f = await fixture(t, { fetchResponse: (url) => {
+      const selected = f.release.assets.find((item) => item.name === name);
+      if (url === selected.browser_download_url || url.endsWith(`/assets/${selected.id}`)) {
+        return new Response("gateway failure", { status: 504 });
+      }
+    } });
+    await f.updater.check();
+    const state = await f.updater.download();
+    assert.equal(state.status, "error");
+    assert.match(state.error, name === "SHA256SUMS.txt" ? /下载校验文件.*HTTP 504/ : /下载更新包.*HTTP 504/);
+    assert.equal(state.canDownload, true);
+    assert.equal(state.htmlUrl, f.release.html_url);
+    assert.equal(f.calls.length, name === "SHA256SUMS.txt" ? 3 : 4);
+    assert.deepEqual(await fs.readdir(path.join(f.root, "updates")), []);
+    assert.deepEqual(f.opened, []);
+  });
+}
+
+for (const status of [403, 404]) {
+  test(`HTTP ${status} does not retry or switch download endpoints`, async (t) => {
+    const f = await fixture(t, { fetchResponse: (url) => {
+      if (!url.endsWith("/latest")) return new Response("not available", { status });
+    } });
+    await f.updater.check();
+    assert.equal((await f.updater.download()).status, "error");
+    assert.equal(f.calls.length, 2);
+  });
+}
+
+test("cancelling a failed download prevents the fallback request", async (t) => {
+  const f = await fixture(t, { fetchResponse: (url) => {
+    if (url.endsWith("SHA256SUMS.txt")) {
+      return new Response(new ReadableStream({ cancel: () => { f.updater.cancel(); } }), { status: 504 });
+    }
+  } });
+  await f.updater.check();
+  assert.equal((await f.updater.download()).status, "available");
+  assert.equal(f.calls.length, 2);
+  assert.deepEqual(await fs.readdir(path.join(f.root, "updates")), []);
+});
+
+test("a failed package stream is not retried into the same partial file", async (t) => {
+  let chunks = 0;
+  const f = await fixture(t, { downloadResponse: () => new Response(new ReadableStream({
+    pull(controller) {
+      if (chunks++ === 0) controller.enqueue(Buffer.from("partial"));
+      else controller.error(new Error("connection reset"));
+    },
+  })) });
+  await f.updater.check();
+  assert.equal((await f.updater.download()).status, "error");
+  assert.equal(f.calls.length, 3);
+  assert.deepEqual(await fs.readdir(path.join(f.root, "updates")), []);
+});
 
 test("checksum mismatch removes the download and never enables installation", async (t) => {
   const f = await fixture(t);

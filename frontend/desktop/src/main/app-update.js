@@ -3,7 +3,8 @@ const path = require("path");
 const { createHash } = require("crypto");
 
 const REPO = "luffysolution-svg/paperloom";
-const LATEST = `https://api.github.com/repos/${REPO}/releases/latest`;
+const API = `https://api.github.com/repos/${REPO}`;
+const LATEST = `${API}/releases/latest`;
 
 function createDesktopUpdater({ app, fetchImpl, openPath, launchPortable, hasActiveJobs,
   onState = () => {}, platform = process.platform, arch = process.arch,
@@ -37,16 +38,30 @@ function createDesktopUpdater({ app, fetchImpl, openPath, launchPortable, hasAct
     return busy;
   }
 
-  async function request(url, consume, controller = new AbortController(), timeoutMs = 30000) {
+  async function request(url, consume, controller = new AbortController(), timeoutMs = 30000, fallbackUrl = url) {
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetchImpl(url, {
-        signal: controller.signal, credentials: "omit", cache: "no-store",
-        headers: { Accept: "application/vnd.github+json", "User-Agent": "PaperLoom-Updater" },
-      });
-      if (!response.ok) throw new Error(`更新服务返回 HTTP ${response.status}`);
-      return await consume(response);
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        controller.signal.throwIfAborted();
+        const target = attempt === 0 ? url : fallbackUrl;
+        const response = await fetchImpl(target, {
+          signal: controller.signal, credentials: "omit", cache: "no-store",
+          headers: { Accept: target === LATEST ? "application/vnd.github+json" : "application/octet-stream",
+            "User-Agent": "PaperLoom-Updater" },
+        });
+        // Retry only before consuming a body so partial packages are never appended.
+        if (response.ok) return await consume(response);
+        await response.body?.cancel();
+        if (attempt === 0 && [502, 503, 504].includes(response.status)) continue;
+        const stage = url === LATEST ? "检查更新" : url.endsWith("/SHA256SUMS.txt") ? "下载校验文件" : "下载更新包";
+        throw new Error(`${stage}失败：GitHub 返回 HTTP ${response.status}，请稍后重试。`);
+      }
     } finally { clearTimeout(timer); }
+  }
+
+  function assetFallbackUrl(selected) {
+    return Number.isSafeInteger(selected.id) && selected.id > 0
+      ? `${API}/releases/assets/${selected.id}` : selected.browser_download_url;
   }
 
   async function smallText(response) {
@@ -113,7 +128,8 @@ function createDesktopUpdater({ app, fetchImpl, openPath, launchPortable, hasAct
       publish({ status: "downloading", percent: 0 });
       try {
         await fs.promises.mkdir(cacheDir, { recursive: true });
-        const sums = await request(releaseAsset("SHA256SUMS.txt").browser_download_url, smallText, controller);
+        const checksumAsset = releaseAsset("SHA256SUMS.txt");
+        const sums = await request(checksumAsset.browser_download_url, smallText, controller, 30000, assetFallbackUrl(checksumAsset));
         const entries = sums.split(/\r?\n/).map((line) => /^([a-f0-9]{64}) [ *](.+)$/.exec(line));
         const matching = entries.filter((entry) => entry?.[2] === asset.name);
         if (matching.length !== 1) throw new Error("更新包校验信息缺失或重复");
@@ -137,7 +153,7 @@ function createDesktopUpdater({ app, fetchImpl, openPath, launchPortable, hasAct
                 lastProgress = Date.now();
               }
             }
-          }, controller, 2 * 60 * 60 * 1000);
+          }, controller, 2 * 60 * 60 * 1000, assetFallbackUrl(asset));
         } finally { await file.close(); clearTimeout(idleTimer); }
         if (received !== asset.size || hash.digest("hex") !== expectedHash) throw new Error("更新包校验失败，请重新下载");
         await fs.promises.rm(target, { force: true });
