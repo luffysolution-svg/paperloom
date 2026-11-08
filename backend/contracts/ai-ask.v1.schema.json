@@ -110,13 +110,8 @@
         "llm_base_url": {
           "type": "string"
         },
-        "llm_api_protocol": {"type": ["string", "null"], "enum": ["openai", "openai_responses", "anthropic", null]},
         "run_id": { "type": "string", "maxLength": 128 },
-        "connection_id": {"type": "string", "maxLength": 128},
-        "connection_model": {"type": "string", "maxLength": 256},
-        "connection_options": {"type": "object", "additionalProperties": {"type": "string"}},
         "scope_document_ids": {"type": "array", "items": {"type": "string"}, "maxItems": 100},
-        "attachments": {"type": "array", "items": {"type": "object"}, "maxItems": 4},
         "llm_model": {
           "type": "string"
         }
@@ -618,9 +613,6 @@
     "SseEventType": {
       "type": "string",
       "enum": [
-        "agent_connection",
-        "agent_interaction",
-        "agent_interaction_resolved",
         "progress",
         "heartbeat",
         "tool",
@@ -630,8 +622,6 @@
         "agent_confirmation_required",
         "answer_delta",
         "reasoning_delta",
-        "agent_plan",
-        "agent_notice",
         "citations",
         "usage",
         "compress",

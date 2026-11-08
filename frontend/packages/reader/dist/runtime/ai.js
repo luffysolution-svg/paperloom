@@ -1,13 +1,14 @@
-import { C as ee, M as te, d as re, e as ae, f as ne, g as se, c as ie, h as oe, j as ce, k as de, l as ue, m as le, n as fe, i as Ae, o as me, p as ge, q as pe, t as he, u as ye, v as ve, w as $e, x as Ie, y as Se, z as we, r as Ce, A as Ee, B as ke, D as Me, E as _e, b as be, F as Ne, a as Re, s as Te, G as He } from "../answer-enhance-DShVYmyb.js";
-import { M as Fe, b as Le, c as De, a as Pe, l as Oe, m as ze, s as Be, d as Ge, t as Ue, v as Xe } from "../answer-quote-CYnPOEkM.js";
-import { b as qe, c as je, a as Qe, d as We, l as Je, s as Ve } from "../ask-answerer-CU7UxZb4.js";
+import { a as ee, b as te, d as re, e as ae, c as ne, f as se, g as ie, h as oe, j as ce, k as de, i as ue, l as le, m as fe, n as Ae, o as me, p as pe, q as ge, t as he, u as ye, r as ve, v as $e, w as Ie, x as Se, y as we, s as Ce, z as Ee } from "../answer-enhance-D8zK9znw.js";
+import { M as ke, b as Me, c as _e, a as Ne, l as Re, m as Te, s as xe, d as He, t as Fe, v as Le } from "../answer-quote-DAI2qqGg.js";
+import { b as De, c as Oe, a as ze, d as Ue, l as Xe, s as Be } from "../ask-answerer-DDdN7iXi.js";
+import { C as Ke, M as qe, h as je, n as Qe, a as We, b as Je, r as Ve, s as Ye } from "../config-DT8amRQ9.js";
 import { Marked as T } from "marked";
-import { p as H } from "../markdown-math-XkF5urpn.js";
+import { p as x } from "../markdown-math-XkF5urpn.js";
 const w = "CITE_", C = "";
 function v(t) {
   return `${t}`.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
 }
-function x(t) {
+function H(t) {
   const a = [];
   return { text: `${t ?? ""}`.replace(/\[(\d+)\]/g, (n, o) => {
     const d = `${w}${a.length}${C}`;
@@ -38,8 +39,8 @@ $.use({
     html: (t) => v(L(t))
   }
 });
-const D = /^\s*(?:javascript|vbscript|data:text\/html)/i;
-function P(t) {
+const P = /^\s*(?:javascript|vbscript|data:text\/html)/i;
+function D(t) {
   const a = globalThis.document;
   if (!a)
     return v(t);
@@ -53,7 +54,7 @@ function P(t) {
         o.removeAttribute(d.name);
         continue;
       }
-      if ((i === "href" || i === "src" || i === "xlink:href") && D.test(d.value)) {
+      if ((i === "href" || i === "src" || i === "xlink:href") && P.test(d.value)) {
         o.removeAttribute(d.name);
         continue;
       }
@@ -80,14 +81,14 @@ async function J(t) {
   if (!a.trim()) return "";
   const r = f.get(a);
   if (r != null) return r;
-  const { text: n, refs: o } = x(a), d = await H(n, (l) => {
-    const g = String($.parse(l, { async: !1 }));
-    return P(g);
+  const { text: n, refs: o } = H(a), d = await x(n, (l) => {
+    const p = String($.parse(l, { async: !1 }));
+    return D(p);
   }), i = F(d, o);
   return z(a, i), i;
 }
-const B = 20, I = 18;
-function G(t = {}) {
+const U = 20, I = 18;
+function X(t = {}) {
   const r = (Array.isArray(t == null ? void 0 : t.messages) ? t.messages : []).find(
     (o) => (o == null ? void 0 : o.role) === "user" && `${(o == null ? void 0 : o.text) || ""}`.trim()
   ), n = `${(r == null ? void 0 : r.text) || (t == null ? void 0 : t.title) || ""}`.replace(/\s+/g, " ").trim();
@@ -99,13 +100,13 @@ function S({
 } = {}) {
   return (Array.isArray(t) ? t : []).map((r) => ({
     id: `${(r == null ? void 0 : r.id) || ""}`,
-    title: G(r),
+    title: X(r),
     updatedAt: Number(r == null ? void 0 : r.updatedAt) || 0,
     messageCount: Array.isArray(r == null ? void 0 : r.messages) ? r.messages.length : 0,
     active: `${(r == null ? void 0 : r.id) || ""}` == `${a}`
   })).filter((r) => r.id).sort((r, n) => n.updatedAt - r.updatedAt);
 }
-function U({ sessions: t = [], activeId: a = "" } = {}, r = B) {
+function B({ sessions: t = [], activeId: a = "" } = {}, r = U) {
   const n = Array.isArray(t) ? [...t] : [];
   if (n.length <= r)
     return n;
@@ -118,9 +119,9 @@ function U({ sessions: t = [], activeId: a = "" } = {}, r = B) {
   }
   return d;
 }
-const X = "retainpdf-ai-chat-v1:";
+const G = "retainpdf-ai-chat-v1:";
 function K(t) {
-  return `${X}${`${t || ""}`.trim()}`;
+  return `${G}${`${t || ""}`.trim()}`;
 }
 function A() {
   try {
@@ -156,8 +157,8 @@ function V({
     if (!e || typeof e != "object")
       return s;
     if (Array.isArray(e.sessions)) {
-      const c = e.sessions.filter((p) => p && `${p.id || ""}`.trim());
-      return { activeId: c.some((p) => `${p.id}` == `${e.activeId}`) ? `${e.activeId}` : `${((u = c[0]) == null ? void 0 : u.id) || ""}`, sessions: c };
+      const c = e.sessions.filter((g) => g && `${g.id || ""}`.trim());
+      return { activeId: c.some((g) => `${g.id}` == `${e.activeId}`) ? `${e.activeId}` : `${((u = c[0]) == null ? void 0 : u.id) || ""}`, sessions: c };
     }
     if (Array.isArray(e.messages) || Array.isArray(e.history)) {
       const c = A(), m = {
@@ -173,12 +174,12 @@ function V({
     var e;
     if (n)
       try {
-        const u = U(s), c = u.some((m) => `${m.id}` == `${s.activeId}`) ? s.activeId : `${((e = u[0]) == null ? void 0 : e.id) || ""}`;
+        const u = B(s), c = u.some((m) => `${m.id}` == `${s.activeId}`) ? s.activeId : `${((e = u[0]) == null ? void 0 : e.id) || ""}`;
         a.setItem(r, JSON.stringify({ v: 2, activeId: c, sessions: u }));
       } catch {
       }
   }
-  function g(s) {
+  function p(s) {
     let e = s.sessions.find((u) => `${u.id}` == `${s.activeId}`);
     return e || (e = h(d(), A()), s.sessions.push(e), s.activeId = e.id), e;
   }
@@ -194,22 +195,22 @@ function V({
   function E({ messages: s = [], history: e = [] } = {}) {
     if (!n)
       return;
-    const u = i(), c = g(u);
+    const u = i(), c = p(u);
     c.messages = s.slice(-40), c.history = e.slice(-40), c.updatedAt = A(), l(u);
   }
-  function k() {
+  function b() {
     if (!n)
       return;
-    const s = i(), e = g(s);
+    const s = i(), e = p(s);
     e.messages = [], e.history = [], e.title = "", e.updatedAt = A(), l(s);
   }
-  function M() {
+  function k() {
     return n ? S(i()) : [];
   }
-  function _() {
+  function M() {
     return n ? `${i().activeId || ""}` : "";
   }
-  function b() {
+  function _() {
     if (!n)
       return "";
     const s = i(), e = h(d(), A());
@@ -238,75 +239,75 @@ function V({
   return {
     load: y,
     save: E,
-    clear: k,
+    clear: b,
     enabled: n,
-    listSessions: M,
-    activeSessionId: _,
-    newSession: b,
+    listSessions: k,
+    activeSessionId: M,
+    newSession: _,
     switchSession: N,
     deleteSession: R
   };
 }
 export {
-  ee as CREDENTIALS_CHANGED_EVENT,
-  Fe as MAX_QUOTE_CHARS,
-  B as MAX_SESSIONS,
-  te as MISSING_MODEL_API_KEY_MESSAGE,
-  re as answerDocumentIds,
-  ae as armReaderAiClickShield,
-  ne as buildMarkdownImageApiUrl,
-  se as buildPagePreviewUrl,
-  Le as buildQuoteBlock,
-  qe as buildScopedQuestion,
-  ie as clearReaderAiNavigationLock,
-  je as clearStoredConversationId,
-  De as clearThreadBranchSnapshot,
-  oe as clipSnippet,
-  Qe as conversationStorageKey,
+  Ke as CREDENTIALS_CHANGED_EVENT,
+  ke as MAX_QUOTE_CHARS,
+  U as MAX_SESSIONS,
+  qe as MISSING_MODEL_API_KEY_MESSAGE,
+  ee as answerDocumentIds,
+  te as armReaderAiClickShield,
+  re as buildMarkdownImageApiUrl,
+  ae as buildPagePreviewUrl,
+  Me as buildQuoteBlock,
+  De as buildScopedQuestion,
+  ne as clearReaderAiNavigationLock,
+  Oe as clearStoredConversationId,
+  _e as clearThreadBranchSnapshot,
+  se as clipSnippet,
+  ze as conversationStorageKey,
   V as createReaderAiHistoryStore,
-  We as createReaderAskAnswerer,
-  Pe as createReaderMarkdownAnswerer,
-  ce as decorateCitationMarkdown,
-  G as deriveSessionTitle,
-  de as findCitationForAnswerImage,
-  ue as hasModelApiKey,
-  le as hydrateProtectedImages,
-  fe as injectCitationMarkers,
-  Ae as installReaderWindowOpenGuard,
-  me as isAgenticCitation,
-  ge as isReaderAiNavigationLocked,
-  Je as loadStoredConversationId,
-  Oe as loadThreadBranchSnapshot,
-  pe as lockReaderAiNavigation,
-  ze as mergeQuoteIntoDraft,
-  he as mountAnswerHtml,
-  ye as neutralizeMarkdownAnchors,
-  ve as normalizeAiCitations,
-  $e as notifyCredentialsChanged,
+  Ue as createReaderAskAnswerer,
+  Ne as createReaderMarkdownAnswerer,
+  ie as decorateCitationMarkdown,
+  X as deriveSessionTitle,
+  oe as findCitationForAnswerImage,
+  je as hasModelApiKey,
+  ce as hydrateProtectedImages,
+  de as injectCitationMarkers,
+  ue as installReaderWindowOpenGuard,
+  le as isAgenticCitation,
+  fe as isReaderAiNavigationLocked,
+  Xe as loadStoredConversationId,
+  Re as loadThreadBranchSnapshot,
+  Ae as lockReaderAiNavigation,
+  Te as mergeQuoteIntoDraft,
+  me as mountAnswerHtml,
+  pe as neutralizeMarkdownAnchors,
+  ge as normalizeAiCitations,
+  Qe as notifyCredentialsChanged,
   W as peekFinalAnswerHtmlCache,
-  Ie as pickCitationsForAnswer,
-  x as protectNumericCitations,
-  Se as readSettingsModelApiKey,
-  we as renderCitationFooter,
+  he as pickCitationsForAnswer,
+  H as protectNumericCitations,
+  We as readSettingsModelApiKey,
+  ye as renderCitationFooter,
   J as renderFinalAnswerHtml,
   Q as renderStreamingPreviewHtml,
-  Ce as resetAnswerEnhanceAdapters,
-  Ee as resetReaderAiConfigAdapters,
-  ke as resolveAnswerImageUrl,
-  Me as resolveCitationPageIdx,
-  _e as resolveCitationPageNumber,
-  be as resolveReaderAiConfig,
+  ve as resetAnswerEnhanceAdapters,
+  Je as resetReaderAiConfigAdapters,
+  $e as resolveAnswerImageUrl,
+  Ie as resolveCitationPageIdx,
+  Se as resolveCitationPageNumber,
+  Ve as resolveReaderAiConfig,
   F as restoreNumericCitations,
-  Ne as revokeHydratedImageUrls,
-  Be as sanitizeAssistantAnswer,
-  Ve as saveStoredConversationId,
-  Ge as saveThreadBranchSnapshot,
-  Re as setAnswerEnhanceAdapters,
-  Te as setReaderAiConfigAdapters,
-  He as shouldIgnoreReaderAiNavEvent,
+  we as revokeHydratedImageUrls,
+  xe as sanitizeAssistantAnswer,
+  Be as saveStoredConversationId,
+  He as saveThreadBranchSnapshot,
+  Ce as setAnswerEnhanceAdapters,
+  Ye as setReaderAiConfigAdapters,
+  Ee as shouldIgnoreReaderAiNavEvent,
   S as summarizeSessions,
-  Ue as threadBranchStorageKey,
-  U as trimSessions,
-  Xe as visiblePathFromSnapshot
+  Fe as threadBranchStorageKey,
+  B as trimSessions,
+  Le as visiblePathFromSnapshot
 };
 //# sourceMappingURL=ai.js.map

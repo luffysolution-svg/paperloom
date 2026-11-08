@@ -30,7 +30,6 @@ PaperLoom hiện là dự án mã nguồn mở duy nhất dành cho việc dịc
 - **Dịch PDF và giữ bố cục.** Hỗ trợ PDF có thể chỉnh sửa, PDF dạng ảnh và bản quét, gồm văn bản nhiều cột, hình ảnh, bảng và công thức phức tạp.
 - **Quản lý tài liệu tập trung.** Thư viện, bộ sưu tập, mục yêu thích, trung tâm tác vụ và trình đọc đối chiếu bản gốc/bản dịch đều nằm trong cùng một giao diện.
 - **Hỏi AI về tài liệu.** Tóm tắt bài báo, tìm hiểu phương pháp hoặc giải thích công thức. Câu trả lời có trích dẫn để quay về trang gốc. PDF Agent hỗ trợ các thao tác với tài liệu cần được bạn cho phép rõ ràng.
-- **Dùng Agent hoặc API của bạn.** Tái sử dụng Agent cục bộ đã đăng nhập, hoặc kết nối API OpenAI Chat Completions, Responses và Anthropic Messages. Mỗi cuộc trò chuyện có thể chọn dịch vụ và mô hình riêng, với 16 cấu hình Agent theo danh mục Agentero. Xem [hướng dẫn BYOA / BYOK](docs/core/ai-runtime/BYOA_BYOK.md).
 - **Nhập từ Zotero và lưu bản dịch về đó.** Hỗ trợ nhập hàng loạt. Với Zotero 10+, bạn có thể lưu PDF đã dịch từng tài liệu hoặc theo lô; lưu lại sẽ cập nhật tệp đính kèm hiện có.
 - **Lưu sang Obsidian.** Xuất ghi chú bản dịch tiếng Trung, ghi chú bản gốc tùy chọn, hình ảnh và PDF đã dịch, từng tài liệu hoặc theo lô, kèm thông tin thư mục, liên kết nguồn và liên kết giữa các ghi chú.
 - **Cấu hình theo cách làm việc của bạn.** Hỗ trợ MinerU/Paddle OCR, API mô hình, bảng thuật ngữ, chiến lược dịch tùy chỉnh, bảo vệ mã nguồn, kiểm soát bảng, tối ưu dung lượng PDF và API mở. Bạn cũng có thể tự triển khai hoặc phát triển thêm.

@@ -30,7 +30,6 @@ PaperLoom is currently the only open-source project built for layout-preserving 
 - **Translate PDFs while keeping their layout.** Supports editable, image-based, and scanned PDFs, including multi-column text, images, tables, and complex formulas.
 - **Keep your papers organized.** The library, collections, favorites, task center, and source/translation reader share one interface.
 - **Ask questions about a document.** Summarize papers, understand methods, or explain formulas. Answers include document citations that take you to the original page. PDF Agent offers document operations that require explicit approval.
-- **Use your own Agent or API.** Reuse an authenticated local Agent or connect an OpenAI Chat Completions, Responses, or Anthropic Messages API. Choose the service and model per conversation, with 16 Agent presets matching Agentero's catalog. See [BYOA / BYOK setup](docs/core/ai-runtime/BYOA_BYOK.md).
 - **Import from Zotero and save translations back.** Batch import is supported. With Zotero 10+, save translated PDFs individually or in batches; repeating the operation updates the existing attachment.
 - **Save to Obsidian.** Export Chinese translation notes, optional source notes, images, and translated PDFs individually or in batches, with bibliographic metadata, source links, and links between notes.
 - **Configure it for your workflow.** Supports MinerU/Paddle OCR, model APIs, glossaries, custom translation strategies, code protection, table controls, PDF size optimization, and an open API. You can also self-host or extend it.

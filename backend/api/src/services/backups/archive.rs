@@ -25,7 +25,6 @@ pub(super) const DATA_DIRS: &[&str] = &[
 const CREDENTIAL_FILES: &[&str] = &[
     "secrets/credentials.json",
     "secrets/ai-runtime.json",
-    "secrets/ai-connections.json",
     "secrets/zotero-local-auth.json",
     "secrets/frontend-config.json",
 ];

@@ -11,8 +11,6 @@ from retainpdf_ai.api_contracts import AskInput
 from retainpdf_ai.ask_orchestration import AskOrchestrator, PreparedAsk
 from retainpdf_ai.config import Settings
 from retainpdf_ai.conversation_state import ConversationState
-from retainpdf_ai.image_inputs import chat_images
-from retainpdf_ai.llm_wire import request_body
 from retainpdf_ai.request_control import RequestControl
 from retainpdf_ai.request_routing import RouteDecision
 from retainpdf_ai.runtimes.contracts import RuntimeCapabilities
@@ -35,13 +33,12 @@ def test_interleaved_parts_merge_partial_tool_updates_and_preserve_order():
     assert turn.answer == "I will check.The result."
 
 
-def test_native_notices_do_not_become_answer_text_and_usage_is_bounded():
+def test_usage_is_bounded_and_does_not_become_answer_text():
     turn = TurnTranscript()
-    turn.accept({"type": "agent_notice", "title": "Plugin update timed out"})
     event = turn.accept({"type": "usage", "usage": {"input_tokens": 42, "attribution": {"irrelevant": "large"}}})
     assert turn.answer == ""
     assert event["usage"] == {"input_tokens": 42}
-    assert turn.parts[0]["type"] == "notice"
+    assert turn.parts == []
 
 
 def test_final_snapshot_is_stable_and_whitespace_does_not_reorder_parts():
@@ -66,15 +63,6 @@ def test_first_text_streams_immediately_and_visible_reasoning_is_separate():
     message = assemble_streaming_message(chunks(), output.append, on_event=activity.append)
     assert message["content"] == "OK"
     assert activity == [{"type": "reasoning_delta", "text": "Check"}]
-
-
-def test_image_blocks_are_native_in_all_three_provider_requests():
-    images = [{"type": "image", "mimeType": "image/png", "data": "aW1hZ2U="}]
-    messages = [{"role": "user", "content": [{"type": "text", "text": "Read this"}, *chat_images(images)]}]
-    assert request_body("openai", "m", messages, [])["messages"][0]["content"][1]["type"] == "image_url"
-    assert request_body("openai_responses", "m", messages, [])["input"][0]["content"][1]["type"] == "input_image"
-    native = request_body("anthropic", "m", messages, [])["messages"][0]["content"][1]
-    assert native["source"] == {"type": "base64", "media_type": "image/png", "data": "aW1hZ2U="}
 
 
 def test_collection_scope_is_enforced_by_tools():

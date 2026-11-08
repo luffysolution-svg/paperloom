@@ -30,7 +30,6 @@ export function HomeAskComposerInput({
     <textarea
       ref={textareaRef}
       className="home-ask-input"
-      aria-label="输入问题"
       rows={2}
       value={text}
       disabled={inputDisabled}
@@ -38,7 +37,7 @@ export function HomeAskComposerInput({
         scopeCount
           ? "继续提问… @ 可再指定文章或合集"
           : variant === "hero"
-            ? "从一个问题开始… 输入 @ 选择文献或合集"
+            ? "用 AI 做任何事… 输入 @ 指定文章或合集"
             : "继续提问… 输入 @ 指定文章或合集"
       }
       onChange={(e) => {

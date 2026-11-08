@@ -1,6 +1,6 @@
 export type TurnPart = {
     id: string;
-    type: "text" | "reasoning" | "tool" | "plan" | "notice";
+    type: "text" | "reasoning" | "tool";
     text?: string;
     status?: string;
     started_ms?: number;
@@ -12,11 +12,6 @@ export type TurnPart = {
     input_preview?: string;
     output?: unknown;
     content?: unknown;
-    entries?: {
-        content: string;
-        status: string;
-        priority?: string;
-    }[];
     [key: string]: unknown;
 };
 export type TurnEvent = {
@@ -32,12 +27,6 @@ export type TurnMetrics = {
     usage?: Record<string, any>;
     [key: string]: any;
 };
-export type AiImageAttachment = {
-    name?: string;
-    mime_type: string;
-    data: string;
-};
-export declare function attachmentsFromTrace(raw: unknown): AiImageAttachment[];
 export declare function applyTurnEvent(parts: TurnPart[], event: TurnEvent): TurnPart[];
 export declare function timelineFromTrace(raw: unknown): {
     parts?: TurnPart[];

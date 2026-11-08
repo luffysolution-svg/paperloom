@@ -9,7 +9,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import { askLibraryAi, createConversation, saveAiSelection, selectionForRequest } from "@/platform/api/index.js";
+import { askLibraryAi, createConversation } from "@/platform/api/index.js";
 import { applyTurnEvent, type TurnPart } from "@/platform/api/index.js";
 import {
   resolveReaderAiConfig,
@@ -95,7 +95,7 @@ export function useHomeAskTurn({
   const send = useCallback(async (
     rawQuestion: string,
     scopes: HomeAskScope[] = [],
-    { regenerateOf = "", editOf = "", attachments = [], forceCompress = false }: { regenerateOf?: string; editOf?: string; attachments?: Record<string, unknown>[]; forceCompress?: boolean } = {},
+    { regenerateOf = "", editOf = "", forceCompress = false }: { regenerateOf?: string; editOf?: string; forceCompress?: boolean } = {},
   ) => {
     const question = `${rawQuestion || ""}`.trim();
     if (!question || runningRef.current) return;
@@ -119,7 +119,6 @@ export function useHomeAskTurn({
       ? findTurnUserMessage(priorMessages, regenerateOf)
       : null;
     if (regenerating && !parentUser) return;
-    if (!attachments.length) attachments = parentUser?.attachments || editedFrom?.attachments || [];
     // 重新生成失败时把原答案放回去——它在服务端还在（成了兄弟分支），但视图里已经被
     // 换掉了，不还原就等于点一次重试把看得见的答案弄丢了。
     const priorAssistant = regenerating
@@ -132,8 +131,7 @@ export function useHomeAskTurn({
     // 运行配置及密钥以本机后端的 runtime-config 为权威。浏览器里的旧配置
     // 只作为本次请求的可选覆盖；为空时让后端使用安全保存的凭据。
     const config = resolveReaderAiConfig();
-    const selection = selectionForRequest(conversationIdRef.current);
-    const modelRequestOverrides = { ...buildHomeAskModelRequestOverrides(config), connectionId: selection.connectionId, connectionModel: selection.model, connectionOptions: { ...selection.options } };
+    const modelRequestOverrides = buildHomeAskModelRequestOverrides(config);
 
     const userId = parentUser ? parentUser.id : makeId("u");
     const assistantId = makeId("a");
@@ -172,7 +170,7 @@ export function useHomeAskTurn({
           id: userId,
           role: "user",
           content: displayUser,
-          attachments,
+
           status: "complete",
           rawQuestion: question,
           ...(headId ? { parentId: headId } : {}),
@@ -207,7 +205,6 @@ export function useHomeAskTurn({
         });
         requestConversationId = `${created?.conversation_id || ""}`.trim();
         if (!requestConversationId) throw new Error("创建 AI 会话失败，请重试。");
-        if (selection.connectionId) saveAiSelection(requestConversationId, selection, { updateDraft: false });
         setConversationId(requestConversationId);
         conversationIdRef.current = requestConversationId;
         saveConversationId(requestConversationId);
@@ -224,7 +221,7 @@ export function useHomeAskTurn({
       let parts: TurnPart[] = [];
       const result = await askLibraryAi({
         scopeDocumentIds: resolvedDocs.map((d) => d.id),
-        attachments,
+
         forceCompress,
         onTurnEvent: (event) => {
           if (abort.signal.aborted) return;

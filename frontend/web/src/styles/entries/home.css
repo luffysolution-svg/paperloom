@@ -62,7 +62,6 @@
 @import "../pages/home/job-dialogs.css";
 @import "../pages/home/job-dialogs.utilities.css";
 @import "../pages/home/credential-settings.css";
-@import "../pages/home/ai-connections.css";
 @import "../pages/home/credential-ocr.css";
 @import "../pages/home/status-card.css";
 /* 书籍详情按职责拆分：壳层 → 概览 → 处理 → 文件产物。 */

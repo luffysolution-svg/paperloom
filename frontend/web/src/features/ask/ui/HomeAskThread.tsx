@@ -178,7 +178,6 @@ export function HomeAskThread({
               ) : (
                 <>
                   <div className="home-ask-msg-bubble">
-                    {m.attachments?.length ? <div className="home-ask-message-images">{m.attachments.map((image, index) => <img key={index} src={`data:${image.mime_type};base64,${image.data}`} alt={image.name || "附图"} />)}</div> : null}
                     <div className="home-ask-md-plain">{m.content}</div>
                   </div>
                   {branch || canEdit ? (

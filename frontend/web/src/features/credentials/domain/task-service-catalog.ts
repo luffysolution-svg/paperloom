@@ -1,7 +1,6 @@
 import { getOcrProviderDefinition, getTranslationProviderDefinition, inferTranslationProvider, OCR_PROVIDER_DEFINITIONS } from "@/platform/config/providers.js";
 import type { CredentialsFields } from "./state.js";
 import type { ServiceProfile } from "./service-profiles.js";
-import { cachedAiConnections } from "@retainpdf/api";
 
 type TranslationSettings = Record<string, unknown>;
 export type TaskServiceSelection = { profileId?: string; ocrId?: string; translationId?: string; model?: string };
@@ -12,7 +11,7 @@ export function buildTaskServiceCatalog({ credentials, translation, profiles = [
   profiles?: ServiceProfile[];
 }) {
   const ocr: { id: string; label: string; provider: string; token: string; credentialRef: string; configured: boolean }[] = [];
-  const translations: { id: string; connectionId?: string; label: string; provider: string; baseUrl: string; apiProtocol: "openai" | "openai_responses" | "anthropic"; apiKey: string; credentialRef: string; model: string; models: string[]; workers: number; configured: boolean }[] = [];
+  const translations: { id: string; label: string; provider: string; baseUrl: string; apiProtocol: "openai" | "openai_responses" | "anthropic"; apiKey: string; credentialRef: string; model: string; models: string[]; workers: number; configured: boolean }[] = [];
 
   function addOcr(id: string, provider: string, source: Partial<CredentialsFields>, name = "") {
     const definition = getOcrProviderDefinition(provider);
@@ -72,11 +71,6 @@ export function buildTaskServiceCatalog({ credentials, translation, profiles = [
     return { id: profile.id, name: profile.name, ocrId, translationId, model: `${profile.translation.model || ""}`.trim() };
   });
 
-  for (const connection of cachedAiConnections().filter((c) => c.kind === "byok" && c.api_key_configured)) {
-    translations.push({ id: `connection:${connection.id}`, connectionId: connection.id, label: `${connection.name} · AI 连接`,
-      provider: inferTranslationProvider(connection.base_url), baseUrl: connection.base_url, apiProtocol: connection.api_protocol,
-      apiKey: "", credentialRef: "", model: connection.model, models: [...new Set([connection.model, ...connection.models])], workers: 5, configured: true });
-  }
 
   function resolve(selection: TaskServiceSelection = {}) {
     const ocrService = ocr.find((item) => item.id === selection.ocrId) || ocr.find((item) => item.id === defaultOcrId)!;

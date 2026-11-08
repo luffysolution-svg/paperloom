@@ -10,10 +10,9 @@
 `finish_reason=running` 的同一 assistant 消息可继续更新；完成、取消或失败后不可
 被迟到的检查点覆盖。取消会保留已生成正文，并保存 `cancelled` 状态。
 
-有序正文、思考、工具、计划与环境提示保存在 `tool_trace_json` 的 `turn_timeline`
-记录中，和 `done.parts` 使用同一最终快照。user 附件使用独立的 attachments 记录，
-近期历史仍以原生图片内容传给模型。浏览器通过会话快照与活动 run 查询恢复界面，
-不会为了恢复显示而重跑工具。权限/表单请求也可按 conversation 查询待处理状态。
+有序正文、思考和工具进度保存在 `tool_trace_json` 的 `turn_timeline` 记录中，和
+`done.parts` 使用同一最终快照。浏览器通过会话快照恢复已保存的正文、引用与过程。
+刷新后的界面不恢复对活动请求的控制，也不会为了恢复显示而重跑工具。
 
 ## 1. 状态由谁拥有
 
@@ -225,5 +224,4 @@ python backend/contracts/check_parity.py --require-upstream
 - `metadata_json`/专用 summary message kind。
 - 跨 turn evidence snapshot 与稳定引用编号。
 - 面向 token 而非字符估算的模型级预算。
-- 客户端取消向运行中的同步 LLM/tool call 传播。
 - 多 Agent 共享 memory/evidence 的 durable 协议。

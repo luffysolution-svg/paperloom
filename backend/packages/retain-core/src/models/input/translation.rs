@@ -43,9 +43,6 @@ pub struct GlossaryEntryInput {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct TranslationInput {
-    /// Resolve once at submission; credentials and protocol are then frozen.
-    #[serde(default)]
-    pub connection_id: String,
     /// Full immutable snapshot, not a pointer to mutable frontend settings.
     /// Omitted for legacy jobs; it never contains an inline model API key.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -111,7 +108,6 @@ pub struct TranslationInput {
 impl Default for TranslationInput {
     fn default() -> Self {
         Self {
-            connection_id: String::new(),
             execution_connection: None,
             mode: default_mode(),
             math_mode: default_math_mode(),

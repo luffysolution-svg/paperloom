@@ -48,15 +48,6 @@ class TurnTranscript:
                 if part.get("status") in {"completed", "failed", "cancelled"}:
                     part["duration_ms"] = now - part["started_ms"]
                 self.metrics.setdefault("first_event_ms", now)
-            elif kind == "agent_plan":
-                part = next((p for p in self.parts if p["type"] == "plan"), None)
-                if part is None:
-                    part = {"id": "plan", "type": "plan"}
-                    self.parts.append(part)
-                part["entries"] = copy.deepcopy(event.get("entries", []))
-            elif kind == "agent_notice":
-                self.parts.append({"id": f"notice-{self.seq}", "type": "notice", "title": event.get("title", "Agent 提示"),
-                                   "text": event.get("description", ""), "severity": event.get("severity", "info")})
             elif kind == "citations":
                 self.citations = copy.deepcopy(event.get("citations", []))
             elif kind == "usage":

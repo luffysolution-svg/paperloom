@@ -7,7 +7,6 @@ import { useHomeFeatures, useHomeSettingsHub, useHomeWorkflowDialog, useHomeWork
 import { useStoreSnapshot } from "@/ui/hooks/use-store.js";
 import { TRANSLATION_PROVIDER_OPTIONS } from "@/platform/config/providers.js";
 import { UploadModelPicker } from "./UploadModelPicker.jsx";
-import { AI_CONNECTIONS_CHANGED, fetchAiConnections } from "@retainpdf/api";
 
 export function UploadServicePicker() {
   const services = useOptionalCredentialsServices();
@@ -35,20 +34,13 @@ export function UploadServicePicker() {
     viewPort: { setTranslationModels: setModels },
   }), []);
 
-  useEffect(() => {
-    let active = true;
-    const load = () => void fetchAiConnections().then(() => { if (active) refresh((v) => v + 1); }).catch(() => {});
-    load();
-    document.addEventListener(AI_CONNECTIONS_CHANGED, load);
-    return () => { active = false; document.removeEventListener(AI_CONNECTIONS_CHANGED, load); };
-  }, []);
 
   useEffect(() => {
     const onChange = () => refresh((value) => value + 1);
     document.addEventListener(CREDENTIALS_CHANGED_EVENT, onChange);
     return () => document.removeEventListener(CREDENTIALS_CHANGED_EVENT, onChange);
   }, []);
-  useEffect(() => { modelFlow.clear(); }, [modelFlow, selected?.translation.id, selected?.translation.apiKey, selected?.translation.baseUrl]);
+  useEffect(() => { modelFlow.clear(); }, [modelFlow, selected?.translation.id, selected?.translation.apiKey, selected?.translation.baseUrl, selected?.translation.apiProtocol]);
   useEffect(() => () => modelFlow.clear(), [modelFlow]);
   if (!catalog || !selected) return null;
   const locked = Boolean(workflow.submitBusy);

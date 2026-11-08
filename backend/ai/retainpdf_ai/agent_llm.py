@@ -12,7 +12,6 @@ import httpx
 from .config import Settings
 from .request_control import AIProviderError, AIRequestTimeout, AIStreamIncomplete, RequestControl
 from .runtimes.contracts import ChatFn
-from . import llm_wire
 
 
 def assemble_streaming_message(
@@ -180,8 +179,7 @@ def build_deepseek_chat_fn(
         # Closing the request-owned client interrupts a connection that is
         # still waiting for response headers when the browser disconnects.
         request_control.add_cancel_callback(http.close)
-    protocol = settings.llm_api_protocol
-    url = llm_wire.endpoint(settings.llm_base_url, protocol)
+    url = f"{settings.llm_base_url}/chat/completions"
     api_key = f"{settings.llm_api_key or ''}".strip()
     if not api_key:
 
@@ -195,7 +193,7 @@ def build_deepseek_chat_fn(
             )
 
         return missing_key
-    headers = llm_wire.headers(api_key, protocol)
+    headers = {"Authorization": f"Bearer {api_key}"}
 
     def chat(
         messages: list[dict[str, Any]],
@@ -213,7 +211,12 @@ def build_deepseek_chat_fn(
         """
         if request_control is not None:
             request_control.raise_if_stopped()
-        body = llm_wire.request_body(protocol, settings.llm_model, messages, tools)
+        body: dict[str, Any] = {
+            "model": settings.llm_model,
+            "messages": messages,
+            "tools": tools,
+            "temperature": 0.2,
+        }
         request_timeout = settings.llm_timeout_s
         if request_control is not None:
             request_timeout = max(
@@ -237,7 +240,7 @@ def build_deepseek_chat_fn(
                 request_control.raise_if_stopped()
             if response.status_code >= 400:
                 raise friendly_llm_error(response.status_code)
-            return llm_wire.response_message(protocol, response.json())
+            return response.json()["choices"][0]["message"]
         body["stream"] = True
         try:
             with http.stream(
@@ -260,10 +263,9 @@ def build_deepseek_chat_fn(
                             if cleaned:
                                 _emit(cleaned)
 
-                    if protocol == "openai":
-                        message = assemble_streaming_message(response.iter_lines(), streamed_on_delta, request_control, on_event)
-                    else:
-                        message = llm_wire.stream_message(protocol, response.iter_lines(), streamed_on_delta, request_control, on_event)
+                    message = assemble_streaming_message(
+                        response.iter_lines(), streamed_on_delta, request_control, on_event
+                    )
                     if (
                         raw_on_delta is not None
                         and delta_sanitizer is not None

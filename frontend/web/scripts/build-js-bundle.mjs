@@ -141,8 +141,6 @@ function bundleOptions({ entry, out }) {
     jsx: "automatic",
     alias: {
       "@": path.join(frontendRoot, "src"),
-      // Workspace popovers must share the host dialog's focus and dismissal context.
-      "radix-ui": fileURLToPath(import.meta.resolve("radix-ui")),
     },
     // Workspace package peers resolve through the host's installed dependency tree.
     nodePaths: [path.join(frontendRoot, "node_modules")],

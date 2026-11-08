@@ -210,7 +210,6 @@ def test_agent_tool_event_does_not_echo_arguments_or_result_values():
         "status": "completed",
         "summary": "Calculation calc-a completed",
         "calculation_id": "calc-a",
-        "output": {"calculation_id": "calc-a"},
     }
     assert "do-not-echo" not in json.dumps(event, ensure_ascii=False)
     assert "123" not in json.dumps({k: v for k, v in event.items() if k != "summary"})

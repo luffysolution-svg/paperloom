@@ -707,7 +707,7 @@ test("接口设置只有一个弹窗：常规与首次配置共用设置中心 A
   assert.equal(byId("browser-credentials-save-btn").textContent, "更新当前方案");
   assert.equal(byId("browser-credentials-subtitle"), null, "常规入口不该出现首配引导语");
   assert.ok(
-    dom.window.document.querySelector(".credential-agent-section > .ai-connections-settings"),
+    dom.window.document.querySelector(".credential-agent-section .credential-agent-card"),
     "常规入口展示 AI 连接管理",
   );
 
@@ -792,7 +792,7 @@ test("凭据入口：设置 API 区内嵌工作台；#credential-gate-action 也
     [[true, false], [false, true]],
     "接口页按 OCR、翻译的纵向顺序排列",
   );
-  assert.ok(dom.window.document.querySelector(".ai-legacy-runtime .credential-agent-card"));
+  assert.ok(dom.window.document.querySelector(".credential-agent-section > .credential-agent-card"));
   assert.match(
     dom.window.document.querySelector(".credential-agent-beta")?.textContent || "",
     /Beta/i,

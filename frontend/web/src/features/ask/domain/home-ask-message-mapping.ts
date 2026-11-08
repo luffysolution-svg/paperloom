@@ -1,7 +1,7 @@
 // 服务端消息/工具事件 → 主页 AI 消息模型（纯映射）
 
 import { messagesToBranchItems, type MessageRecord } from "@/platform/api/index.js";
-import { timelineFromTrace, attachmentsFromTrace } from "@/platform/api/index.js";
+import { timelineFromTrace } from "@/platform/api/index.js";
 import type { HomeAskCitation, HomeAskMessage } from "./types.js";
 import { makeId } from "./home-ask-ids.js";
 
@@ -101,7 +101,7 @@ export function nodesFromDetail(detail: ConversationDetailLike): {
       metrics: timeline.metrics,
       persisted: true,
       errorText: timeline.metrics?.error,
-      attachments: attachmentsFromTrace(original?.tool_trace_json),
+
       ...(source ? { source } : {}),
       status: (finish === "cancelled" || finish === "running" ? "cancelled" : finish === "error" ? "error" : "complete") as HomeAskMessage["status"],
       ...(incomplete && finish !== "cancelled" ? { incompleteReason: finish } : {}),

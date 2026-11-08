@@ -14,6 +14,7 @@
 
 | 文档 | 内容 |
 |------|------|
+| **[TRANSLATION_PROTOCOLS.md](./TRANSLATION_PROTOCOLS.md)** | 翻译 API 协议、独立配置与验证 |
 | **[AI_RUNTIME.md](./AI_RUNTIME.md)** | 当前 Transport / Orchestrator / Runtime / broker 架构与安全边界 |
 | **[SESSION_AND_MEMORY.md](./SESSION_AND_MEMORY.md)** | 当前消息树、上下文压缩、durable 写入和恢复语义 |
 | **[SKILLS.md](./SKILLS.md)** | Skill 包格式、与 Tool 的边界、首个 `literature-qa` 示例 |

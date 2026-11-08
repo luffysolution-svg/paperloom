@@ -14,8 +14,6 @@ substitute for package copyright notices, license texts, or corresponding source
 | --- | --- | --- |
 | PaperLoom first-party work | AGPL-3.0-only, root `LICENSE` | Provide complete corresponding source with every network deployment and binary release. |
 | RetainPDF foundation | MIT, `LICENSE-MIT` | Preserve the original RetainPDF copyright and permission notice. |
-| Agentero brand mark components | MIT, `resources/licenses/Agentero-MIT.txt` | Brand SVGs adapted from poco-ai/Agentero; preserve its copyright and permission notice. |
-| Simple Icons brand marks | CC0-1.0, https://github.com/simple-icons/simple-icons | Vector brand assets; trademarks remain with their respective owners. |
 | Electron, Node.js, Chromium | MIT and component-specific notices | Preserve the runtime's `LICENSE` and `LICENSES.chromium.html`; include dependency notices in packages. |
 | Python runtime and packages | Python-2.0 and package-specific licenses | Preserve Python's license and installed distribution license files. |
 | **PyMuPDF 1.26.5 / MuPDF** | **GNU AGPL-3.0**, as stated by installed package metadata | Official releases use the AGPL route and attach the exact upstream source archive identified in `CORRESPONDING_SOURCE.md`. |

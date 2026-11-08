@@ -4,8 +4,6 @@ import type { ReaderAskStoreMessage } from "./reader-ask-tree.js";
 import type { ReaderAssistantMode } from "../../../shared/ai/ask-answerer.js";
 import type { ReaderSelection } from "../../../shared/data/reader-regions.js";
 export type ReaderAssistantThreadProps = {
-    connectionConfigured?: boolean;
-    connectionBlocked?: boolean;
     jobId?: string;
     messages?: readonly ReaderAskStoreMessage[];
     citationsByMessageId?: Record<string, AiCitationLike[]>;
@@ -25,5 +23,5 @@ export type ReaderAssistantThreadProps = {
     selectionContext?: ReaderSelection | null;
     onClearSelectionContext?: () => void;
 };
-export declare function ReaderAssistantThread({ connectionConfigured, connectionBlocked, jobId, messages, citationsByMessageId, progressByMessageId, contentByMessageId, streamingAssistantId, isRunning, onSubmit, onRetry, onCancel, onJumpCitation, onBranchFromAnswer, branchBusy, agentOperations, assistantMode, onAssistantModeChange, selectionContext, onClearSelectionContext, }: ReaderAssistantThreadProps): import("react").JSX.Element;
+export declare function ReaderAssistantThread({ jobId, messages, citationsByMessageId, progressByMessageId, contentByMessageId, streamingAssistantId, isRunning, onSubmit, onRetry, onCancel, onJumpCitation, onBranchFromAnswer, branchBusy, agentOperations, assistantMode, onAssistantModeChange, selectionContext, onClearSelectionContext, }: ReaderAssistantThreadProps): import("react").JSX.Element;
 //# sourceMappingURL=ReaderAssistantThread.d.ts.map

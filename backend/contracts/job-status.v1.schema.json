@@ -413,7 +413,6 @@
         "model": {
           "type": "string"
         },
-        "connection_id": { "type": "string" },
         "api_protocol": { "type": "string", "enum": ["openai", "openai_responses", "anthropic"], "default": "openai" },
         "thinking": { "type": "string", "enum": ["auto", "off", "low", "medium", "high", "max"], "default": "auto" },
         "base_url": {
