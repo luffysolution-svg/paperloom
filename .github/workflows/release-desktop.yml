@@ -74,12 +74,13 @@ jobs:
         shell: pwsh
         run: |
           $typstVersion = "${{ env.TYPST_VERSION }}"
-          $typstUrl = "https://github.com/typst/typst/releases/download/v$typstVersion/typst-x86_64-pc-windows-msvc.zip"
+          $typstAsset = "typst-x86_64-pc-windows-msvc.zip"
           $downloadZip = Join-Path $env:RUNNER_TEMP "typst-windows.zip"
           $extractRoot = Join-Path $env:RUNNER_TEMP "typst-windows"
           $bundleRoot = Join-Path $PWD "$env:DESKTOP_ROOT/src/runtime/windows/typst"
-          Write-Host "Downloading Typst $typstVersion from $typstUrl"
-          Invoke-WebRequest -Uri $typstUrl -OutFile $downloadZip
+          Write-Host "Downloading Typst $typstVersion ($typstAsset) through GitHub API"
+          python ops/release/download_github_asset.py typst/typst "v$typstVersion" $typstAsset $downloadZip
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (Test-Path $extractRoot) {
             Remove-Item $extractRoot -Recurse -Force
           }
@@ -308,12 +309,12 @@ jobs:
         shell: bash
         run: |
           typst_version="${{ env.TYPST_VERSION }}"
-          typst_url="https://github.com/typst/typst/releases/download/v${typst_version}/typst-x86_64-unknown-linux-musl.tar.xz"
+          typst_asset="typst-x86_64-unknown-linux-musl.tar.xz"
           download_tar="$RUNNER_TEMP/typst-linux.tar.xz"
           extract_root="$RUNNER_TEMP/typst-linux"
           bundle_root="$PWD/$DESKTOP_ROOT/src/runtime/linux/typst"
-          echo "Downloading Typst $typst_version from $typst_url"
-          curl -L "$typst_url" -o "$download_tar"
+          echo "Downloading Typst $typst_version ($typst_asset) through GitHub API"
+          python3 ops/release/download_github_asset.py typst/typst "v$typst_version" "$typst_asset" "$download_tar"
           rm -rf "$extract_root" "$bundle_root"
           mkdir -p "$extract_root" "$bundle_root/bin"
           tar -xJf "$download_tar" -C "$extract_root"
@@ -573,12 +574,12 @@ jobs:
         shell: bash
         run: |
           typst_version="${{ env.TYPST_VERSION }}"
-          typst_url="https://github.com/typst/typst/releases/download/v${typst_version}/typst-aarch64-apple-darwin.tar.xz"
+          typst_asset="typst-aarch64-apple-darwin.tar.xz"
           download_tar="$RUNNER_TEMP/typst-macos.tar.xz"
           extract_root="$RUNNER_TEMP/typst-macos"
           bundle_root="$PWD/$DESKTOP_ROOT/src/runtime/mac/typst"
-          echo "Downloading Typst $typst_version from $typst_url"
-          curl -L "$typst_url" -o "$download_tar"
+          echo "Downloading Typst $typst_version ($typst_asset) through GitHub API"
+          python3 ops/release/download_github_asset.py typst/typst "v$typst_version" "$typst_asset" "$download_tar"
           rm -rf "$extract_root" "$bundle_root"
           mkdir -p "$extract_root" "$bundle_root/bin"
           tar -xJf "$download_tar" -C "$extract_root"

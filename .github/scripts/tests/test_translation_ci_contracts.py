@@ -32,8 +32,8 @@ def test_formula_runtime_matches_repository_version():
     action = (ROOT / ".github/actions/setup-test-typst/action.yml").read_text()
     sample = (ROOT / ".github/workflows/translate-sample-pdf.yml").read_text()
     assert 'TYPST_VERSION: "0.15.1"' in sample
-    assert "/download/v0.15.1/" in action
-    assert "curl --fail" in action
+    assert "typst/typst v0.15.1" in action
+    assert "ops/release/download_github_asset.py" in action
     assert '"$GITHUB_ENV"' in action
     assert "TYPST_BIN=" in action
 

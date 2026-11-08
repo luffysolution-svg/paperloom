@@ -40,6 +40,8 @@ RUN uv export \
 
 FROM python:3.11-slim-bookworm AS typstsrc
 
+COPY ops/release/download_github_asset.py /usr/local/bin/download_github_asset.py
+
 ARG TYPST_VERSION=0.15.1
 ARG CMARKER_VERSION=0.1.10
 ARG MITEX_VERSION=0.2.7
@@ -61,8 +63,8 @@ RUN set -eux; \
       aarch64) TYPST_ARCH="aarch64" ;; \
       *) echo "Unsupported architecture: $ARCH"; exit 1 ;; \
     esac; \
-    curl -fsSL "https://github.com/typst/typst/releases/download/v${TYPST_VERSION}/typst-${TYPST_ARCH}-unknown-linux-musl.tar.xz" \
-    -o /tmp/typst/typst.tar.xz \
+    python /usr/local/bin/download_github_asset.py typst/typst "v${TYPST_VERSION}" \
+    "typst-${TYPST_ARCH}-unknown-linux-musl.tar.xz" /tmp/typst/typst.tar.xz \
     && tar -xJf /tmp/typst/typst.tar.xz -C /tmp/typst \
     && cp /tmp/typst/typst-${TYPST_ARCH}-unknown-linux-musl/typst /opt/typst/bin/typst
 

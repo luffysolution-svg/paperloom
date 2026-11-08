@@ -30,6 +30,7 @@ REQUIRED_FILES = (
     "backend/api/Cargo.toml", "backend/ai/pyproject.toml",
     "backend/pipeline/pyproject.toml", "backend/config/ocr_providers.json",
     "ops/deployment/docker/backend/Dockerfile.app",
+    "ops/release/download_github_asset.py",
     "resources/fonts/LICENSE-OFL-1.1.txt",
     "package.json", "package-lock.json", "frontend/desktop/package.json",
     "frontend/web/package.json", "frontend/packages/api/package.json",
