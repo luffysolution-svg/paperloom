@@ -67,19 +67,24 @@ export function readSettingsModelApiKey(
 export function resolveReaderAiConfig({
   browserConfig = _loadBrowserStoredConfig(),
   developerConfig = _loadDeveloperStoredConfig(),
-}: { browserConfig?: any; developerConfig?: any } = {}): { apiKey: string; baseUrl: string; model: string; provider: string; apiProtocol?: "anthropic" | "openai_responses" } {
+}: { browserConfig?: any; developerConfig?: any } = {}): { apiKey: string; baseUrl: string; model: string; provider: string } {
+  // Native translation credentials cannot override the OpenAI-compatible chat runtime.
+  if (developerConfig?.apiProtocol && developerConfig.apiProtocol !== "openai") {
+    return { apiKey: "", baseUrl: "", model: "", provider: "deepseek" };
+  }
   // 模型 Key：仅用户设置；baseUrl / model 可回退 runtime 默认（非密钥）
   return {
     apiKey: readSettingsModelApiKey(browserConfig),
     baseUrl: firstNonEmpty(developerConfig?.baseUrl, _defaultModelBaseUrl()),
     model: firstNonEmpty(developerConfig?.model, _defaultModelName()),
     provider: "deepseek",
-    ...(developerConfig?.apiProtocol === "anthropic" || developerConfig?.apiProtocol === "openai_responses" ? { apiProtocol: developerConfig.apiProtocol } : {}),
   };
 }
 
 /** 是否已在设置中配置下游模型 API Key（对话前置门禁）。 */
 export function hasModelApiKey(browserConfig?: any): boolean {
+  const protocol = _loadDeveloperStoredConfig()?.apiProtocol;
+  if (protocol && protocol !== "openai") return false;
   if (browserConfig !== undefined) {
     return Boolean(readSettingsModelApiKey(browserConfig));
   }

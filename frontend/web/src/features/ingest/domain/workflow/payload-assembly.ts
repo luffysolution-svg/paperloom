@@ -79,7 +79,6 @@ export function createWorkflowPayloadAssembly({
     return buildTranslationPayloadRequest({
       developerConfig,
       translationCredentialRef: submitValues.translationCredentialRef,
-      translationConnectionId: submitValues.translationConnectionId,
       modelApiKey: submitValues.modelApiKey,
       selectedGlossaryId: submitValues.selectedGlossaryId,
       constants,

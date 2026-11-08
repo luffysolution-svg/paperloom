@@ -1,8 +1,6 @@
 // Notion AI 式右侧栏：Markdown 线程 + 会话窗口 + 分支开窗
 
 import { useCallback, useState } from "react";
-import { AiComposerControlProvider, AiConnectionPicker, useAiConnection } from "../ai/AiConnectionPicker.js";
-import { AgentInteractionPanel } from "../ai/AgentInteractionPanel.js";
 import { Sparkles } from "lucide-react";
 import { type AiCitationLike } from "../../external.js";
 import { ReaderFloatShell } from "./ReaderFloatShell.js";
@@ -75,7 +73,6 @@ export function ReaderAiPanel({
   });
 
   const [branchNotice, setBranchNotice] = useState("");
-  const aiConnection = useAiConnection(activeConversationId, isRunning);
 
   const handleBranch = useCallback(async (assistantId: string) => {
     setBranchNotice("");
@@ -116,7 +113,6 @@ export function ReaderAiPanel({
         </div>
       ) : (
         <div className="reader-float-ai-body">
-          <AgentInteractionPanel conversationId={activeConversationId} running={isRunning} />
           <ReaderConversationBar
             sessions={sessions}
             activeId={activeConversationId}
@@ -133,10 +129,7 @@ export function ReaderAiPanel({
             </div>
           ) : null}
           <div className="reader-float-ai-thread-wrap" aria-busy={sessionBusy || undefined}>
-            <AiComposerControlProvider value={<AiConnectionPicker controller={aiConnection} disabled={isRunning || sessionBusy} />}>
             <ReaderAssistantThread
-            connectionConfigured={aiConnection.configured}
-            connectionBlocked={aiConnection.blocked}
               jobId={jobId}
               messages={messages}
               citationsByMessageId={citationsByMessageId}
@@ -156,7 +149,6 @@ export function ReaderAiPanel({
               selectionContext={selectionContext}
               onClearSelectionContext={onClearSelectionContext}
             />
-            </AiComposerControlProvider>
           </div>
         </div>
       )}

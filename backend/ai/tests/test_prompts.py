@@ -9,10 +9,11 @@ from retainpdf_ai.prompts import (
 )
 
 
-def test_reading_prompt_prefers_relevant_controlled_images_without_hallucinating_urls():
+def test_reading_prompt_uses_controlled_images_when_requested_or_needed():
     prompt = build_reading_system_prompt()
 
-    assert "默认选 1–3 张" in prompt
+    assert "只有用户要求配图或问题本身需要图示时" in prompt
+    assert "普通事实问答使用文字和引用即可" in prompt
     assert "工具返回的原始 image_url" in prompt
     assert "不得猜测、拼接或改写 URL" in prompt
     assert "没有相关受控" in prompt and "正常使用纯文字" in prompt

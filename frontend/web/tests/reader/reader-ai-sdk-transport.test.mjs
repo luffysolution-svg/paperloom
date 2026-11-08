@@ -169,9 +169,7 @@ test("Reader transport forwards operation hints and green-light mode to the oper
   assert.deepEqual(modes, ["green_light", "green_light"]);
 });
 
-test("Reader transport freezes mode, scope, and selection before async loading", async () => {
-  const { saveAiSelection } = await import("@retainpdf/api");
-  saveAiSelection("transport-source", { connectionId: "initial-api", model: "initial-model", options: { mode: "first" } });
+test("Reader transport freezes mode and document scope before async loading", async () => {
   let currentMode = "reading";
   let releaseLoading;
   const loading = new Promise((resolve) => { releaseLoading = resolve; });
@@ -217,7 +215,6 @@ test("Reader transport freezes mode, scope, and selection before async loading",
   // Mutating the visible controls and caller object after submission must not
   // reroute the request that is already waiting for its document payload.
   currentMode = "reading";
-  saveAiSelection("transport-source", { connectionId: "later-agent", model: "later-model", options: { mode: "second" } });
   context.quoteText = "mutated selection";
   releaseLoading();
   await sending;
@@ -226,7 +223,4 @@ test("Reader transport freezes mode, scope, and selection before async loading",
   assert.equal(calls[0].assistantMode, "operations");
   assert.equal(calls[0].scope, "selection");
   assert.equal(calls[0].context.quoteText, "original selection");
-  assert.equal(calls[0].connectionId, "initial-api");
-  assert.equal(calls[0].connectionModel, "initial-model");
-  assert.deepEqual(calls[0].connectionOptions, { mode: "first" });
 });

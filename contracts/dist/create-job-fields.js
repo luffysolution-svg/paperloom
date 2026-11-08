@@ -68,7 +68,6 @@ export const CREATE_JOB_SECTION_FIELDS = {
         "base_url",
         "batch_size",
         "classify_batch_size",
-        "connection_id",
         "context_mode",
         "credential_ref",
         "custom_rules_text",

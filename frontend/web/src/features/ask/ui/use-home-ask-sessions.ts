@@ -15,7 +15,6 @@ import {
 import { nodesFromDetail } from "../domain/home-ask-message-mapping.js";
 import { recordToSession, type HomeAskSession } from "../domain/home-ask-session.js";
 import type { HomeAskMessage } from "../domain/types.js";
-import { fetchActiveAiRuns, cancelAiRun } from "@/platform/api/index.js";
 
 type HomeAskSessionsDeps = {
   runningRef: { current: boolean };
@@ -38,36 +37,6 @@ export function useHomeAskSessions({
   const [sessions, setSessions] = useState<HomeAskSession[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [sessionBusy, setSessionBusy] = useState(false);
-  const [remoteRunId, setRemoteRunId] = useState("");
-  const checkRunning = useCallback(async (id: string, detail: { messages?: { finish_reason?: string }[] }) => {
-    if (!detail.messages?.some((m) => m.finish_reason === "running")) return;
-    const runs = await fetchActiveAiRuns(id).catch(() => []);
-    if (runs.length && conversationIdRef.current === id) setRemoteRunId(runs[0].run_id);
-  }, [conversationIdRef]);
-  useEffect(() => {
-    if (!remoteRunId) return;
-    let active = true;
-    let timer: ReturnType<typeof setTimeout>;
-    runningRef.current = true;
-    const id = conversationIdRef.current;
-    let missingRunPolls = 0;
-    const poll = async () => {
-      try {
-        const [detail, runs] = await Promise.all([getConversation(id), fetchActiveAiRuns(id)]);
-        if (!active || conversationIdRef.current !== id) return;
-        const thread = nodesFromDetail(detail);
-        const live = runs.some((run) => run.run_id === remoteRunId);
-        replaceThread(thread.nodes.map((node) => node.id === remoteRunId && live ? { ...node, status: "streaming", progress: "正在继续生成" } : node), thread.headId);
-        if (!live) {
-          const finishing = detail.messages.some((message) => message.message_id === remoteRunId && message.finish_reason === "running");
-          if (!finishing || ++missingRunPolls >= 6) { runningRef.current = false; setRemoteRunId(""); return; }
-        }
-      } catch { /* Retain the latest persisted snapshot until the next poll. */ }
-      if (active) timer = setTimeout(poll, 1200);
-    };
-    void poll();
-    return () => { active = false; clearTimeout(timer); };
-  }, [remoteRunId, conversationIdRef, replaceThread, runningRef]);
 
   const refreshSessions = useCallback(async () => {
     setSessionsLoading(true);
@@ -101,7 +70,6 @@ export function useHomeAskSessions({
         conversationIdRef.current = id;
         const thread = nodesFromDetail(detail);
         replaceThread(thread.nodes, thread.headId);
-        void checkRunning(id, detail);
       } catch {
         if (!cancelled) {
           saveConversationId("");
@@ -128,7 +96,6 @@ export function useHomeAskSessions({
       saveConversationId(next);
       const thread = nodesFromDetail(detail);
         replaceThread(thread.nodes, thread.headId);
-      void checkRunning(next, detail);
     } catch {
       // 切失败保持现状
     } finally {
@@ -180,8 +147,6 @@ export function useHomeAskSessions({
   }, [runningRef, sessionBusy]);
 
   return {
-    remoteRunning: Boolean(remoteRunId),
-    stopRemote: () => { if (remoteRunId) void cancelAiRun(remoteRunId); },
     sessions,
     sessionsLoading,
     sessionBusy,

@@ -161,7 +161,7 @@ class ConversationState:
                 if request_runtime.capabilities.model_transport == "runtime_managed"
                 else payload.llm_model or self._settings.llm_model
             )
-            model = getattr(request_runtime, "source_label", "") or model
+            model = getattr(result, "source_label", "") or model
             # 这条回答是怎么结束的,要跟着它一起落库。只活在当前这一轮的话,刷新回来
             # 就看不出它其实没做完——而它写出来的话语气和正常回答没有区别。
             finish_reason = f"{getattr(result, 'incomplete_reason', '') or ''}".strip()
@@ -185,7 +185,6 @@ class ConversationState:
                     conversation_id,
                     role="user",
                     content=payload.question.strip(),
-                    tool_trace_json=json.dumps([{"type": "attachments", "items": payload.attachments}], ensure_ascii=False) if payload.attachments else "[]",
                     parent_id=parent_hint,
                     message_id=payload.user_message_id.strip(),
                     set_head=True,
@@ -229,7 +228,6 @@ class ConversationState:
                 conversation_id,
                 role="user",
                 content=payload.question.strip(),
-                tool_trace_json=json.dumps([{"type": "attachments", "items": payload.attachments}], ensure_ascii=False) if payload.attachments else "[]",
                 parent_id=parent_hint,
                 message_id=requested_id,
                 set_head=True,
@@ -251,7 +249,7 @@ class ConversationState:
         try:
             self._store.append_conversation_message(conversation_id, role="assistant", content=transcript.answer,
                 parent_id=user_id, message_id=payload.assistant_message_id, finish_reason="running", set_head=True,
-                model=getattr(runtime, "source_label", "") or runtime.runtime_id,
+                model=runtime.runtime_id,
                 citations_json=json.dumps(transcript.citations, ensure_ascii=False),
                 tool_trace_json=json.dumps([{"type": "turn_timeline", **snapshot}], ensure_ascii=False))
         except Exception:

@@ -14,7 +14,7 @@ import {
 import { useStoreSnapshot } from "@/ui/hooks/use-store.js";
 import { useHomeCredentialsStatePort } from "@/ui/context/home-services-context.js";
 import { HomeAskComposer } from "./HomeAskComposer.js";
-import { AiConnectionPicker, AgentInteractionPanel, useAiConnection } from "@retainpdf/reader/ai";
+import { ServiceProfileSelect } from "@/features/credentials/index.js";
 import { guideToCredentialSetup } from "./use-home-ask-composer.js";
 import { HomeAskSidebar } from "./HomeAskSidebar.js";
 import { HomeAskThread, HOME_ASK_SUGGESTIONS } from "./HomeAskThread.js";
@@ -77,7 +77,6 @@ export function HomeAskView() {
     scopesOwner.current = conversationId;
   }, [conversationId, isRunning, scopes]);
   const [revealMessageId, setRevealMessageId] = useState("");
-  const aiConnection = useAiConnection(conversationId, isRunning);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(loadSidebarCollapsed);
   const [runtimeConfig, setRuntimeConfig] = useState<AgentRuntimeConfigView | null>(null);
   const [runtimeConfigLoading, setRuntimeConfigLoading] = useState(true);
@@ -164,16 +163,12 @@ export function HomeAskView() {
   const { selection, clear: clearSelection } = useQuoteSelection(threadScrollRef);
   const [quoteRequest, setQuoteRequest] = useState<{ id: string; text: string } | null>(null);
 
-  const legacyCredentialGate = resolveAgentRuntimeCredentialGate({
+  const credentialGate = resolveAgentRuntimeCredentialGate({
     config: runtimeConfig,
     loading: runtimeConfigLoading,
     error: runtimeConfigError,
     legacyModelKeyConfigured: hasModelApiKey(),
   });
-  const credentialGate = aiConnection.loading ? { blocked: false, message: "" }
-    : aiConnection.configured ? { blocked: false, message: "" }
-    : aiConnection.blocked ? { blocked: true, message: aiConnection.selected ? "此连接还未配置 API Key，请打开设置补充。" : "连接已不可用，请选择其他连接。" }
-    : legacyCredentialGate;
   const displayedRuntime = agentRuntime || runtimeConfig?.active_runtime || "";
 
   return (
@@ -208,8 +203,8 @@ export function HomeAskView() {
         {!empty ? <HomeAskThreadToolbar title={sessions.find((s) => s.id === conversationId)?.title || messages.find((m) => m.role === "user")?.content || "文献对话"}
           messages={messages} running={isRunning} onCompress={() => void send("请概括目前讨论的要点，保留重要文献引用。", scopes, { forceCompress: true })}
           onFind={setRevealMessageId} /> : null}
-        <AgentInteractionPanel conversationId={conversationId} running={isRunning} />
-        {displayedRuntime && !aiConnection.selected ? (
+        <ServiceProfileSelect disabled={isRunning} />
+        {displayedRuntime ? (
           <div className="home-ask-runtime-badge" role="status">
             {agentRuntimeModeLabel(activeAgentRuntimeMode(displayedRuntime))}
           </div>
@@ -222,16 +217,13 @@ export function HomeAskView() {
             <h2 className="home-ask-empty-title">一起读懂文献</h2>
             <p className="home-ask-empty-description">引用文献或合集，追问方法、图表与证据。</p>
             <HomeAskComposer
-              disabled={aiConnection.loading}
-              aiSelector={<AiConnectionPicker controller={aiConnection} disabled={isRunning || sessionBusy} />}
-              imageSupported={aiConnection.selected?.kind !== "byoa" || aiConnection.capabilities?.promptCapabilities?.image !== false}
               isRunning={isRunning}
               credentialBlocked={credentialGate.blocked}
               credentialMessage={credentialGate.message}
               scopes={scopes}
               onScopesChange={changeScopes}
-              onSend={(q, attachments) => {
-                void send(q, scopes, { attachments });
+              onSend={(q) => {
+                void send(q, scopes);
               }}
               onStop={stop}
               variant="hero"
@@ -244,7 +236,7 @@ export function HomeAskView() {
                     key={item.prompt}
                     type="button"
                     className="home-ask-suggestion"
-                    disabled={isRunning || aiConnection.loading}
+                    disabled={isRunning}
                     onClick={() => {
                       // 缺凭据不锁推荐问题：点击走发送时刻的统一引导（横幅按钮直达设置）。
                       if (credentialGate.blocked) {
@@ -312,16 +304,13 @@ export function HomeAskView() {
             </div>
             {!atBottom ? <button type="button" className="home-ask-jump-bottom" onClick={scrollToBottom}><ArrowDown size={14} aria-hidden="true" />回到最新</button> : null}
             <HomeAskComposer
-              disabled={aiConnection.loading}
-              aiSelector={<AiConnectionPicker controller={aiConnection} disabled={isRunning || sessionBusy} />}
-              imageSupported={aiConnection.selected?.kind !== "byoa" || aiConnection.capabilities?.promptCapabilities?.image !== false}
               isRunning={isRunning}
               credentialBlocked={credentialGate.blocked}
               credentialMessage={credentialGate.message}
               scopes={scopes}
               onScopesChange={changeScopes}
-              onSend={(q, attachments) => {
-                void send(q, scopes, { attachments });
+              onSend={(q) => {
+                void send(q, scopes);
               }}
               quoteRequest={quoteRequest}
               onStop={stop}

@@ -1,13 +1,3 @@
-export function attachmentsFromTrace(raw) {
-    try {
-        const trace = typeof raw === "string" ? JSON.parse(raw || "[]") : raw;
-        const items = Array.isArray(trace) ? trace.find((entry) => entry?.type === "attachments")?.items : [];
-        return Array.isArray(items) ? items.filter((item) => /^image\/(png|jpeg|webp)$/.test(item.mime_type) && typeof item.data === "string").slice(0, 4) : [];
-    }
-    catch {
-        return [];
-    }
-}
 export function applyTurnEvent(parts, event) {
     if (Array.isArray(event.parts))
         return event.parts;
@@ -35,12 +25,6 @@ export function applyTurnEvent(parts, event) {
             return [...parts, part];
         return parts.map((item, i) => i === index ? part : item);
     }
-    if (event.type === "agent_plan") {
-        const plan = { id: "plan", type: "plan", entries: event.entries || [] };
-        return parts.some((p) => p.id === "plan") ? parts.map((p) => p.id === "plan" ? plan : p) : [...parts, plan];
-    }
-    if (event.type === "agent_notice")
-        return [...parts, { id: `notice-${event.seq}`, type: "notice", title: event.title, text: event.description, severity: event.severity }];
     return parts;
 }
 export function timelineFromTrace(raw) {

@@ -27,7 +27,6 @@ import { armReaderAiClickShield, lockReaderAiNavigation } from "../../../externa
 import type { AiCitationLike } from "../../../external.js";
 import { AiTurnContent, AiRunStatus } from "../../ai/AiTurnContent.js";
 import type { TurnPart, TurnMetrics } from "@retainpdf/api";
-import { useAiComposerControl } from "../../ai/AiConnectionPicker.js";
 import type { ReaderAssistantMode } from "../../../shared/ai/ask-answerer.js";
 import {
   readerRegionContent,
@@ -278,7 +277,6 @@ export function AssistantComposer({
   selectionContext?: ReaderSelection | null;
   onClearSelectionContext?: () => void;
 }) {
-  const aiSelector = useAiComposerControl();
   return (
     <ComposerPrimitive.Root className="aui-composer" data-reader-ai-composer="">
       <div className="aui-composer-shell">
@@ -296,7 +294,7 @@ export function AssistantComposer({
           submitMode="enter"
         />
         <div className="aui-composer-toolbar">
-          <div className="reader-ai-composer-leading">{aiSelector}<ModeSwitch mode={mode} disabled={isRunning || branchBusy} onChange={onModeChange} /></div>
+          <div className="reader-ai-composer-leading"><ModeSwitch mode={mode} disabled={isRunning || branchBusy} onChange={onModeChange} /></div>
           <div className="aui-composer-actions">
             {isRunning ? (
               <ComposerPrimitive.Cancel className="aui-send aui-send-stop" aria-label="停止生成">
@@ -316,12 +314,10 @@ export function AssistantComposer({
 }
 
 export function LockedComposer() {
-  const aiSelector = useAiComposerControl();
   return (
     <div className="aui-composer aui-composer-locked" role="alert">
-      <p className="aui-llm-lock-msg">连接 AI 服务后即可提问</p>
-      <p className="aui-hint">选择已登录的本机 Agent，或添加模型 API。</p>
-      {aiSelector}
+      <p className="aui-llm-lock-msg">配置模型 API 后即可提问</p>
+      <p className="aui-hint">请在设置中填写模型 API Key、地址和模型。</p>
     </div>
   );
 }

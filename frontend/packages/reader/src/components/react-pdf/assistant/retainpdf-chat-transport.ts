@@ -3,7 +3,7 @@ import type {
   UIMessage,
   UIMessageChunk,
 } from "ai";
-import { selectionForRequest, applyTurnEvent, type TurnPart, type TurnMetrics } from "@retainpdf/api";
+import { applyTurnEvent, type TurnPart, type TurnMetrics } from "@retainpdf/api";
 import type { AiCitationLike } from "../../../shared/ai/answer-enhance.js";
 import { normalizeAiCitations } from "../../../shared/ai/answer-enhance.js";
 import { sanitizeAssistantAnswer } from "../../../shared/ai/sanitize-answer.js";
@@ -108,8 +108,6 @@ export class RetainPdfChatTransport implements ChatTransport<ReaderChatMessage> 
     const textPartId = `${assistantMessageId}-text`;
     const remoteAnswerer = this.options.getRemoteAnswerer();
     const localAnswerer = this.options.getLocalAnswerer?.() || null;
-    const selected = selectionForRequest(remoteAnswerer?.getConversationId?.() || "");
-    const connection = { connectionId: selected.connectionId, connectionModel: selected.model, connectionOptions: { ...selected.options } };
 
     if (!remoteAnswerer && !localAnswerer) {
       throw new Error("问答暂不可用：请确认已打开任务阅读器。");
@@ -170,7 +168,6 @@ export class RetainPdfChatTransport implements ChatTransport<ReaderChatMessage> 
                   if (event.type === "done") updateMetadata({ metrics: event.metrics, parts: event.parts || parts });
                 },
                 question,
-                ...connection,
                 assistantMode,
                 scope: requestScope,
                 context: requestContext,

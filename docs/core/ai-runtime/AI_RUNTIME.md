@@ -2,11 +2,15 @@
 
 **状态：** 当前实现说明
 
-**更新：** 2026-09-02
+**更新：** 2026-11-08
 
 **范围：** `backend/ai`、Rust AI proxy 与公开问答/operation 契约
 
 **非范围：** OCR、翻译和排版流水线内部实现
+
+问答使用原有运行时设置和 OpenAI 兼容模型调用，不提供通用本机 Agent 连接目录。
+首页和阅读器共用正文、思考、工具进度与用量事件；引用和过程随会话保存。
+翻译的三种 API 协议使用独立配置，见 [TRANSLATION_PROTOCOLS.md](TRANSLATION_PROTOCOLS.md)。
 
 配套文档：
 
@@ -134,18 +138,6 @@ content 全部匹配的既有消息。若预写失败，operation 工具不会�
 本轮最多只能回答，不能声称已经执行文档操作。
 
 ## 6. SSE 契约
-
-BYOA 通过 ACP v1 stdio 连接本机 Agent。同一连接、会话与文档范围内复用进程和 MCP
-端点；空闲五分钟或进程退出后回收，后续通过原生 `session/load` 或宿主历史恢复。
-端点仅在活动 turn 内执行工具，空闲时允许 ping 和工具目录查询。
-
-`reasoning_delta`、`agent_plan`、`agent_notice`、`citations`、`usage` 与现有正文、工具
-事件共享递增 `seq`。`done.parts` 和历史中的 `turn_timeline` 是同一最终快照；思考
-只转发上游公开内容，不显示签名或加密字段。模型用量仅保留可展示的计数。
-
-图表使用 `read_figure` 返回原图内容，优先选择图像/图表块，按 `image_offset`
-分页，不把公式截图当成图表。ACP 与三种原生 API 分别传递真正的图片内容块。
-`scope_document_ids` 在宿主工具层执行合集范围限制；不依赖 prompt 限定。
 
 当前事件类型：
 

@@ -147,7 +147,6 @@ async fn ai_proxy_forwards_all_routes_and_authenticates_before_upstream() {
             seen.fetch_add(1, Ordering::SeqCst);
             let method = request.method().to_string();
             let path = request.uri().path().to_string();
-            let query = request.uri().query().unwrap_or_default().to_string();
             assert_eq!(request.headers()["X-API-Key"], "test-key");
             let body = to_bytes(request.into_body(), 4096).await.unwrap();
             if method != "GET" {
@@ -158,7 +157,7 @@ async fn ai_proxy_forwards_all_routes_and_authenticates_before_upstream() {
             }
             (
                 StatusCode::CONFLICT,
-                axum::Json(serde_json::json!({"method":method,"path":path,"query":query})),
+                axum::Json(serde_json::json!({"method":method,"path":path})),
             )
         }
     })))
@@ -167,43 +166,6 @@ async fn ai_proxy_forwards_all_routes_and_authenticates_before_upstream() {
         ("POST", "/api/v1/ai/ask", "/v1/ask"),
         ("GET", "/api/v1/ai/runtime-config", "/v1/runtime-config"),
         ("PUT", "/api/v1/ai/runtime-config", "/v1/runtime-config"),
-        ("GET", "/api/v1/ai/connections", "/v1/connections"),
-        (
-            "GET",
-            "/api/v1/ai/connections/runs?conversation_id=conv-1",
-            "/v1/connections/runs",
-        ),
-        (
-            "GET",
-            "/api/v1/ai/connections/interactions?conversation_id=conv-1",
-            "/v1/connections/interactions",
-        ),
-        ("PUT", "/api/v1/ai/connections", "/v1/connections"),
-        (
-            "DELETE",
-            "/api/v1/ai/connections/example?expected_revision=1",
-            "/v1/connections/example",
-        ),
-        (
-            "POST",
-            "/api/v1/ai/connections/example/probe",
-            "/v1/connections/example/probe",
-        ),
-        (
-            "POST",
-            "/api/v1/ai/connections/example/authenticate",
-            "/v1/connections/example/authenticate",
-        ),
-        (
-            "POST",
-            "/api/v1/ai/connections/interactions/interaction-1",
-            "/v1/connections/interactions/interaction-1",
-        ),
-        (
-            "POST",
-            "/api/v1/ai/connections/runs/run-1/cancel",
-            "/v1/connections/runs/run-1/cancel",
-        ),
     ] {
         let app = upstream.app();
         let before = calls.load(Ordering::SeqCst);
@@ -233,9 +195,6 @@ async fn ai_proxy_forwards_all_routes_and_authenticates_before_upstream() {
         let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(value["path"], target);
         assert_eq!(value["method"], method);
-        if path.contains("conversation_id=") {
-            assert_eq!(value["query"], "conversation_id=conv-1");
-        }
     }
 }
 

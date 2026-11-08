@@ -72,7 +72,7 @@ def assemble_history(
         content = _clip_content(role, str(message.get("content") or ""))
         if not content.strip():
             continue
-        history.append({"role": role, "content": content, **({"attachments": message["attachments"]} if role == "user" and message.get("attachments") else {})})
+        history.append({"role": role, "content": content})
 
     # 总长护栏：从窗口头（摘要伪轮之后）开始丢
     def total_chars(items: list[dict[str, str]]) -> int:

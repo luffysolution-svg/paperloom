@@ -666,7 +666,7 @@ test("ask answerer:无浏览器模型 Key 时使用后端运行配置", async ()
   const askCalls = [];
   const answerer = createReaderAskAnswerer({
     jobId: "job-x",
-    llmConfig: () => ({ apiKey: "", baseUrl: "", model: "" }),
+    llmConfig: () => ({ apiKey: "", baseUrl: "https://translation.example/v1", model: "translation-model" }),
     documentByJobId: async () => {
       listCalls.push(1);
       return { document_id: "doc-x" };
@@ -681,6 +681,8 @@ test("ask answerer:无浏览器模型 Key 时使用后端运行配置", async ()
   assert.equal(listCalls.length, 1);
   assert.equal(askCalls.length, 1);
   assert.equal(askCalls[0].llmApiKey, "", "不把翻译凭据引用误作 Agent Key");
+  assert.equal(askCalls[0].llmBaseUrl, undefined, "不把后端模型 Key 发往另一个翻译地址");
+  assert.equal(askCalls[0].llmModel, undefined, "模型随后端凭据一起使用后端配置");
 });
 
 test("askLibraryAi 携带 llm_api_key/base/model,仅非空字段进 payload", async () => {

@@ -118,28 +118,6 @@ class Runtime:
         streaming=True, durable_sessions=False, model_transport='runtime_managed')
 
 
-@pytest.mark.parametrize('stream', [False, True])
-def test_byoa_has_time_for_cli_startup_and_document_tools(stream, monkeypatch):
-    from fastapi.testclient import TestClient
-    from retainpdf_ai.app import build_app
-    from retainpdf_ai.runtimes.contracts import AskResult
-
-    class SlowAgent(Runtime):
-        runtime_id = 'acp:local:test'
-        def ask(self, question, *, request_control, on_event=None, **kwargs):
-            time.sleep(0.06)
-            request_control.raise_if_stopped()
-            return AskResult(answer='Completed after startup', citations=[], tool_trace=[], rounds=1)
-
-    settings = Settings(api_keys=frozenset({'test-key'}), ai_request_deadline_s=0.02,
-                        byoa_request_deadline_s=1, followup_suggestions=False)
-    monkeypatch.setattr('retainpdf_ai.byoa_runtime.ConnectionManager.resolve', lambda self, payload: (SlowAgent(), settings))
-    with TestClient(build_app(settings=settings, runtime=SlowAgent())) as client:
-        response = client.post('/v1/ask', headers={'X-API-Key': 'test-key'}, json={'question': 'hello', 'stream': stream, 'connection_id': 'local'})
-    assert response.status_code == 200
-    assert 'Completed after startup' in response.text
-    assert 'AI_RESPONSE_TIMEOUT' not in response.text
-
 
 def test_explicit_cancel_wakeup_is_not_reported_as_an_incomplete_response(monkeypatch):
     entered = threading.Event()

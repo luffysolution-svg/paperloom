@@ -9,40 +9,6 @@ pub(super) fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/ai/ask", post(ai_proxy::ask_proxy))
         .route(
-            "/api/v1/ai/connections",
-            get(ai_proxy::connections_proxy).put(ai_proxy::connections_proxy),
-        )
-        .route(
-            "/api/v1/ai/connections/:id",
-            axum::routing::delete(ai_proxy::connections_proxy),
-        )
-        .route(
-            "/api/v1/ai/connections/:id/probe",
-            post(ai_proxy::connections_proxy),
-        )
-        .route(
-            "/api/v1/ai/connections/:id/authenticate",
-            post(ai_proxy::connections_proxy)
-                .get(ai_proxy::connections_proxy)
-                .delete(ai_proxy::connections_proxy),
-        )
-        .route(
-            "/api/v1/ai/connections/interactions",
-            get(ai_proxy::connections_proxy),
-        )
-        .route(
-            "/api/v1/ai/connections/runs",
-            get(ai_proxy::connections_proxy),
-        )
-        .route(
-            "/api/v1/ai/connections/interactions/:id",
-            post(ai_proxy::connections_proxy),
-        )
-        .route(
-            "/api/v1/ai/connections/runs/:id/cancel",
-            post(ai_proxy::connections_proxy),
-        )
-        .route(
             "/api/v1/ai/runtime-config",
             get(ai_proxy::get_runtime_config_proxy).put(ai_proxy::update_runtime_config_proxy),
         )

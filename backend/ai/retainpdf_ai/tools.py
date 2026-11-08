@@ -9,8 +9,6 @@
 from __future__ import annotations
 
 import json
-import base64
-import mimetypes
 from concurrent.futures import ThreadPoolExecutor
 
 import re
@@ -204,7 +202,7 @@ class ToolRegistry:
                 return {"error": "输入引用了本轮范围外的文献。"}
             if selected and selected not in allowed:
                 return {"error": "此文献不在本轮选择范围内，请使用已选文献。"}
-            if selected or name in {"calculate_expression", "calculate_statistics"} or (referenced and name not in {"search_fulltext", "read_blocks", "read_figure"}):
+            if selected or name in {"calculate_expression", "calculate_statistics"} or (referenced and name not in {"search_fulltext", "read_blocks"}):
                 return self.invoke(name, args)
             if name in {"search_fulltext", "search_favorites", "list_documents"}:
                 with ThreadPoolExecutor(max_workers=4) as executor:
@@ -646,46 +644,6 @@ def build_default_registry(settings: Settings, rust: RustApiClient) -> ToolRegis
             "image_urls": exact_image_urls,
         }
 
-    def read_figure(arguments: dict[str, Any]) -> dict[str, Any]:
-        result = read_blocks({**arguments, "max_blocks": 30})
-        if result.get("error"):
-            return result
-        scope = document_artifact_scope(arguments)
-        if isinstance(scope, dict):
-            return scope
-        source_root = scope[4]
-        images = []
-        figure_urls = list(dict.fromkeys(url for block in result.get("blocks", [])
-            if block.get("block_type") in {"image", "figure", "table", "chart"}
-            or re.match(r"^(?:fig(?:ure)?\.?\s*\d|图\s*\d|table\s*\d|表\s*\d)", block.get("source_text", "").strip(), re.I)
-            for url in block.get("asset_image_urls", [])))
-        offset = max(0, int(arguments.get("image_offset") or 0))
-        result["image_urls"] = figure_urls[offset:offset + 4]
-        result["hint"] = f"本页有 {len(figure_urls)} 张图表图片，本次提供第 {offset + 1} 至 {min(offset + 4, len(figure_urls))} 张。图片与 image_urls 顺序一致。可用 image_offset 继续读取。"
-        for url in result["image_urls"]:
-            relative = unquote(url.split("/markdown/images/", 1)[-1].split("?", 1)[0])
-            root = (source_root / "md" / "images").resolve()
-            candidate = (root / relative).resolve()
-            if not candidate.is_relative_to(root) or not candidate.is_file() or candidate.stat().st_size > 3_000_000:
-                continue
-            mime = mimetypes.guess_type(candidate.name)[0]
-            if mime in {"image/png", "image/jpeg", "image/webp"}:
-                raw = candidate.read_bytes()
-                if len(raw) > 600_000:
-                    from PIL import Image
-                    from io import BytesIO
-                    with Image.open(BytesIO(raw)) as image:
-                        image.thumbnail((2048, 2048))
-                        buffer = BytesIO()
-                        image.convert("RGB").save(buffer, format="WEBP", quality=90)
-                        raw, mime = buffer.getvalue(), "image/webp"
-                images.append({"type": "image", "mimeType": mime, "data": base64.b64encode(raw).decode()})
-        result["_images"] = images
-        result["visual_input"] = bool(images)
-        if not images:
-            result["hint"] = "当前页没有可读取的图像。只能依据图注与正文说明，不能声称已查看图片。"
-        return result
-
     def search_favorites(arguments: dict[str, Any]) -> dict[str, Any]:
         keyword = str(arguments.get("keyword") or "").strip().lower()
         favorites = rust.list_favorites(str(arguments.get("document_id") or ""))
@@ -838,9 +796,6 @@ def build_default_registry(settings: Settings, rust: RustApiClient) -> ToolRegis
                 },
                 handler=search_favorites,
             ),
-            Tool("read_figure", "查看文献某页图表的实际图片及图注。解释曲线、子图、结构图时先调用此工具，不能只根据图片地址推断。",
-                 {"type": "object", "properties": {"document_id": {"type": "string"}, "page_idx": {"type": "integer", "minimum": 0},
-                  "job_id": {"type": "string"}, "around_block_id": {"type": "string"}, "image_offset": {"type": "integer", "minimum": 0}}, "required": ["document_id", "page_idx"]}, read_figure),
             *calculation_tools(settings, rust),
             *chart_tools(),
         ],

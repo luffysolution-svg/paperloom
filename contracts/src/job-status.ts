@@ -133,7 +133,6 @@ export interface PublicTranslationInput {
   api_key_configured: boolean;
   credential_ref: string;
   model: string;
-  connection_id?: string;
   api_protocol?: "openai" | "openai_responses" | "anthropic";
   thinking?: "auto" | "off" | "low" | "medium" | "high" | "max";
   base_url: string;

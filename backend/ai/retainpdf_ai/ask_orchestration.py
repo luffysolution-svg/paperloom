@@ -28,7 +28,6 @@ from .request_routing import RouteDecision, resolve_assistant_mode
 from .runtimes.contracts import AgentRuntime
 from .runtimes.contracts import AskResult, Citation
 from .turn_events import TurnTranscript
-from .image_inputs import image_inputs
 
 ChatFnBuilder = Callable[..., Any]
 ConfirmationProjector = Callable[[Any, str], list[dict[str, Any]]]
@@ -47,7 +46,13 @@ class PreparedAsk:
 
     @property
     def request_deadline_s(self) -> float:
-        return self.settings.byoa_request_deadline_s if self.runtime_id.startswith("acp:") else self.settings.ai_request_deadline_s
+        return self.settings.ai_request_deadline_s
+
+    @property
+    def model_label(self) -> str:
+        if self.runtime.capabilities.model_transport == "host_chat":
+            return self.settings.llm_model
+        return self.settings.fx_model or self.runtime_id
 
 
 def _pending_terminal_event(events: "queue.Queue") -> dict | None:
@@ -82,7 +87,6 @@ class AskOrchestrator:
         conversation_state: ConversationState,
         chat_fn_builder: ChatFnBuilder,
         confirmation_projector: ConfirmationProjector,
-        connection_resolver: Callable | None = None,
     ) -> None:
         self._settings = settings
         self._runtime = runtime
@@ -91,18 +95,12 @@ class AskOrchestrator:
         self._conversation_state = conversation_state
         self._chat_fn_builder = chat_fn_builder
         self._confirmation_projector = confirmation_projector
-        self._connection_resolver = connection_resolver
 
     def prepare(self, payload: AskInput) -> PreparedAsk:
         """Select a runtime and validate model credentials before responding."""
         route = resolve_assistant_mode(payload.assistant_mode, payload.question)
-        image_inputs(payload.attachments)
-        if payload.connection_id and self._connection_resolver:
-            request_runtime, request_settings = self._connection_resolver(payload)
-            request_runtime_id = request_runtime.runtime_id
-        else:
-            request_runtime, request_runtime_id = self._request_runtime(payload, route)
-            request_settings = self._resolve_llm_settings(payload, request_runtime)
+        request_runtime, request_runtime_id = self._request_runtime(payload, route)
+        request_settings = self._resolve_llm_settings(payload, request_runtime)
         document_id = self._resolve_document_id(payload)
         content_source = self._content_source(
             request_runtime,
@@ -163,7 +161,6 @@ class AskOrchestrator:
                 max_tool_rounds=prepared.max_tool_rounds,
                 content_source=prepared.content_source,
                 request_control=control,
-                attachments=payload.attachments,
                 scope_document_ids=payload.scope_document_ids,
                 **self._operation_arguments(
                     payload, request_runtime, request_message_id
@@ -171,6 +168,7 @@ class AskOrchestrator:
             )
             control.raise_if_stopped()
             self._ensure_answer(result)
+            result.source_label = prepared.model_label
             # 在 finally 的 control.finish() 关掉本请求的 transport 之前产出建议。
             # 这条路没有流式响应在外面盯着 deadline,所以晚一点写库是安全的。
             followups = self._followup_suggestions(payload, prepared, result, control)
@@ -293,7 +291,6 @@ class AskOrchestrator:
                     job_id=payload.job_id.strip(),
                     on_event=emit,
                     scope_document_ids=payload.scope_document_ids,
-                    attachments=payload.attachments,
                     chat_fn=chat_fn,
                     history=history,
                     max_tool_rounds=prepared.max_tool_rounds,
@@ -303,6 +300,7 @@ class AskOrchestrator:
                 )
                 control.raise_if_stopped()
                 self._ensure_answer(result)
+                result.source_label = prepared.model_label
                 for confirmation in self._confirmation_projector(
                     result, self._settings.agent_confirmation_mode
                 ):
@@ -506,7 +504,6 @@ class AskOrchestrator:
                 "/"
             ),
             llm_model=payload.llm_model or self._settings.llm_model,
-            llm_api_protocol=payload.llm_api_protocol or self._settings.llm_api_protocol,
         )
 
     def _request_chat_fn(
@@ -542,8 +539,6 @@ class AskOrchestrator:
         else:
             supported = {key: value for key, value in kwargs.items() if key in parameters}
             result = runtime.ask(question, **supported)
-        if getattr(runtime, "source_label", ""):
-            result.source_label = runtime.source_label
         return result
 
     @staticmethod
@@ -627,7 +622,7 @@ class AskOrchestrator:
             "conversation_id": conversation_id,
             "request_message_id": request_message_id or payload.user_message_id.strip(),
             "agent_runtime": prepared.runtime_id,
-            "model": getattr(request_runtime, "source_label", ""),
+            "model": prepared.model_label,
             "capabilities": {
                 **request_runtime.capabilities.public_view(),
                 "document_operations": bool(

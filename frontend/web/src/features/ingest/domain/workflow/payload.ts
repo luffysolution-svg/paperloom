@@ -69,7 +69,6 @@ export interface BuildTranslationPayloadOptions {
   developerConfig: WorkflowDeveloperConfig;
   modelApiKey?: string;
   translationCredentialRef?: string;
-  translationConnectionId?: string;
   selectedGlossaryId?: string;
   constants: WorkflowPayloadConstants;
 }
@@ -122,7 +121,6 @@ export function buildOcrPayload({
 export function buildTranslationPayload({
   developerConfig,
   translationCredentialRef,
-  translationConnectionId,
   modelApiKey,
   selectedGlossaryId,
   constants,
@@ -133,7 +131,7 @@ export function buildTranslationPayload({
     model: developerConfig.model,
     base_url: developerConfig.baseUrl,
     api_protocol: developerConfig.apiProtocol || "openai",
-    ...(translationConnectionId ? { connection_id: translationConnectionId } : modelApiKey?.trim()
+    ...(modelApiKey?.trim()
       ? { api_key: modelApiKey.trim() }
       : { credential_ref: `${translationCredentialRef || ""}`.trim() }),
     workers: developerConfig.workers,

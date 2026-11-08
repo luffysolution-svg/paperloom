@@ -6,9 +6,8 @@ import type { AiCitationLike } from "../../shared/ai/answer-enhance.js";
 
 const TOOL_NAMES: Record<string, string> = {
   search_fulltext: "检索文献", read_blocks: "阅读原文", list_documents: "查找文献", search_favorites: "检索收藏",
-  search_markdown: "检索全文", read_markdown_chunk: "阅读全文", read_figure: "查看图表",
+  search_markdown: "检索全文", read_markdown_chunk: "阅读全文",
   calculate_expression: "计算表达式", calculate_statistics: "统计分析", analyze_table: "分析表格", generate_chart: "生成图表",
-  exec_command: "运行命令", read_file: "读取文件",
 };
 const seconds = (ms = 0) => `${Math.max(1, Math.round(ms / 1000))} 秒`;
 function preview(value: unknown): string {
@@ -16,12 +15,9 @@ function preview(value: unknown): string {
 }
 
 function Activity({ part, running }: { part: TurnPart; running: boolean }) {
-  if (part.type === "notice") return <details className="reader-ai-activity-step ai-agent-notice"><summary><CircleAlert size={14} aria-hidden="true" /><span>{part.title}</span><ChevronDown size={12} aria-hidden="true" /></summary>{part.text ? <div className="reader-ai-activity-detail">{part.text}</div> : null}</details>;
   const active = running && !["completed", "failed", "cancelled"].includes(part.status || "");
-  const Icon = part.type === "reasoning" ? Brain : part.type === "plan" ? ListChecks
-    : /search/.test(part.tool || "") ? Search : /read|list/.test(part.tool || "") ? BookOpen : Wrench;
-  const label = part.type === "reasoning" ? "思考过程" : part.type === "plan" ? "执行计划"
-    : TOOL_NAMES[part.tool || ""] || part.title || "执行工具";
+  const Icon = part.type === "reasoning" ? Brain : /search/.test(part.tool || "") ? Search : /read|list/.test(part.tool || "") ? BookOpen : Wrench;
+  const label = part.type === "reasoning" ? "思考过程" : TOOL_NAMES[part.tool || ""] || part.title || "执行工具";
   return <details className={`reader-ai-activity-step${active ? " is-active" : ""}`}>
     <summary>
       <Icon size={15} aria-hidden="true" />
@@ -35,10 +31,7 @@ function Activity({ part, running }: { part: TurnPart; running: boolean }) {
     </summary>
     <div className="reader-ai-activity-detail">
       {part.type === "reasoning" ? <div className="reader-ai-reasoning-text">{part.text}</div>
-        : part.type === "plan" ? <ol className="reader-ai-plan-list">{part.entries?.map((entry, i) => <li key={i} data-status={entry.status}>
-          {entry.status === "completed" ? <Check size={13} aria-hidden="true" /> : <span className="reader-ai-plan-dot" />}<span>{entry.content}</span>
-        </li>)}</ol>
-          : <>
+        : <>
             {part.input != null || part.input_preview ? <><span className="reader-ai-detail-label">输入</span><pre>{preview(part.input ?? part.input_preview)}</pre></> : null}
             {part.output != null || part.content != null ? <><span className="reader-ai-detail-label">结果</span><pre>{preview(part.output ?? part.content)}</pre></> : null}
             {!part.input && !part.input_preview && !part.output && !part.content ? <p>{active ? "正在执行，结果会在这里更新。" : part.summary || "执行已结束。"}</p> : null}
@@ -83,13 +76,7 @@ export const AiTurnContent = memo(function AiTurnContent({ parts = [], content, 
           <summary className="reader-ai-activity-group-head"><ListChecks size={15} aria-hidden="true" /><span>思考与执行</span>
             <span className="reader-ai-activity-summary">{group.parts.length} 个步骤</span><ChevronDown size={13} className="reader-ai-details-chevron" aria-hidden="true" /></summary>
           <div className="reader-ai-activity-list">{group.parts.map((part) => <Activity key={part.id} part={part} running={streaming} />)}</div>
-        </details>{(() => {
-          const images = [...new Set(group.parts.flatMap((part) => part.tool === "read_figure" && part.output && typeof part.output === "object"
-            ? ((part.output as { image_urls?: string[] }).image_urls || []) : []))];
-          return images.length ? <details className="reader-ai-figure-gallery"><summary><BookOpen size={14} aria-hidden="true" />查看 {images.length} 张原图<ChevronDown size={12} aria-hidden="true" /></summary>
-            <AiMarkdownAnswer content={images.map((url, index) => `![图表 ${index + 1}](${url})`).join("\n\n")} citations={citations} jobId={jobId} citationFooterMax={0} />
-          </details> : null;
-        })()}</div>)}
+        </details></div>)}
     {!streaming && metrics?.usage ? <details className="reader-ai-usage"><summary>上下文与用量<ChevronDown size={12} aria-hidden="true" /></summary>
       <dl className="reader-ai-usage-facts">{Object.entries({ "输入 Token": metrics.usage.input_tokens ?? metrics.usage.prompt_tokens ?? metrics.usage.used,
         "输出 Token": metrics.usage.output_tokens ?? metrics.usage.completion_tokens,

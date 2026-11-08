@@ -38,7 +38,6 @@ export type HomeAskMessage = {
   metrics?: TurnMetrics;
   persisted?: boolean;
   errorText?: string;
-  attachments?: Record<string, any>[];
   id: string;
   role: "user" | "assistant";
   content: string;

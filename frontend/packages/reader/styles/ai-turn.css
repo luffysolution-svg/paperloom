@@ -20,18 +20,11 @@
 .reader-ai-reasoning-text { white-space: pre-wrap; max-height: 300px; overflow-y: auto; padding-right: 10px; line-height: 1.75; }
 .reader-ai-activity-detail pre, .reader-ai-usage pre { max-height: 240px; overflow: auto; white-space: pre-wrap; font-size: 12px; line-height: 1.6; }
 .reader-ai-detail-label { display: block; margin-top: 12px; color: var(--ink, #242729); font-weight: 550; }
-.reader-ai-plan-list { list-style: none; margin: 0; padding: 2px 0; display: grid; gap: 9px; }
-.reader-ai-plan-list li { display: flex; gap: 9px; align-items: baseline; }
-.reader-ai-plan-list li[data-status="completed"] { color: var(--muted, #62696d); }
-.reader-ai-plan-dot { width: 6px; height: 6px; flex-shrink: 0; border: 1px solid currentColor; border-radius: 50%; }
 .reader-ai-run-status { display: flex; align-items: center; gap: 8px; min-height: 28px; margin-bottom: 8px; font-size: 13px; color: var(--muted, #62696d); }
 .reader-ai-run-elapsed { margin-left: 4px; }
 .reader-ai-turn-error { color: var(--danger, #a53232); font-size: 13px; line-height: 1.7; margin-bottom: 10px; }
 .reader-ai-usage { font-size: 12px; color: var(--muted, #62696d); margin-top: 12px; }
 .reader-ai-usage summary { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
-.reader-ai-figure-gallery { margin: 5px 0 12px; }.reader-ai-figure-gallery > summary { display: inline-flex; align-items: center; gap: 7px; color: var(--muted, #62696d); font-size: 13px; cursor: pointer; min-height: 34px; }
-.reader-ai-figure-gallery img { max-height: 440px; width: auto; max-width: 100%; object-fit: contain; }.reader-ai-figure-gallery > summary:focus-visible { outline: 2px solid var(--accent, #526d60); outline-offset: 3px; }
 .reader-ai-usage-facts { display: flex; flex-wrap: wrap; gap: 12px 24px; padding-block: 8px; }
 .reader-ai-usage-facts dt { color: var(--muted, #62696d); }.reader-ai-usage-facts dd { margin: 3px 0 0; color: var(--ink, #242729); font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce) { .reader-ai-details-chevron { transition: none; } }
-@media (max-width: 640px) { .reader-ai-activity-step summary, .reader-ai-activity-group-head, .reader-ai-figure-gallery > summary { min-height: 44px; } .reader-ai-activity-summary { display: none; } }

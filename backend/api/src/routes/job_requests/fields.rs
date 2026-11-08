@@ -53,7 +53,6 @@ pub(super) fn apply_multipart_request_field(
         "credential_ref" => request.translation.credential_ref = value.to_string(),
         "model" => request.translation.model = value.to_string(),
         "api_protocol" => request.translation.api_protocol = value.to_string(),
-        "connection_id" => request.translation.connection_id = value.to_string(),
         "thinking" => request.translation.thinking = value.to_string(),
         "base_url" => request.translation.base_url = value.to_string(),
         "render_mode" => request.render.render_mode = value.to_string(),

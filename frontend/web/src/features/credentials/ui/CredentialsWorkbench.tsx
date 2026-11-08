@@ -16,7 +16,6 @@ import { DialogFooter } from "@/ui/components/dialog.js";
 import { FormStatusLine } from "@/ui/components/form-status-line.js";
 import { Check, Save, ScanText } from "lucide-react";
 import { OCR_PROVIDER_DEFINITIONS } from "@/platform/config/providers.js";
-import { AiConnectionsSettings } from "./AiConnectionsSettings.js";
 
 // Button.size 在未注解源文件里被推断为必填;unstyled 路径运行时不用 size。
 const Button = ButtonBase as any;
@@ -147,8 +146,7 @@ export function CredentialsWorkbench() {
         </p>
       ) : (
         <div className="credential-agent-section">
-          <AiConnectionsSettings />
-          <details className="ai-legacy-runtime"><summary>默认运行时与文档操作确认</summary><AgentRuntimeSettingsCard ref={agentRef} /></details>
+          <AgentRuntimeSettingsCard ref={agentRef} />
         </div>
       )}
       {saveAction}

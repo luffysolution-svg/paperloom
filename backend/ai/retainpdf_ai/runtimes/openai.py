@@ -29,7 +29,6 @@ from ..prompts import build_operation_system_prompt
 from ..request_control import RequestControl
 from ..rust_client import RustApiClient
 from ..tools import ToolRegistry
-from ..image_inputs import image_inputs, chat_images
 from dataclasses import asdict
 from ..unified_tools import (
     CALCULATION_TOOL_NAMES,
@@ -47,7 +46,7 @@ from .openai_operations import (
 OPENAI_AGENT_RUNTIME_ID = "openai-compatible-agent-v1"
 _MAX_ANSWER_CHARS = 1024 * 1024
 _LIBRARY_READING_TOOL_NAMES = frozenset(
-    {"list_documents", "search_fulltext", "read_blocks", "read_figure", "search_favorites"}
+    {"list_documents", "search_fulltext", "read_blocks", "search_favorites"}
 )
 
 class OpenAICompatibleAgentRuntime:
@@ -99,10 +98,10 @@ class OpenAICompatibleAgentRuntime:
         max_tool_rounds: int | None = None,
         content_source: str = "auto",
         request_control: RequestControl | None = None,
-        attachments: list | None = None,
         scope_document_ids: list | None = None,
     ) -> AskResult:
         emit = on_event or (lambda _event: None)
+        reading_registry = self._reading_registry.scoped(scope_document_ids) if self._reading_registry else None
         if chat_fn is None and self._chat is None:
             self._chat = build_deepseek_chat_fn(self._settings)
         chat = chat_fn or self._chat
@@ -158,10 +157,9 @@ class OpenAICompatibleAgentRuntime:
             role = str(turn.get("role") or "")
             content = str(turn.get("content") or "").strip()
             if role in {"user", "assistant"} and content:
-                previous_images = image_inputs(turn.get("attachments")) if role == "user" else []
-                messages.append({"role": role, "content": [{"type": "text", "text": content}, *chat_images(previous_images)] if previous_images else content})
-        images = image_inputs(attachments)
-        messages.append({"role": "user", "content": [{"type": "text", "text": question.strip()}, *chat_images(images)] if images else question.strip()})
+
+                messages.append({"role": role, "content": content})
+        messages.append({"role": "user", "content": question.strip()})
 
         if not tool_specs:
             message = chat(messages, [])
@@ -223,13 +221,12 @@ class OpenAICompatibleAgentRuntime:
             else nullcontext(None)
         )
         with broker_context as broker:
-            pending_images = []
+
             for round_index in range(1, round_limit + 1):
                 if request_control is not None:
                     request_control.raise_if_stopped()
-                if pending_images:
-                    messages.append({"role": "user", "content": [{"type": "text", "text": "以下是刚才 read_figure 返回的原始图表，请结合图注分析。"}, *chat_images(pending_images)]})
-                    pending_images = []
+
+
                 message = chat(messages, tool_specs)
                 tool_calls = message.get("tool_calls") or []
                 if not tool_calls:
@@ -250,7 +247,7 @@ class OpenAICompatibleAgentRuntime:
                         "role": "assistant",
                         "content": message.get("content") or "",
                         "tool_calls": tool_calls,
-                        **{k: v for k, v in message.items() if k in {"_responses_output", "_anthropic_content"}},
+
                     }
                 )
                 for call in tool_calls:
@@ -302,9 +299,7 @@ class OpenAICompatibleAgentRuntime:
                             )
                             continue
                         emit({**agent_tool_event(name, call_id, "running"), "input": arguments})
-                        raw_result = self._reading_registry.invoke(name, scoped_arguments)
-                        images = raw_result.pop("_images", [])
-                        pending_images.extend(images)
+                        raw_result = reading_registry.invoke(name, scoped_arguments)
                         if name == "search_fulltext":
                             markdown_fallback_allowed = (
                                 raw_result.get("structured_data_available") is False
@@ -397,8 +392,7 @@ class OpenAICompatibleAgentRuntime:
             )
             if request_control is not None:
                 request_control.raise_if_stopped()
-            if pending_images:
-                messages.append({"role": "user", "content": [{"type": "text", "text": "工具返回的图表："}, *chat_images(pending_images)]})
+
             final = chat(messages, [])
             answer = sanitize_answer_text(
                 str(final.get("content") or "").strip()[:_MAX_ANSWER_CHARS],
