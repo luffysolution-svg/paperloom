@@ -12,10 +12,45 @@ pub(crate) fn parse_glossary_csv(
     parse_glossary_csv_text(&input.csv_text)
 }
 
+/// 先按 CSV 引号规则解析候选分隔符，再比较表头和列数一致性，避免把单元格内的逗号误判为分隔符。
+fn detect_delimiter(csv_text: &str) -> u8 {
+    let mut best = (b',', 0);
+    for delimiter in [b',', b'\t', b';'] {
+        let mut reader = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .flexible(true)
+            .delimiter(delimiter)
+            .from_reader(csv_text.as_bytes());
+        let rows: Vec<_> = reader
+            .records()
+            .take(20)
+            .filter_map(Result::ok)
+            .filter(|row| row.iter().any(|cell| !cell.trim().is_empty()))
+            .collect();
+        if let Some(first) = rows.first() {
+            let width = first.len();
+            let consistent = rows.iter().filter(|row| row.len() == width).count();
+            // 表头最可信；其次是切出来不止一列。从 Excel 复制出来的是制表符分隔、单元格不加引号，
+            // 备注里的逗号会让按逗号切的列更多，所以制表符能切出多列时额外加分，比列数、各行一致更优先。
+            let tab_bonus = usize::from(delimiter == b'\t' && width > 1) * 500;
+            let score = usize::from(detect_csv_header(first).is_some()) * 10000
+                + usize::from(width > 1) * 1000
+                + tab_bonus
+                + consistent * 100 / rows.len()
+                + width.min(50);
+            if score > best.1 {
+                best = (delimiter, score);
+            }
+        }
+    }
+    best.0
+}
+
 pub(crate) fn parse_glossary_csv_text(csv_text: &str) -> Result<Vec<GlossaryEntryInput>, AppError> {
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(false)
         .flexible(true)
+        .delimiter(detect_delimiter(csv_text))
         .from_reader(csv_text.as_bytes());
     let mut rows = Vec::new();
     for record in reader.records() {

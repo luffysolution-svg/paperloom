@@ -552,6 +552,8 @@
         "devtools/tests/document_schema/test_paddle_normalization_boundaries.py",
         "devtools/tests/document_schema/test_paddle_official_cli.py",
         "devtools/tests/document_schema/test_paddle_official_http.py",
+        "devtools/tests/document_schema/test_paddle_vision_footnote_target.py",
+        "devtools/tests/document_schema/test_page_bounds.py",
         "devtools/tests/document_schema/test_pipeline_shared_io_streaming.py",
         "devtools/tests/entrypoints/test_console.py",
         "devtools/tests/entrypoints/test_repository_paths.py",

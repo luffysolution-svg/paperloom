@@ -427,3 +427,41 @@ fn resolve_task_glossary_request_rejects_merged_entries_over_limit() {
         .to_string()
         .contains("merged glossary entry count exceeds"));
 }
+
+#[test]
+fn parse_csv_reads_tab_separated_text() {
+    let entries = parse_glossary_csv_text("原词\t译文\t备注\nband gap\t带隙\t固体\nexciton\t激子\t\n")
+        .expect("parse tsv");
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries[0].source, "band gap");
+    assert_eq!(entries[0].note, "固体");
+}
+
+#[test]
+fn parse_csv_keeps_tabs_when_an_unquoted_note_has_many_commas() {
+    // 从 Excel 复制出来的是制表符分隔、单元格不加引号；没有表头、第一行备注里逗号多时，
+    // 按逗号切出来的列反而更多，以前会被当成逗号分隔。
+    for text in [
+        "attention\t注意力\t用于 encoder, decoder, cross, self, multi-head, sparse, linear\n",
+        "attention\t注意力\t用于 encoder, decoder, cross, self, multi-head, sparse, linear\nloss\t损失\t\n",
+    ] {
+        let entries = parse_glossary_csv_text(text).expect("tab separated");
+        assert_eq!(entries[0].source, "attention");
+        assert_eq!(entries[0].target, "注意力");
+        assert!(entries[0].note.starts_with("用于 encoder,"));
+    }
+}
+
+#[test]
+fn parse_csv_detects_semicolon_and_tabs_with_commas_in_cells() {
+    for text in [
+        "\"a,b\"\t甲\t\"one\ntwo\"\ncat\t猫\tnote",
+        "source;target;note\n\"a,b\";甲;\"one\ntwo\"\ncat;猫;note",
+        "\"a;b\",甲,\"one\ntwo\"\ncat,猫,note",
+    ] {
+        let entries = parse_glossary_csv_text(text).expect("detect separator outside quotes");
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].target, "甲");
+        assert_eq!(entries[0].note, "one\ntwo");
+    }
+}

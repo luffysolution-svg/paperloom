@@ -1,4 +1,5 @@
 import sys
+import shutil
 import tempfile
 from pathlib import Path
 from unittest import mock
@@ -31,7 +32,7 @@ from retainpdf_pipeline.render.source.dev_overlay.text_draw import _build_direct
 from retainpdf_pipeline.render.source.dev_overlay.text_draw import _fit_segment_layout
 from retainpdf_pipeline.render.layout.payload.suspicious_ocr import detect_and_drop_suspicious_ocr_glued_blocks
 from retainpdf_pipeline.render.output.typst.book_renderer import _compile_render_pages_pdf_resilient
-from retainpdf_pipeline.render.output.typst.block_renderer import build_typst_block
+from retainpdf_pipeline.render.output.typst.block_renderer import build_typst_block, sanitize_typst_markdown_for_compile
 from retainpdf_pipeline.render.output.typst.overlay_ops import overlay_translated_pages_on_doc
 from retainpdf_pipeline.render.output.typst.book_support import prepare_translated_pages_for_render
 from retainpdf_pipeline.render.output.typst.compiler import _resolved_font_paths
@@ -189,3 +190,57 @@ def test_body_rendering_folds_model_visual_line_breaks_for_flow_text() -> None:
     assert "\n" not in rendered
     assert rendered == "对于较大的 $ CN_{A}^{\\prime} $ 值，该 d 能级能量降低。"
     assert "_render_preserve_line_breaks" not in item
+
+
+@pytest.mark.parametrize(
+    ("markdown", "expected"),
+    [
+        (r"原文中的 $\textcircled{1}$ 是圈号", "原文中的 ① 是圈号"),
+        (r"$x + \circled{2}$", "$x + ②$"),
+        (r"$\textcircled{a}$ 与 $\textcircled{B}$", "ⓐ 与 Ⓑ"),
+        (r"$\textcircled{20}$、$\textcircled{25}$", "⑳、(25)"),
+        # 原有的特例不变
+        (r"$^{\textcircled{R}}$", "®"),
+        (r"$\textcircled{\times}$", r"$\otimes$"),
+    ],
+)
+def test_circled_characters_become_plain_circled_glyphs(markdown: str, expected: str) -> None:
+    assert sanitize_typst_markdown_for_compile(markdown) == expected
+
+
+@pytest.mark.skipif(shutil.which("typst") is None, reason="needs the typst binary")
+@pytest.mark.parametrize("cleaned", [False, True])
+def test_mitex_only_compiles_a_circled_digit_once_cleaned(tmp_path, cleaned: bool) -> None:
+    import subprocess
+
+    from retainpdf_pipeline.render.output.typst.shared import escape_typst_string
+
+    markdown = r"编号 $x + \textcircled{1}$ 后面"
+    if cleaned:
+        markdown = sanitize_typst_markdown_for_compile(markdown)
+    source = tmp_path / "circled.typ"
+    source.write_text(
+        '#import "@preview/cmarker:0.1.10"\n#import "@preview/mitex:0.2.7": mitex\n'
+        f'#cmarker.render("{escape_typst_string(markdown)}", math: mitex)\n',
+        encoding="utf-8",
+    )
+    proc = subprocess.run(["typst", "compile", str(source), str(tmp_path / "circled.pdf")], capture_output=True, text=True)
+    if cleaned:
+        assert proc.returncode == 0, proc.stderr
+    else:
+        assert proc.returncode != 0 and "textcircled" in proc.stderr
+
+
+@pytest.mark.parametrize(
+    ("markdown", "expected"),
+    [
+        ("以 suspect_name [@input_index] 的格式", r"以 suspect_name [\@input_index] 的格式"),
+        ("[ @x; @y]", r"[ \@x; @y]"),
+        # 这些 cmarker 本来就不当引用，不动
+        ("名称后附加 @PV# 后缀", "名称后附加 @PV# 后缀"),
+        ("发邮件到 a@b.com", "发邮件到 a@b.com"),
+        ("见 (@y)", "见 (@y)"),
+    ],
+)
+def test_bracketed_at_signs_are_escaped_for_cmarker(markdown: str, expected: str) -> None:
+    assert sanitize_typst_markdown_for_compile(markdown) == expected

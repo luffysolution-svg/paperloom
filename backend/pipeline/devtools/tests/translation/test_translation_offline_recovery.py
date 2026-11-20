@@ -145,13 +145,21 @@ def stable_output_hashes(directory: Path, source: Path) -> dict[str, str]:
     # The original operation records the source path in document provenance,
     # and its serialized-byte hash in the checkpoint. Normalize both transitively.
     files = snapshot_files(directory)
-    source_name = str(source.resolve()).encode()
-    normalized_doc = files["ocr/normalized/document.v1.json"].replace(source_name, b"<SOURCE>")
-    doc_hash = hashlib.sha256(normalized_doc).hexdigest()
+    layout_path = source.resolve() / "ocr" / "unpacked" / "layout.json"
+    encoded_path = json.dumps(str(layout_path), ensure_ascii=False).encode()
+    for relative, content in files.items():
+        if relative.endswith(".json"):
+            files[relative] = content.replace(b"\r\n", b"\n").replace(
+                encoded_path, b'"<SOURCE>/ocr/unpacked/layout.json"',
+            )
+    doc_hash = hashlib.sha256(files["ocr/normalized/document.v1.json"]).hexdigest()
     result = {}
     for relative, content in files.items():
-        content = content.replace(source_name, b"<SOURCE>")
         if relative == "translated/translation-checkpoint.v1.json":
+            for page_path in (directory / "translated").glob("page-*.json"):
+                raw_hash = hashlib.sha256(page_path.read_bytes()).hexdigest()
+                canonical_hash = hashlib.sha256(files[f"translated/{page_path.name}"]).hexdigest()
+                content = content.replace(raw_hash.encode(), canonical_hash.encode())
             checkpoint = json.loads(content)
             checkpoint["normalized_document_sha256"] = doc_hash
             identity = {key: checkpoint[key] for key in ("normalized_document_sha256", "parameters_sha256")}
