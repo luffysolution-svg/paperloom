@@ -641,7 +641,8 @@
         "devtools/tests/translation/test_translation_pool_specs.py",
         "devtools/tests/translation/test_translation_publication_consistency.py",
         "devtools/tests/translation/test_translation_validation_protocols.py",
-        "devtools/tests/translation/test_upstream_resilience.py"
+        "devtools/tests/translation/test_upstream_resilience.py",
+        "devtools/tests/translation/test_zero_translated_failure_cause.py"
       ],
       "runtime_required": false,
       "devtool_required": false

@@ -24,6 +24,7 @@
 from __future__ import annotations
 
 import json
+import re
 import threading
 from dataclasses import dataclass
 from typing import Any
@@ -150,7 +151,14 @@ def clear_registered_connections() -> None:
         _TEMPERATURE_REJECTED.clear()
 
 
+# 文档写明不收 temperature 的 Claude 模型（发了就 400）：一开始就不带。以前全靠第一次挨 400 后记下来，可一本书开头
+# 几路请求是同时发的，每个任务都有 4—9 个请求先挨 400 再重发（2026-10-30 claude-haiku-5-5）。别的模型照旧挨一次再记住。
+_NO_TEMPERATURE_MODEL_RE = re.compile(r"claude-(?:opus-5|opus-4-[78]|fable-5|haiku-5-5)")
+
+
 def temperature_rejected(*, base_url: str, model: str) -> bool:
+    if _NO_TEMPERATURE_MODEL_RE.search(str(model or "").lower()):
+        return True
     with _PROFILES_LOCK:
         return _profile_key(base_url, model) in _TEMPERATURE_REJECTED
 
@@ -508,7 +516,9 @@ def anthropic_body(
         body["system"] = "\n\n".join(system_parts)
     if thinking_fields:
         body.update(thinking_fields)
-    elif temperature is not None:
+    thinking_on = bool(thinking_fields) and (thinking_fields.get("thinking") or {}).get("type") != "disabled"
+    if temperature is not None and not thinking_on:
+        # 关思考（``disabled``）时和不发思考字段一样可以带 temperature
         body["temperature"] = max(0.0, min(1.0, float(temperature)))
     return body
 

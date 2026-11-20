@@ -17,6 +17,7 @@ if str(REPO_SCRIPTS_ROOT) not in sys.path:
 from retainpdf_pipeline.foundation.shared.stage_specs import TranslateStageSpec
 from retainpdf_pipeline.foundation.shared.stage_specs import resolve_credential_ref
 from retainpdf_pipeline.translate.llm import translate_batch
+from retainpdf_pipeline.translate.llm.shared.model_wire import register_stage_connections
 from retainpdf_pipeline.translate.core.payload import load_translation_manifest_file
 from retainpdf_pipeline.translate.core.payload import load_translations
 from retainpdf_pipeline.translate.services.policy import build_translation_policy_config
@@ -41,6 +42,25 @@ def _job_root_from_arg(value: str) -> Path:
 def _load_translate_spec(job_root: Path) -> TranslateStageSpec:
     spec_path = job_root / "specs" / "translate.spec.json"
     return TranslateStageSpec.load(spec_path)
+
+
+def _register_connections(params: object) -> None:
+    # 和翻译阶段入口一样先登记协议、思考深度：不登记就按 OpenAI 协议发，Anthropic 的模型
+    # 走成 /chat/completions 还带着 temperature，直接 400（2026-11-06 重翻 claude-haiku-5-5 的任务）。
+    def field(name: str) -> str:
+        value = params.get(name) if isinstance(params, dict) else getattr(params, name, "")
+        return str(value or "")
+
+    register_stage_connections(
+        model=field("model"),
+        base_url=field("base_url"),
+        api_protocol=field("api_protocol"),
+        thinking=field("thinking"),
+        reviewer_model=field("reviewer_model"),
+        reviewer_base_url=field("reviewer_base_url"),
+        reviewer_api_protocol=field("reviewer_api_protocol"),
+        reviewer_thinking=field("reviewer_thinking"),
+    )
 
 
 def _load_manifest(job_root: Path) -> dict[int, Path]:
@@ -227,6 +247,7 @@ def replay_translation_item(job_root: Path, item_id: str) -> dict[str, object]:
     job_root = Path(job_root).resolve()
     with contextlib.redirect_stdout(sys.stderr):
         spec = _load_translate_spec(job_root)
+        _register_connections(spec.params)
         _ensure_translation_credential_env(job_root, spec)
         page_idx, payload_path, payload, saved_item = _find_item_payload(job_root, item_id)
         return _run_replay(
@@ -278,6 +299,7 @@ def replay_translation_case_artifact(case_artifact_path: Path, item_id: str | No
             }
 
         spec = dict(replay_input.get("spec") or {})
+        _register_connections(spec)
         payload = list(replay_input.get("page_payload") or [])
         resolved_item_id = str(item_id or replay_input.get("item_id") or "").strip()
         saved_item = next(
