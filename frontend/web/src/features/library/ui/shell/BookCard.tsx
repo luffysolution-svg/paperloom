@@ -23,6 +23,7 @@ import { memo } from "react";
 import { cn } from "@retainpdf/ui/lib/utils";
 import { isLibraryCardProcessing, libraryCardBadge } from "../../domain/card/library-card-badge.js";
 import { useRecentJobCover } from "../display/useRecentJobCover.js";
+import { useNearViewport } from "../display/useNearViewport.js";
 import {
   bookCardActionsSignature,
   buildDefaultBookCardActions,
@@ -106,7 +107,9 @@ function BookCardImpl({
   const percent = active ? recentJobProgressPercent(item) : NaN;
 
   renderCountsForTests.set(jobId, (renderCountsForTests.get(jobId) || 0) + 1);
-  const coverUrl = useRecentJobCover(item);
+  // 封面等卡片快进入视口才下（书多的时候往下翻一页不再一下子下、解 24 张）。
+  const [cardRef, near] = useNearViewport<HTMLDivElement>();
+  const coverUrl = useRecentJobCover(item, { enabled: near });
 
   const actions = Array.isArray(actionsProp)
     ? actionsProp
@@ -140,6 +143,7 @@ function BookCardImpl({
 
   return (
     <div
+      ref={cardRef}
       className="book-card recent-job-item group text-left transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.99]"
       role="button"
       tabIndex={0}

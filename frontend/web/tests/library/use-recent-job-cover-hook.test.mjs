@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 
 // useRecentJobCover(蓝图 §6 新增测试⑩)。覆盖:
@@ -200,4 +201,35 @@ test("useRecentJobCover：卸载不 revoke objectURL(风险 §8.3)", async () =>
   assert.equal(revokeCalls.length, 0, "卸载不得 revoke——objectURL 缓存只归 invalidateRecentJobImages 管");
 
   host.remove();
+});
+
+test("书库封面只下一遍：无版本下过一次后，首次带版本认领不重下，再换版本才重下", async () => {
+  const { loadRecentJobImage, clearRecentJobImageCache } = await import("../../src/features/library/domain/card/recent-job-card-image-loader.js");
+  const { fetchCalls } = installFetchAndObjectUrlMocks();
+  const rawUrl = "/api/v1/documents/doc-claim/files/thumbnail.jpg";
+  try {
+    const first = await loadRecentJobImage(rawUrl);
+    const second = await loadRecentJobImage(rawUrl, { cacheVersion: "succeeded|2026-11-06" });
+    const third = await loadRecentJobImage(rawUrl, { cacheVersion: "succeeded|2026-11-06" });
+    assert.equal(first, second);
+    assert.equal(second, third);
+    assert.equal(fetchCalls.length, 1);
+    const fourth = await loadRecentJobImage(rawUrl, { cacheVersion: "succeeded|2026-11-07" });
+    assert.notEqual(fourth, third);
+    assert.equal(fetchCalls.length, 2);
+  } finally {
+    clearRecentJobImageCache(rawUrl);
+  }
+});
+
+test("书库卡片封面等快进入视口才下（useNearViewport）", () => {
+  const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
+  for (const file of ["../../src/features/library/ui/shell/BookCard.tsx", "../../src/features/library/ui/shell/BookListRow.tsx"]) {
+    const source = read(file);
+    assert.match(source, /useRecentJobCover\(item, \{ enabled: near \}\)/, `${file} 的封面没等近了才下`);
+    assert.match(source, /ref=\{(cardRef|rowRef)\}/, `${file} 没把卡片交给 useNearViewport 看`);
+  }
+  const hook = read("../../src/features/library/ui/display/useNearViewport.ts");
+  assert.match(hook, /new IntersectionObserver/);
+  assert.match(hook, /observer\.disconnect\(\);/, "近过一次就不再看（滚走不撤）");
 });
