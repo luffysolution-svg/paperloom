@@ -742,7 +742,8 @@ def _payload_sha256(payload: Any, *, compact: bool) -> str:
     encoder = json.JSONEncoder(**kwargs)
     digest = hashlib.sha256()
     for chunk in encoder.iterencode(payload):
-        digest.update(chunk.encode("utf-8"))
+        # Match the text-mode newline encoding used by save_json_atomic.
+        digest.update(chunk.replace("\n", os.linesep).encode("utf-8"))
     return digest.hexdigest()
 
 

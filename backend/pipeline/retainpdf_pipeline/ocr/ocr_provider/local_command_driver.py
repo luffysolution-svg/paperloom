@@ -86,7 +86,9 @@ def run_local_command_ocr_to_job_dir(args: SimpleNamespace) -> OcrProviderResult
 
     timeout_seconds = _configured_timeout_seconds(args)
     try:
-        command_argv = shlex.split(command)
+        # CreateProcess takes the original command line. POSIX shlex would strip
+        # the backslashes from unquoted Windows executable and script paths.
+        command_argv = command if os.name == "nt" else shlex.split(command)
     except ValueError as exc:
         raise RuntimeError(f"local OCR provider command could not be parsed: {exc}") from exc
     if not command_argv:
