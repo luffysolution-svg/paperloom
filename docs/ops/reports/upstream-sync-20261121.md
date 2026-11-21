@@ -37,3 +37,22 @@
 - Windows 的 OCR 文档、Typst 文本和翻译离线恢复测试共 320 项通过。带圈公式用桌面包自带的 Typst 做了实际编译。离线恢复会检查原任务文件、修复后的译文、检查点和产物指纹。
 - Rust 后端 54 项通过，覆盖上传数页、术语表、Obsidian 和 Zotero；前端集成回归 13 项通过。数页测试使用仓库中的 10 份 PDF，将过滤流后的页数与完整加载的结果逐一对照。
 - 验证使用仓库样本和测试库。真实个人 vault 写入、外部模型调用及桌面安装包发布不在本次验证范围内。
+
+## 第二阶段同步与实测记录（v0.2.8）
+
+在分支 `sync/retain-pdf-20261121` 上完成了以下四项与上游 `retain-pdf`（`97f08772e`）的对齐，同时完整保留 PaperLoom 的桌面更新、Obsidian 导出、Zotero 联动与写回、WebDAV 及本地备份恢复功能：
+
+1. **翻译错误提示与单项重放**（上游 `a819d8b8c`、`fca1cdfdf`）：零译文失败归因到最常见上游错误并标记不可重试（如 401 `auth_failed`），单项重放恢复任务原始模型连接。
+2. **大 PDF 分段读取与封面按需加载**（上游 `cac1aa80e`、`84da78f80`）：大于 48 MiB 的受保护 PDF 改走 `PDFDataRangeTransport` + HTTP `206` 分段加载并中止全量下载，同步修正缓存淘汰细节；书库封面改为懒加载。
+3. **移除阅读器问答与独立 AI 服务**：与上游一致移除 `backend/ai`、`retainpdf-agent` 及阅读器内嵌问答 UI，同步清理桌面启动、打包依赖与源码归档必填项（`ops/release/build_source_archive.py`）。
+4. **模型配置与上游一致（仅保留 PaddleOCR + MinerU）**：采用上游单套卡片式配置 UI（`ChoiceTiles`）、默认 `openai_responses` 协议、支持 `anthropic` 协议与 `thinking` 深度及 OpenCode Go 预设；OCR 仅暴露 PaddleOCR 与 MinerU（不引入 `glm_ocr` 界面）。
+
+### 本地端到端与门禁验证
+
+- **自动化套件**：`frontend/web` 1,493 通过 / 0 失败（2 跳过）；`frontend/desktop` 77 通过 + ESLint 0 警告 + `verify:packaging-deps` + `check-frontend-bundle.mjs` 通过；`@retainpdf/contracts`（17 通过 + 契约字节一致性）及 domain/reader/web TypeScript 类型检查通过；架构/依赖同步/发布与 Docker 交付 pytest 共 132 项通过；Rust workspace 954 项通过（12 项为既有 Windows POSIX/路径分隔符测试，由 Linux CI 覆盖）。
+- **本地隔离实测**：启动真实编译的 `rust_api.exe`（独立临时 `RUST_API_DATA_ROOT` + 本地模拟 HTTP 上游，不触碰个人 Obsidian vault 与外部付费 API）：
+  - `/health` 与 `/ready` 返回 200 且不含 `ai_service`；`/api/v1/ai/ask`、`/api/v1/ai/conversations`、`/api/v1/internal/agent/capabilities` 均返回 404。
+  - 真实上传 PDF 后验证 `Accept-Ranges: bytes` 与 `Range: bytes=0-1023` 返回 `206 Partial Content` 且逐字节一致；Node 实测 52 MiB PDF 触发 `loadProtectedPdfFile` 分段传输并中止整份下载。
+  - 本地 401 模拟响应触发 Python 流水线 `dominant_failure_cause` 与 `classify_exception`，输出 `failure_code="auth_failed"`、`retryable=False` 及 `(2/2 failed items)`。
+  - `POST /api/v1/providers/deepseek/validate-token` 实测 `openai_responses` 发往 `/v1/responses`（`Authorization: Bearer`）、`anthropic` 发往 `/v1/messages`（`x-api-key` + `anthropic-version`）。
+  - Obsidian 设置读写、Zotero 状态查询、本地备份 ZIP 创建/下载/校验/恢复挂起/取消及 `frontend/web/dist` 产物扫描全部通过。
