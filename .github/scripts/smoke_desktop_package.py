@@ -133,7 +133,8 @@ def main() -> None:
     try:
         base, key = start(1)
         assert isinstance(data("GET", "/api/v1/documents?limit=1"), dict)
-        assert isinstance(data("GET", "/api/v1/providers/ocr"), dict)
+        ocr_providers = data("GET", "/api/v1/providers/ocr")
+        assert isinstance(ocr_providers, list) and len(ocr_providers) >= 1, ocr_providers
         try:
             with request("GET", "/api/v1/ai/runtime-config"):
                 raise AssertionError("Removed /api/v1/ai/runtime-config unexpectedly succeeded")
