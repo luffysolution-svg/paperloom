@@ -19,15 +19,7 @@ const { createBookDetailNavigation } = await import(
   "../../src/features/library/domain/documents/navigation-actions.js"
 );
 
-function blockedFavoritesError(count = 2, path = "/api/v1/documents/doc-b/favorites") {
-  return Object.assign(new Error("document is referenced by favorite(s)"), {
-    errorCode: "DELETE_BLOCKED_BY_FAVORITES",
-    favoriteCount: count,
-    clearFavoritesPath: path,
-  });
-}
-
-test("错误文案：凭据缺失、OCR 复用失败、结构化收藏 409", () => {
+test("错误文案：凭据缺失、OCR 复用失败", () => {
   assert.match(friendlyTranslateError(new Error("paddle_token is required")), /配置 OCR/);
   assert.match(
     friendlyTranslateError({ errorCode: "OCR_PAGE_COVERAGE_MISMATCH" }),
@@ -39,8 +31,20 @@ test("错误文案：凭据缺失、OCR 复用失败、结构化收藏 409", () 
   );
   assert.equal(friendlyTranslateError(""), "发起翻译失败，请稍后重试。");
 
-  assert.match(friendlyDocumentDeleteError(blockedFavoritesError(3)), /3 条收藏/);
   assert.equal(friendlyDocumentDeleteError(new Error("boom")), "boom");
+  // 没带 reason 的 409 是"还有排队或运行中的任务"（收藏挡删除的 409 后端已删）。
+  const conflict = Object.assign(new Error("book is Running; pass force=true to delete it(409)"), { status: 409 });
+  assert.equal(friendlyDocumentDeleteError(conflict), "还有排队或运行中的任务，请先取消再删除。");
+  assert.equal(friendlyDocumentDeleteError(new Error("x(409)")), "还有排队或运行中的任务，请先取消再删除。");
+  // 别的任务还在用它的产物：按 reason 单独提示，不说成“任务在跑”。
+  const dependents = Object.assign(
+    new Error("other jobs still use this job's artifacts: job-r (uses job-a); delete them first or pass force=true(409)"),
+    { status: 409, errorCode: "CONFLICT", reason: "job_has_dependents" },
+  );
+  assert.equal(
+    friendlyDocumentDeleteError(dependents),
+    "还有别的任务在用这个任务的产物（比如换字体重排出的版本），请先删掉那些任务再删。",
+  );
 });
 
 test("提交载荷：凭据基座 + overrides 叠加；复用 OCR 时删掉 ocr 字段", () => {
@@ -65,49 +69,6 @@ test("提交载荷：凭据基座 + overrides 叠加；复用 OCR 时删掉 ocr 
   }));
   assert.equal(ocr.workflow, "ocr");
   assert.equal(ocr.ocr.page_ranges, "5-6");
-});
-
-test("删除动作：成功乐观移除 + reload；收藏挡住结构化透传；批量区分 blocked/failed", async () => {
-  const removed = [];
-  const calls = [];
-  const actions = createDocumentDeleteActions({
-    reload: () => calls.push(["reload"]),
-    removeLibraryDocuments: (ids) => removed.push(...ids),
-    deleteDocumentApi: async (prefix, id) => calls.push(["delete", prefix, id]),
-    clearFavoritesApi: async (prefix, path) => {
-      calls.push(["clear", prefix, path]);
-      return 5;
-    },
-  });
-
-  await actions.deleteDocument("doc-1");
-  assert.deepEqual(removed, ["doc-1"]);
-  assert.equal(await actions.clearFavorites("/api/v1/documents/x/favorites"), 5);
-  assert.equal(await actions.clearFavorites(""), 0);
-
-  const blocked = blockedFavoritesError();
-  const onlyBlocked = createDocumentDeleteActions({
-    reload() {},
-    deleteDocumentApi: async () => {
-      throw blocked;
-    },
-  });
-  await assert.rejects(() => onlyBlocked.deleteDocument("doc-2"), (error) => error === blocked);
-
-  const batch = createDocumentDeleteActions({
-    reload() {},
-    removeLibraryDocuments: (ids) => removed.push(...ids),
-    deleteDocumentApi: async (_prefix, id) => {
-      if (id === "doc-b") throw blocked;
-      if (id === "doc-c") throw new Error("boom");
-    },
-  });
-  const result = await batch.deleteDocuments(["doc-a", "doc-b", "doc-c"]);
-  assert.equal(result.confirmed, 1);
-  assert.equal(result.failed, 1);
-  assert.equal(result.blocked.length, 1);
-  assert.equal(result.blocked[0].documentId, "doc-b");
-  assert.equal(result.blocked[0].clearFavoritesPath, blocked.clearFavoritesPath);
 });
 
 test("任务动作：cancel 按 workflow 路由；retry 带 document_id 并 promote", async () => {
@@ -145,6 +106,39 @@ test("任务动作：cancel 按 workflow 路由；retry 带 document_id 并 prom
   await retryActions.retryJobStage("job-old", "translation", {});
   assert.deepEqual(retryCalls[0], ["retry", "job-old", "translation", "doc-1", "deepseek"]);
   assert.deepEqual(retryCalls[1], ["promote", "doc-1", "job-new"]);
+});
+
+test("从断点继续：回执 promote 到详情 payload，详情跟上新任务而不是停在旧的失败任务", async () => {
+  const { createDialogStore } = await import("../../src/platform/store/dialog-store.js");
+  const { promoteDocumentToJob } = await import("../../src/features/library/domain/documents/promote.js");
+  const bookDetailStore = createDialogStore(null);
+  bookDetailStore.open({ document_id: "doc-1", job_id: "job-old", status: "failed", workflow: "book", title: "标题" });
+  const attached = [];
+  const resumed = [];
+  const actions = createDocumentJobActions({
+    bookDetailStore,
+    promoteDocumentToJob: (documentId, result, sourceJobId) => promoteDocumentToJob({
+      bookDetailStore,
+      attachJobProgress: (jobId) => attached.push(jobId),
+      documentId,
+      result,
+      sourceJobId,
+    }),
+    resumeJobApi: async (id, prefix) => {
+      resumed.push([id, prefix]);
+      return { job_id: "job-new", status: "queued" };
+    },
+  });
+
+  const receipt = await actions.resumeJob("job-old");
+  assert.equal(receipt.job_id, "job-new");
+  assert.equal(resumed[0][0], "job-old");
+  const payload = bookDetailStore.getState().payload;
+  assert.equal(payload.job_id, "job-new", "详情 payload 换成新任务");
+  assert.equal(payload.status, "queued", "不再是旧任务的 failed");
+  assert.equal(payload.document_id, "doc-1");
+  assert.deepEqual(attached, ["job-new"], "静默接上新任务的进度");
+  assert.equal(await actions.resumeJob("doc:synthetic"), null);
 });
 
 test("重新翻译：只覆盖详情页真能改的字段，不碰原任务的术语表/自定义规则", () => {

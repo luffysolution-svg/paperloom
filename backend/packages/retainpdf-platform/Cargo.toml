@@ -1,0 +1,17 @@
+[package]
+name = "retainpdf-platform"
+version = "0.1.0"
+edition = "2021"
+description = "平台：多设备同步、数据库备份、字体、健康检查"
+
+[dependencies]
+retainpdf-api-base = { path = "../retainpdf-api-base" }
+retainpdf-core = { path = "../retainpdf-core" }
+retainpdf-data = { path = "../retainpdf-data" }
+retainpdf-db = { path = "../../../database/retainpdf-db" }
+anyhow = "1"
+chrono = { version = "0.4", features = ["serde", "clock"] }
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+walkdir = "2"

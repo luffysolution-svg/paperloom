@@ -4,8 +4,8 @@
 
 ## 拆分结果
 
-- `paths.py`
-  只放路径相关配置，例如 `ROOT_DIR`、`DATA_DIR`、`OUTPUT_DIR`、`SOURCE_PDF`。
+- 路径（`ROOT_DIR`、`DATA_DIR`、`OUTPUT_DIR`、各缓存目录）和任务目录子目录名已经下放到底座包：
+  `retainpdf_base.paths`、`retainpdf_base.output_layout`（`backend/base`），流水线和翻译共用。
 - `fonts.py`
   只放字体与字号相关配置，例如默认字体路径、默认字号、Typst 默认字体族。
 - `runtime.py`

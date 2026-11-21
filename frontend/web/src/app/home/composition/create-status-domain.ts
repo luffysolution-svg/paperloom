@@ -8,7 +8,7 @@ import {
   fetchJobDiagnostics,
   fetchJobStageActions,
   fetchResumePlan,
-  rerunJob,
+  resumeJob,
   fetchTranslationDiagnostics,
   fetchTranslationItems,
   fetchTranslationItem,
@@ -35,15 +35,14 @@ import type { HomeFeatures, StatusDetailHolder } from "./types.js";
 type CreateStatusDomainArgs = {
   features: HomeFeatures;
   documentRef: Document;
-  bridge: { resetEventsList: () => void };
-  setText: (id: string, value?: string) => void;
+  /** 值多数是文案；error-box 还可能收到错误诊断对象（见 state/text-store.ts）。 */
+  setText: (id: string, value?: unknown) => void;
   statusDetailHolder: StatusDetailHolder;
 };
 
 export function createStatusDomain({
   features,
   documentRef,
-  bridge,
   setText,
   statusDetailHolder,
 }: CreateStatusDomainArgs) {
@@ -92,7 +91,7 @@ export function createStatusDomain({
     resolveOcrAmbiguity,
     retryJobStage,
     copyText,
-    rerunJob,
+    resumeJob,
     renderJob: statusCardPresenter.renderMain,
     startPolling: (jobId: string) => features.jobRuntimeFeature?.startPolling(jobId),
     setText,
@@ -105,8 +104,8 @@ export function createStatusDomain({
   const jobRuntimeShellViewPort = {
     closeDialogs: () => statusDetailDialogStore.close(),
     isReaderOpen: () => false,
-    resetEvents: () => bridge.resetEventsList(),
     setCancelDisabled: (disabled: boolean) => statusCardStore.actions.setCancelDisabled(disabled),
+    setCancelError: (message: string) => statusCardStore.actions.setCancelError(message),
   };
 
   // 取消当前任务的业务内聚到 status 域，不再由 build-home-services 拼闭包

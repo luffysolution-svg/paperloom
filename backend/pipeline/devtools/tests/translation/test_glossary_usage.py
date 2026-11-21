@@ -1,12 +1,7 @@
-import sys
-from pathlib import Path
 
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
-
-from retainpdf_pipeline.translate.services.terms.usage import summarize_glossary_usage
+from retainpdf_translation.services.terms.usage import summarize_glossary_usage
 
 
 def test_summarize_glossary_usage_counts_hits_and_unapplied_terms() -> None:

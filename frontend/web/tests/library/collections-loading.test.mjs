@@ -7,6 +7,7 @@ import { createRoot } from "react-dom/client";
 // CollectionsView 已迁至 src/features/collections 并改为 props 注入：
 // 不再需要 HomeServicesProvider 包裹，依赖直接传入。
 import { CollectionsView } from "../../src/features/collections/ui/CollectionsView.js";
+import { deferred, waitFor } from "../helpers/async.mjs";
 
 function installDom() {
   const dom = new JSDOM("<!doctype html><html><body><div id=\"root\"></div></body></html>", {
@@ -32,25 +33,6 @@ function versionSignal(version = 1) {
     subscribe: () => () => {},
     actions: { bump() {} },
   };
-}
-
-function deferred() {
-  let resolve;
-  let reject;
-  const promise = new Promise((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, resolve, reject };
-}
-
-async function waitFor(predicate, message) {
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    if (predicate()) return;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  assert.fail(message);
 }
 
 function renderCollections(dom, listCollections) {
@@ -114,4 +96,19 @@ test("合集首次请求失败也会退出 loading 并显示错误", async () =>
   );
   assert.doesNotMatch(dom.window.document.body.textContent, /正在加载合集/);
   root.unmount();
+});
+
+test("首次请求失败后切走（卸载），自动重试的定时器跟着取消，不再发请求", async () => {
+  const dom = installDom();
+  let calls = 0;
+  const root = renderCollections(dom, async () => {
+    calls += 1;
+    throw new Error("合集服务暂不可用");
+  });
+  await waitFor(() => calls === 1, "合集首次请求没有开始");
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  root.unmount();
+  // 自动重试排在 1.5 秒后
+  await new Promise((resolve) => setTimeout(resolve, 1700));
+  assert.equal(calls, 1, "卸载后不该再发自动重试的请求");
 });

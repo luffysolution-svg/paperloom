@@ -2,15 +2,17 @@
 // 每个文件夹各自独立拉取,互不阻塞——某个文件夹加载慢不该拖住其余卡片先显示。
 import { useEffect, useState } from "react";
 import type { CollectionsController } from "./types.js";
+import type { CollectionRecord } from "../domain/controller.js";
+import type { LibraryCardItem } from "@/features/library/index.js";
 
 type UseCollectionPreviewsArgs = {
-  collections: any[];
+  collections: CollectionRecord[];
   controller: CollectionsController;
   version: number;
 };
 
 export function useCollectionPreviews({ collections, controller, version }: UseCollectionPreviewsArgs) {
-  const [previews, setPreviews] = useState({});
+  const [previews, setPreviews] = useState<Record<string, LibraryCardItem[]>>({});
 
   const collectionIdsKey = collections.map((item) => item.collection_id).join(",");
   useEffect(() => {

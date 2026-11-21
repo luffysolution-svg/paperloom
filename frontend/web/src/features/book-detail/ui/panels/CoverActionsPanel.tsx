@@ -1,30 +1,36 @@
 // 左栏：封面 + 文档身份 + 对照/原版主操作 + 阅读状态。
-// 元信息摘要（页数/大小/入库/合集）已迁到右栏简介 Tab 的信息网格
-// （BookDetailOverviewTab）——左栏纯粹化，右栏不再空旷。
+// 元信息摘要（页数/大小/入库/合集）在右栏概览的信息区（BookDetailOverviewTab）；
+// 书名 / 作者只在这里展示一次，概览不再重复。
 
-import { btn, IconCompare, IconEye } from "./ui.jsx";
+import { Button } from "@retainpdf/ui";
+import { IconCompare, IconEye } from "./ui.jsx";
 import { BookCardProcessingOverlay } from "@/features/library/index.js";
-import { BookMarked, Check, Copy, Hash, UserRound } from "lucide-react";
+import { Check, Copy, Hash, UserRound } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
-/**
- * @param {object} props
- * @param {string} props.coverUrl
- * @param {string} [props.title]
- * @param {string[]} [props.authors]
- * @param {string|number} [props.year]
- * @param {number} [props.pageCount] 保留兼容（页数已迁右栏简介）
- * @param {string} [props.readingStatus] 保留兼容（左栏阅读状态已移除）
- * @param {boolean} props.readerAvailable
- * @param {string} [props.readerActionLabel] 真实 job 的主阅读动作文案
- * @param {string} props.documentId
- * @param {string} [props.jobId] 当前任务 job_id；缺省回退 documentId
- * @param {string|boolean} props.busy
- * @param {boolean} [props.processing] 翻译/重试进行中：封面中央 loading
- * @param {() => void} props.onCompare
- * @param {() => void} props.onReadSource
- * @param {ReactNode} [props.quickDownloadsSlot]
- */
+type CoverActionsPanelProps = {
+  coverUrl: string | null;
+  title?: string | null;
+  authors?: string[];
+  year?: string | number;
+  /** 保留兼容（页数已迁右栏简介） */
+  pageCount?: number;
+  /** 保留兼容（左栏阅读状态已移除） */
+  readingStatus?: string;
+  readerAvailable: boolean;
+  /** 真实 job 的主阅读动作文案 */
+  readerActionLabel?: string;
+  documentId: string;
+  /** 当前任务 job_id；缺省回退 documentId */
+  jobId?: string;
+  busy?: string | boolean;
+  /** 翻译/重试进行中：封面中央 loading */
+  processing?: boolean;
+  onCompare: () => void;
+  onReadSource: () => void;
+  quickDownloadsSlot?: ReactNode;
+};
+
 export function CoverActionsPanel({
   coverUrl,
   title = "",
@@ -41,7 +47,7 @@ export function CoverActionsPanel({
   onCompare,
   onReadSource,
   quickDownloadsSlot,
-}) {
+}: CoverActionsPanelProps) {
   const compareReading = readerActionLabel === "对照阅读";
   const authorText = authors.length ? authors.join("、") : "未知作者";
   const displayJobId = `${jobId || documentId || ""}`.trim();
@@ -84,10 +90,8 @@ export function CoverActionsPanel({
         {processing ? <BookCardProcessingOverlay /> : null}
       </div>
       <div className="book-detail-cover-identity">
-        <h3 title={title}>
-          <BookMarked aria-hidden="true" />
-          <span>{title || "未命名文档"}</span>
-        </h3>
+        {/* 书名前不放图标：h3 是 -webkit-box 两行截断，图标会被挤成单独一行，孤零零悬在书名上方。 */}
+        <h3 title={title ?? undefined}>{title || "未命名文档"}</h3>
         <p title={`${authorText}${year ? ` · ${year}` : ""}`}>
           <UserRound aria-hidden="true" />
           <span>{authorText}{year ? ` · ${year}` : ""}</span>
@@ -113,31 +117,29 @@ export function CoverActionsPanel({
       </div>
       <div className="book-detail-cover-buttons flex flex-col gap-2.5 pt-1">
         {readerAvailable ? (
-          <button
+          <Button
             id={compareReading ? "book-detail-compare-btn" : "book-detail-ocr-btn"}
-            className={btn("default", "w-full gap-1.5 py-2.5 text-sm")}
+            variant="primary" className="w-full"
             disabled={Boolean(busy)}
             onClick={onCompare}
             aria-label={readerActionLabel}
           >
             {compareReading
-              ? <IconCompare className="mr-0.5 h-4 w-4" />
-              : <IconEye className="mr-0.5 h-4 w-4" />}
+              ? <IconCompare />
+              : <IconEye />}
             {readerActionLabel}
-          </button>
+          </Button>
         ) : null}
-        <button
+        <Button
           id="book-detail-read-source-btn"
-          className={btn(
-            readerAvailable ? "outline" : "default",
-            `w-full gap-1.5 py-2.5 text-sm${readerAvailable ? " bg-paper" : ""}`,
-          )}
+          variant={readerAvailable ? "secondary" : "primary"}
+          className="w-full"
           disabled={Boolean(busy) || !documentId}
           onClick={onReadSource}
         >
-          <IconEye className="mr-0.5 h-4 w-4" />
+          <IconEye />
           查看原版
-        </button>
+        </Button>
       </div>
       {quickDownloadsSlot}
     </div>

@@ -9,9 +9,6 @@
 .reader-float-markdown-content.hidden {
   display: none;
 }
-.reader-notes-panel--workspace .reader-notes-panel-toolbar {
-  display: none;
-}
 .reader-notes-panel--workspace .reader-notes-panel-body {
   width: min(900px, 100%);
   margin-inline: auto;

@@ -1,3 +1,4 @@
+import { apiFetch } from "./internal/runtime.js";
 import { buildApiHeaders, unwrapEnvelope } from "./internal/runtime.js";
 import { buildApiEndpoint } from "./http.js";
 
@@ -12,7 +13,6 @@ export type CredentialMetadata = {
   revision: number;
   created_at: string;
   updated_at: string;
-  secret?: string;
 };
 
 export type CredentialListView = {
@@ -22,12 +22,6 @@ export type CredentialListView = {
 
 export type CredentialMutationView = {
   credential: CredentialMetadata;
-  revision: number;
-};
-
-export type CredentialDeleteView = {
-  credential_ref: string;
-  deleted: boolean;
   revision: number;
 };
 
@@ -57,7 +51,7 @@ async function credentialRequest<T>(
   url: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     ...options,
     headers: {
       ...buildApiHeaders(),
@@ -77,8 +71,9 @@ async function credentialRequest<T>(
   return unwrapEnvelope<T>(envelope);
 }
 
-export function listCredentials(apiPrefix?: string, { includeValues = false } = {}): Promise<CredentialListView> {
-  return credentialRequest(`${buildApiEndpoint(apiPrefix, "credentials")}${includeValues ? "?include_values=true" : ""}`, { cache: "no-store" });
+// 后端不返回明文，带任何查询参数都回 400（以前的 include_values 已删）。
+export function listCredentials(apiPrefix?: string): Promise<CredentialListView> {
+  return credentialRequest(buildApiEndpoint(apiPrefix, "credentials"), { cache: "no-store" });
 }
 
 export function createCredential(
@@ -102,16 +97,3 @@ export function updateCredential(
   );
 }
 
-export function deleteCredential(
-  apiPrefix: string | undefined,
-  credentialRef: string,
-  expectedRevision?: number,
-): Promise<CredentialDeleteView> {
-  const query = Number.isFinite(expectedRevision)
-    ? `?expected_revision=${encodeURIComponent(String(expectedRevision))}`
-    : "";
-  return credentialRequest(
-    `${buildApiEndpoint(apiPrefix, `credentials/${encodeURIComponent(credentialRef)}`)}${query}`,
-    { method: "DELETE" },
-  );
-}

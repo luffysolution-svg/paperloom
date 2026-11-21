@@ -2,7 +2,7 @@
  * Word 排版稿的下载入口：从译文 PDF 的就绪状态派生，清晰度挂在地址上。
  *
  * 这条链路和另外四个常用下载不一样——它是**按请求现生成**的（后端
- * `GET /jobs/{id}/docx` 起 `retainpdf-pipeline layout-docx`），所以 URL 必须带上
+ * `GET /jobs/{id}/files/output/translated.docx` 起 `retainpdf-pipeline layout-docx`），所以 URL 必须带上
  * 这一次选的 DPI，否则后端会按默认值给出（或命中别人的缓存）。
  */
 
@@ -42,7 +42,7 @@ function quickDownloads(job = JOB, links = { pdf_ready: true, pdf_url: "/api/v1/
 test("译文 PDF 就绪时才有 Word 排版稿入口", () => {
   const ready = quickDownloads();
   assert.ok(ready.word, "译文 PDF 已就绪，却没有 Word 入口");
-  assert.equal(ready.word.url, "/api/v1/jobs/job-1/docx");
+  assert.equal(ready.word.url, "/api/v1/jobs/job-1/files/output/translated.docx?download=1");
 
   const notReady = quickDownloads(JOB, { pdf_ready: false, pdf_url: "/api/v1/jobs/job-1/pdf" });
   assert.equal(notReady.word, null, "译文 PDF 没好就不该给 Word 入口");
@@ -56,12 +56,22 @@ test("OCR 任务没有 Word 排版稿——它根本没有译文可排", () => {
   assert.equal(ocr.word, null);
 });
 
-test("docx 是译文 PDF 的兄弟路由，不是它的子路径", () => {
-  // 这条是为 side-by-side 那种「往后拼」的写法准备的:照抄会拼出 /pdf/docx。
+test("docx 和对照 PDF 都从任务根推出 /files/output/ 下的文件，不是译文 PDF 的子路径", () => {
+  // 按 pdf_url 里 /jobs/{id}/ 截出任务根，再拼 /files/output/...；照着 pdf_url 往后拼会拼出 /pdf/docx。
   const { word, comparison } = quickDownloads();
-  assert.equal(comparison.url, "/api/v1/jobs/job-1/pdf/side-by-side");
-  assert.equal(word.url, "/api/v1/jobs/job-1/docx");
+  assert.equal(comparison.url, "/api/v1/jobs/job-1/files/output/side-by-side.pdf?download=1");
+  assert.equal(word.url, "/api/v1/jobs/job-1/files/output/translated.docx?download=1");
   assert.ok(!word.url.includes("/pdf/"), `拼成了子路径:${word.url}`);
+});
+
+test("后端换成新链接（/files/output/translated.pdf，带域名）后，Word 和对照 PDF 照样推对", () => {
+  // 后端要等前端不再按旧地址推算才会把 pdf_url 换成新地址；换了以后这里不能拼出 translated.pdf/side-by-side。
+  const { word, comparison } = quickDownloads(JOB, {
+    pdf_ready: true,
+    pdf_url: "http://127.0.0.1:41000/api/v1/jobs/job-1/files/output/translated.pdf",
+  });
+  assert.equal(comparison.url, "http://127.0.0.1:41000/api/v1/jobs/job-1/files/output/side-by-side.pdf?download=1");
+  assert.equal(word.url, "http://127.0.0.1:41000/api/v1/jobs/job-1/files/output/translated.docx?download=1");
 });
 
 test("清晰度挂到地址上，不会拼出第二个问号", () => {
@@ -69,6 +79,11 @@ test("清晰度挂到地址上，不会拼出第二个问号", () => {
   assert.equal(
     withWordExportDpi("/api/v1/jobs/job-1/docx?attempt=2", 120),
     "/api/v1/jobs/job-1/docx?attempt=2&dpi=120",
+  );
+  // 现在的 Word 地址自带 ?download=1：dpi 用 & 接在后面。
+  assert.equal(
+    withWordExportDpi("/api/v1/jobs/job-1/files/output/translated.docx?download=1", 300),
+    "/api/v1/jobs/job-1/files/output/translated.docx?download=1&dpi=300",
   );
   // 已经带了 dpi 的话是替换而不是追加，否则后端读到的是第一个。
   assert.equal(

@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { ExternalLink, Gem, LoaderCircle } from "lucide-react";
 import { ObsidianBatchExportSummary } from "./ObsidianBatchExportSummary.js";
 
-import { Button } from "@/ui/components/button.js";
 import {
+  Button,
+  Checkbox,
   Dialog,
   DialogBody,
   DialogClose,
@@ -14,7 +15,9 @@ import {
   DialogHeader,
   DialogShell,
   DialogTitle,
-} from "@/ui/components/dialog.js";
+  Input,
+  Select,
+} from "@retainpdf/ui";
 import {
   exportDocumentsToObsidian,
   exportJobToObsidian,
@@ -215,7 +218,7 @@ export function ObsidianExportDialog({
                 </DialogDescription>
                 <label>
                   <span>库</span>
-                  <select
+                  <Select
                     id="book-detail-obsidian-vault"
                     value={vaultId}
                     onChange={(event) => setVaultId(event.target.value)}
@@ -229,35 +232,31 @@ export function ObsidianExportDialog({
                         {vault.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
                 <label>
                   <span>目录</span>
-                  <input
+                  <Input
                     id="book-detail-obsidian-folder"
                     value={folder}
                     placeholder="留空表示库根目录"
                     onChange={(event) => setFolder(event.target.value)}
                   />
                 </label>
-                <label className="book-detail-obsidian-check">
-                  <input
-                    id="book-detail-obsidian-include-source"
-                    type="checkbox"
-                    checked={includeSource}
-                    onChange={(event) => setIncludeSource(event.target.checked)}
-                  />
-                  <span>同时保存原文笔记</span>
-                </label>
-                <label className="book-detail-obsidian-check">
-                  <input
-                    id="book-detail-obsidian-by-collection"
-                    type="checkbox"
-                    checked={byCollection}
-                    onChange={(event) => setByCollection(event.target.checked)}
-                  />
-                  <span>Zotero 文献按所在分类建子目录</span>
-                </label>
+                <Checkbox
+                  id="book-detail-obsidian-include-source"
+                  className="book-detail-obsidian-check"
+                  checked={includeSource}
+                  onChange={(event) => setIncludeSource(event.target.checked)}
+                  label="同时保存原文笔记"
+                />
+                <Checkbox
+                  id="book-detail-obsidian-by-collection"
+                  className="book-detail-obsidian-check"
+                  checked={byCollection}
+                  onChange={(event) => setByCollection(event.target.checked)}
+                  label="Zotero 文献按所在分类建子目录"
+                />
               </form>
             ) : null}
 
@@ -300,7 +299,7 @@ export function ObsidianExportDialog({
             {phase.kind === "form" ? (
               <>
                 <DialogClose asChild>
-                  <Button type="button" variant="outline">
+                  <Button type="button" variant="secondary">
                     取消
                   </Button>
                 </DialogClose>
@@ -322,7 +321,7 @@ export function ObsidianExportDialog({
               <>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="secondary"
                   disabled={busy}
                   onClick={() => setPhase({ kind: "form" })}
                 >
@@ -330,7 +329,7 @@ export function ObsidianExportDialog({
                 </Button>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="secondary"
                   disabled={busy}
                   onClick={() => void submit("overwrite")}
                 >
@@ -353,7 +352,7 @@ export function ObsidianExportDialog({
             {phase.kind === "done" ? (
               <>
                 <DialogClose asChild>
-                  <Button type="button" variant="outline">
+                  <Button type="button" variant="secondary">
                     完成
                   </Button>
                 </DialogClose>

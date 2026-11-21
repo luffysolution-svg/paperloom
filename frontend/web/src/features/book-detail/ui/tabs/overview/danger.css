@@ -1,0 +1,46 @@
+/* 书籍详情 · 概览页签（BookDetailOverviewTab）：底部危险操作区与删除按钮（DeleteFooterPanel）。
+ * 删除单独放在最底下，按钮用 @retainpdf/ui 的 Button（danger），和日常操作（阅读状态、合集）拉开距离。
+ *
+ * @owns book-detail */
+
+.book-detail-overview-danger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  border: 1px solid color-mix(in srgb, var(--danger) 22%, var(--line));
+  border-radius: 18px;
+}
+
+.book-detail-overview-danger > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.book-detail-overview-danger h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--ui-text-md);
+  font-weight: 640;
+}
+
+.book-detail-overview-danger h3 svg {
+  width: 14px;
+  height: 14px;
+  color: var(--danger);
+}
+
+.book-detail-overview-danger p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--ui-text-xs);
+}
+
+.book-detail-delete-panel {
+  flex: 0 0 auto;
+}

@@ -5,18 +5,20 @@ import { normalizeJobImageUrl } from "@retainpdf/api/job-images";
 // 真实模式行为不变。
 import { fetchProtected } from "@/platform/api/index.js";
 
-const recentJobImageCache = new Map();
+const recentJobImageCache = new Map<string, Promise<string>>();
 
-function cacheKeyForRecentJobImage(url, { cacheVersion = "" } = {}) {
+type RecentJobImageOptions = { cacheVersion?: string };
+
+function cacheKeyForRecentJobImage(url: string, { cacheVersion = "" }: RecentJobImageOptions = {}) {
   const version = `${cacheVersion || ""}`.trim();
   return version ? `${url}#${version}` : url;
 }
 
-export function normalizeRecentJobImageUrl(value) {
+export function normalizeRecentJobImageUrl(value: unknown) {
   return normalizeJobImageUrl(value);
 }
 
-export function clearRecentJobImageCache(rawUrls) {
+export function clearRecentJobImageCache(rawUrls: unknown) {
   for (const rawUrl of Array.isArray(rawUrls) ? rawUrls : [rawUrls]) {
     const url = normalizeRecentJobImageUrl(rawUrl);
     if (url) {
@@ -25,14 +27,15 @@ export function clearRecentJobImageCache(rawUrls) {
   }
 }
 
-export async function loadRecentJobImage(rawUrl, options = {}) {
+export async function loadRecentJobImage(rawUrl: unknown, options: RecentJobImageOptions = {}): Promise<string> {
   const url = normalizeRecentJobImageUrl(rawUrl);
   if (!url) {
     return "";
   }
   const cacheKey = cacheKeyForRecentJobImage(url, options);
-  if (recentJobImageCache.has(cacheKey)) {
-    return recentJobImageCache.get(cacheKey);
+  const cached = recentJobImageCache.get(cacheKey);
+  if (cached) {
+    return cached;
   }
   // 先按「还不知道版本」（书单先到、任务状态还没合进来）下过的那张，版本头一回定下来时直接认领，不再重下：
   // 以前书库第一页每张封面都下两遍（书单一遍、任务状态到了又一遍），书一多，打开书库时成倍的请求和解码。
@@ -57,7 +60,7 @@ export async function loadRecentJobImage(rawUrl, options = {}) {
   return request;
 }
 
-export async function loadFirstRecentJobImage(rawUrls, options = {}) {
+export async function loadFirstRecentJobImage(rawUrls: unknown, options: RecentJobImageOptions = {}) {
   for (const rawUrl of Array.isArray(rawUrls) ? rawUrls : [rawUrls]) {
     try {
       const objectUrl = await loadRecentJobImage(rawUrl, options);

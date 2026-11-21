@@ -52,7 +52,7 @@ GATED_SOURCE_TEXT_KEYS = frozenset(
     }
 )
 
-CANONICAL_READER = "retainpdf_pipeline/translate/core/item_reader.py"
+CANONICAL_READER = "translation/retainpdf_translation/core/item_reader.py"
 
 SOURCE_TEXT_READER_ALLOWLIST: dict[str, int] = {
     # ---- owner:唯一的完整取值链 ----
@@ -61,60 +61,66 @@ SOURCE_TEXT_READER_ALLOWLIST: dict[str, int] = {
     # windows.py 的顺序看着"反了"(source_text 打头),但那是对的:上下文文本紧接着要过
     # sanitize_prompt_context_text 剥占位符,先取 protected 会把公式整个剥没;
     # 上下文要的是可读原文,不是送翻译的那段。不要"修正"成完整链。
-    "retainpdf_pipeline/translate/services/context/windows.py": 3,  # 例外:上下文要可读原文
+    "translation/retainpdf_translation/services/context/windows.py": 3,  # 例外:上下文要可读原文
     # control_context.py 同理:其中一条链算的是术语命中统计,要的也是未被占位符替换的原文。
-    "retainpdf_pipeline/translate/llm/shared/control_context.py": 12,  # frozen-debt + 例外混合
+    "translation/retainpdf_translation/llm/shared/control_context.py": 12,  # frozen-debt + 例外混合
+    # 确定性 QA 要按「这一块自己的」原文核对续接组成员,范围本来就比完整链窄:
+    # 走完整链会把整组原文算到单个成员头上(正是 truncated_translation 误报的成因)。
+    "translation/retainpdf_translation/services/quality/qa/units.py": 2,  # 例外:块内原文
+    # 翻译引擎 agent 按块交原文：接续组由 agent 自己合起来翻、再按比例分回各块,
+    # 走完整链会把整组原文塞给每个成员,同一段话翻好几遍。收在 _block_source 一个函数里。
+    "translation/retainpdf_translation/workflow/agent_flow.py": 2,  # 例外:块内原文
     # ---- frozen-debt:逐处判断后再收敛,不能无脑替换 ----
-    "retainpdf_pipeline/translate/artifacts/debug_index.py": 1,
-    "retainpdf_pipeline/translate/core/context/models.py": 3,
-    "retainpdf_pipeline/translate/core/execution_policy.py": 3,
-    "retainpdf_pipeline/translate/core/orchestration/abstract_groups.py": 2,
-    "retainpdf_pipeline/translate/core/orchestration/zones.py": 1,
-    "retainpdf_pipeline/translate/core/payload/parts/apply.py": 8,
-    "retainpdf_pipeline/translate/core/payload/parts/common.py": 3,
-    "retainpdf_pipeline/translate/core/payload/parts/group_split.py": 2,
-    "retainpdf_pipeline/translate/core/payload/parts/policy_state.py": 2,
-    "retainpdf_pipeline/translate/core/payload/parts/translation_units.py": 3,
-    "retainpdf_pipeline/translate/core/payload/parts/units.py": 2,
-    "retainpdf_pipeline/translate/core/payload/template_sync.py": 5,
-    "retainpdf_pipeline/translate/core/text_rules.py": 1,
-    "retainpdf_pipeline/translate/llm/decision_hints.py": 2,
-    "retainpdf_pipeline/translate/llm/shared/cache.py": 3,
-    "retainpdf_pipeline/translate/llm/shared/orchestration/common.py": 11,
-    "retainpdf_pipeline/translate/llm/shared/orchestration/direct_typst_long_text.py": 4,
-    "retainpdf_pipeline/translate/llm/shared/orchestration/direct_typst_repair.py": 3,
-    "retainpdf_pipeline/translate/llm/shared/orchestration/heavy_formula.py": 4,
-    "retainpdf_pipeline/translate/llm/shared/orchestration/metadata.py": 2,
-    "retainpdf_pipeline/translate/llm/shared/orchestration/segment_parsing.py": 1,
-    "retainpdf_pipeline/translate/llm/shared/orchestration/segment_plan.py": 3,
-    "retainpdf_pipeline/translate/llm/shared/orchestration/segment_prompts.py": 1,
-    "retainpdf_pipeline/translate/llm/shared/orchestration/segment_risk.py": 1,
-    "retainpdf_pipeline/translate/llm/shared/orchestration/sentence_level.py": 2,
-    "retainpdf_pipeline/translate/llm/shared/orchestration/short_text_retry.py": 3,
-    "retainpdf_pipeline/translate/llm/shared/orchestration/single_item_flow.py": 2,
-    "retainpdf_pipeline/translate/llm/shared/orchestration/tagged_placeholder.py": 4,
-    "retainpdf_pipeline/translate/llm/validation/english_residue.py": 4,
-    "retainpdf_pipeline/translate/services/agents/review_artifact.py": 3,
-    "retainpdf_pipeline/translate/services/classification/prompting.py": 1,
-    "retainpdf_pipeline/translate/services/classification/rule_engine.py": 2,
-    "retainpdf_pipeline/translate/services/continuation/pairs.py": 4,
-    "retainpdf_pipeline/translate/services/continuation/rules.py": 8,
-    "retainpdf_pipeline/translate/services/continuation/state.py": 5,
-    "retainpdf_pipeline/translate/services/fast_path/keep_origin.py": 4,
-    "retainpdf_pipeline/translate/services/finalization/untranslated.py": 3,
-    "retainpdf_pipeline/translate/services/memory/job_memory.py": 3,
-    "retainpdf_pipeline/translate/services/memory/text.py": 3,
-    "retainpdf_pipeline/translate/services/policy/literal_block_rules.py": 1,
-    "retainpdf_pipeline/translate/services/policy/metadata_filter.py": 1,
-    "retainpdf_pipeline/translate/services/policy/payload_rules/legacy_policy_checks.py": 3,
-    "retainpdf_pipeline/translate/services/policy/payload_rules/legacy_policy_mutations.py": 2,
-    "retainpdf_pipeline/translate/services/policy/soft_hints.py": 1,
-    "retainpdf_pipeline/translate/services/policy/structured_technical_blocks.py": 1,
-    "retainpdf_pipeline/translate/services/policy/verdict.py": 4,
-    "retainpdf_pipeline/translate/services/postprocess/garbled_reconstruction.py": 3,
-    "retainpdf_pipeline/translate/services/terms/usage.py": 4,
-    "retainpdf_pipeline/translate/workflow/batching/dedupe.py": 4,
-    "retainpdf_pipeline/translate/workflow/recovery.py": 2,
+    "translation/retainpdf_translation/artifacts/debug_index.py": 1,
+    "translation/retainpdf_translation/core/context/models.py": 1,
+    "translation/retainpdf_translation/core/execution_policy.py": 3,
+    "translation/retainpdf_translation/core/orchestration/abstract_groups.py": 2,
+    "translation/retainpdf_translation/core/orchestration/zones.py": 1,
+    "translation/retainpdf_translation/core/payload/parts/apply.py": 8,
+    "translation/retainpdf_translation/core/payload/parts/common.py": 3,
+    "translation/retainpdf_translation/core/payload/parts/group_split.py": 2,
+    "translation/retainpdf_translation/core/payload/parts/policy_state.py": 2,
+    "translation/retainpdf_translation/core/payload/parts/translation_units.py": 3,
+    "translation/retainpdf_translation/core/payload/parts/units.py": 2,
+    "translation/retainpdf_translation/core/payload/template_sync.py": 5,
+    "translation/retainpdf_translation/core/text_rules.py": 1,
+    "translation/retainpdf_translation/llm/decision_hints.py": 2,
+    "translation/retainpdf_translation/llm/shared/cache.py": 3,
+    "translation/retainpdf_translation/llm/shared/orchestration/common.py": 11,
+    "translation/retainpdf_translation/llm/shared/orchestration/direct_typst_long_text.py": 4,
+    "translation/retainpdf_translation/llm/shared/orchestration/direct_typst_repair.py": 3,
+    "translation/retainpdf_translation/llm/shared/orchestration/heavy_formula.py": 4,
+    "translation/retainpdf_translation/llm/shared/orchestration/metadata.py": 2,
+    "translation/retainpdf_translation/llm/shared/orchestration/segment_parsing.py": 1,
+    "translation/retainpdf_translation/llm/shared/orchestration/segment_plan.py": 3,
+    "translation/retainpdf_translation/llm/shared/orchestration/segment_prompts.py": 1,
+    "translation/retainpdf_translation/llm/shared/orchestration/segment_risk.py": 1,
+    "translation/retainpdf_translation/llm/shared/orchestration/sentence_level.py": 2,
+    "translation/retainpdf_translation/llm/shared/orchestration/short_text_retry.py": 3,
+    "translation/retainpdf_translation/llm/shared/orchestration/single_item_flow.py": 2,
+    "translation/retainpdf_translation/llm/shared/orchestration/tagged_placeholder.py": 4,
+    "translation/retainpdf_translation/llm/validation/english_residue.py": 4,
+    "translation/retainpdf_translation/services/agents/review_artifact.py": 3,
+    "translation/retainpdf_translation/services/classification/prompting.py": 1,
+    "translation/retainpdf_translation/services/classification/rule_engine.py": 2,
+    "translation/retainpdf_translation/services/continuation/pairs.py": 4,
+    "translation/retainpdf_translation/services/continuation/rules.py": 6,
+    "translation/retainpdf_translation/services/continuation/state.py": 5,
+    "translation/retainpdf_translation/services/fast_path/keep_origin.py": 4,
+    "translation/retainpdf_translation/services/finalization/untranslated.py": 3,
+    "translation/retainpdf_translation/services/memory/job_memory.py": 3,
+    "translation/retainpdf_translation/services/memory/text.py": 3,
+    "translation/retainpdf_translation/services/policy/literal_block_rules.py": 1,
+    "translation/retainpdf_translation/services/policy/metadata_filter.py": 1,
+    "translation/retainpdf_translation/services/policy/payload_rules/legacy_policy_checks.py": 3,
+    "translation/retainpdf_translation/services/policy/payload_rules/legacy_policy_mutations.py": 2,
+    "translation/retainpdf_translation/services/policy/soft_hints.py": 1,
+    "translation/retainpdf_translation/services/policy/structured_technical_blocks.py": 1,
+    "translation/retainpdf_translation/services/policy/verdict.py": 4,
+    "translation/retainpdf_translation/services/postprocess/garbled_reconstruction.py": 3,
+    "translation/retainpdf_translation/services/terms/usage.py": 4,
+    "translation/retainpdf_translation/workflow/batching/dedupe.py": 4,
+    "translation/retainpdf_translation/workflow/recovery.py": 2,
 }
 
 

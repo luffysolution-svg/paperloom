@@ -9,7 +9,7 @@ from retainpdf_pipeline.render.layout.model.models import RenderBlock
 from retainpdf_pipeline.render.layout.payload.blocks import build_render_blocks
 from retainpdf_pipeline.render.output.typst import block_config as typst_config
 from retainpdf_pipeline.render.output.typst.fit_helpers import render_block_fit_helpers
-from retainpdf_pipeline.services.pipeline_shared.events import emit_render_page_progress
+from retainpdf_base.events import emit_render_page_progress
 
 
 BuildTypstBlockFn = Callable[[str, RenderBlock], str]

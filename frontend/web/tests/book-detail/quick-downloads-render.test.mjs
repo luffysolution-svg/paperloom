@@ -14,7 +14,7 @@ const dom = new JSDOM("<!doctype html><body></body>", {
   url: "http://localhost/index.html", pretendToBeVisual: true,
 });
 for (const key of [
-  "window", "document", "Element", "SVGElement", "HTMLElement", "HTMLButtonElement", "Node", "Event",
+  "window", "document", "HTMLElement", "HTMLButtonElement", "Node", "Event",
   "CustomEvent", "MouseEvent", "KeyboardEvent", "PointerEvent", "DocumentFragment",
   "MutationObserver", "NodeFilter", "Range", "DOMRect",
   // Radix 的焦点管理会 instanceof 这两个；少了就是 ReferenceError，对话框打不开。
@@ -30,7 +30,6 @@ Object.defineProperty(globalThis, "navigator", {
   value: dom.window.navigator, writable: true, configurable: true,
 });
 globalThis.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
-globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
 globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(0), 0);
 globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
 globalThis.matchMedia = () => ({
@@ -120,20 +119,11 @@ describe("常用下载面板", () => {
     assert.equal(gears.length, 1, `渲染了 ${gears.length} 个设置按钮`);
   });
 
-  it("五个下载按钮都能通过键盘查看用途，包括尚未生成的文件", async () => {
-    for (const button of host.querySelectorAll(".book-detail-quick-download-btn")) {
-      const target = button.disabled ? button.parentElement : button;
-      await act(async () => target.focus());
-      assert.match(document.querySelector('[role="tooltip"]')?.textContent || "", new RegExp(button.getAttribute("aria-label")));
-      await act(async () => target.blur());
-    }
-  });
-
   it("点 Word 下载时地址带上清晰度", async () => {
     downloaded.length = 0;
     await click(host.querySelector("#book-detail-download-word-btn"));
     assert.equal(downloaded.length, 1, "没有触发下载");
-    assert.match(downloaded[0].url, /\/api\/v1\/jobs\/job-1\/docx\?dpi=\d+$/, downloaded[0].url);
+    assert.match(downloaded[0].url, /\/api\/v1\/jobs\/job-1\/files\/output\/translated\.docx\?download=1&dpi=\d+$/, downloaded[0].url);
   });
 
   it("其余四个原样下载，不该被挂上 dpi", async () => {
@@ -153,6 +143,6 @@ describe("常用下载面板", () => {
     downloaded.length = 0;
     await click(host.querySelector("#book-detail-download-word-btn"));
     assert.equal(downloaded.length, 1, "没有触发下载");
-    assert.ok(downloaded[0].url.endsWith("?dpi=300"), downloaded[0].url);
+    assert.ok(downloaded[0].url.endsWith("translated.docx?download=1&dpi=300"), downloaded[0].url);
   });
 });

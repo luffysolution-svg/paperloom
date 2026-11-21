@@ -25,7 +25,7 @@ export function isProtectedMarkdownAssetUrl(value: string, baseUrl = "http://loc
     const documentBase = globalThis.location?.href || "http://localhost/";
     const trustedBase = new URL(baseUrl, documentBase);
     const url = new URL(value, trustedBase);
-    if (!/\/api\/v1\/jobs\/[^/]+\/markdown\/images\//.test(url.pathname)) return false;
+    if (!/\/api\/v1\/jobs\/[^/]+\/(?:markdown|files\/output\/ocr)\/images\//.test(url.pathname)) return false;
     if (!/^[a-z][a-z\d+.-]*:/i.test(value)) return true;
     const isLoopback = ["localhost", "127.0.0.1", "::1", "[::1]"].includes(url.hostname);
     return url.origin === trustedBase.origin || isLoopback;

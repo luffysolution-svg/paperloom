@@ -2,7 +2,7 @@
 // 仅依赖 types/values，不涉及 URL 解析与 section 组装。
 
 import type { DocumentJobSummary } from "@/features/library/domain.js";
-import type { ArtifactCenterGroupId, ArtifactManifestItem } from "./artifact-center-types.js";
+import type { ArtifactCenterGroupId, ArtifactCenterItem, ArtifactManifestItem } from "./artifact-center-types.js";
 import { artifactKey, text, workflowOf } from "./artifact-values.js";
 
 export const GROUP_META: Record<ArtifactCenterGroupId, { label: string; description: string }> = {
@@ -18,6 +18,20 @@ export function isDiagnosticArtifact(item: ArtifactManifestItem): boolean {
   return /(diagnostic|report|summary|failure|error|log|trace)/.test(key);
 }
 
+// 后端 manifest 的 artifact_group：debug / provider 两组是流水线中间产物和 OCR 供应商的原始返回，
+// 只有排查问题时才用得上。
+const DEBUG_ARTIFACT_GROUP = /^(debug|provider|typst)$/;
+// 老后端不一定给 artifact_group，按键名兜底：事件流、请求日志、断点、渲染配置、OCR 原始数据。
+const DEBUG_ARTIFACT_KEY = /(events|journal|checkpoint|render.config|translation.manifest|layout.json|provider|paddle|mineru|typst|pipeline)/;
+
+/** 排查用的文件：文件页不和 PDF / Markdown / 任务包摆在一起，收进「调试文件」。 */
+export function isDebugArtifact(item: ArtifactManifestItem): boolean {
+  if (DEBUG_ARTIFACT_GROUP.test(text(item.artifact_group).toLowerCase())) return true;
+  if (isDiagnosticArtifact(item)) return true;
+  // 只看键名不看文件名：译文 PDF 的文件名来自用户的书名，书名里带 events / pipeline 不该被当成调试文件。
+  return DEBUG_ARTIFACT_KEY.test(artifactKey(item));
+}
+
 export function groupFor(job: DocumentJobSummary, item: ArtifactManifestItem): ArtifactCenterGroupId {
   if (isDiagnosticArtifact(item)) return "diagnostics";
   const workflow = workflowOf(job);
@@ -30,15 +44,20 @@ export function labelFor(item: ArtifactManifestItem): string {
   if (/obsidian/.test(key)) return "Obsidian 笔记包";
   if (/side.by.side|comparison|bilingual/.test(key)) return "对照 PDF";
   if (/translated.pdf|output.pdf|result.pdf|^pdf$/.test(key)) return "译文 PDF";
+  // 识别报告的文件名是 document.v1.report.json，必须先于「结构化文档」判断，否则会被 document.v1 吃掉。
+  if (/normalization.report|document\.v1\.report/.test(key)) return "识别报告";
   if (/normalized.document|document\.v1/.test(key)) return "结构化文档";
-  if (/normalization.report/.test(key)) return "识别报告";
+  // OCR 服务商的原始返回（/files 里叫 ocr-provider/result.json、raw.zip），要先于「任务包」判断，否则 zip 会被当成完整任务包。
+  if (/provider.result|provider.bundle|ocr-provider\//.test(key)) return "识别原始数据";
   if (/markdown.*bundle|bundle.*markdown/.test(key)) return "Markdown 任务包";
   if (/bundle|archive|zip/.test(key)) return "完整任务包";
   if (/translation.manifest/.test(key)) return "翻译清单";
   if (/layout\.json/.test(key)) return "版式数据";
   if (/events\.json/.test(key)) return "事件记录";
-  if (/paddle_result|paddle_raw/.test(key)) return "识别原始数据";
+  if (/paddle_result|paddle_raw|mineru_result|mineru_raw/.test(key)) return "识别原始数据";
   if (/request.journal/.test(key)) return "翻译请求记录";
+  if (/translation.checkpoint/.test(key)) return "翻译断点";
+  if (/render.config/.test(key)) return "渲染配置";
   if (/markdown/.test(key)) return "Markdown";
   if (/diagnostic/.test(key)) return "诊断报告";
   if (/report/.test(key)) return "处理报告";
@@ -56,10 +75,21 @@ export function kindFor(item: ArtifactManifestItem): string {
   if (contentType.includes("pdf")) return "PDF";
   if (contentType.includes("json")) return "JSON";
   if (contentType.includes("markdown")) return "MD";
-  return explicit || "FILE";
+  const key = artifactKey(item);
+  if (key === "markdown_raw") return "MD";
+  return key.match(/(?:^|_)(pdf|json|zip)$/)?.[1].toUpperCase() || explicit || "FILE";
 }
 
 export function previewable(item: ArtifactManifestItem): boolean {
   const key = artifactKey(item);
   return /(pdf|markdown|normalized.document)/.test(key);
+}
+
+export function previewFormat(item: ArtifactManifestItem, kind: string): ArtifactCenterItem["preview"] {
+  if (!previewable(item)) return null;
+  if (artifactKey(item) === "markdown_bundle_zip") return "markdown-zip";
+  if (kind === "PDF") return "pdf";
+  if (kind === "MD" || kind === "MARKDOWN") return "markdown";
+  if (kind === "JSON") return "json";
+  return null;
 }

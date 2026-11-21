@@ -1,27 +1,14 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
 from retainpdf_pipeline.foundation.shared.job_dirs import ensure_job_dirs
 from retainpdf_pipeline.foundation.shared.job_dirs import resolve_job_dirs
-from retainpdf_pipeline.foundation.shared.stage_specs import NormalizeStageSpec
-from retainpdf_pipeline.foundation.shared.stage_specs import build_stage_invocation_metadata
-from retainpdf_pipeline.foundation.shared.stage_specs import BookStageSpec
-from retainpdf_pipeline.foundation.shared.stage_specs import BOOK_STAGE_SCHEMA_VERSION
-from retainpdf_pipeline.foundation.shared.stage_specs import NORMALIZE_STAGE_SCHEMA_VERSION
 from retainpdf_pipeline.foundation.shared.stage_specs import ProviderStageSpec
 from retainpdf_pipeline.foundation.shared.stage_specs import PROVIDER_STAGE_SCHEMA_VERSION
-from retainpdf_pipeline.foundation.shared.stage_specs import resolve_credential_ref
-from retainpdf_pipeline.foundation.shared.stage_specs import TranslateStageSpec
-from retainpdf_pipeline.foundation.shared.stage_specs import TRANSLATE_STAGE_SCHEMA_VERSION
-from retainpdf_pipeline.foundation.shared.stage_specs import RenderStageSpec
-from retainpdf_pipeline.foundation.shared.stage_specs import RENDER_STAGE_SCHEMA_VERSION
-from retainpdf_pipeline.foundation.config import fonts
+from retainpdf_base.credentials import resolve_credential_ref
 
 def test_provider_stage_spec_loads_and_resolves_credentials(tmp_path: Path, monkeypatch) -> None:
     job_root = tmp_path / "20260414-providerjob"

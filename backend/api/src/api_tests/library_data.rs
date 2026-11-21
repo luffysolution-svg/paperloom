@@ -14,7 +14,7 @@ use crate::models::domain::{
     now_iso, CreateJobInput, JobSnapshot, JobStatusKind, UploadRecord, WorkflowKind,
 };
 
-fn seed_document(state: &crate::AppState, content: &[u8]) -> String {
+pub(super) fn seed_document(state: &crate::AppState, content: &[u8]) -> String {
     let hash = sha256_hex(content);
     let upload_id = format!("up-{hash:.8}");
     let relative = format!("uploads/{upload_id}/paper.pdf");
@@ -65,7 +65,7 @@ fn seed_succeeded_job_for_document(state: &crate::AppState, document_id: &str, j
     .expect("link job to document");
 }
 
-fn seed_reusable_ocr_job(state: &crate::AppState, document_id: &str, job_id: &str) -> String {
+pub(super) fn seed_reusable_ocr_job(state: &crate::AppState, document_id: &str, job_id: &str) -> String {
     let upload = state
         .db
         .find_upload_for_document(document_id)
@@ -150,15 +150,15 @@ async fn documents_list_get_and_patch_roundtrip() {
     assert_eq!(payload["data"]["documents"][0]["document_id"], document_id);
     assert_eq!(
         payload["data"]["documents"][0]["source_pdf_url"],
-        format!("http://127.0.0.1:41000/api/v1/documents/{document_id}/source.pdf")
+        format!("http://127.0.0.1:41000/api/v1/documents/{document_id}/files/source.pdf?download=1")
     );
     assert_eq!(
         payload["data"]["documents"][0]["cover_url"],
-        format!("http://127.0.0.1:41000/api/v1/documents/{document_id}/cover")
+        format!("http://127.0.0.1:41000/api/v1/documents/{document_id}/files/cover.jpg")
     );
     assert_eq!(
         payload["data"]["documents"][0]["thumbnail_url"],
-        format!("http://127.0.0.1:41000/api/v1/documents/{document_id}/thumbnail")
+        format!("http://127.0.0.1:41000/api/v1/documents/{document_id}/files/thumbnail.jpg")
     );
 
     let response = app
@@ -171,8 +171,7 @@ async fn documents_list_get_and_patch_roundtrip() {
                 .header("content-type", "application/json")
                 .body(Body::from(
                     serde_json::json!({
-                        "reading_status": "reading",
-                        "tags": ["化学", "光谱"]
+                        "reading_status": "reading"
                     })
                     .to_string(),
                 ))
@@ -186,7 +185,7 @@ async fn documents_list_get_and_patch_roundtrip() {
     assert!(payload["data"]["source_pdf_url"]
         .as_str()
         .unwrap_or("")
-        .contains("/source.pdf"));
+        .contains("/files/source.pdf"));
 
     let patched_document = payload["data"].clone();
     let response = app
@@ -426,15 +425,15 @@ async fn documents_list_supports_text_search_over_title_and_filename() {
     seed_document(&state, b"text-search-unrelated");
     state
         .db
-        .update_document_fields(&spectra, Some("拉曼散射的计算方法"), None, None)
+        .update_document_fields(&spectra, Some("拉曼散射的计算方法"), None)
         .expect("title spectra");
     state
         .db
-        .update_document_fields(&attention, Some("Attention Is All You Need"), None, None)
+        .update_document_fields(&attention, Some("Attention Is All You Need"), None)
         .expect("title attention");
     state
         .db
-        .update_document_fields(&attention, None, None, None)
+        .update_document_fields(&attention, None, None)
         .expect("noop patch keeps title");
 
     let hit = app
@@ -576,7 +575,6 @@ async fn documents_list_total_uses_filters_upload_constraint_and_job_lookup() {
             &chemistry_reading,
             None,
             Some("reading"),
-            Some(&["chemistry".to_string()]),
         )
         .expect("mark chemistry reading");
     state
@@ -585,7 +583,6 @@ async fn documents_list_total_uses_filters_upload_constraint_and_job_lookup() {
             &biology_reading,
             None,
             Some("reading"),
-            Some(&["biology".to_string()]),
         )
         .expect("mark biology reading");
     state
@@ -594,7 +591,6 @@ async fn documents_list_total_uses_filters_upload_constraint_and_job_lookup() {
             &chemistry_finished,
             None,
             Some("finished"),
-            Some(&["chemistry".to_string()]),
         )
         .expect("mark chemistry finished");
     state
@@ -617,17 +613,12 @@ async fn documents_list_total_uses_filters_upload_constraint_and_job_lookup() {
         [],
     )
     .expect("insert orphan document");
-    conn.execute(
-        "INSERT INTO document_tags (document_id, tag) VALUES ('orphan-filtered', 'chemistry')",
-        [],
-    )
-    .expect("tag orphan document");
 
     let filtered = app
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/api/v1/documents?reading_status=reading&tag=chemistry&collection_id=col-chemistry-reading&limit=1&offset=0")
+                .uri("/api/v1/documents?reading_status=reading&collection_id=col-chemistry-reading&limit=1&offset=0")
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("filtered request"),
@@ -685,223 +676,6 @@ async fn documents_list_total_uses_filters_upload_constraint_and_job_lookup() {
 }
 
 #[tokio::test]
-async fn deleting_library_book_is_blocked_by_favorites_even_with_force() {
-    // 这条路径此前零 HTTP 级测试覆盖：`DELETE /api/v1/library/books/:id` 的收藏
-    // 保护从未被端到端验证过，`force=true` 是否能绕过它也没人验。
-    //
-    // 语义：force 只放行「运行中/排队中」的 job（ensure_deletable），
-    // 收藏保护是独立的一道，force 不得绕过——收藏是用户策展内容，删了不可逆。
-    let state = test_state("library-book-delete-favorites-guard");
-    let app = build_app(state.clone());
-    let document_id = seed_document(&state, b"book delete favorites guard");
-    seed_succeeded_job_for_document(&state, &document_id, "job-guarded");
-    state
-        .db
-        .set_document_active_job(&document_id, "job-guarded", None)
-        .expect("set active job");
-
-    let created = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/v1/favorites")
-                .header("X-API-Key", "test-key")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({
-                        "document_id": document_id,
-                        "job_id": "job-guarded",
-                        "page_idx": 1,
-                        "block_id": "p001-b0001",
-                        "quote_text": "anchored quote",
-                        "translated_quote_text": "锚定引用"
-                    })
-                    .to_string(),
-                ))
-                .expect("create favorite request"),
-        )
-        .await
-        .expect("create favorite response");
-    assert_eq!(created.status(), StatusCode::OK);
-    let favorite_id = json_response(created).await["data"]["favorite_id"]
-        .as_str()
-        .expect("favorite id")
-        .to_string();
-
-    for uri in [
-        "/api/v1/library/books/job-guarded",
-        "/api/v1/library/books/job-guarded?force=true",
-    ] {
-        let blocked = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .method("DELETE")
-                    .uri(uri)
-                    .header("X-API-Key", "test-key")
-                    .body(Body::empty())
-                    .expect("delete request"),
-            )
-            .await
-            .expect("delete response");
-        assert_eq!(
-            blocked.status(),
-            StatusCode::CONFLICT,
-            "收藏保护必须拦住 {uri}（force 不得绕过）"
-        );
-        assert!(
-            state.db.get_job("job-guarded").is_ok(),
-            "被拦下时 job 不得被删除: {uri}"
-        );
-    }
-
-    // 清掉收藏后才允许删除
-    let removed = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("DELETE")
-                .uri(format!("/api/v1/favorites/{favorite_id}"))
-                .header("X-API-Key", "test-key")
-                .body(Body::empty())
-                .expect("delete favorite request"),
-        )
-        .await
-        .expect("delete favorite response");
-    assert_eq!(removed.status(), StatusCode::OK);
-
-    let deleted = app
-        .oneshot(
-            Request::builder()
-                .method("DELETE")
-                .uri("/api/v1/library/books/job-guarded")
-                .header("X-API-Key", "test-key")
-                .body(Body::empty())
-                .expect("final delete request"),
-        )
-        .await
-        .expect("final delete response");
-    assert_eq!(deleted.status(), StatusCode::OK);
-    assert!(state.db.get_job("job-guarded").is_err(), "job 应已删除");
-}
-
-#[tokio::test]
-async fn library_book_delete_fails_closed_when_favorites_lookup_errors() {
-    // 收藏保护的失败方向必须是"拒绝删除"，不能是"当作没有收藏、放行"。
-    //
-    // 原实现写的是 `favorites_referencing_job(..).unwrap_or(0)`：查询一旦出错
-    // （磁盘满、库损坏、迁移中途、锁争用）就退化成 0，保护静默消失，而删除是
-    // 不可逆的。正常环境下查询不会失败，所以这个缺陷用常规用例测不出来——
-    // 这里主动制造一次真实的查询失败来钉住它。
-    let state = test_state("library-book-delete-favorites-fail-closed");
-    let app = build_app(state.clone());
-    let document_id = seed_document(&state, b"book delete favorites fail closed");
-    seed_succeeded_job_for_document(&state, &document_id, "job-lookup-error");
-
-    // 制造查询失败：favorites 表不存在时 favorites_referencing_job 返回 Err。
-    let conn = rusqlite::Connection::open(state.config.jobs_db_path.clone()).expect("open db");
-    conn.execute("DROP TABLE favorites", [])
-        .expect("drop favorites table");
-    drop(conn);
-    assert!(
-        state
-            .db
-            .favorites_referencing_job("job-lookup-error")
-            .is_err(),
-        "前置条件：此时收藏查询必须真的失败"
-    );
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("DELETE")
-                .uri("/api/v1/library/books/job-lookup-error")
-                .header("X-API-Key", "test-key")
-                .body(Body::empty())
-                .expect("delete request"),
-        )
-        .await
-        .expect("delete response");
-
-    assert_ne!(
-        response.status(),
-        StatusCode::OK,
-        "收藏查询失败时不得放行删除"
-    );
-    assert!(
-        state.db.get_job("job-lookup-error").is_ok(),
-        "查询失败时 job 必须原封不动"
-    );
-}
-
-#[tokio::test]
-async fn favorites_crud_and_job_reference_guard() {
-    let state = test_state("library-favorites");
-    let app = build_app(state.clone());
-    let document_id = seed_document(&state, b"doc favorites");
-    seed_succeeded_job_for_document(&state, &document_id, "job-active");
-    state
-        .db
-        .set_document_active_job(&document_id, "job-active", None)
-        .expect("set active job");
-
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/v1/favorites")
-                .header("X-API-Key", "test-key")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({
-                        "document_id": document_id,
-                        "page_idx": 4,
-                        "block_id": "p005-b0008",
-                        "quote_text": "reaction rate increases",
-                        "translated_quote_text": "反应速率随温度上升"
-                    })
-                    .to_string(),
-                ))
-                .expect("request"),
-        )
-        .await
-        .expect("create response");
-    assert_eq!(response.status(), StatusCode::OK);
-    let payload = json_response(response).await;
-    // 未显式给 job_id 时锚定到 active_job_id
-    assert_eq!(payload["data"]["job_id"], "job-active");
-    let favorite_id = payload["data"]["favorite_id"]
-        .as_str()
-        .expect("favorite id")
-        .to_string();
-
-    assert_eq!(
-        state
-            .db
-            .favorites_referencing_job("job-active")
-            .expect("count"),
-        1
-    );
-
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("DELETE")
-                .uri(format!("/api/v1/favorites/{favorite_id}"))
-                .header("X-API-Key", "test-key")
-                .body(Body::empty())
-                .expect("request"),
-        )
-        .await
-        .expect("delete response");
-    assert_eq!(response.status(), StatusCode::OK);
-    assert_eq!(state.db.list_favorites(None).expect("list").len(), 0);
-}
-
-#[tokio::test]
 async fn search_returns_anchored_hits() {
     let state = test_state("library-search");
     let app = build_app(state.clone());
@@ -938,288 +712,55 @@ async fn search_returns_anchored_hits() {
     assert_eq!(hit["job_id"], "job-1");
     assert_eq!(hit["page_idx"], 7);
     assert_eq!(hit["block_id"], "p008-b0002");
+    // 没有这个任务的记录：不知道整本书的页号
+    assert!(hit["document_page"].is_null(), "{hit}");
 }
 
+/// 分段翻译的书：命中里的 page_idx 是建索引那个任务自己的本地页号，document_page 是整本书的页号，
+/// 和按书阅读（合并任务按整本书编页）对得上（Studio 的「搜到第 N 页 → 按书读第 N 页」）。
 #[tokio::test]
-async fn document_lookup_by_historical_job_id() {
-    let state = test_state("library-job-lookup");
+async fn search_hits_carry_the_whole_book_page() {
+    let state = test_state("library-search-document-page");
     let app = build_app(state.clone());
-    let document_id = seed_document(&state, b"doc job lookup");
-    // 历史 job:归属该文档但不是 active run
+    let document_id = seed_document(&state, b"doc search pages");
+    let mut input = crate::models::CreateJobInput::default();
+    input.runtime.job_id = "job-pages-11-13".to_string();
+    let mut job = crate::models::JobSnapshot::new("job-pages-11-13".to_string(), input, vec!["python".to_string()]);
+    job.artifacts = Some(crate::models::JobArtifacts {
+        ocr_page_numbers: vec![11, 12, 13],
+        ..crate::models::JobArtifacts::default()
+    });
+    state.db.save_job(&job).expect("save job");
     state
         .db
-        .set_document_active_job(&document_id, "job-new", None)
-        .expect("set active");
-    {
-        let conn = rusqlite::Connection::open(state.config.jobs_db_path.clone()).expect("open db");
-        conn.execute(
-            "INSERT INTO jobs (job_id, workflow, status_json, created_at, updated_at, command_json, request_json, log_tail_json, document_id)
-             VALUES ('job-old', '\"book\"', '\"succeeded\"', '2026-01-01', '2026-01-01', '[]', '{}', '[]', ?1)",
-            rusqlite::params![document_id],
+        .replace_document_fts(
+            &document_id,
+            "job-pages-11-13",
+            &[FtsBlockRow {
+                page_idx: 1,
+                block_id: "p002-b0003".to_string(),
+                source_text: "grignard reagent formation".to_string(),
+                translated_text: "格氏试剂的生成".to_string(),
+            }],
         )
-        .expect("insert historical job");
-    }
+        .expect("seed fts");
 
     let response = app
-        .clone()
         .oneshot(
             Request::builder()
-                .uri("/api/v1/documents?job_id=job-old")
+                .uri("/api/v1/search?q=grignard")
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("request"),
         )
         .await
-        .expect("lookup response");
+        .expect("search response");
     assert_eq!(response.status(), StatusCode::OK);
     let payload = json_response(response).await;
-    assert_eq!(payload["data"]["documents"][0]["document_id"], document_id);
-
-    // 只带 job_id 创建收藏:锚定到历史 run 的块空间,文档由后端解析
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/v1/favorites")
-                .header("X-API-Key", "test-key")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({
-                        "job_id": "job-old",
-                        "page_idx": 2,
-                        "block_id": "p003-b0001",
-                        "quote_text": "historical quote"
-                    })
-                    .to_string(),
-                ))
-                .expect("request"),
-        )
-        .await
-        .expect("create response");
-    assert_eq!(response.status(), StatusCode::OK);
-    let payload = json_response(response).await;
-    assert_eq!(payload["data"]["document_id"], document_id);
-    assert_eq!(payload["data"]["job_id"], "job-old");
-}
-
-#[tokio::test]
-async fn favorite_note_patch_updates_in_place() {
-    let state = test_state("library-fav-patch");
-    let app = build_app(state.clone());
-    let document_id = seed_document(&state, b"doc patch note");
-    seed_succeeded_job_for_document(&state, &document_id, "job-x");
-    state
-        .db
-        .set_document_active_job(&document_id, "job-x", None)
-        .expect("set active");
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/v1/favorites")
-                .header("X-API-Key", "test-key")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({
-                        "document_id": document_id,
-                        "page_idx": 1,
-                        "block_id": "p002-b0001",
-                        "quote_text": "q"
-                    })
-                    .to_string(),
-                ))
-                .expect("request"),
-        )
-        .await
-        .expect("create");
-    let favorite_id = json_response(response).await["data"]["favorite_id"]
-        .as_str()
-        .expect("id")
-        .to_string();
-
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("PATCH")
-                .uri(format!("/api/v1/favorites/{favorite_id}"))
-                .header("X-API-Key", "test-key")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({"note": "改后的笔记"}).to_string(),
-                ))
-                .expect("request"),
-        )
-        .await
-        .expect("patch");
-    assert_eq!(response.status(), StatusCode::OK);
-    let favorites = state.db.list_favorites(Some(&document_id)).expect("list");
-    // favorite_id 不变,note 原子更新
-    assert_eq!(favorites[0].favorite_id, favorite_id);
-    assert_eq!(favorites[0].note, "改后的笔记");
-}
-
-#[tokio::test]
-async fn asset_upload_dedupes_and_serves_immutable() {
-    let state = test_state("library-assets");
-    let app = build_app(state.clone());
-    let png: &[u8] = b"\x89PNG\r\n\x1a\nfake-png-bytes-for-test";
-    let boundary = "XBOUNDARY";
-    let mut body_bytes: Vec<u8> = Vec::new();
-    body_bytes.extend_from_slice(
-        format!(
-            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"clip.png\"\r\nContent-Type: image/png\r\n\r\n"
-        )
-        .as_bytes(),
-    );
-    body_bytes.extend_from_slice(png);
-    body_bytes.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
-    let body = body_bytes;
-    let upload = |app: axum::Router| {
-        let body = body.clone();
-        async move {
-            app.oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/v1/assets")
-                    .header("X-API-Key", "test-key")
-                    .header(
-                        "content-type",
-                        format!("multipart/form-data; boundary={boundary}"),
-                    )
-                    .body(Body::from(body))
-                    .expect("request"),
-            )
-            .await
-            .expect("upload response")
-        }
-    };
-
-    let first = json_response(upload(app.clone()).await).await;
-    let second = json_response(upload(app.clone()).await).await;
-    // 内容寻址:同字节两次上传同一 asset_id
-    assert_eq!(first["data"]["asset_id"], second["data"]["asset_id"]);
-    let asset_id = first["data"]["asset_id"].as_str().expect("asset id");
-
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .uri(format!("/api/v1/assets/{asset_id}"))
-                .header("X-API-Key", "test-key")
-                .body(Body::empty())
-                .expect("request"),
-        )
-        .await
-        .expect("download response");
-    assert_eq!(response.status(), StatusCode::OK);
-    assert_eq!(response.headers().get("content-type").unwrap(), "image/png");
-    assert!(response
-        .headers()
-        .get("cache-control")
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .contains("immutable"));
-
-    // 收藏挂图:kind=figure + asset_id + rect_json
-    let document_id = seed_document(&state, b"doc with figure");
-    seed_succeeded_job_for_document(&state, &document_id, "job-f");
-    state
-        .db
-        .set_document_active_job(&document_id, "job-f", None)
-        .expect("set active");
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/v1/favorites")
-                .header("X-API-Key", "test-key")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({
-                        "document_id": document_id,
-                        "page_idx": 3,
-                        "block_id": "p004-b0001",
-                        "kind": "figure",
-                        "quote_text": "figure clip",
-                        "asset_id": asset_id,
-                        "rect_json": "{\"x\":10,\"y\":20,\"w\":300,\"h\":200}"
-                    })
-                    .to_string(),
-                ))
-                .expect("request"),
-        )
-        .await
-        .expect("favorite response");
-    assert_eq!(response.status(), StatusCode::OK);
-    let payload = json_response(response).await;
-    assert_eq!(payload["data"]["asset_id"], asset_id);
-    assert!(payload["data"]["rect_json"]
-        .as_str()
-        .unwrap()
-        .contains("300"));
-
-    // 未上传的 asset_id 被拒绝
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/v1/favorites")
-                .header("X-API-Key", "test-key")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({
-                        "document_id": document_id,
-                        "page_idx": 1,
-                        "block_id": "p002-b0001",
-                        "quote_text": "q",
-                        "asset_id": "deadbeef00"
-                    })
-                    .to_string(),
-                ))
-                .expect("request"),
-        )
-        .await
-        .expect("bad favorite response");
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-}
-
-#[tokio::test]
-async fn asset_upload_enforces_configured_stream_limit_without_trusting_content_length() {
-    let mut state = test_state("library-assets-stream-limit");
-    Arc::make_mut(&mut state.config).asset.max_bytes = 4;
-    let app = build_app(state);
-    let boundary = "ASSET-LIMIT-BOUNDARY";
-    let body = format!(
-        "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"clip.png\"\r\nContent-Type: image/png\r\n\r\n12345\r\n--{boundary}--\r\n"
-    );
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/v1/assets")
-                .header("X-API-Key", "test-key")
-                .header(
-                    "content-type",
-                    format!("multipart/form-data; boundary={boundary}"),
-                )
-                .header("content-length", "1")
-                .body(Body::from(body))
-                .expect("request"),
-        )
-        .await
-        .expect("upload response");
-
-    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
-    let payload = json_response(response).await;
-    assert_eq!(payload["code"], 41300);
-    assert_eq!(payload["error"]["code"], "PAYLOAD_TOO_LARGE");
-    assert_eq!(payload["message"], "request body is too large");
+    let hit = &payload["data"]["hits"][0];
+    assert_eq!(hit["job_id"], "job-pages-11-13");
+    assert_eq!(hit["page_idx"], 1);
+    assert_eq!(hit["document_page"], 12);
 }
 
 #[tokio::test]
@@ -1428,10 +969,11 @@ async fn collections_crud_and_document_membership_roundtrip() {
 }
 
 #[tokio::test]
-async fn library_books_job_ids_filter_returns_only_requested_jobs() {
+async fn jobs_job_ids_filter_returns_only_requested_jobs() {
+    // 原来钉的是书架 `GET /library/books?job_ids=`（2026-10-22 删了），前端改调的是任务列表。
     use crate::models::{CreateJobInput, JobSnapshot};
 
-    let state = test_state("library-books-job-ids");
+    let state = test_state("jobs-job-ids-filter");
     for job_id in ["job-alpha", "job-beta", "job-gamma"] {
         let job = JobSnapshot::new(
             job_id.to_string(),
@@ -1446,7 +988,7 @@ async fn library_books_job_ids_filter_returns_only_requested_jobs() {
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/api/v1/library/books?job_ids=job-alpha,job-gamma")
+                .uri("/api/v1/jobs?job_ids=job-alpha,job-gamma")
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("request"),
@@ -1470,7 +1012,7 @@ async fn library_books_job_ids_filter_returns_only_requested_jobs() {
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/api/v1/library/books")
+                .uri("/api/v1/jobs")
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("request"),
@@ -1491,7 +1033,7 @@ async fn document_source_pdf_and_media_urls_work_without_job() {
         .clone()
         .oneshot(
             Request::builder()
-                .uri(format!("/api/v1/documents/{document_id}/source.pdf"))
+                .uri(format!("/api/v1/documents/{document_id}/files/source.pdf"))
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("request"),
@@ -1514,7 +1056,7 @@ async fn document_source_pdf_and_media_urls_work_without_job() {
         .clone()
         .oneshot(
             Request::builder()
-                .uri(format!("/api/v1/documents/{document_id}/cover"))
+                .uri(format!("/api/v1/documents/{document_id}/files/cover.jpg"))
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("request"),
@@ -1865,7 +1407,7 @@ async fn document_translate_rejects_missing_layout_without_exposing_path() {
 }
 
 #[tokio::test]
-async fn document_translate_rejects_uncovered_translation_pages() {
+async fn document_translate_needs_ocr_settings_for_pages_outside_existing_ocr() {
     let state = test_state("library-document-translate-reuse-page-coverage");
     let app = build_app(state.clone());
     let document_id = seed_document(&state, b"translate-reuse-page-coverage");
@@ -1905,10 +1447,108 @@ async fn document_translate_rejects_uncovered_translation_pages() {
         )
         .await
         .expect("translate response");
-    assert_eq!(response.status(), StatusCode::CONFLICT);
+    // 第 4 页不在已有 OCR（1-3）里：按「允许自动补 OCR」要重新识别它，但请求里没有 OCR
+    // 凭据。要说清楚是哪几页、为什么，而且一个任务都不能建（不留半截提交）。
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let payload = json_response(response).await;
-    assert_eq!(payload["code"], "OCR_PAGE_COVERAGE_MISMATCH");
-    assert_eq!(payload["reason"], "page_coverage_mismatch");
+    let message = payload["message"].as_str().unwrap_or_default();
+    assert!(message.contains("第 4 页") && message.contains("重新识别"), "{message}");
+    let conn = rusqlite::Connection::open(&state.config.jobs_db_path).unwrap();
+    let job_ids: Vec<String> = conn
+        .prepare("SELECT job_id FROM jobs")
+        .unwrap()
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .map(|row| row.unwrap())
+        .collect();
+    assert_eq!(job_ids, vec!["ocr-partial-pages".to_string()], "失败的提交建出了任务");
+}
+
+async fn post_translate(app: &axum::Router, document_id: &str, body: serde_json::Value) -> (StatusCode, serde_json::Value) {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/documents/{document_id}/translate"))
+                .header("X-API-Key", "test-key")
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("translate response");
+    let status = response.status();
+    (status, json_response(response).await)
+}
+
+fn submitted_jobs(state: &crate::AppState, payload: &serde_json::Value) -> Vec<JobSnapshot> {
+    let mut ids = vec![payload["data"]["job_id"].as_str().expect("job id").to_string()];
+    ids.extend(
+        payload["data"]["sibling_job_ids"]
+            .as_array()
+            .map(|ids| ids.iter().map(|id| id.as_str().unwrap().to_string()).collect::<Vec<_>>())
+            .unwrap_or_default(),
+    );
+    ids.iter().map(|id| state.db.get_job(id).expect("submitted job")).collect()
+}
+
+#[tokio::test]
+async fn mixed_pages_on_one_ocr_split_into_one_translation_per_contiguous_run() {
+    let state = test_state("library-document-translate-mixed-runs");
+    let app = build_app(state.clone());
+    let document_id = seed_document(&state, b"translate-mixed-runs");
+    let source_job_id = seed_reusable_ocr_job(&state, &document_id, "ocr-whole-book");
+
+    let (status, payload) = post_translate(&app, &document_id, serde_json::json!({
+        "workflow": "translate",
+        "source": { "artifact_job_id": source_job_id },
+        "translation": { "page_ranges": [7, 1, 2], "api_key": "sk-test", "model": "m", "base_url": "https://api.example.com/v1" }
+    })).await;
+    assert_eq!(status, StatusCode::OK, "{payload}");
+    let jobs = submitted_jobs(&state, &payload);
+    let mut runs: Vec<(String, Vec<u32>)> = jobs
+        .iter()
+        .map(|job| (job.request_payload.source.artifact_job_id.clone(), job.request_payload.translation.page_ranges.clone()))
+        .collect();
+    runs.sort();
+    assert_eq!(
+        runs,
+        vec![("ocr-whole-book".to_string(), vec![1, 2]), ("ocr-whole-book".to_string(), vec![7])],
+        "1、2、7 页应拆成两段、都复用同一份 OCR"
+    );
+    for job in &jobs {
+        assert_eq!(state.db.document_id_for_job(&job.job_id).unwrap().as_deref(), Some(document_id.as_str()));
+    }
+}
+
+#[tokio::test]
+async fn pages_beyond_the_existing_ocr_get_a_fresh_ocr_job_for_just_that_run() {
+    let state = test_state("library-document-translate-fresh-ocr");
+    let app = build_app(state.clone());
+    let document_id = seed_document(&state, b"translate-fresh-ocr");
+    let source_job_id = seed_reusable_ocr_job(&state, &document_id, "ocr-first-three");
+    let mut source_job = state.db.get_job(&source_job_id).unwrap();
+    source_job.artifacts.as_mut().unwrap().ocr_page_numbers = vec![1, 2, 3];
+    state.db.save_job(&source_job).unwrap();
+
+    let (status, payload) = post_translate(&app, &document_id, serde_json::json!({
+        "workflow": "translate",
+        "source": { "artifact_job_id": source_job_id },
+        "ocr": { "provider": "mineru", "mineru_token": "test-mineru-token" },
+        "translation": { "page_ranges": [1, 2, 3, 5, 6], "api_key": "sk-test", "model": "m", "base_url": "https://api.example.com/v1" }
+    })).await;
+    assert_eq!(status, StatusCode::OK, "{payload}");
+    let jobs = submitted_jobs(&state, &payload);
+    assert_eq!(jobs.len(), 2);
+    let reuse = jobs.iter().find(|job| !job.request_payload.source.artifact_job_id.is_empty()).expect("reuse job");
+    assert_eq!(reuse.request_payload.source.artifact_job_id, "ocr-first-three");
+    assert_eq!(reuse.request_payload.translation.page_ranges, vec![1, 2, 3]);
+    let fresh = jobs.iter().find(|job| job.request_payload.source.artifact_job_id.is_empty()).expect("fresh job");
+    assert_eq!(fresh.workflow, WorkflowKind::Book);
+    assert_eq!(fresh.request_payload.ocr.page_ranges, "5-6", "只 OCR 超出的那一段");
+    assert!(fresh.request_payload.translation.page_ranges.is_empty());
+    assert_eq!(payload["data"]["job_id"], fresh.job_id, "补 OCR 的段排在前面");
 }
 
 #[tokio::test]
@@ -1933,7 +1573,7 @@ async fn document_ocr_reuses_upload_and_document_jobs_lists_ocr() {
                 .header("host", "127.0.0.1:41000")
                 .body(Body::from(
                     serde_json::json!({
-                        "workflow": "book",
+                        "workflow": "ocr",
                         "ocr": {
                             "provider": "paddle",
                             "paddle_token": "paddle-test-token",
@@ -2062,6 +1702,21 @@ async fn document_jobs_return_authoritative_pagination_and_retry_metadata() {
         payload["data"]["items"][0]["last_retry_at"],
         "2026-09-01T01:59:00Z"
     );
+
+    // limit 越界是 400，不静默夹。
+    for limit in ["0", "501"] {
+        let response = build_app(state.clone())
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/v1/documents/{document_id}/jobs?limit={limit}"))
+                    .header("X-API-Key", "test-key")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("jobs response");
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "limit={limit}");
+    }
 }
 
 // P0-2:删单个 job 后,悬空的 active_job_id 被 reconcile(重指剩余 job 或 NULL)
@@ -2100,7 +1755,7 @@ async fn deleting_a_job_reconciles_document_active_job() {
         .oneshot(
             Request::builder()
                 .method("DELETE")
-                .uri("/api/v1/library/books/job-b")
+                .uri("/api/v1/jobs/job-b")
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("request"),
@@ -2120,7 +1775,7 @@ async fn deleting_a_job_reconciles_document_active_job() {
         .oneshot(
             Request::builder()
                 .method("DELETE")
-                .uri("/api/v1/library/books/job-a")
+                .uri("/api/v1/jobs/job-a")
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("request"),
@@ -2135,144 +1790,6 @@ async fn deleting_a_job_reconciles_document_active_job() {
     assert_eq!(doc.active_job_id, None);
 }
 
-// P0-1:DELETE /documents/:id 删除文档行 + jobs + uploads + 文件;收藏引用 → 409
-#[tokio::test]
-async fn delete_document_removes_everything_and_guards_favorites() {
-    use crate::models::{CreateJobInput, JobSnapshot, JobStatusKind};
-    use crate::services::credentials::api::get_credential_metadata;
-    use crate::services::credentials::get_or_create_managed_credential;
-
-    let state = test_state("library-delete-document");
-    let app = build_app(state.clone());
-    let document_id = seed_document(&state, b"doc delete");
-    let managed_credential = get_or_create_managed_credential(
-        &state.config.data_root,
-        "translation_api_key",
-        "openai_compatible",
-        "Imported legacy translation credential",
-        "delete-document-managed-secret",
-    )
-    .expect("create managed credential");
-    let managed_credential_ref = managed_credential.credential.credential_ref;
-    let mut input = CreateJobInput::default();
-    input.translation.credential_ref = managed_credential_ref.clone();
-    let mut job = JobSnapshot::new("job-x".to_string(), input, vec!["python".to_string()]);
-    job.status = JobStatusKind::Succeeded;
-    job.sync_runtime_state();
-    state.db.save_job(&job).expect("save job");
-    {
-        let conn = rusqlite::Connection::open(state.config.jobs_db_path.clone()).expect("open db");
-        conn.execute(
-            "UPDATE jobs SET document_id = ?1 WHERE job_id = 'job-x'",
-            rusqlite::params![document_id],
-        )
-        .expect("link job");
-    }
-    state
-        .db
-        .set_document_active_job(&document_id, "job-x", None)
-        .expect("set active");
-
-    // 先挂一条收藏 → 删文档应 409
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/v1/favorites")
-                .header("X-API-Key", "test-key")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({
-                        "document_id": document_id,
-                        "page_idx": 1,
-                        "block_id": "p002-b0001",
-                        "quote_text": "q"
-                    })
-                    .to_string(),
-                ))
-                .expect("request"),
-        )
-        .await
-        .expect("create favorite");
-    let favorite_id = json_response(response).await["data"]["favorite_id"]
-        .as_str()
-        .expect("fav id")
-        .to_string();
-
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("DELETE")
-                .uri(format!("/api/v1/documents/{document_id}"))
-                .header("X-API-Key", "test-key")
-                .body(Body::empty())
-                .expect("request"),
-        )
-        .await
-        .expect("delete blocked");
-    assert_eq!(response.status(), StatusCode::CONFLICT);
-    assert!(get_credential_metadata(&state.config.data_root, &managed_credential_ref).is_ok());
-
-    // 移除收藏后可删
-    app.clone()
-        .oneshot(
-            Request::builder()
-                .method("DELETE")
-                .uri(format!("/api/v1/favorites/{favorite_id}"))
-                .header("X-API-Key", "test-key")
-                .body(Body::empty())
-                .expect("request"),
-        )
-        .await
-        .expect("remove favorite");
-
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("DELETE")
-                .uri(format!("/api/v1/documents/{document_id}"))
-                .header("X-API-Key", "test-key")
-                .body(Body::empty())
-                .expect("request"),
-        )
-        .await
-        .expect("delete document");
-    assert_eq!(response.status(), StatusCode::OK);
-    let payload = json_response(response).await;
-    assert_eq!(payload["data"]["deleted"], true);
-    assert!(payload["data"]["removed_jobs"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|v| v == "job-x"));
-
-    // 文档行、job 行、upload 行都没了
-    assert!(state.db.get_document(&document_id).is_err());
-    assert!(state.db.get_job("job-x").is_err());
-    assert!(get_credential_metadata(&state.config.data_root, &managed_credential_ref).is_err());
-    assert!(state
-        .db
-        .uploads_for_document(&document_id)
-        .expect("uploads query")
-        .is_empty());
-
-    // 删不存在的文档 → 404
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("DELETE")
-                .uri("/api/v1/documents/nonexistent")
-                .header("X-API-Key", "test-key")
-                .body(Body::empty())
-                .expect("request"),
-        )
-        .await
-        .expect("delete missing");
-    assert_eq!(response.status(), StatusCode::NOT_FOUND);
-}
 
 // 孤儿治理:root-cause(retention 保护)+ 列表过滤 + 启动清理
 #[tokio::test]
@@ -2454,179 +1971,353 @@ async fn delete_document_rolls_back_rows_and_keeps_files_when_a_step_fails() {
     );
 }
 
-/// 收藏挡住删除时必须给出结构化的 409,而不只是一句人话。
+/// 失败的结构化信息必须出现在**列表**里。
 ///
-/// 客户端在这个 409 之后要做的事是固定的:告诉用户有 N 条收藏、问他要不要
-/// 一并删掉、清空、重试。若只给 `message`,那 N 和清空的目标就只能从中文
-/// 句子里正则抠出来,任何一次文案改动(包括做多语言)都会静默打断这条路径。
-///
-/// 文档级与 run 级共用错误码 `DELETE_BLOCKED_BY_FAVORITES`,靠 details 里的
-/// `scope` 和 `clear_favorites_path` 区分,所以客户端只需要一个分支。
-#[tokio::test]
-async fn favorites_blocked_delete_returns_structured_409_with_clear_path() {
-    use crate::models::{CreateJobInput, JobSnapshot, JobStatusKind};
-
-    let state = test_state("library-favorites-blocked-409");
-    let app = build_app(state.clone());
-    let document_id = seed_document(&state, b"structured 409 doc");
-
+/// 起因：DB 里 17/17 的失败都有 failure_json（category / retryable / summary /
+/// suggestion / provider 全都有），job 详情端点也带 `failure`，**但书籍详情页
+/// 只吃 document jobs 列表、从不打详情端点**。于是用户看到的只有「失败」两个字，
+/// 而「MinerU 解析失败 / 上游问题 / 可重试 / 建议」全被截在后端。
+fn seed_failed_job_for_document(
+    state: &crate::AppState,
+    document_id: &str,
+    job_id: &str,
+    failure: serde_json::Value,
+) {
     let mut job = JobSnapshot::new(
-        "job-blocked".to_string(),
+        job_id.to_string(),
         CreateJobInput::default(),
         vec!["python".to_string()],
     );
-    job.status = JobStatusKind::Succeeded;
+    job.status = JobStatusKind::Failed;
+    job.error = Some("MinerU batch task failed: parsing failed, please try again later".into());
+    job.failure = serde_json::from_value(failure).expect("failure info");
     job.sync_runtime_state();
     state.db.save_job(&job).expect("save job");
     let conn = rusqlite::Connection::open(state.config.jobs_db_path.clone()).expect("open db");
     conn.execute(
-        "UPDATE jobs SET document_id = ?1 WHERE job_id = 'job-blocked'",
-        rusqlite::params![document_id],
+        "UPDATE jobs SET document_id = ?1 WHERE job_id = ?2",
+        rusqlite::params![document_id, job_id],
     )
-    .expect("link job");
-    drop(conn);
+    .expect("link job to document");
+}
 
-    for page in 1..=2 {
-        let response = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/v1/favorites")
-                    .header("X-API-Key", "test-key")
-                    .header("content-type", "application/json")
-                    .body(Body::from(
-                        serde_json::json!({
-                            "document_id": document_id,
-                            "job_id": "job-blocked",
-                            "page_idx": page,
-                            "block_id": format!("p00{page}-b0001"),
-                            "quote_text": "q"
-                        })
-                        .to_string(),
-                    ))
-                    .expect("request"),
-            )
-            .await
-            .expect("create favorite");
-        assert_eq!(response.status(), StatusCode::OK);
-    }
-
-    // 文档级
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("DELETE")
-                .uri(format!("/api/v1/documents/{document_id}"))
-                .header("X-API-Key", "test-key")
-                .body(Body::empty())
-                .expect("request"),
-        )
-        .await
-        .expect("delete document");
-    assert_eq!(response.status(), StatusCode::CONFLICT);
-    let body = json_response(response).await;
-    assert_eq!(body["error"]["code"], "DELETE_BLOCKED_BY_FAVORITES");
-    assert_eq!(body["error"]["http_status"], 409);
-    assert_eq!(body["error"]["details"]["scope"], "document");
-    assert_eq!(body["error"]["details"]["favorite_count"], 2);
-    assert_eq!(body["error"]["details"]["document_id"], document_id);
-    assert_eq!(
-        body["error"]["details"]["clear_favorites_path"],
-        format!("/api/v1/documents/{document_id}/favorites")
+#[tokio::test]
+async fn document_jobs_list_carries_structured_failure() {
+    let state = test_state("document-jobs-failure");
+    let document_id = seed_document(&state, b"failing doc");
+    // 字段取自真实数据：一条 MinerU 解析失败。
+    seed_failed_job_for_document(
+        &state,
+        &document_id,
+        "job-failed-1",
+        serde_json::json!({
+            "stage": "ocr",
+            "category": "unknown",
+            "failed_stage": "ocr",
+            "failure_category": "provider",
+            "summary": "任务失败，但暂未识别出明确根因",
+            "root_cause": "MinerU batch task failed: parsing failed, please try again later",
+            "retryable": true,
+            "provider": "mineru",
+            "suggestion": "查看 log_tail 和完整错误日志进一步排查",
+            // **重字段必须真的在夹具里。** 原来一个都没放，于是下面那条「列表不驮
+            // traceback」在任何实现下都绿 —— 往 JobFailureBriefView 里加一个带
+            // skip_serializing_if 的 raw_excerpt 照样过。
+            "last_log_line": "RuntimeError: parsing failed",
+            "raw_excerpt": "Traceback (most recent call last):\n  File \"ocr.py\", line 1",
+            "raw_error_excerpt": "parsing failed",
+            "raw_diagnostic": { "traceback": "Traceback (most recent call last):\n  ..." }
+        }),
     );
 
-    // run 级:同一个错误码,details 换一套坐标
-    let response = app
-        .clone()
+    let response = build_app(state.clone())
         .oneshot(
             Request::builder()
-                .method("DELETE")
-                .uri("/api/v1/library/books/job-blocked")
+                .uri(format!("/api/v1/documents/{document_id}/jobs"))
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("request"),
         )
         .await
-        .expect("delete book");
-    assert_eq!(response.status(), StatusCode::CONFLICT);
-    let body = json_response(response).await;
-    assert_eq!(body["error"]["code"], "DELETE_BLOCKED_BY_FAVORITES");
-    assert_eq!(body["error"]["details"]["scope"], "job");
-    assert_eq!(body["error"]["details"]["job_id"], "job-blocked");
-    assert_eq!(body["error"]["details"]["favorite_count"], 2);
-    assert_eq!(
-        body["error"]["details"]["clear_favorites_path"],
-        "/api/v1/library/books/job-blocked/favorites"
-    );
+        .expect("response");
+    let payload = json_response(response).await;
+    let item = &payload["data"]["items"][0];
 
-    // 走 409 指出的那条路:清空 → 重试删除必须成功
-    let response = app
-        .clone()
+    // 正对照：确实取到了那条任务，否则下面全是在断言 null。
+    assert_eq!(item["job_id"], "job-failed-1");
+    assert_eq!(item["status"], "failed");
+
+    let failure = &item["failure"];
+    assert!(!failure.is_null(), "列表项没有带 failure —— 用户只能看到「失败」两个字");
+    // **分类取更准的那一套**：真实数据里 6 条 MinerU 失败的 category 都是
+    // "unknown"，而 failure_category 是 "provider"。用错的那个等于没分类。
+    assert_eq!(failure["category"], "provider", "用了旧的 category 字段（unknown）");
+    assert_eq!(failure["stage"], "ocr");
+    assert_eq!(failure["retryable"], true, "retryable 没传出来，一键重试就没有依据");
+    assert_eq!(failure["provider"], "mineru");
+    assert!(failure["suggestion"].as_str().is_some_and(|s| !s.is_empty()));
+    assert!(failure["root_cause"].as_str().is_some_and(|s| s.contains("MinerU")));
+
+    // **列表不驮 traceback**：每 2 秒轮询一次，raw_excerpt / traceback 这类大字段
+    // 要留给详情端点按需取。
+    // 列表那份简报是**精简版**，键集合钉死：加任何字段都要在这里显式放行。
+    // 原来这里循环断言 traceback / raw_excerpt「不在」，而夹具从没放过它们 ——
+    // 空转。顺带，"traceback" 从来不是顶层字段（它住在 raw_diagnostic 里）。
+    let mut keys: Vec<&str> = failure
+        .as_object()
+        .expect("failure 不是对象")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    keys.sort_unstable();
+    assert_eq!(
+        keys,
+        [
+            "category", "provider", "retryable", "root_cause", "stage", "suggestion", "summary",
+        ],
+        "列表里那份失败简报的字段集合变了 —— 2 秒一次的轮询不该驮新东西"
+    );
+}
+
+#[tokio::test]
+async fn document_jobs_list_omits_failure_for_healthy_jobs() {
+    let state = test_state("document-jobs-no-failure");
+    let document_id = seed_document(&state, b"ok doc");
+    seed_succeeded_job_for_document(&state, &document_id, "job-ok-1");
+
+    let response = build_app(state.clone())
         .oneshot(
             Request::builder()
-                .method("DELETE")
-                .uri(format!("/api/v1/documents/{document_id}/favorites"))
+                .uri(format!("/api/v1/documents/{document_id}/jobs"))
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("request"),
         )
         .await
-        .expect("clear favorites");
+        .expect("response");
+    let payload = json_response(response).await;
+    let item = &payload["data"]["items"][0];
+    assert_eq!(item["status"], "succeeded", "正对照：取到的是那条成功任务");
+    assert!(
+        item.get("failure").is_none(),
+        "成功的任务也带了 failure 字段 —— 前端会据此画出失败卡片"
+    );
+}
+
+fn dev_defaults() -> crate::services::jobs::DevDefaultsGuard {
+    crate::services::jobs::DevDefaultsGuard::set(crate::services::jobs::DevTranslationDefaults {
+        model: "glm-5.3-flash".into(),
+        base_url: "https://open.bigmodel.cn/api/paas/v4".into(),
+        api_key: "dev-env-key".into(),
+        workers: Some(20),
+    })
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn document_translate_without_model_settings_uses_the_dev_stack_defaults() {
+    // 开发栈从 .env.local 读出模型配置；直接调接口测试时请求里不写模型也能跑。
+    let _defaults = dev_defaults();
+    let state = test_state("library-document-translate-dev-defaults");
+    let app = build_app(state.clone());
+    let document_id = seed_document(&state, b"translate-dev-defaults");
+    let source_job_id = seed_reusable_ocr_job(&state, &document_id, "ocr-dev-defaults");
+    let (status, payload) = post_translate(&app, &document_id, serde_json::json!({
+        "workflow": "translate",
+        "source": { "artifact_job_id": source_job_id },
+        "translation": { "page_ranges": [1, 2] }
+    })).await;
+    assert_eq!(status, StatusCode::OK, "{payload}");
+    let job = state.db.get_job(payload["data"]["job_id"].as_str().unwrap()).unwrap();
+    assert_eq!(job.request_payload.translation.model, "glm-5.3-flash");
+    assert_eq!(job.request_payload.translation.base_url, "https://open.bigmodel.cn/api/paas/v4");
+    assert_eq!(job.request_payload.translation.workers, 20);
+    // 明文 key 不落库：创建任务时会换成托管凭据的引用（原有行为）。
+    assert!(job.request_payload.translation.api_key.is_empty());
+    assert!(!job.request_payload.translation.credential_ref.is_empty(), "key 没被补上");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_request_with_its_own_model_settings_ignores_the_dev_stack_defaults() {
+    let _defaults = dev_defaults();
+    let state = test_state("library-document-translate-dev-defaults-explicit");
+    let app = build_app(state.clone());
+    let document_id = seed_document(&state, b"translate-dev-defaults-explicit");
+    let source_job_id = seed_reusable_ocr_job(&state, &document_id, "ocr-dev-defaults-explicit");
+    let (status, payload) = post_translate(&app, &document_id, serde_json::json!({
+        "workflow": "translate",
+        "source": { "artifact_job_id": source_job_id },
+        "translation": { "page_ranges": [1], "api_key": "sk-caller", "model": "deepseek-flash", "base_url": "https://api.deepseek.com/v1", "workers": 3 }
+    })).await;
+    assert_eq!(status, StatusCode::OK, "{payload}");
+    let job = state.db.get_job(payload["data"]["job_id"].as_str().unwrap()).unwrap();
+    assert_eq!(job.request_payload.translation.model, "deepseek-flash");
+    assert_eq!(job.request_payload.translation.base_url, "https://api.deepseek.com/v1");
+    assert_eq!(job.request_payload.translation.workers, 3);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn split_translation_pre_check_sees_the_dev_stack_defaults() {
+    // 补 OCR 的段在建任务前预检翻译凭据 —— 默认值必须在那之前补上，否则请求里没写模型就被拒。
+    let _defaults = dev_defaults();
+    let state = test_state("library-document-translate-dev-defaults-split");
+    let app = build_app(state.clone());
+    let document_id = seed_document(&state, b"translate-dev-defaults-split");
+    let source_job_id = seed_reusable_ocr_job(&state, &document_id, "ocr-dev-defaults-split");
+    let mut source_job = state.db.get_job(&source_job_id).unwrap();
+    source_job.artifacts.as_mut().unwrap().ocr_page_numbers = vec![1, 2, 3];
+    state.db.save_job(&source_job).unwrap();
+    let (status, payload) = post_translate(&app, &document_id, serde_json::json!({
+        "workflow": "translate",
+        "source": { "artifact_job_id": source_job_id },
+        "ocr": { "provider": "mineru", "mineru_token": "test-mineru-token" },
+        "translation": { "page_ranges": [1, 2, 5] }
+    })).await;
+    assert_eq!(status, StatusCode::OK, "{payload}");
+    let jobs = submitted_jobs(&state, &payload);
+    assert_eq!(jobs.len(), 2);
+    assert!(jobs.iter().all(|job| job.request_payload.translation.model == "glm-5.3-flash"));
+}
+
+async fn get_json(app: &axum::Router, uri: &str) -> serde_json::Value {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(uri)
+                .header("X-API-Key", "test-key")
+                .header("host", "127.0.0.1:41000")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK, "{uri}");
+    json_response(response).await
+}
+
+#[tokio::test]
+async fn cards_and_job_lists_show_the_document_title_not_the_upload_file_name() {
+    // 书籍详情显示文档标题（会被元数据建议自动改名、或用户手改）；书架卡片和任务列表原来
+    // 显示的是上传文件名，两边对不上。书架列表 2026-10-22 删了，书卡现在用任务列表。
+    let state = test_state("library-card-title-follows-document");
+    let app = build_app(state.clone());
+    let document_id = seed_document(&state, b"card-title-follows-document");
+    let upload = state.db.find_upload_for_document(&document_id).unwrap().unwrap();
+    let mut job = JobSnapshot::new("job-titled".to_string(), CreateJobInput::default(), vec!["python".to_string()]);
+    job.status = JobStatusKind::Succeeded;
+    job.upload_id = Some(upload.upload_id.clone());
+    job.sync_runtime_state();
+    state.db.save_job(&job).unwrap();
+    state.db.link_job_to_document("job-titled", &upload.upload_id).unwrap();
+    state.db.update_document_fields(&document_id, Some("自动识别出的论文标题"), None).unwrap();
+
+    let jobs = get_json(&app, "/api/v1/jobs").await;
+    let listed = jobs["data"]["items"].as_array().unwrap().iter().find(|item| item["job_id"] == "job-titled").expect("job item");
+    assert_eq!(listed["display_name"], "自动识别出的论文标题", "任务列表还是文件名");
+
+    // 书架详情（`/library/books/:job_id`）2026-10-19 删了；任务详情的书摘要同样跟文档标题走。
+    let detail = get_json(&app, "/api/v1/jobs/job-titled").await;
+    assert_eq!(detail["data"]["book_summary"]["title"], "自动识别出的论文标题", "任务详情的书摘要还是文件名");
+}
+
+#[tokio::test]
+async fn a_job_without_a_document_still_falls_back_to_the_upload_file_name() {
+    let state = test_state("library-card-title-fallback");
+    let app = build_app(state.clone());
+    let document_id = seed_document(&state, b"card-title-fallback");
+    let upload = state.db.find_upload_for_document(&document_id).unwrap().unwrap();
+    // 文档标题被清空（或这本书的文档记录不存在）：退回文件名，不能显示空白。
+    state.db.update_document_fields(&document_id, Some(""), None).unwrap();
+    let mut job = JobSnapshot::new("job-untitled".to_string(), CreateJobInput::default(), vec!["python".to_string()]);
+    job.status = JobStatusKind::Succeeded;
+    job.upload_id = Some(upload.upload_id.clone());
+    job.sync_runtime_state();
+    state.db.save_job(&job).unwrap();
+    let jobs = get_json(&app, "/api/v1/jobs").await;
+    let listed = jobs["data"]["items"].as_array().unwrap().iter().find(|item| item["job_id"] == "job-untitled").expect("job item");
+    assert_eq!(listed["display_name"], "光谱综述.pdf");
+}
+
+/// 书库列表带 `has_translation`：有没有任何成功的、带译文（非纯 OCR）的任务。
+///
+/// 书卡原来只看当前任务（active_job）成没成功；早已翻译完的书一旦重新翻译失败或正在跑，
+/// 书卡就降级成「读原文 / 失败」，而阅读器（resolve_reading_target）一直能打开旧译文。
+/// 这个字段只查数据库（成功的非 OCR 任务是否存在），不解析 PDF —— 列表每本书都要算。
+#[tokio::test]
+async fn documents_list_exposes_has_translation_independent_of_the_active_job() {
+    let state = test_state("library-documents-has-translation");
+    let app = build_app(state.clone());
+
+    let seed_job = |document_id: &str, job_id: &str, workflow: WorkflowKind, status: JobStatusKind| {
+        let mut input = CreateJobInput::default();
+        input.workflow = workflow;
+        let mut job = JobSnapshot::new(job_id.to_string(), input, vec!["python".to_string()]);
+        job.status = status;
+        job.sync_runtime_state();
+        state.db.save_job(&job).expect("save job");
+        let conn = rusqlite::Connection::open(state.config.jobs_db_path.clone()).expect("open db");
+        conn.execute(
+            "UPDATE jobs SET document_id = ?1 WHERE job_id = ?2",
+            rusqlite::params![document_id, job_id],
+        )
+        .expect("link job to document");
+    };
+
+    // 旧译文成功、最新一次重新翻译失败，当前任务指向失败的那个。
+    let retranslated = seed_document(&state, b"has-translation-old-success");
+    seed_job(&retranslated, "job-old-book", WorkflowKind::Book, JobStatusKind::Succeeded);
+    seed_job(&retranslated, "job-new-book", WorkflowKind::Book, JobStatusKind::Failed);
+    state
+        .db
+        .set_document_active_job(&retranslated, "job-new-book", None)
+        .expect("point active job at the failed retry");
+
+    // 只有成功的 OCR + 失败的翻译：没有译文。
+    let ocr_only = seed_document(&state, b"has-translation-ocr-only");
+    seed_job(&ocr_only, "job-ocr", WorkflowKind::Ocr, JobStatusKind::Succeeded);
+    seed_job(&ocr_only, "job-failed-book", WorkflowKind::Book, JobStatusKind::Failed);
+
+    // 只收藏、从没处理过。
+    let library_only = seed_document(&state, b"has-translation-library-only");
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/documents?limit=10&offset=0")
+                .header("X-API-Key", "test-key")
+                .body(Body::empty())
+                .expect("list request"),
+        )
+        .await
+        .expect("list response");
     assert_eq!(response.status(), StatusCode::OK);
-    let body = json_response(response).await;
-    assert_eq!(
-        body["data"]["deleted_count"], 2,
-        "清空必须报告实际删掉的条数,好让客户端核对它读到的 favorite_count"
-    );
+    let payload = json_response(response).await;
+    let flag = |document_id: &str| {
+        payload["data"]["documents"]
+            .as_array()
+            .expect("documents array")
+            .iter()
+            .find(|doc| doc["document_id"] == document_id)
+            .map(|doc| doc["has_translation"].clone())
+            .expect("document listed")
+    };
+    assert_eq!(flag(&retranslated), serde_json::json!(true), "旧译文可读，当前任务失败不影响");
+    assert_eq!(flag(&ocr_only), serde_json::json!(false), "纯 OCR 不算译文");
+    assert_eq!(flag(&library_only), serde_json::json!(false));
 
-    let response = app
-        .clone()
+    // 详情接口同一个字段、同一条规则。
+    let detail = app
         .oneshot(
             Request::builder()
-                .method("DELETE")
-                .uri(format!("/api/v1/documents/{document_id}"))
+                .uri(format!("/api/v1/documents/{retranslated}"))
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
-                .expect("request"),
+                .expect("detail request"),
         )
         .await
-        .expect("retry delete");
-    assert_eq!(
-        response.status(),
-        StatusCode::OK,
-        "清空收藏后重试删除必须放行,否则 409 指的那条路是死路"
-    );
-
-    // 清空是幂等的:没有收藏时返回 0 而不是报错
-    let other = seed_document(&state, b"no favorites doc");
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("DELETE")
-                .uri(format!("/api/v1/documents/{other}/favorites"))
-                .header("X-API-Key", "test-key")
-                .body(Body::empty())
-                .expect("request"),
-        )
-        .await
-        .expect("clear empty");
-    assert_eq!(response.status(), StatusCode::OK);
-    assert_eq!(json_response(response).await["data"]["deleted_count"], 0);
-
-    // 但文档不存在要 404,不能和"存在但没有收藏"混为一谈
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("DELETE")
-                .uri("/api/v1/documents/nosuchdoc/favorites")
-                .header("X-API-Key", "test-key")
-                .body(Body::empty())
-                .expect("request"),
-        )
-        .await
-        .expect("clear missing");
-    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        .expect("detail response");
+    let detail = json_response(detail).await;
+    assert_eq!(detail["data"]["has_translation"], serde_json::json!(true));
+    assert_eq!(detail["data"]["active_job_id"], "job-new-book");
 }

@@ -1,0 +1,16 @@
+# 装成 /docker-entrypoint.d/15-backend-api-key.envsh。nginx 官方入口按文件名顺序处理这个目录，
+# .envsh 用 . 引进来，所以这里 export 的变量能被后面的 20-envsubst-on-templates.sh 拿去展开模板。
+# 被引进来执行：不能 exit，不能 set -e。
+#
+# web.env 的 RETAINPDF_PROXY_API_KEY 还是公开的占位 key、compose 又挂了共享目录时，改用 app 容器第一次
+# 启动生成的那把（见 backend/api-key.sh；compose 让 web 等 app 就绪才启动，那时文件已经在了）。
+# 设成空（多用户叠加配置，不让 NGINX 补 key）或换成自己的 key，都不动。
+if [ "${RETAINPDF_PROXY_API_KEY:-}" = "replace-with-your-backend-key" ] && [ -n "${RETAINPDF_SHARED_KEY_DIR:-}" ]; then
+  if [ -s "$RETAINPDF_SHARED_KEY_DIR/backend-api-key" ]; then
+    RETAINPDF_PROXY_API_KEY="$(cat "$RETAINPDF_SHARED_KEY_DIR/backend-api-key")"
+    export RETAINPDF_PROXY_API_KEY
+    echo "backend-api-key: using the generated backend API key from $RETAINPDF_SHARED_KEY_DIR" >&2
+  else
+    echo "WARNING: backend-api-key: $RETAINPDF_SHARED_KEY_DIR/backend-api-key is missing; NGINX keeps the placeholder key" >&2
+  fi
+fi

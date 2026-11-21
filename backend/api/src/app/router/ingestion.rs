@@ -1,49 +1,10 @@
-use axum::extract::DefaultBodyLimit;
-use axum::routing::{get, post};
-use axum::Router;
+//! 上传（`/uploads`）。只做 OCR 的旧别名 `/ocr/jobs/*` 2026-10-18 删了，OCR 任务也走 `/jobs/*`。
 
 use crate::app::AppState;
-use crate::routes::{jobs, uploads};
+use crate::routes::uploads;
 
-pub(super) fn routes() -> Router<AppState> {
-    Router::new()
-        .route(
-            "/api/v1/ocr/jobs",
-            post(jobs::create_ocr_job)
-                .get(jobs::list_ocr_jobs)
-                .layer(DefaultBodyLimit::disable()),
-        )
-        .route("/api/v1/ocr/jobs/:job_id", get(jobs::get_ocr_job))
-        .route(
-            "/api/v1/ocr/jobs/:job_id/events",
-            get(jobs::get_ocr_job_events),
-        )
-        .route(
-            "/api/v1/ocr/jobs/:job_id/artifacts",
-            get(jobs::get_ocr_job_artifacts),
-        )
-        .route(
-            "/api/v1/ocr/jobs/:job_id/artifacts-manifest",
-            get(jobs::get_ocr_job_artifacts_manifest),
-        )
-        .route(
-            "/api/v1/ocr/jobs/:job_id/artifacts/:artifact_key",
-            get(jobs::download_ocr_artifact_by_key),
-        )
-        .route(
-            "/api/v1/ocr/jobs/:job_id/normalized-document",
-            get(jobs::download_ocr_normalized_document),
-        )
-        .route(
-            "/api/v1/ocr/jobs/:job_id/normalization-report",
-            get(jobs::download_ocr_normalization_report),
-        )
-        .route(
-            "/api/v1/ocr/jobs/:job_id/cancel",
-            post(jobs::cancel_ocr_job),
-        )
-        .route(
-            "/api/v1/uploads",
-            post(uploads::upload_pdf).layer(DefaultBodyLimit::disable()),
-        )
+crate::endpoints! {
+    state: AppState;
+    /// 上传一个 PDF（不限请求体大小），建任务时用返回的 upload_id
+    POST "/api/v1/uploads" => uploads::upload_pdf, signed [unlimited_body];
 }

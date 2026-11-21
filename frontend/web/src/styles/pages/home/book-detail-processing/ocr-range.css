@@ -1,0 +1,20 @@
+/* OCR 指定页码：动作区选项行里的一项，和翻译的「指定页码」并排。（BookDetailProcessingTab） */
+
+.book-detail-ocr-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 勾选框是 @retainpdf/ui 的 Checkbox，这里只定颜色和字号。 */
+.book-detail-ocr-range-toggle {
+  color: var(--muted);
+  font-size: var(--ui-text-xs);
+}
+
+.book-detail-ocr-range-inputs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

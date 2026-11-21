@@ -30,7 +30,7 @@ import { AllPackages } from "mathjax-full/js/input/tex/AllPackages.js";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REGISTRY = join(
   HERE,
-  "../../../../backend/pipeline/retainpdf_pipeline/foundation/shared/latex_commands.json",
+  "../../../../backend/math/retainpdf_math/latex_commands.json",
 );
 
 const commands = JSON.parse(readFileSync(REGISTRY, "utf8")).commands;

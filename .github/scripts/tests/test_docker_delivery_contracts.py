@@ -108,7 +108,7 @@ def test_web_proxy_key_is_server_side_and_browser_key_defaults_empty() -> None:
 @pytest.mark.parametrize(
     "declaration",
     [
-        "location ~ ^/api/v1/jobs/[^/]+/live-events$ {",
+        "location ~ ^/api/v1/jobs/[^/]+/progress/stream$ {",
     ],
 )
 def test_nginx_sse_locations_disable_response_buffering(declaration: str) -> None:
@@ -144,7 +144,8 @@ def test_host_nginx_example_keeps_backend_private_and_sse_streaming() -> None:
     assert 'auth_basic "RetainPDF";' in nginx
     assert "client_max_body_size 256m;" in nginx
     assert "location = /api/v1/ai/ask {" not in nginx
-    assert "location ~ ^/api/v1/jobs/[^/]+/live-events$ {" in nginx
+    assert "location ~ ^/api/v1/jobs/[^/]+/progress/stream$ {" in nginx
+    assert "live-events" not in nginx
     assert nginx.count("proxy_buffering off;") == 1
     assert nginx.count("add_header X-Accel-Buffering no always;") == 1
     assert "proxy_request_buffering off;" in nginx

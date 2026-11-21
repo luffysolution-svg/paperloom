@@ -4,6 +4,7 @@
 // 所有读取都经注入的 getter（developerConfigWithDefaults / getUploadState /
 // 凭据状态），不直接触碰 DOM 或全局状态。
 
+import { getApiAuthMode } from "@retainpdf/api/http";
 import { isOfficialDeepSeekBaseUrl } from "@/platform/config/providers.js";
 import {
   workflowHeadline as resolveWorkflowHeadline,
@@ -19,9 +20,19 @@ import type { WorkflowDeveloperConfig } from "./payload.js";
 import type { WorkflowConfigPortLike } from "./contracts.js";
 import type { WorkflowConstants } from "./contracts.js";
 
+
+/** 让凭据功能刷新「上传门禁」时带过去的回调（凭据侧的 UpdateCredentialGateOptions 与之同形）。 */
+export type CredentialGateRequest = {
+  workflowNeedsCredentials: () => boolean;
+  workflowNeedsUpload: () => boolean;
+  hasCredentials?: () => boolean;
+  refreshSubmitControls: () => void;
+};
+
 export interface CreateWorkflowModeControllerOptions {
   constants: WorkflowConstants;
-  developerConfigWithDefaults: () => WorkflowDeveloperConfig;
+  /** 补过默认值的配置，workflow 一定有值（见 developer-config.ts）。 */
+  developerConfigWithDefaults: () => WorkflowDeveloperConfig & { workflow: string };
   isOcrOnlyMode: () => boolean;
   getDeveloperConfig: () => WorkflowDeveloperConfig | Record<string, unknown> | null | undefined;
   getUploadState: () => { uploadId?: string; uploadedPageCount?: number };
@@ -35,12 +46,7 @@ export interface CreateWorkflowModeControllerOptions {
   defaultFileLabel: string;
   normalizeWorkflow: (value?: unknown) => string;
   hasBrowserCredentials?: () => boolean;
-  updateCredentialGatePort?: (options?: {
-    workflowNeedsCredentials?: () => boolean;
-    workflowNeedsUpload?: () => boolean;
-    hasCredentials?: () => boolean;
-    refreshSubmitControls?: () => void;
-  }) => void;
+  updateCredentialGatePort?: (options: CredentialGateRequest) => void;
   loadGlossaryOptions: () => void;
 }
 
@@ -112,9 +118,14 @@ export function createWorkflowModeController({
     });
   }
 
+  // 多用户模式下模型和 OCR 由平台统一配（服务器上），浏览器里没有、也不需要 Key：
+  // 按钮、提示条、提交前检查都当凭据已就绪（和 actions/submit/readiness.ts 一致），也不查本机 DeepSeek 余额。
+  const multiUser = () => getApiAuthMode() === "multi";
+  const credentialsReady = () => multiUser() || Boolean(hasBrowserCredentials?.());
+
   function currentBudgetState(workflow = currentWorkflow()) {
-    if (isOcrOnlyMode()) {
-      return { visible: false, blocking: false, tone: "", message: "", topUpUrl: "" } as any;
+    if (isOcrOnlyMode() || multiUser()) {
+      return { visible: false, blocking: false, tone: "", message: "", topUpUrl: "" };
     }
     const developerConfig = getDeveloperConfig() || {};
     const modelBaseUrl = `${
@@ -123,7 +134,7 @@ export function createWorkflowModeController({
       || ""
     }`;
     if (!isOfficialDeepSeekBaseUrl(modelBaseUrl)) {
-      return { visible: false, blocking: false, tone: "", message: "", topUpUrl: "" } as any;
+      return { visible: false, blocking: false, tone: "", message: "", topUpUrl: "" };
     }
     const uploadState = getUploadState();
     const balanceState = getDeepSeekBalanceState();
@@ -140,14 +151,13 @@ export function createWorkflowModeController({
     const workflow = isOcrOnlyMode() ? WORKFLOW_OCR : currentWorkflow();
     const uploadState = getUploadState();
     const budget = currentBudgetState(workflow);
-    const hasCreds = hasBrowserCredentials?.();
     const submitState = resolveSubmitControlState({
       workflow,
       isMock: configPort.isMock(),
       desktopMode: isDesktopMode(),
       uploadId: uploadState.uploadId,
       renderSourceJobId: currentRenderSourceJobId(),
-      hasBrowserCredentials: Boolean(hasCreds),
+      hasBrowserCredentials: credentialsReady(),
       budgetBlocking: Boolean(budget.blocking),
       workflowNeedsUpload,
       workflowNeedsCredentials,
@@ -170,7 +180,7 @@ export function createWorkflowModeController({
     updateCredentialGatePort?.({
       workflowNeedsCredentials: () => workflowNeedsCredentials(workflow),
       workflowNeedsUpload: () => workflowNeedsUpload(workflow),
-      hasCredentials: () => Boolean(hasBrowserCredentials?.()),
+      hasCredentials: credentialsReady,
       refreshSubmitControls,
     });
   }

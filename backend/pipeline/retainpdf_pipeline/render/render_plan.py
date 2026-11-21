@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from retainpdf_pipeline.render.layout.title_source_size import annotate_title_source_font_sizes
 from retainpdf_pipeline.render.render_inputs import RenderInputs
 from retainpdf_pipeline.render.render_mode import resolve_effective_render_mode
 from retainpdf_pipeline.render.translation_loader import load_translated_pages
@@ -20,6 +21,31 @@ class RenderPlan:
         return len(self.selected_pages)
 
 
+def plan_pages(
+    *,
+    source_pdf_path: Path,
+    pages: dict[int, list[dict]],
+    mode_probe_pages: dict[int, list[dict]] | None,
+    start_page: int,
+    end_page: int,
+    render_mode: str,
+) -> tuple[dict[int, list[dict]], str]:
+    """要渲染的页与实际渲染模式。渲染阶段与提前做的渲染准备（翻译前的条目）共用这一份推导。"""
+    effective_render_mode = resolve_effective_render_mode(
+        render_mode=render_mode,
+        source_pdf_path=source_pdf_path,
+        start_page=start_page,
+        end_page=end_page,
+        translated_pages_map=mode_probe_pages,
+    )
+    selected_pages = select_translated_pages(
+        pages,
+        start_page=max(0, start_page),
+        end_page=max(pages) if end_page < 0 else end_page,
+    )
+    return selected_pages, effective_render_mode
+
+
 def build_render_plan(
     *,
     source_pdf_path: Path,
@@ -30,6 +56,7 @@ def build_render_plan(
     end_page: int,
     render_mode: str,
     translated_pages_map: dict[int, list[dict]] | None = None,
+    document_path: Path | None = None,
 ) -> RenderPlan:
     from retainpdf_pipeline.render.render_inputs import resolve_render_inputs
 
@@ -37,6 +64,7 @@ def build_render_plan(
         source_pdf_path=source_pdf_path,
         translations_dir=translations_dir,
         translation_manifest_path=translation_manifest_path,
+        document_path=document_path,
     )
     auto_pages_map = translated_pages_map
     if render_mode == "auto" and auto_pages_map is None:
@@ -44,29 +72,26 @@ def build_render_plan(
             render_inputs.translations_dir,
             manifest_path=render_inputs.translation_manifest_path,
         )
-    effective_render_mode = resolve_effective_render_mode(
-        render_mode=render_mode,
-        source_pdf_path=render_inputs.source_pdf_path,
-        start_page=start_page,
-        end_page=end_page,
-        translated_pages_map=auto_pages_map,
-    )
-    if auto_pages_map is not None:
-        selected_pages = select_translated_pages(
-            auto_pages_map,
-            start_page=max(0, start_page),
-            end_page=max(auto_pages_map) if end_page < 0 else end_page,
-        )
-    else:
-        selected_pages = load_translated_pages(
+    pages = (
+        auto_pages_map
+        if auto_pages_map is not None
+        else load_translated_pages(
             render_inputs.translations_dir,
             manifest_path=render_inputs.translation_manifest_path,
         )
-        selected_pages = select_translated_pages(
-            selected_pages,
-            start_page=max(0, start_page),
-            end_page=max(selected_pages) if end_page < 0 else end_page,
-        )
+    )
+    selected_pages, effective_render_mode = plan_pages(
+        source_pdf_path=render_inputs.source_pdf_path,
+        pages=pages,
+        mode_probe_pages=auto_pages_map,
+        start_page=start_page,
+        end_page=end_page,
+        render_mode=render_mode,
+    )
+    # 标题按原文字号排（Typst 路线和 rpr_fit 引擎同一个值），读原 PDF 的文字层，读不到按框反推
+    title_stats = annotate_title_source_font_sizes(selected_pages, render_inputs.source_pdf_path)
+    if any(title_stats.values()):
+        print(f"title source font sizes: {title_stats}", flush=True)
     return RenderPlan(
         render_inputs=render_inputs,
         selected_pages=selected_pages,

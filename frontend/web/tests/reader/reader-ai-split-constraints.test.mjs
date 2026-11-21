@@ -10,8 +10,8 @@ import {
   clampAssistantPercent,
   documentPercentForAssistant,
   panelPercent,
-} from "../../../../frontend/packages/reader/src/components/react-pdf/reader-ai-split-constraints.ts";
-import { normalizeReaderAiSplitLayout } from "../../../../frontend/packages/reader/src/components/react-pdf/ReaderAiSplitResizeHandle.tsx";
+} from "../../../../frontend/packages/reader/src/components/react-pdf/reader-assistant-split-constraints.ts";
+import { normalizeReaderAiSplitLayout } from "../../../../frontend/packages/reader/src/components/react-pdf/ReaderAssistantSplitResizeHandle.tsx";
 
 test("split constraints are one source of truth for defaults and bounds", () => {
   assert.equal(MIN_ASSISTANT_PERCENT, 30);
@@ -42,7 +42,7 @@ test("clampAssistantPercent matches the layout normalizer", () => {
 
 test("resize handle derives every Panel bound from the shared constraints", async () => {
   const handle = await readFile(
-    new URL("../../../../frontend/packages/reader/src/components/react-pdf/ReaderAiSplitResizeHandle.tsx", import.meta.url),
+    new URL("../../../../frontend/packages/reader/src/components/react-pdf/ReaderAssistantSplitResizeHandle.tsx", import.meta.url),
     "utf8",
   );
   // No second set of literals living next to the shared module.

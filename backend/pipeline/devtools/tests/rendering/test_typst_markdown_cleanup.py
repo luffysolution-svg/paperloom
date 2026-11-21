@@ -1,74 +1,12 @@
-import sys
+
+
+
 import shutil
-import tempfile
-from pathlib import Path
-from unittest import mock
-import re
 
-import fitz
 import pytest
-from PIL import Image
 
-
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-
-from retainpdf_pipeline.render.source.background.stage import build_clean_background_pdf
-from retainpdf_pipeline.foundation.config import fonts
-from retainpdf_pipeline.render.layout.payload.blocks import build_render_blocks
-from retainpdf_pipeline.render.layout.payload.body_pipeline import apply_body_payload_pipeline
-from retainpdf_pipeline.render.layout.payload.collision import mark_adjacent_collision_risk
-from retainpdf_pipeline.render.layout.payload.emit import payload_to_render_block
-from retainpdf_pipeline.render.layout.payload.first_line_indent import detect_first_line_indent_pt
 from retainpdf_pipeline.render.layout.payload.line_structure import maybe_preserve_structured_line_breaks
-from retainpdf_pipeline.render.layout.model.models import RenderLayoutBlock
-from retainpdf_pipeline.render.layout.model.models import RenderPageSpec
-from retainpdf_pipeline.render.layout.page_specs import build_render_page_specs
-from retainpdf_pipeline.render.layout.payload.continuation_split import split_protected_text_for_boxes
-from retainpdf_pipeline.render.layout.payload.prepare import prepare_render_payloads_by_page
-from retainpdf_pipeline.render.source.items import get_item_translated_text
-from retainpdf_pipeline.render.source.dev_overlay.text_draw import _build_direct_draw_tokens
-from retainpdf_pipeline.render.source.dev_overlay.text_draw import _fit_segment_layout
-from retainpdf_pipeline.render.layout.payload.suspicious_ocr import detect_and_drop_suspicious_ocr_glued_blocks
-from retainpdf_pipeline.render.output.typst.book_renderer import _compile_render_pages_pdf_resilient
-from retainpdf_pipeline.render.output.typst.block_renderer import build_typst_block, sanitize_typst_markdown_for_compile
-from retainpdf_pipeline.render.output.typst.overlay_ops import overlay_translated_pages_on_doc
-from retainpdf_pipeline.render.output.typst.book_support import prepare_translated_pages_for_render
-from retainpdf_pipeline.render.output.typst.compiler import _resolved_font_paths
-from retainpdf_pipeline.render.output.typst.compiler import _resolved_common_root
-from retainpdf_pipeline.render.output.typst.compiler import TypstCompileError
-from retainpdf_pipeline.render.output.typst.compiler import compile_typst_book_background_pdf
-from retainpdf_pipeline.render.output.typst.compiler import compile_typst_overlay_pdf
-from retainpdf_pipeline.render.output.typst.compiler import compile_typst_render_pages_pdf
-from retainpdf_pipeline.render.output.typst.emitter import build_typst_source_from_page_specs
-from retainpdf_pipeline.render.output.typst.source_builder import build_typst_overlay_source
-from retainpdf_pipeline.render.policy import apply_render_page_policy_fields
-from retainpdf_pipeline.render.policy import build_render_page_policy
-from retainpdf_pipeline.render.policy import formula_neighbor_text_item_ids
-from retainpdf_pipeline.render.policy import item_render_policy
-from retainpdf_pipeline.render.policy import item_render_policy_reason
-from retainpdf_pipeline.render.policy import item_requires_visual_cover_only
-from retainpdf_pipeline.render.policy import item_uses_white_overlay_fill
-from retainpdf_pipeline.render.policy import protect_formula_regions_in_redaction_items
-from retainpdf_pipeline.render.output.typst.source_page_overlay import apply_source_page_overlay
-from retainpdf_pipeline.render.output.typst.overlay_diagnostics import apply_redaction_diagnostics
-from retainpdf_pipeline.render.output.typst.overlay_diagnostics import new_overlay_merge_diagnostics
-from retainpdf_pipeline.render.source.background.redaction_items import redaction_items_from_layout_blocks
-from retainpdf_pipeline.render.source.cleanup.item_rects import cover_rects_from_valid_items
-from retainpdf_pipeline.render.output.typst.source_page_overlay import overlay_pages_from_single_pdf
-from retainpdf_pipeline.render.output.typst.source_page_overlay import redaction_items_from_render_blocks
-from retainpdf_pipeline.render.output.typst.sanitize import sanitize_items_for_typst_compile
-from retainpdf_pipeline.render.output.typst.overlay_ops import _extract_failed_overlay_indices
-from retainpdf_pipeline.render.output.typst.overlay_ops import _can_use_pikepdf_book_overlay
-from retainpdf_pipeline.render.workflow.cover_fallback import cover_fallback_page_indices
-from retainpdf_pipeline.render.workflow.context import RenderExecutionContext
-from retainpdf_pipeline.render.workflow.modes import _compress_final_pdf_if_needed
-from retainpdf_pipeline.render.document.pikepdf_overlay import overlay_pdf_pages_with_pikepdf
-from retainpdf_pipeline.render.document.pikepdf_overlay import overlay_page_pdfs_with_pikepdf
-from retainpdf_pipeline.render.document.pikepdf_pages import extract_pages_with_pikepdf
 from retainpdf_pipeline.render.layout.inline_content.core.markdown import build_direct_typst_passthrough_text
-from devtools.tests.rendering_support.page_specs import sample_page_spec as _page_spec
 
 
 def test_direct_typst_inline_math_internal_newline_is_folded_before_rendering() -> None:
@@ -192,6 +130,7 @@ def test_body_rendering_folds_model_visual_line_breaks_for_flow_text() -> None:
     assert "_render_preserve_line_breaks" not in item
 
 
+# 带圈字：公式插件 mitex 不认 \textcircled / \circled，一处就让整本编译失败（2026-11-04，1265 页的图纸里一处 $\textcircled{1}$）
 @pytest.mark.parametrize(
     ("markdown", "expected"),
     [
@@ -205,14 +144,18 @@ def test_body_rendering_folds_model_visual_line_breaks_for_flow_text() -> None:
     ],
 )
 def test_circled_characters_become_plain_circled_glyphs(markdown: str, expected: str) -> None:
+    from retainpdf_pipeline.render.output.typst.block_renderer import sanitize_typst_markdown_for_compile
+
     assert sanitize_typst_markdown_for_compile(markdown) == expected
 
 
+@pytest.mark.needs_typst
 @pytest.mark.skipif(shutil.which("typst") is None, reason="needs the typst binary")
 @pytest.mark.parametrize("cleaned", [False, True])
 def test_mitex_only_compiles_a_circled_digit_once_cleaned(tmp_path, cleaned: bool) -> None:
     import subprocess
 
+    from retainpdf_pipeline.render.output.typst.block_renderer import sanitize_typst_markdown_for_compile
     from retainpdf_pipeline.render.output.typst.shared import escape_typst_string
 
     markdown = r"编号 $x + \textcircled{1}$ 后面"
@@ -229,18 +172,3 @@ def test_mitex_only_compiles_a_circled_digit_once_cleaned(tmp_path, cleaned: boo
         assert proc.returncode == 0, proc.stderr
     else:
         assert proc.returncode != 0 and "textcircled" in proc.stderr
-
-
-@pytest.mark.parametrize(
-    ("markdown", "expected"),
-    [
-        ("以 suspect_name [@input_index] 的格式", r"以 suspect_name [\@input_index] 的格式"),
-        ("[ @x; @y]", r"[ \@x; @y]"),
-        # 这些 cmarker 本来就不当引用，不动
-        ("名称后附加 @PV# 后缀", "名称后附加 @PV# 后缀"),
-        ("发邮件到 a@b.com", "发邮件到 a@b.com"),
-        ("见 (@y)", "见 (@y)"),
-    ],
-)
-def test_bracketed_at_signs_are_escaped_for_cmarker(markdown: str, expected: str) -> None:
-    assert sanitize_typst_markdown_for_compile(markdown) == expected

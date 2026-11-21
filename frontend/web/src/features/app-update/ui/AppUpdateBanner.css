@@ -1,0 +1,35 @@
+/* 主页动作按钮（更新提示横幅里用）。（AppUpdateBanner）
+ *
+ * @owns home-action-btn
+ * @uses primary */
+
+@utility home-action-btn {
+  @apply rounded-full border border-[var(--line)] bg-[var(--paper)] text-[13px] font-semibold leading-none text-[var(--ink)] shadow-none;
+  appearance: auto;
+  min-height: 38px;
+  padding: 0 16px;
+  filter: none;
+
+  &.primary {
+    border-color: var(--ink);
+    background: var(--ink);
+    color: var(--paper);
+  }
+
+  &:hover {
+    border-color: var(--ink);
+    background: var(--bg);
+    color: var(--ink);
+    filter: none;
+  }
+
+  &.primary:hover {
+    background: var(--ink);
+    color: var(--paper);
+  }
+
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    outline-offset: 3px;
+  }
+}

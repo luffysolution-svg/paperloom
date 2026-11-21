@@ -10,10 +10,6 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./library-books": {
-      "types": "./dist/library-books.d.ts",
-      "import": "./dist/library-books.js"
-    },
     "./jobs": {
       "types": "./dist/jobs.d.ts",
       "import": "./dist/jobs.js"
@@ -62,13 +58,17 @@
       "types": "./dist/collections.d.ts",
       "import": "./dist/collections.js"
     },
-    "./favorites": {
-      "types": "./dist/favorites.d.ts",
-      "import": "./dist/favorites.js"
-    },
     "./glossaries": {
       "types": "./dist/glossaries.d.ts",
       "import": "./dist/glossaries.js"
+    },
+    "./backups": {
+      "types": "./dist/backups.d.ts",
+      "import": "./dist/backups.js"
+    },
+    "./sync": {
+      "types": "./dist/sync.d.ts",
+      "import": "./dist/sync.js"
     },
     "./providers": {
       "types": "./dist/providers.d.ts",
@@ -77,6 +77,26 @@
     "./reader": {
       "types": "./dist/reader.d.ts",
       "import": "./dist/reader.js"
+    },
+    "./quality": {
+      "types": "./dist/quality.d.ts",
+      "import": "./dist/quality.js"
+    },
+    "./job-data": {
+      "types": "./dist/job-data.d.ts",
+      "import": "./dist/job-data.js"
+    },
+    "./auth": {
+      "types": "./dist/auth.d.ts",
+      "import": "./dist/auth.js"
+    },
+    "./admin-platform": {
+      "types": "./dist/admin-platform.d.ts",
+      "import": "./dist/admin-platform.js"
+    },
+    "./usage": {
+      "types": "./dist/usage.d.ts",
+      "import": "./dist/usage.js"
     },
     "./search": {
       "types": "./dist/search.d.ts",
@@ -107,6 +127,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "generate:client": "node ./scripts/generate-client.mjs",
+    "generate:client:check": "node ./scripts/generate-client.mjs --check",
     "dev": "tsc --watch -p tsconfig.json",
     "verify:package": "node ./scripts/verify-package.mjs",
     "test": "npm run build && npm run verify:package",

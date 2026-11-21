@@ -4,24 +4,26 @@ import argparse
 from pathlib import Path
 from types import SimpleNamespace
 
+from retainpdf_translation.llm.shared.model_wire import register_stage_connections
+from retainpdf_pipeline.foundation.shared.stage_specs import DEFAULT_RENDER_ENGINE
 from retainpdf_pipeline.foundation.config import layout
 from retainpdf_pipeline.foundation.shared.job_dirs import job_dirs_from_explicit_args
 from retainpdf_pipeline.foundation.shared.stage_specs import build_stage_invocation_metadata
 from retainpdf_pipeline.foundation.shared.stage_specs import BookStageSpec
-from retainpdf_pipeline.foundation.shared.stage_specs import resolve_credential_ref
+from retainpdf_base.credentials import resolve_credential_ref
 from retainpdf_pipeline.foundation.shared.tee_output import enable_job_log_capture
 from retainpdf_pipeline.translate.entrypoints.report_files import DOCUMENT_SCHEMA_REPORT_FILE_NAME
-from retainpdf_pipeline.services.pipeline_shared.contracts import PIPELINE_SUMMARY_FILE_NAME
-from retainpdf_pipeline.services.pipeline_shared.contracts import STDOUT_LABEL_EVENTS_JSONL
-from retainpdf_pipeline.services.pipeline_shared.events import emit_artifact_published
-from retainpdf_pipeline.services.pipeline_shared.events import emit_stage_transition
-from retainpdf_pipeline.services.pipeline_shared.events import PipelineEventWriter
-from retainpdf_pipeline.services.pipeline_shared.events import pipeline_event_writer_scope
+from retainpdf_base.contracts import PIPELINE_SUMMARY_FILE_NAME
+from retainpdf_base.contracts import STDOUT_LABEL_EVENTS_JSONL
+from retainpdf_base.events import emit_artifact_published
+from retainpdf_base.events import emit_stage_transition
+from retainpdf_base.events import PipelineEventWriter
+from retainpdf_base.events import pipeline_event_writer_scope
 from retainpdf_pipeline.services.pipeline_shared.summary import print_pipeline_summary
 from retainpdf_pipeline.services.pipeline_shared.summary import write_pipeline_summary
-from retainpdf_pipeline.translate.llm.shared.provider_runtime import DEFAULT_BASE_URL
-from retainpdf_pipeline.translate.llm.shared.provider_runtime import get_api_key
-from retainpdf_pipeline.translate.llm.shared.provider_runtime import normalize_base_url
+from retainpdf_translation.llm.shared.provider_runtime import DEFAULT_BASE_URL
+from retainpdf_translation.llm.shared.provider_runtime import get_api_key
+from retainpdf_translation.llm.shared.provider_runtime import normalize_base_url
 from retainpdf_pipeline.runtime.pipeline.book_pipeline import run_book_pipeline
 
 
@@ -34,6 +36,16 @@ def parse_args() -> argparse.Namespace:
 
 
 def _args_from_spec(spec: BookStageSpec) -> SimpleNamespace:
+    register_stage_connections(
+        model=spec.translation.model,
+        base_url=spec.translation.base_url,
+        api_protocol=spec.translation.api_protocol,
+        thinking=spec.translation.thinking,
+        reviewer_model=spec.translation.reviewer_model,
+        reviewer_base_url=spec.translation.reviewer_base_url,
+        reviewer_api_protocol=spec.translation.reviewer_api_protocol,
+        reviewer_thinking=spec.translation.reviewer_thinking,
+    )
     job_dirs = spec.job_dirs
     return SimpleNamespace(
         job_root=str(job_dirs.root),
@@ -67,8 +79,11 @@ def _args_from_spec(spec: BookStageSpec) -> SimpleNamespace:
         api_key=resolve_credential_ref(spec.translation.credential_ref),
         model=spec.translation.model,
         base_url=spec.translation.base_url,
-        api_protocol=spec.translation.api_protocol,
-        thinking=spec.translation.thinking,
+        preparation=spec.translation.preparation,
+        reviewer_model=spec.translation.reviewer_model,
+        reviewer_base_url=spec.translation.reviewer_base_url,
+        reviewer_api_key=resolve_credential_ref(spec.translation.reviewer_credential_ref),
+        engine=spec.translation.engine,
         render_mode=spec.render.render_mode,
         compile_workers=spec.render.compile_workers,
         typst_font_family=spec.render.typst_font_family,
@@ -82,6 +97,7 @@ def _args_from_spec(spec: BookStageSpec) -> SimpleNamespace:
         inner_bbox_dense_shrink_y=spec.render.inner_bbox_dense_shrink_y,
         font_unify_mode=spec.render.font_unify_mode,
         source_cleanup_strategy=spec.render.source_cleanup_strategy,
+        render_engine=spec.render.engine,
     )
 
 
@@ -90,8 +106,6 @@ def main() -> None:
     spec = BookStageSpec.load(Path(args.spec))
     stage_spec_schema_version = spec.schema_version
     args = _args_from_spec(spec)
-    from retainpdf_pipeline.translate.llm.shared.model_wire import register_connection
-    register_connection(base_url=args.base_url, model=args.model, protocol=args.api_protocol, thinking=args.thinking)
     layout.apply_layout_tuning(
         body_font_size_factor=args.body_font_size_factor,
         body_leading_factor=args.body_leading_factor,
@@ -162,10 +176,16 @@ def main() -> None:
             context_mode=args.context_mode,
             glossary_mode=args.glossary_mode,
             memory_mode=args.memory_mode,
+            preparation=args.preparation,
+            reviewer_model=args.reviewer_model,
+            reviewer_base_url=args.reviewer_base_url,
+            reviewer_api_key=args.reviewer_api_key,
+            engine=getattr(args, "engine", "legacy"),
             compile_workers=args.compile_workers or None,
             typst_font_family=args.typst_font_family,
             pdf_compress_dpi=args.pdf_compress_dpi,
             source_cleanup_strategy=args.source_cleanup_strategy,
+            render_engine=getattr(args, "render_engine", DEFAULT_RENDER_ENGINE),
             invocation=build_stage_invocation_metadata(
                 stage="book",
                 stage_spec_schema_version=stage_spec_schema_version,

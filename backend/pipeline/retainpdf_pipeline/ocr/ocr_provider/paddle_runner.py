@@ -25,9 +25,9 @@ from retainpdf_pipeline.ocr.ocr_provider.paddle_cli import paddle_cli_payload_fo
 from retainpdf_pipeline.ocr.ocr_provider.paddle_cli import run_paddle_cli
 from retainpdf_pipeline.ocr.ocr_provider.paddle_markdown import materialize_paddle_markdown_artifacts
 from retainpdf_pipeline.ocr.ocr_provider.paddle_normalize import save_normalized_document_for_paddle
-from retainpdf_pipeline.services.pipeline_shared.events import emit_stage_progress
-from retainpdf_pipeline.services.pipeline_shared.events import emit_stage_transition
-from retainpdf_pipeline.services.pipeline_shared.io import save_json
+from retainpdf_base.events import emit_stage_progress
+from retainpdf_base.events import emit_stage_transition
+from retainpdf_base.io import save_json
 
 DownloadSourcePdfFn = Callable[[str, Path], Path]
 GetTokenFn = Callable[..., str]

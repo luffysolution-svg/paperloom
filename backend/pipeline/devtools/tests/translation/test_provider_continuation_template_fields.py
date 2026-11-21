@@ -4,11 +4,11 @@ from pathlib import Path
 from retainpdf_pipeline.ocr.document_schema.defaults import default_block_continuation_hint
 from retainpdf_pipeline.ocr.document_schema.adapters import adapt_payload_to_document_v1
 from retainpdf_pipeline.ocr.document_schema.providers import PROVIDER_GENERIC_FLAT_OCR
-from retainpdf_pipeline.translate.core.ocr.json_extractor import extract_text_items
-from retainpdf_pipeline.translate.core.ocr.models import TextItem
-from retainpdf_pipeline.translate.core.payload.translations import export_translation_template
-from retainpdf_pipeline.translate.core.payload.translations import load_translations
-from retainpdf_pipeline.translate.services.continuation import state
+from retainpdf_translation.core.ocr.json_extractor import extract_text_items
+from retainpdf_translation.core.ocr.models import TextItem
+from retainpdf_translation.core.payload.translations import export_translation_template
+from retainpdf_translation.core.payload.translations import load_translations
+from retainpdf_translation.services.continuation import state
 
 
 def test_generic_provider_continuation_hint_flows_through_extractor_and_template() -> None:

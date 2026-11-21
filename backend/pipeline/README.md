@@ -16,7 +16,7 @@
 其中 `services/` 内部现在又明确分成两类：
 
 - provider / translation / rendering 这类能力模块
-- `services/pipeline_shared/` 这类跨阶段共享协议模块
+- `services/pipeline_shared/`：跨阶段的 pipeline summary（事件、stdout 标签、JSON IO 在底座包 `backend/base` 的 `retainpdf_base`）
 
 ## 主链路
 
@@ -68,9 +68,6 @@
   顶层 translate worker。只接受已经标准化的 `document.v1.json`。
 - `retainpdf-pipeline render-only --spec <job_root>/specs/render.spec.json`
   顶层 render worker。只接受翻译产物和 PDF。
-- `retainpdf-pipeline document-operation --help`
-  页面删除、重排、复制和旋转的固定解释器；执行页面程序并生成候选 PDF、结果和视觉校验报告。
-  实现随 Pipeline wheel 安装，不依赖 AI 服务包。
 - `retainpdf-pipeline translate-from-ocr --spec <job_root>/specs/book.spec.json`
   provider/normalize 后继续翻译和渲染的入口之一（顶层垫片已删除，只有包内入口和 console 子命令）。
 - `retainpdf-pipeline diagnose-failure --spec <job_root>/specs/<stage>.spec.json`
@@ -99,22 +96,16 @@
 
 如果要改翻译链路，推荐阅读顺序是：
 
-1. `retainpdf_pipeline/translate/README.md`
-2. `retainpdf_pipeline/translate/llm/README.md`
-3. 再按需要进入 `retainpdf_pipeline/translate/llm/providers/` 或 `retainpdf_pipeline/translate/llm/shared/orchestration/`
+翻译在独立包 `backend/translation`（`retainpdf_translation`），流水线里的 `retainpdf_pipeline/translate/` 只剩 worker 外壳：
 
-## 页面操作独立安装验收
+1. `../translation/README.md`
+2. `../translation/retainpdf_translation/llm/README.md`
+3. 再按需要进入 `retainpdf_translation/llm/providers/` 或 `retainpdf_translation/llm/shared/orchestration/`
 
-将 Pipeline wheel 及其声明依赖安装到全新虚拟环境，不安装 AI 包，也不使用 editable workspace。
-再由开发环境运行下列测试，并把子进程解释器指向该独立环境：
+## 页面操作独立安装验收（已删）
 
-```bash
-RETAINPDF_PIPELINE_ONLY_PYTHON=/path/to/isolated/venv/bin/python \
-  backend/.venv/bin/python -m pytest backend/pipeline/devtools/tests/document_operations/test_document_operation_cli.py -q
-```
-
-此模式检查 AI/FastAPI 实际不存在，并执行真实页面操作及结果、像素校验。
-不设置该变量时只验证 AI 导入阻断，不能替代独立安装验收。
+`retainpdf-pipeline document-operation`（页面删除、重排、复制和旋转）和它的测试 2026-11-03 跟 RetainPDF 自己的
+AI 服务一起删了，产品里只留 Studio 的 AI。
 
 ## 新 Provider 接入顺序
 
@@ -143,16 +134,14 @@ RETAINPDF_PIPELINE_ONLY_PYTHON=/path/to/isolated/venv/bin/python \
 - `retainpdf_pipeline/ocr/mineru_provider`
   MinerU 接入、下载、解包、job 组织。
 - `retainpdf_pipeline/services/pipeline_shared`
-  provider / translate / render 共用的阶段协议、summary 和 JSON IO。
+  provider / translate / render 共用的 pipeline summary；阶段事件、stdout 标签、JSON IO 在底座包
+  `retainpdf_base`（`backend/base`）。
   `retainpdf_pipeline/services/` 下只有它仍有实体文件，其余子目录是搬家空壳。
 - `retainpdf_pipeline/translate`
-  OCR payload 到翻译 JSON（含 `translation_stage.py` 阶段门面）。
+  翻译 worker 外壳（`python -m retainpdf_pipeline.translate`、`translation_stage.py` 阶段门面）；
+  OCR payload 到翻译 JSON 的逻辑在独立包 `retainpdf_translation`（`backend/translation`）。
 - `retainpdf_pipeline/render`
   翻译 JSON 到 PDF（含 `render_stage.py`、`translation_loader.py`、`render_inputs.py` 阶段门面）。
-- `retainpdf_pipeline/document_operations`
-  页面程序执行与逐页像素校验；仅公开 `execute_page_program`、`validate_page_program` 和
-  `validate_page_program_visuals`。AI 通过 Rust API 提交操作，不能直接导入 Pipeline；
-  Pipeline 也不能导入 AI 包。架构检查包含延迟导入，防止反向依赖重新出现。
 - `retainpdf_pipeline/runtime/pipeline`
   本地 book 串联收口（仅 `book_pipeline.py`）；生产编排在 Rust 侧。
 - `retainpdf_pipeline/entrypoints`
@@ -224,7 +213,7 @@ RETAINPDF_PIPELINE_ONLY_PYTHON=/path/to/isolated/venv/bin/python \
 - 密钥不明文写入 spec
   - 翻译 key 通过 `credential_ref=env:RETAIN_TRANSLATION_API_KEY`
   - 如果 provider 是 `mineru`，对应 token 通过 `credential_ref=env:RETAIN_MINERU_API_TOKEN`
-  - 运行时由 Rust 注入环境变量，Python 通过 `stage_specs.resolve_credential_ref(...)` 读取
+  - 运行时由 Rust 注入环境变量，Python 通过 `retainpdf_base.credentials.resolve_credential_ref(...)` 读取
 - Rust 主工作流和本地 book/translate 入口都已切到 spec-only
   - `retainpdf-pipeline normalize-ocr --spec <job_root>/specs/normalize.spec.json`
   - `retainpdf-pipeline provider-ocr --spec <job_root>/specs/provider.spec.json`
@@ -302,7 +291,7 @@ python backend/pipeline/devtools/backfill_normalized_documents.py \
 
 Pipeline 是可独立安装的 `retainpdf-pipeline` 包，依赖真相源是本目录的
 [`pyproject.toml`](./pyproject.toml)。后端 workspace 根是
-[`backend/pyproject.toml`](../pyproject.toml)，组合 `pipeline` 与 `ai` 两个成员；
+[`backend/pyproject.toml`](../pyproject.toml)，组合 `base`、`math`、`pipeline`、`translation`、`translation-agent` 这几个成员；
 monorepo 根不再持有 Python workspace 真相源。
 
 wheel 只发布 `retainpdf_pipeline.*`；不会再安装通用顶层包名
@@ -350,7 +339,7 @@ Docker 镜像安装 pipeline 包并固定使用 `console` 模式；尚未安装�
 - [runtime/pipeline/README.md](./retainpdf_pipeline/runtime/pipeline/README.md)
 - [services/README.md](./retainpdf_pipeline/services/README.md)
 - [ocr/ocr_provider/README.md](./retainpdf_pipeline/ocr/ocr_provider/README.md)
-- [translate/README.md](./retainpdf_pipeline/translate/README.md)
+- [translate/README.md](./retainpdf_pipeline/translate/README.md)（worker 外壳）、[翻译包 README](../translation/README.md)
 - [render/README.md](./retainpdf_pipeline/render/README.md)
 - [ocr/mineru_provider/README.md](./retainpdf_pipeline/ocr/mineru_provider/README.md)
 

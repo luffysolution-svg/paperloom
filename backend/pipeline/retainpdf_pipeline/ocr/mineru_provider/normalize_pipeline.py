@@ -4,7 +4,7 @@ import argparse
 import shutil
 from pathlib import Path
 
-from retainpdf_pipeline.foundation.config import paths
+from retainpdf_base import paths
 from retainpdf_pipeline.foundation.shared.job_dirs import create_job_dirs
 from retainpdf_pipeline.ocr.document_schema import DOCUMENT_SCHEMA_REPORT_FILE_NAME
 from retainpdf_pipeline.ocr.mineru_provider.artifacts import (
@@ -12,7 +12,7 @@ from retainpdf_pipeline.ocr.mineru_provider.artifacts import (
     resolve_layout_json_path,
 )
 from retainpdf_pipeline.ocr.mineru_provider.job_flow import _materialize_normalized_document
-from retainpdf_pipeline.services.pipeline_shared.contracts import (
+from retainpdf_base.contracts import (
     STDOUT_LABEL_JOB_ROOT,
     STDOUT_LABEL_LAYOUT_JSON,
     STDOUT_LABEL_NORMALIZATION_REPORT_JSON,

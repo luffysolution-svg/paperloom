@@ -28,6 +28,7 @@ test("passes backend API, multipart, and jobs ports without standalone AI env", 
   assert.equal(env.RUST_API_PORT, "41001");
   assert.equal(env.RUST_API_SIMPLE_PORT, "42001");
   assert.equal(env.RUST_API_JOBS_PORT, "41003");
+  assert.ok(env.RETAIN_RPR_ENGINE_DIR.endsWith("rendering-engine"));
   assert.equal(env.RUST_API_AI_SERVICE_BASE, undefined);
   assert.equal(env.RETAIN_AI_PORT, undefined);
 });

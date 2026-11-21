@@ -21,23 +21,6 @@ const MOCK_JOB_ID = "mock-job-20260415";
 // 允许的差异像素占比(抗锯齿等噪音)
 const DIFF_RATIO_THRESHOLD = 0.001;
 
-async function readerReady(page) {
-  await page.waitForSelector("[data-reader-mode]", { timeout: 20000 });
-  await page.waitForSelector(".react-pdf__Page canvas", { timeout: 20000 });
-  await page.waitForSelector(".reader-boot-loading", { state: "detached", timeout: 20000 });
-}
-
-async function openBook(page) {
-  await page.locator(`[data-book-card][data-job-id="${MOCK_JOB_ID}"]`).click();
-  await page.waitForSelector("#book-detail-dialog", { timeout: 10000 });
-}
-
-async function openReaderAi(page) {
-  await readerReady(page);
-  await page.getByRole("button", { name: "打开AI 问答", exact: true }).click();
-  await page.waitForSelector("#reader-ai-panel", { timeout: 10000 });
-}
-
 const STATES = [
   {
     name: "home",
@@ -58,7 +41,7 @@ const STATES = [
     diffThreshold: 0.008,
     url: `/reader.html?mock=succeeded`,
     prepare: async (page) => {
-      await readerReady(page);
+      await page.waitForSelector(".reader-boot-loading", { state: "attached", timeout: 20000 });
       // 右栏默认展开会触发 PDF 重排缩放,留足时间让缩放落定再截图(否则 PDF 文本亚像素抖动)
       await page.waitForTimeout(1800);
     },
@@ -68,7 +51,9 @@ const STATES = [
     diffThreshold: 0.008,
     url: `/reader.html?mock=succeeded`,
     prepare: async (page) => {
-      await openReaderAi(page);
+      await page.waitForSelector(".reader-boot-loading", { state: "attached", timeout: 20000 });
+      // 三栏骨架:右栏(AI 问答)默认展开,无需再点开
+      await page.waitForSelector("#reader-ai-drawer.is-open", { timeout: 10000 });
       // 等待右栏展开引发的 PDF 重排缩放落定,避免亚像素抖动
       await page.waitForTimeout(1800);
     },
@@ -78,8 +63,9 @@ const STATES = [
     url: `/index.html?mock=failed`,
     prepare: async (page) => {
       await page.waitForTimeout(1500);
-      await openBook(page);
-      await page.click("#book-detail-tab-processing");
+      await page.locator("recent-job-card, .library-card, [data-job-id]").first().click();
+      await page.waitForTimeout(1000);
+      await page.click("#status-detail-btn");
       await page.waitForTimeout(800);
     },
   },
@@ -95,8 +81,8 @@ const STATES = [
     diffThreshold: 0.008,
     url: `/reader.html?mock=succeeded`,
     prepare: async (page) => {
-      await readerReady(page);
-      await page.getByRole("button", { name: "打开Markdown", exact: true }).click();
+      await page.waitForSelector(".reader-boot-loading", { state: "attached", timeout: 20000 });
+      await page.click("#reader-markdown-toggle-btn");
       await page.waitForSelector("#reader-markdown-content:not(.hidden)", { timeout: 10000 });
       await page.waitForTimeout(600);
     },
@@ -107,11 +93,12 @@ const STATES = [
     url: `/index.html?mock=done`,
     prepare: async (page) => {
       await page.waitForTimeout(1500);
-      await openBook(page);
-      await page.click("#book-detail-compare-btn");
+      await page.locator("recent-job-card, .library-card, [data-job-id]").first().click();
+      await page.waitForTimeout(1000);
+      await page.click("#reader-btn");
       const frameElement = await page.waitForSelector("iframe[src*='reader.html']", { timeout: 10000 });
       const frame = await frameElement.contentFrame();
-      await readerReady(frame);
+      await frame.waitForSelector(".reader-boot-loading", { state: "attached", timeout: 20000 });
       await page.waitForTimeout(800);
     },
   },
@@ -120,9 +107,11 @@ const STATES = [
     diffThreshold: 0.008,
     url: `/reader.html?mock=succeeded`,
     prepare: async (page) => {
-      await openReaderAi(page);
-      await page.getByRole("textbox", { name: "向文档 AI 提问", exact: true }).fill("共轭如何影响选择性?");
-      await page.getByRole("button", { name: "发送", exact: true }).click();
+      await page.waitForSelector(".reader-boot-loading", { state: "attached", timeout: 20000 });
+      // 右栏默认展开,直接提问(不再点击开合按钮)
+      await page.waitForSelector("#reader-ai-drawer.is-open", { timeout: 10000 });
+      await page.fill("#reader-ai-input", "共轭如何影响选择性?");
+      await page.click("#reader-ai-submit-btn");
       await page.waitForSelector(".reader-ai-citation-item", { timeout: 10000 });
       await page.waitForTimeout(600);
     },
@@ -132,10 +121,9 @@ const STATES = [
     diffThreshold: 0.008,
     url: `/reader.html?mock=succeeded`,
     prepare: async (page) => {
-      await readerReady(page);
-      await page.getByRole("button", { name: "打开工具菜单", exact: true }).click();
-      await page.getByRole("menuitem").filter({ hasText: "批注" }).click();
-      await page.waitForSelector("#reader-notes-panel", { timeout: 10000 });
+      await page.waitForSelector(".reader-boot-loading", { state: "attached", timeout: 20000 });
+      await page.click("#reader-annotations-toggle-btn");
+      await page.waitForSelector(".reader-annotations-item", { timeout: 10000 });
       await page.waitForTimeout(600);
     },
   },
@@ -154,8 +142,11 @@ const STATES = [
     url: `/index.html?mock=done`,
     prepare: async (page) => {
       await page.waitForTimeout(1500);
-      await openBook(page);
-      await page.click("#book-detail-tab-processing");
+      await page.locator("recent-job-card, .library-card, [data-job-id]").first().click();
+      await page.waitForTimeout(1000);
+      await page.click("#status-detail-btn");
+      await page.waitForTimeout(600);
+      await page.click("#detail-tab-translation");
       await page.waitForTimeout(900);
     },
   },
@@ -166,7 +157,7 @@ mkdirSync(BASELINE_DIR, { recursive: true });
 mkdirSync(OUTPUT_DIR, { recursive: true });
 
 const server = spawn(
-  process.env.PYTHON || (process.platform === "win32" ? "python" : "python3"),
+  "python3",
   ["scripts/serve_static.py", "--host", "127.0.0.1", "--port", String(PORT), "--root", "."],
   { cwd: FRONTEND_ROOT, stdio: "ignore" },
 );
@@ -177,11 +168,6 @@ let failures = 0;
 try {
   for (const state of STATES) {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-    await page.addInitScript(() => {
-      localStorage.setItem("retainpdf.browser.config.v1", JSON.stringify({
-        ocrProvider: "paddle", paddleToken: "visual-fixture-ocr", modelApiKey: "visual-fixture-model",
-      }));
-    });
     await page.clock.install({ time: FIXED_TIME });
     await page.emulateMedia({ reducedMotion: "reduce" });
     const consoleErrors = [];

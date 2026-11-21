@@ -9,8 +9,9 @@ import type {
   ArtifactCenterSection,
   BuildArtifactCenterInput,
 } from "./artifact-center-types.js";
-import { GROUP_META, groupFor, kindFor, labelFor, previewable } from "./artifact-classification.js";
+import { GROUP_META, groupFor, isDebugArtifact, kindFor, labelFor, previewFormat, previewable } from "./artifact-classification.js";
 import { artifactKey, jobAttempt, numberOrNull, text, workflowOf } from "./artifact-values.js";
+import { DOWNLOAD_KIND_BY_ARTIFACT_KEY, downloadFileName } from "./download-names.js";
 
 function buildJob(job: DocumentJobSummary): ArtifactCenterJob | null {
   const jobId = text(job.job_id);
@@ -35,7 +36,7 @@ function sourceItem(input: BuildArtifactCenterInput): ArtifactCenterItem | null 
     id: `source:${input.documentId}`,
     group: "source",
     label: "原始 PDF",
-    filename: text(source?.filename) || "原始 PDF",
+    filename: text(input.title) ? downloadFileName(text(input.title), "source") : text(source?.filename) || "原始 PDF",
     kind: "PDF",
     url,
     sizeBytes: numberOrNull(source?.sizeBytes),
@@ -44,7 +45,16 @@ function sourceItem(input: BuildArtifactCenterInput): ArtifactCenterItem | null 
     jobId: "",
     workflow: "source",
     previewable: true,
+    preview: "pdf",
   };
+}
+
+/** 给用户的几类文件写出「下载下来会叫什么」（和后端同一个命名规则）；排查用的文件、
+ *  以及不知道书名时，保持存储时的原名。 */
+function displayFileName(input: BuildArtifactCenterInput, key: string, stored: string): string {
+  const title = text(input.title);
+  const kind = DOWNLOAD_KIND_BY_ARTIFACT_KEY[key];
+  return title && kind ? downloadFileName(title, kind) : stored;
 }
 
 export function buildArtifactCenterSections(input: BuildArtifactCenterInput): ArtifactCenterSection[] {
@@ -71,12 +81,14 @@ export function buildArtifactCenterSections(input: BuildArtifactCenterInput): Ar
         || artifactKind === "directory"
       ) continue;
       const group = groupFor(job, item);
+      const kind = kindFor(item);
+      const preview = previewFormat(item, kind);
       items.push({
         id: `${jobId}:${key}`,
         group,
         label: labelFor(item),
-        filename: text(item.file_name || item.filename) || labelFor(item),
-        kind: kindFor(item),
+        filename: displayFileName(input, key, text(item.file_name || item.filename) || labelFor(item)),
+        kind,
         url,
         sizeBytes: numberOrNull(item.size_bytes),
         generatedAt: text(item.updated_at || job.updated_at || job.created_at),
@@ -84,6 +96,8 @@ export function buildArtifactCenterSections(input: BuildArtifactCenterInput): Ar
         jobId,
         workflow: workflowOf(job),
         previewable: previewable(item),
+        preview,
+        debug: isDebugArtifact(item),
       });
     }
   }
@@ -106,6 +120,7 @@ export function buildArtifactCenterSections(input: BuildArtifactCenterInput): Ar
       jobId: "",
       workflow: "agent",
       previewable: false,
+      preview: null,
     });
   }
 

@@ -1,5 +1,21 @@
 import { createStore } from "@/platform/store/store.js";
 import type { Store } from "@/platform/store/store.js";
+import {
+  isWorkflowPreferenceKey,
+  loadWorkflowPreferences,
+  normalizeWorkflowPreference,
+  saveWorkflowPreference,
+  type WorkflowPreferences,
+} from "./workflow-preferences.js";
+
+export {
+  normalizeRenderEngine,
+  normalizeTranslationQuality,
+  type RenderEngine,
+  type TranslationQuality,
+  type WorkflowPreferenceKey,
+  type WorkflowPreferences,
+} from "./workflow-preferences.js";
 
 // workflow 域视图 store + React viewPort。
 //
@@ -59,6 +75,8 @@ export type WorkflowViewState = {
   jobWarningVisible: boolean;
   glossaries: WorkflowGlossaryOption[];
   selectedGlossaryId: string;
+  /** 用户的长期偏好（翻译质量、排版引擎……），定义见 workflow-preferences.ts。 */
+  preferences: WorkflowPreferences;
   developerDialog: WorkflowDeveloperDialog;
   developerFormState: Record<string, unknown>;
   ocrOnly: boolean;
@@ -106,6 +124,7 @@ export function createWorkflowViewStore(): WorkflowViewStore {
       jobWarningVisible: false,
       glossaries: [],
       selectedGlossaryId: "",
+      preferences: loadWorkflowPreferences(),
       developerDialog: {},
       developerFormState: {},
       ocrOnly: false,
@@ -143,6 +162,18 @@ export function createWorkflowViewFeature({
     patch({ selectedGlossaryId: `${value || ""}`.trim() });
   }
 
+  function preferences(): WorkflowPreferences {
+    return store.getSnapshot().preferences;
+  }
+
+  /** 改一个偏好：校验取值、记到本机、更新 store。不认识的键忽略。 */
+  function setPreference(key: unknown, value: unknown) {
+    if (!isWorkflowPreferenceKey(key)) return;
+    const next = normalizeWorkflowPreference(key, value);
+    saveWorkflowPreference(key, next);
+    patch({ preferences: { ...store.getSnapshot().preferences, [key]: next } });
+  }
+
   function setJobWarningVisible(visible: boolean) {
     patch({ jobWarningVisible: Boolean(visible) });
   }
@@ -173,7 +204,7 @@ export function createWorkflowViewFeature({
       submitLabel: `${label ?? ""}` || store.getSnapshot().submitLabel,
       pageRangeButtonVisible: Boolean(pageRangeVisible),
     });
-    uploadTilePort?.setUploadActionSlotVisible(actionVisible);
+    uploadTilePort?.setUploadActionSlotVisible?.(actionVisible);
   }
 
   function renderBudgetNote(budget?: Partial<WorkflowBudgetNote> | null) {
@@ -197,8 +228,8 @@ export function createWorkflowViewFeature({
     submitLabel?: string;
     showPageRangeButton?: boolean;
   } = {}) {
-    uploadTilePort?.setUploadTileLocked({ locked: true, enabled: false });
-    uploadTilePort?.setUploadTileText({
+    uploadTilePort?.setUploadTileLocked?.({ locked: true, enabled: false });
+    uploadTilePort?.setUploadTileText?.({
       label: "Mock 模式",
       labelTitle: "",
       help: `当前为 mock 模式：${mockScenario || "running"}。不会上传文件，也不会请求真实后端。`,
@@ -226,8 +257,8 @@ export function createWorkflowViewFeature({
     headline?: string;
     renderSourceJobId?: string;
   } = {}) {
-    uploadTilePort?.setUploadTileLocked({ locked: !needsUpload, enabled: needsUpload });
-    uploadTilePort?.setUploadTileText({
+    uploadTilePort?.setUploadTileLocked?.({ locked: !needsUpload, enabled: needsUpload });
+    uploadTilePort?.setUploadTileText?.({
       label: !uploadReady ? (needsUpload ? defaultFileLabel : "复用已有任务产物") : "",
       labelTitle: "",
       help: headline,
@@ -315,6 +346,8 @@ export function createWorkflowViewFeature({
     setOcrOnly,
     setJobWarningVisible,
     setSelectedGlossaryId,
+    preferences,
+    setPreference,
     setSubmitBusy,
     setSubmitDisabled,
     store,

@@ -58,8 +58,8 @@
   只负责翻译阶段。输入 `document.v1.json` 和输出目录，完成页范围裁剪、学术模式策略装配和全书翻译，输出逐页 translation payload。
 - `render_stage.py`
   只负责渲染阶段。输入源 PDF 和翻译产物，按 `overlay`、`typst`、`dual` 等模式生成最终 PDF。
-- `services/pipeline_shared/`
-  不属于 `runtime/pipeline/`，但它承载跨阶段共享的 stdout contract、summary、统一 `pipeline_events.jsonl` 事件流和 JSON IO；pipeline 应依赖这层，而不是回头依赖某个 provider 模块的共享 helper。
+- `services/pipeline_shared/` 与底座包 `retainpdf_base`
+  不属于 `runtime/pipeline/`，但它们承载跨阶段共享的 summary（前者）和 stdout contract、统一 `pipeline_events.jsonl` 事件流、JSON IO（后者）；pipeline 应依赖这层，而不是回头依赖某个 provider 模块的共享 helper。
 - `render_inputs.py`
   只负责校验 Render-only 调用协议，把 `source_pdf_path + translations_dir/translation_manifest_path` 规范化成渲染阶段可消费的稳定输入。
 - `render_mode.py`

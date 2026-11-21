@@ -2,17 +2,13 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
-import sys
 import threading
 import time
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
-from retainpdf_pipeline.translate.services.results.applier import TranslationResultApplier
-from retainpdf_pipeline.translate.services.results.flush import TranslationFlushState
-from retainpdf_pipeline.translate.workflow import batch_runner
+from retainpdf_translation.services.results.applier import TranslationResultApplier
+from retainpdf_translation.services.results.flush import TranslationFlushState
+from retainpdf_translation.workflow import batch_runner
 
 
 def test_parallel_idle_heartbeat_saves_success_before_slow_request_returns(monkeypatch, tmp_path):

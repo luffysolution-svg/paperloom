@@ -1,0 +1,240 @@
+use std::collections::{BTreeMap, HashSet};
+use std::path::Path;
+
+use serde_json::Value;
+
+use retainpdf_api_base::error::AppError;
+use crate::views::{ReaderRegionBoxView, ReaderRegionItemView, ReaderRegionsView};
+use retainpdf_core::models::domain::JobSnapshot;
+
+mod artifacts;
+mod cache;
+mod metadata;
+mod value_extract;
+
+use artifacts::{
+    has_translation_manifest, load_source_region_map, SourceRegion,
+};
+pub use artifacts::load_translation_manifest_pages as load_translation_pages;
+pub(crate) use metadata::load_reader_metadata_view;
+use value_extract::{
+    bbox_from_value, block_translated_text_from_item, canonical_item_id,
+    continuation_group_from_item, markdown_from_item, reading_order_from_item,
+    region_type_from_item, source_text_from_item, sub_type_from_item, translated_text_from_item,
+    translation_status_from_item, value_string,
+};
+
+/// 区块数据的指纹（当 ETag 用）：输入文件没变就不变，见 `cache.rs`。
+pub(crate) fn reader_regions_fingerprint(data_root: &Path, job: &JobSnapshot) -> String {
+    cache::regions_fingerprint(data_root, job)
+}
+
+/// 区块数据：输入文件没变就用内存里算好的，变了才重新解析。
+pub(crate) fn load_reader_regions_view(
+    data_root: &Path,
+    job: &JobSnapshot,
+) -> Result<ReaderRegionsView, AppError> {
+    let fingerprint = cache::regions_fingerprint(data_root, job);
+    load_reader_regions_view_for(data_root, job, &fingerprint)
+}
+
+/// 同上，指纹调用方已经算好了。
+pub(crate) fn load_reader_regions_view_for(
+    data_root: &Path,
+    job: &JobSnapshot,
+    fingerprint: &str,
+) -> Result<ReaderRegionsView, AppError> {
+    if let Some(view) = cache::cached_view(data_root, job, fingerprint) {
+        return Ok(view);
+    }
+    let view = build_reader_regions_view(data_root, job)?;
+    cache::store_view(data_root, job, fingerprint, &view);
+    Ok(view)
+}
+
+fn build_reader_regions_view(
+    data_root: &Path,
+    job: &JobSnapshot,
+) -> Result<ReaderRegionsView, AppError> {
+    let source_regions = load_source_region_map(data_root, job)?;
+    if !has_translation_manifest(data_root, job) {
+        let mut items = source_only_items(source_regions, &HashSet::new());
+        sort_in_reading_order(&mut items);
+        return Ok(ReaderRegionsView { items });
+    }
+    let mut items = Vec::new();
+    let mut translated_source_block_ids = HashSet::new();
+    for (fallback_page_idx, page_items) in load_translation_pages(data_root, job)? {
+        for item in page_items {
+            let item_id = value_string(item.get("item_id"));
+            if item_id.is_empty() {
+                continue;
+            }
+            let translated_bbox = match bbox_from_value(item.get("bbox")) {
+                Some(value) => value,
+                None => continue,
+            };
+            let translated_page_idx = item
+                .get("page_idx")
+                .and_then(Value::as_i64)
+                .unwrap_or(fallback_page_idx);
+            let translated_text = translated_text_from_item(&item);
+            let markdown = markdown_from_item(&item).or_else(|| translated_text.clone());
+            let status = translation_status_from_item(&item);
+            let source_region = source_regions
+                .get(&item_id)
+                .cloned()
+                .or_else(|| source_regions.get(&canonical_item_id(&item_id)).cloned());
+            if let Some(region) = source_region.as_ref() {
+                translated_source_block_ids.insert(region.block_id.clone());
+            }
+            let region_type = source_region
+                .as_ref()
+                .map(|region| region.region_type.clone())
+                .filter(|value| !value.is_empty())
+                .unwrap_or_else(|| region_type_from_item(&item));
+            let asset_ids = source_region
+                .as_ref()
+                .map(|region| region.asset_ids.clone())
+                .unwrap_or_default();
+            let asset_urls = source_region
+                .as_ref()
+                .map(|region| region.asset_urls.clone())
+                .unwrap_or_default();
+            let reading_order = source_region
+                .as_ref()
+                .and_then(|region| region.reading_order)
+                .or_else(|| reading_order_from_item(&item, &item_id));
+            let sub_type = source_region
+                .as_ref()
+                .and_then(|region| region.sub_type.clone())
+                .or_else(|| sub_type_from_item(&item));
+            let heading_level = source_region
+                .as_ref()
+                .and_then(|region| region.heading_level)
+                .or_else(|| match sub_type.as_deref() {
+                    Some("title") => Some(1),
+                    Some("heading") => Some(2),
+                    _ => None,
+                });
+            let continuation_group_id = continuation_group_from_item(&item);
+            let translated_block_text = continuation_group_id
+                .as_ref()
+                .and_then(|_| block_translated_text_from_item(&item));
+            let source = source_region
+                .map(|region| ReaderRegionBoxView {
+                    page: region.page,
+                    bbox: region.bbox,
+                    unit: "pdf_point".to_string(),
+                    origin: "top_left".to_string(),
+                    text: region.text,
+                })
+                .unwrap_or_else(|| ReaderRegionBoxView {
+                    page: translated_page_idx + 1,
+                    bbox: translated_bbox.clone(),
+                    unit: "pdf_point".to_string(),
+                    origin: "top_left".to_string(),
+                    text: source_text_from_item(&item),
+                });
+            items.push(ReaderRegionItemView {
+                item_id: canonical_item_id(&item_id),
+                source,
+                translated: ReaderRegionBoxView {
+                    page: translated_page_idx + 1,
+                    bbox: translated_bbox,
+                    unit: "pdf_point".to_string(),
+                    origin: "top_left".to_string(),
+                    text: translated_text,
+                },
+                markdown,
+                region_type,
+                status,
+                asset_ids,
+                asset_urls,
+                reading_order,
+                sub_type,
+                heading_level,
+                continuation_group_id,
+                translated_block_text,
+            });
+        }
+    }
+    items.extend(source_only_items(
+        source_regions,
+        &translated_source_block_ids,
+    ));
+    sort_in_reading_order(&mut items);
+    Ok(ReaderRegionsView { items })
+}
+
+/// One block of the reader regions (`reader/regions/:item_id`), for quoting a paragraph
+/// without fetching the whole book. Same data and id spelling as the list: `p8-b9` and
+/// `p008-b0009` name the same block. No regions at all yet → not ready.
+pub(crate) fn load_reader_region_item(
+    data_root: &Path,
+    job: &JobSnapshot,
+    item_id: &str,
+) -> Result<ReaderRegionItemView, AppError> {
+    let view = load_reader_regions_view(data_root, job)?;
+    if view.items.is_empty() {
+        return Err(AppError::not_ready("reader regions"));
+    }
+    let wanted = canonical_item_id(item_id);
+    view.items
+        .into_iter()
+        .find(|item| item.item_id == wanted || item.item_id == item_id)
+        .ok_or_else(|| AppError::not_found(format!("reader region not found: {item_id}")))
+}
+
+/// Interleaves translated and source-only blocks in document order. The sort
+/// is stable, so blocks without an order keep their position on the page.
+fn sort_in_reading_order(items: &mut [ReaderRegionItemView]) {
+    items.sort_by_key(|item| (item.source.page, item.reading_order.unwrap_or(i64::MAX)));
+}
+
+fn source_only_items(
+    source_regions: std::collections::HashMap<String, SourceRegion>,
+    excluded_block_ids: &HashSet<String>,
+) -> Vec<ReaderRegionItemView> {
+    let mut unique = BTreeMap::new();
+    for region in source_regions.into_values() {
+        unique.entry(region.block_id.clone()).or_insert(region);
+    }
+    unique
+        .into_values()
+        .filter(|region| !excluded_block_ids.contains(&region.block_id))
+        .map(|region| {
+            let source = ReaderRegionBoxView {
+                page: region.page,
+                bbox: region.bbox.clone(),
+                unit: "pdf_point".to_string(),
+                origin: "top_left".to_string(),
+                text: region.text.clone(),
+            };
+            ReaderRegionItemView {
+                item_id: region.block_id,
+                source,
+                translated: ReaderRegionBoxView {
+                    page: region.page,
+                    bbox: region.bbox,
+                    unit: "pdf_point".to_string(),
+                    origin: "top_left".to_string(),
+                    text: None,
+                },
+                markdown: region.text,
+                region_type: region.region_type,
+                status: "source_only".to_string(),
+                asset_ids: region.asset_ids,
+                asset_urls: region.asset_urls,
+                reading_order: region.reading_order,
+                sub_type: region.sub_type,
+                heading_level: region.heading_level,
+                continuation_group_id: None,
+                translated_block_text: None,
+            }
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests;

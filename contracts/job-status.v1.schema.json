@@ -2,29 +2,27 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "retainpdf/contracts/job-status/v1",
   "title": "任务状态与阶段进度契约（Job Status / Stage Progress Bundle）",
-  "description": "Rust ↔ TS 任务状态单一真值（含 stage_snapshot / progress / cover_url 等重复高发区）。生产者：services/api crates/retain-core models/view/job_types.rs（JobDetailView / JobListView / JobStageSnapshotView / JobProgressView）与 models/view/common.rs（JobStagesView 等）；消费者：@retainpdf/contracts/job-status 生成 DTO、packages/domain 的 job/job-status 归一化模型，以及 apps/web-react 的 library/status 类型层。所有响应为 {code, message, data} 信封，本契约描述 data。改契约先改本文件，再重新生成 DTO 并让两端测试变绿。",
+  "description": "Rust ↔ TS 任务状态单一真值（含 stage_snapshot / progress / cover_url 等重复高发区）。生产者：backend/packages/retainpdf-jobs/src/views/job_types.rs（JobDetailView / JobListView / JobStageSnapshotView / JobProgressView）与 backend/packages/retainpdf-jobs/src/views/common.rs（JobStagesView 等）；消费者：@retainpdf/contracts/job-status 生成 DTO、packages/domain 的 job/job-status 归一化模型，以及 apps/web-react 的 library/status 类型层。所有响应为 {code, message, data} 信封，本契约描述 data。改契约先改本文件，再重新生成 DTO 并让两端测试变绿。",
   "base_path": "/api/v1/jobs",
   "endpoints": [
     {
       "method": "GET",
       "path": "/api/v1/jobs",
+      "client_name": "listJobs",
+      "transport": "json",
       "query": "ListJobsQuery",
       "output": "JobListView",
       "rust_view": "JobListView",
-      "ts_consumer": "apps/web/src/js/job/types.ts :: JobLike / apps/web-react type JobListView"
+      "ts_consumer": "@retainpdf/contracts/job-status :: JobListView"
     },
     {
       "method": "GET",
       "path": "/api/v1/jobs/:job_id",
+      "client_name": "getJob",
+      "transport": "json",
       "output": "JobDetailView",
       "rust_view": "JobDetailView",
-      "ts_consumer": "apps/web/src/js/job/types.ts :: JobPayload"
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/ocr/jobs/:job_id",
-      "output": "JobDetailView",
-      "note": "WorkflowKind::Ocr 走 /api/v1/ocr/jobs 前缀，view 形状与 book 一致"
+      "ts_consumer": "@retainpdf/contracts/job-status :: JobDetailView"
     }
   ],
   "definitions": {
@@ -254,7 +252,6 @@
             "openai_compatible"
           ]
         },
-        "api_protocol": { "type": "string", "enum": ["openai", "openai_responses", "anthropic"], "default": "openai" },
         "base_url": {
           "type": "string"
         },
@@ -401,6 +398,20 @@
         "memory_mode": {
           "type": "string"
         },
+        "preparation": {
+          "type": "string",
+          "description": "TRANSLATION_PREPARATION_MODES：off / artifacts_only / terms / terms+style / editorial。"
+        },
+        "refine": {
+          "type": "string",
+          "description": "TRANSLATION_REFINE_MODES：off / review_only / review_and_fix / editorial。"
+        },
+        "refine_max_items": {
+          "type": "integer"
+        },
+        "refine_max_tokens": {
+          "type": "integer"
+        },
         "api_key": {
           "type": "string"
         },
@@ -413,10 +424,44 @@
         "model": {
           "type": "string"
         },
-        "api_protocol": { "type": "string", "enum": ["openai", "openai_responses", "anthropic"], "default": "openai" },
-        "thinking": { "type": "string", "enum": ["auto", "off", "low", "medium", "high", "max"], "default": "auto" },
         "base_url": {
           "type": "string"
+        },
+        "reviewer_model": {
+          "type": "string"
+        },
+        "reviewer_base_url": {
+          "type": "string"
+        },
+        "reviewer_api_key": {
+          "type": "string",
+          "description": "恒为空，仅暴露 reviewer_api_key_configured。"
+        },
+        "reviewer_api_key_configured": {
+          "type": "boolean"
+        },
+        "reviewer_credential_ref": {
+          "type": "string"
+        },
+        "api_protocol": {
+          "type": "string",
+          "description": "TRANSLATION_API_PROTOCOLS：openai / openai_responses / anthropic。"
+        },
+        "thinking": {
+          "type": "string",
+          "description": "TRANSLATION_THINKING_LEVELS：auto / off / low / medium / high / max。"
+        },
+        "reviewer_api_protocol": {
+          "type": "string",
+          "description": "留空沿用 api_protocol。"
+        },
+        "reviewer_thinking": {
+          "type": "string",
+          "description": "留空沿用 thinking。"
+        },
+        "engine": {
+          "type": "string",
+          "description": "TRANSLATION_ENGINES：legacy（现有流程）/ agent（翻译 agent）。"
         },
         "start_page": {
           "type": "integer"
@@ -460,7 +505,8 @@
         "inner_bbox_dense_shrink_x",
         "inner_bbox_dense_shrink_y",
         "font_unify_mode",
-        "source_cleanup_strategy"
+        "source_cleanup_strategy",
+        "engine"
       ],
       "additionalProperties": false,
       "properties": {
@@ -501,6 +547,9 @@
           "type": "string"
         },
         "source_cleanup_strategy": {
+          "type": "string"
+        },
+        "engine": {
           "type": "string"
         }
       }
@@ -1408,7 +1457,7 @@
             "string",
             "null"
           ],
-          "description": "page|batch|step|percent，skip_serializing_if None"
+          "description": "page|batch|block|step|percent，skip_serializing_if None"
         }
       }
     },
@@ -1612,6 +1661,7 @@
         "open_job",
         "open_artifacts",
         "cancel",
+        "resume",
         "rerun",
         "download_pdf",
         "open_markdown",
@@ -1628,8 +1678,13 @@
         "cancel": {
           "$ref": "#/definitions/ActionLinkView"
         },
+        "resume": {
+          "$ref": "#/definitions/ActionLinkView",
+          "description": "从断点续跑：POST /api/v1/jobs/:job_id/actions/resume。"
+        },
         "rerun": {
-          "$ref": "#/definitions/ActionLinkView"
+          "$ref": "#/definitions/ActionLinkView",
+          "description": "旧名，和 resume 同值，地址是旧地址 actions/rerun。新代码读 resume。"
         },
         "download_pdf": {
           "$ref": "#/definitions/ActionLinkView"
@@ -1928,6 +1983,13 @@
             "integer",
             "null"
           ]
+        },
+        "document_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "书的编号（原文 PDF 的 sha256），原文、封面在 /documents/{document_id}/files/ 下；查不到书的任务是 null"
         }
       }
     },
@@ -2062,6 +2124,46 @@
         }
       }
     },
+    "JobFailureBriefView": {
+      "type": "object",
+      "description": "backend/packages/retainpdf-jobs/src/views/job_types.rs :: JobFailureBriefView — 列表里那份精简失败信息。只有失败的任务才带（JobListItemView.failure），成功 / 进行中的任务整个键不出现，不是 null。只放「一眼能判断该怎么办」的几项，不带 raw_excerpt / traceback；要完整错误按需去打任务详情（那边的 failure 是 JobFailureInfo）。root_cause / suggestion / provider 为空时整个键不出现（不是 null）。",
+      "required": [
+        "category",
+        "stage",
+        "retryable",
+        "summary"
+      ],
+      "properties": {
+        "category": {
+          "type": "string",
+          "description": "面向用户的分类：provider / translation / timeout / render / internal …"
+        },
+        "stage": {
+          "type": "string",
+          "description": "失败发生在哪一段：ocr / translation / render"
+        },
+        "retryable": {
+          "type": "boolean",
+          "description": "能不能重试。"
+        },
+        "summary": {
+          "type": "string",
+          "description": "一句话结论。"
+        },
+        "root_cause": {
+          "type": "string",
+          "description": "根因；没有时键不出现。"
+        },
+        "suggestion": {
+          "type": "string",
+          "description": "建议的处理办法；没有时键不出现。"
+        },
+        "provider": {
+          "type": "string",
+          "description": "上游是谁（mineru / deepseek …），排查时第一眼要看的；没有时键不出现。"
+        }
+      }
+    },
     "JobListItemView": {
       "type": "object",
       "description": "job_types.rs :: JobListItemView — 列表卡用；关键字段 job_id / display_name / workflow / status / stage_snapshot / progress(经 stage_snapshot.progress) / cover_url 均在契约内。",
@@ -2085,6 +2187,10 @@
         "detail_url"
       ],
       "properties": {
+        "source_artifact_job_id": {
+          "type": ["string", "null"],
+          "description": "复用了哪个任务的产物（OCR / 译文）；顺着它能找到真正持有译文的任务。没有复用时为 null。"
+        },
         "job_id": {
           "type": "string"
         },
@@ -2200,6 +2306,9 @@
         },
         "detail_url": {
           "type": "string"
+        },
+        "failure": {
+          "$ref": "#/definitions/JobFailureBriefView"
         }
       }
     },
@@ -2222,7 +2331,10 @@
       "type": "object",
       "required": [
         "items",
-        "invocation_summary"
+        "invocation_summary",
+        "limit",
+        "offset",
+        "has_more"
       ],
       "properties": {
         "items": {
@@ -2233,6 +2345,19 @@
         },
         "invocation_summary": {
           "$ref": "#/definitions/JobListInvocationSummaryView"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "实际生效的条数上限。越界（0 或大于 500）是 400，不会被夹，所以总等于请求的值；没传是 20。"
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "has_more": {
+          "type": "boolean",
+          "description": "这一页之后还有没有。"
         }
       }
     },
@@ -2508,6 +2633,10 @@
     "ListJobsQuery": {
       "type": "object",
       "properties": {
+        "include_live_stage": {
+          "type": "boolean",
+          "description": "false 只读库里的任务摘要，不导入事件历史（首屏更快）；省略或 true 是完整的实时阶段。"
+        },
         "limit": {
           "type": "integer"
         },

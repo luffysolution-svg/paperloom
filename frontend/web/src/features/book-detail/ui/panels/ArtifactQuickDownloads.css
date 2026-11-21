@@ -1,0 +1,247 @@
+/* 左栏快速下载与导出设置。（ArtifactQuickDownloads）
+ *
+ * @owns book-detail */
+
+.book-detail-quick-downloads {
+  display: grid;
+  gap: 7px;
+  padding: 9px 10px 10px;
+  border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  border-radius: var(--ui-radius-lg);
+  background: color-mix(in srgb, var(--paper) 76%, transparent);
+}
+
+.book-detail-quick-downloads > header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: var(--ui-text-xs);
+  font-weight: 600;
+}
+
+.book-detail-quick-downloads > header > svg {
+  width: 13px;
+  height: 13px;
+}
+
+.book-detail-quick-downloads-loader {
+  margin-left: auto;
+  animation: spin 900ms linear infinite;
+}
+
+/* 「导出设置」是 @retainpdf/ui 的 IconButton（ghost、sm）；负的上下外边距让标题行不被它撑高。 */
+.book-detail-quick-downloads-settings {
+  margin: -4px 0 -4px auto;
+  color: var(--muted);
+}
+
+.book-detail-quick-downloads-loader + .book-detail-quick-downloads-settings {
+  margin-left: 6px;
+}
+
+.book-detail-quick-download-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.book-detail-export-settings {
+  display: grid;
+  margin-top: 10px;
+  gap: 7px;
+}
+
+.book-detail-export-settings-option {
+  display: grid;
+  gap: 2px;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
+  border-radius: var(--ui-radius-md);
+  color: var(--ink);
+  text-align: left;
+  background: var(--paper);
+  transition:
+    border-color 150ms var(--ease-out),
+    background-color 150ms var(--ease-out);
+}
+
+.book-detail-export-settings-option > strong {
+  font-size: var(--ui-text-md);
+  font-weight: 600;
+}
+
+.book-detail-export-settings-option > span {
+  color: var(--muted);
+  font-size: var(--ui-text-xs);
+}
+
+.book-detail-export-settings-option[aria-checked="true"] {
+  border-color: color-mix(in srgb, var(--ink) 38%, var(--line));
+  background: color-mix(in srgb, var(--ink) 5%, var(--paper));
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .book-detail-export-settings-option:hover {
+    border-color: color-mix(in srgb, var(--ink) 30%, var(--line));
+  }
+}
+
+
+.book-detail-quick-download-trigger {
+  display: block;
+  min-width: 0;
+}
+
+.book-detail-quick-download-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  height: 46px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
+  border-radius: 9px;
+  color: var(--ink);
+  background: var(--paper);
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--shadow-color) 7%, transparent);
+  transition:
+    border-color 150ms var(--ease-out),
+    background-color 150ms var(--ease-out),
+    transform 150ms var(--ease-out);
+}
+
+/* 触屏会在点按时触发 hover，导致位移/底色"粘住"。只给精确指针设备。 */
+@media (hover: hover) and (pointer: fine) {
+  .book-detail-quick-download-btn:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--ink) 34%, var(--line));
+    background: color-mix(in srgb, var(--ink) 4%, var(--paper));
+    transform: translateY(-1px);
+  }
+}
+
+.book-detail-quick-download-btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.book-detail-quick-download-btn:disabled {
+  cursor: not-allowed;
+  color: color-mix(in srgb, var(--muted) 38%, transparent);
+  background: color-mix(in srgb, var(--bg) 64%, var(--paper));
+  box-shadow: none;
+}
+
+.book-detail-quick-download-btn > svg {
+  width: 14px;
+  height: 14px;
+}
+
+.book-detail-quick-download-label {
+  font-size: var(--ui-text-2xs);
+  font-weight: 550;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.book-detail-quick-download-btn > svg.is-spinning,
+#book-detail-obsidian-dialog svg.is-spinning,
+#book-detail-zotero-writeback-dialog svg.is-spinning {
+  animation: spin 850ms linear infinite;
+}
+
+.book-detail-obsidian-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
+  border-radius: var(--ui-radius-md);
+  color: var(--ink);
+  font-size: var(--ui-text-sm);
+  background: var(--paper);
+  transition: border-color 150ms var(--ease-out), background-color 150ms var(--ease-out);
+}
+
+.book-detail-obsidian-action > svg {
+  width: 14px;
+  height: 14px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .book-detail-obsidian-action:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--ink) 30%, var(--line));
+  }
+}
+
+.book-detail-obsidian-action:disabled {
+  cursor: not-allowed;
+  color: color-mix(in srgb, var(--muted) 60%, transparent);
+}
+
+.book-detail-obsidian-form {
+  display: grid;
+  gap: 12px;
+}
+
+.book-detail-obsidian-form > label {
+  display: grid;
+  gap: 4px;
+  font-size: var(--ui-text-sm);
+  color: var(--muted);
+}
+
+.book-detail-obsidian-form select,
+.book-detail-obsidian-form input:not([type="checkbox"]) {
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
+  border-radius: var(--ui-radius-sm);
+  color: var(--ink);
+  font-size: var(--ui-text-md);
+  background: var(--paper);
+}
+
+.book-detail-obsidian-form > .book-detail-obsidian-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+}
+
+.book-detail-obsidian-status,
+.book-detail-obsidian-empty,
+.book-detail-obsidian-conflict,
+.book-detail-obsidian-done {
+  display: grid;
+  gap: 6px;
+  font-size: var(--ui-text-md);
+  color: var(--ink);
+}
+
+.book-detail-obsidian-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.book-detail-obsidian-empty > p + p {
+  color: var(--muted);
+  font-size: var(--ui-text-sm);
+}
+
+.book-detail-obsidian-error {
+  margin-top: 8px;
+  color: var(--danger);
+  font-size: var(--ui-text-sm);
+}
+
+.book-detail-obsidian-done code,
+.book-detail-obsidian-conflict code,
+.book-detail-obsidian-empty code {
+  word-break: break-all;
+}

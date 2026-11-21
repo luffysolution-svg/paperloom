@@ -1,0 +1,98 @@
+/* 状态详情 · 单条翻译详情、原文 / 译文、重放。（TranslationItemDetailPanel）
+ *
+ * @owns translation, info-value, info-row, detail-info-list, status-panel-note, ring */
+
+@utility translation-item-detail {
+  display: grid;
+  gap: 14px;
+}
+
+@utility translation-detail-grid {
+  /* 提高特异性:后文的 .detail-info-list 定义了两列,这里要单列扁平键值行 */
+  &.detail-info-list {
+    margin: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+
+  @media (max-width: 720px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+@utility translation-detail-row {
+  /* 详情字段用扁平键值行,盖掉 .info-row 的卡片样式 */
+  &.info-row {
+    grid-template-columns: minmax(120px, auto) 1fr;
+    align-items: baseline;
+    gap: 10px;
+    min-height: 0;
+    padding: 7px 2px;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+  }
+
+  &.info-row .info-value {
+    font-size: 13px;
+    text-align: right;
+  }
+}
+
+
+
+@utility translation-text-block {
+  display: grid;
+  gap: 8px;
+
+  & pre {
+    margin: 0;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: var(--bg);
+    color: var(--ink);
+    font-size: 12px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-x: auto;
+  }
+}
+
+
+
+@utility translation-replay-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 2px;
+  border-top: 1px solid var(--line);
+}
+
+
+
+@utility translation-replay-result {
+  display: grid;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+
+
+@utility translation-replay-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+
+  @media (max-width: 720px) {
+    grid-template-columns: 1fr;
+  }
+}

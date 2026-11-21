@@ -13,8 +13,11 @@ and internal Agent contracts used by backend maintainers.
 - Base path: `/api/v1`
 - Health path: `/health`
 - Except for raw file download endpoints, responses are JSON.
-- Except for `GET /health`, endpoints require `X-API-Key` unless a documented
-  internal Agent capability authorizes the exact method and path.
+- Except for `GET /health`, `GET /ready`, the sign-in routes under
+  `/api/v1/auth/`, and the model-executor worker routes (per-job capability,
+  see [runtime-and-events](docs/api-spec/runtime-and-events.md#model-executor-worker-routes)),
+  endpoints require `X-API-Key` unless a documented internal Agent capability
+  authorizes the exact method and path.
 - `X-API-Key` authenticates access to the Rust API. It is not an OCR provider
   token or model API key.
 - API paths, stage names, artifact keys, schema versions, and stdout labels are
@@ -63,8 +66,6 @@ only for compatibility. See the detailed credential contract below.
 | [Glossary resources](docs/api-spec/glossaries.md) | Glossary CRUD, CSV parsing/export, and JSON import |
 | [Translation diagnostics](docs/api-spec/translation-diagnostics.md) | Summary, item index/detail, redaction, and single-item replay |
 | [Credential references](docs/api-spec/credentials.md) | Vault API, CAS revisions, permissions, runtime resolution, and adoption scope |
-| [AI proxy, conversations, and public operation control](docs/api-spec/ai-control-plane.md) | Ask/SSE proxy, runtime settings, durable message tree, operation projection, explicit confirmation actions, and candidate download |
-| [Backend-only Agent document operations](docs/api-spec/agent-document-operations.md) | Capabilities, fixed page programs, confirmation modes, retry/idempotency, candidate validation, runtime cursor |
 | [Live translation overlay](docs/api-spec/live-translation.md) | Durable layout/page snapshots, SSE replay, commit ordering, and producer requirements |
 | [Document metadata suggestions](docs/api-spec/document-metadata.md) | Durable title candidates, OCR role mapping, provenance, and guarded application |
 | [Errors, storage, and implementation notes](docs/api-spec/storage-and-errors.md) | Error shape, code ranges, data-root layout, and backend/worker ownership |
@@ -83,7 +84,8 @@ only for compatibility. See the detailed credential contract below.
 
 - Update the domain page that owns the behavior; do not append new numbered
   sections to this index.
-- Treat `src/app/router/*.rs` as the authority for route registration. Endpoint
+- Treat the endpoint tables in `src/app/router/*.rs` (generated into
+  `docs/api/00-接口目录.md`) as the authority for route registration. Endpoint
   maps in these pages are curated navigation aids and must not be interpreted
   as additional or planned routes.
 - Keep public HTTP paths and schema identifiers unchanged when moving prose.

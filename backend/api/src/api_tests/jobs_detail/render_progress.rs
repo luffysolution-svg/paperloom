@@ -129,3 +129,61 @@ async fn job_detail_route_keeps_render_page_progress_over_compile_steps() {
         "page"
     );
 }
+
+#[tokio::test]
+async fn job_detail_route_shows_render_prepare_steps_as_main_render_progress() {
+    let state = test_state("detail-render-prepare-main-lane");
+    let mut job = JobSnapshot::new(
+        "job-route-render-prepare".to_string(),
+        CreateJobInput::default(),
+        vec!["python".to_string()],
+    );
+    job.stage = Some("rendering".to_string());
+    let job_root: PathBuf = state.config.data_root.join("jobs").join(&job.job_id);
+    fs::create_dir_all(job_root.join("logs")).expect("create logs dir");
+    job.artifacts
+        .get_or_insert_with(crate::models::JobArtifacts::default)
+        .job_root = Some(job_root.to_string_lossy().to_string());
+    state.db.save_job(&job).expect("save job");
+    // The render start transition carries no page counters, so the step-based
+    // render_prepare progress must surface instead of a frozen 0/48 page bar.
+    fs::write(
+        job_root.join("logs").join("pipeline_events.jsonl"),
+        concat!(
+            r#"{"job_id":"job-route-render-prepare","seq":1,"ts":"2026-04-24T01:00:00Z","level":"info","user_stage":"render","stage":"rendering","substage":"render_pages","stage_detail":"开始渲染翻译 PDF","event_type":"stage_transition","message":"开始渲染翻译 PDF","progress_current":null,"progress_total":null,"progress_unit":"page","payload":{"effective_render_mode":"typst","render_total":48}}"#,
+            "\n",
+            r#"{"job_id":"job-route-render-prepare","seq":2,"ts":"2026-04-24T01:00:01Z","level":"info","user_stage":"render","stage":"rendering","substage":"render_prepare","stage_detail":"渲染准备：正在计算版式与配色（3/4）","event_type":"stage_progress","message":"渲染准备：正在计算版式与配色（3/4）","progress_current":2,"progress_total":4,"progress_unit":"step","payload":{"render_prepare_step":"payload_layout_color"}}"#,
+            "\n"
+        ),
+    )
+    .expect("write pipeline events");
+
+    let app = build_app(state.clone());
+    let detail_response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/jobs/{}", job.job_id))
+                .header("X-API-Key", "test-key")
+                .body(Body::empty())
+                .expect("detail request"),
+        )
+        .await
+        .expect("detail response");
+    assert_eq!(detail_response.status(), StatusCode::OK);
+    let detail_json = read_json(detail_response).await;
+    let snapshot = &detail_json["data"]["stage_snapshot"];
+    assert_eq!(snapshot["stage"], "rendering");
+    assert_eq!(snapshot["substage"], "render_prepare");
+    assert_eq!(snapshot["lane"], "main");
+    assert_eq!(
+        snapshot["stage_detail"],
+        "渲染准备：正在计算版式与配色（3/4）"
+    );
+    assert_eq!(snapshot["progress"]["current"], 2);
+    assert_eq!(snapshot["progress"]["total"], 4);
+    assert_eq!(snapshot["progress"]["unit"], "step");
+    assert!(snapshot["background_stages"]
+        .as_array()
+        .map(|stages| stages.is_empty())
+        .unwrap_or(true));
+}

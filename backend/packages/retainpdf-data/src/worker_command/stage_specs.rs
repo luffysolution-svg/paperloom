@@ -1,0 +1,619 @@
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use anyhow::{Context, Result};
+use serde_json::json;
+
+use crate::models::domain::{
+    normalize_translation_refine_mode, ResolvedJobSpec, DEFAULT_TRANSLATION_REFINE_MAX_ITEMS,
+    DEFAULT_TRANSLATION_REFINE_MAX_TOKENS,
+};
+use crate::ocr_provider::{is_server_owned_ocr_option, provider_public_definitions};
+use crate::ocr_provider::{
+    configured_provider_credential_env, is_configured_command_provider, provider_model_version,
+    require_supported_provider,
+};
+use crate::ocr_provider::{provider_token, provider_token_env_name};
+use crate::storage_paths::JobPaths;
+
+use super::stage_commands::RenderRefine;
+
+const NORMALIZE_STAGE_SCHEMA_VERSION: &str = "normalize.stage.v1";
+const TRANSLATE_STAGE_SCHEMA_VERSION: &str = "translate.stage.v1";
+const RENDER_STAGE_SCHEMA_VERSION: &str = "render.stage.v1";
+const RENDER_PREPARE_STAGE_SCHEMA_VERSION: &str = "render_prepare.stage.v1";
+const DOMAIN_PREWARM_STAGE_SCHEMA_VERSION: &str = "domain_prewarm.stage.v1";
+const PROVIDER_STAGE_SCHEMA_VERSION: &str = "provider.stage.v1";
+pub(crate) const TRANSLATION_API_KEY_ENV_NAME: &str = "RETAIN_TRANSLATION_API_KEY";
+/// 审校 key 的 env 名。worker_process 解析出 key 后经它注入；spec 里只写 env 引用。
+pub(crate) const REVIEWER_API_KEY_ENV_NAME: &str = "RETAIN_REVIEWER_API_KEY";
+const OCR_CREDENTIAL_ENV_NAME: &str = "RETAIN_OCR_CREDENTIAL";
+
+fn normalize_stage_spec_path(job_paths: &JobPaths) -> PathBuf {
+    job_paths.specs_dir.join("normalize.spec.json")
+}
+
+fn translate_stage_spec_path(job_paths: &JobPaths) -> PathBuf {
+    job_paths.specs_dir.join("translate.spec.json")
+}
+
+fn render_stage_spec_path(job_paths: &JobPaths) -> PathBuf {
+    job_paths.specs_dir.join("render.spec.json")
+}
+
+fn render_prepare_stage_spec_path(job_paths: &JobPaths) -> PathBuf {
+    job_paths.specs_dir.join("render-prepare.spec.json")
+}
+
+fn domain_prewarm_stage_spec_path(job_paths: &JobPaths) -> PathBuf {
+    job_paths.specs_dir.join("domain-prewarm.spec.json")
+}
+
+fn provider_stage_spec_path(job_paths: &JobPaths) -> PathBuf {
+    job_paths.specs_dir.join("provider.spec.json")
+}
+
+/// 审校 key 的 spec 引用：和翻译 key 一样，只在配置了 key 时写 env 引用，绝不写明文。
+fn reviewer_credential_ref_for_stage(request: &ResolvedJobSpec) -> String {
+    if request.translation.reviewer_api_key.trim().is_empty()
+        && request.translation.reviewer_credential_ref.trim().is_empty()
+    {
+        String::new()
+    } else {
+        format!("env:{REVIEWER_API_KEY_ENV_NAME}")
+    }
+}
+
+fn ensure_specs_dir(job_paths: &JobPaths) -> Result<()> {
+    fs::create_dir_all(&job_paths.specs_dir)
+        .with_context(|| format!("create specs dir: {}", job_paths.specs_dir.display()))
+}
+
+pub(crate) fn write_normalize_stage_spec(
+    request: &ResolvedJobSpec,
+    job_paths: &JobPaths,
+    source_json_path: &Path,
+    source_pdf_path: &Path,
+    provider_result_json_path: &Path,
+    provider_zip_path: &Path,
+    provider_raw_dir: &Path,
+) -> Result<PathBuf> {
+    ensure_specs_dir(job_paths)?;
+    let spec_path = normalize_stage_spec_path(job_paths);
+    let provider_kind = require_supported_provider(&request.ocr.provider)
+        .context("resolve OCR provider for normalize stage spec")?;
+    let provider_version = provider_model_version(&provider_kind, &request.ocr).to_string();
+    let payload = json!({
+        "schema_version": NORMALIZE_STAGE_SCHEMA_VERSION,
+        "stage": "normalize",
+        "job": {
+            "job_id": request.job_id,
+            "job_root": job_paths.root,
+            "workflow": request.workflow,
+        },
+        "inputs": {
+            "provider": request.ocr.provider,
+            "source_json": source_json_path,
+            "source_pdf": source_pdf_path,
+            "provider_version": provider_version,
+            "provider_result_json": provider_result_json_path,
+            "provider_zip": provider_zip_path,
+            "provider_raw_dir": provider_raw_dir,
+        },
+        "params": {},
+    });
+    let content = serde_json::to_string_pretty(&payload)?;
+    fs::write(&spec_path, content)
+        .with_context(|| format!("write normalize stage spec: {}", spec_path.display()))?;
+    Ok(spec_path)
+}
+
+pub(crate) fn write_translate_stage_spec(
+    request: &ResolvedJobSpec,
+    job_paths: &JobPaths,
+    source_json_path: &Path,
+    source_pdf_path: &Path,
+    layout_json_path: Option<&Path>,
+    ocr_stream_dir: Option<&Path>,
+) -> Result<PathBuf> {
+    ensure_specs_dir(job_paths)?;
+    let spec_path = translate_stage_spec_path(job_paths);
+    let credential_ref = if request.translation.api_key.trim().is_empty()
+        && request.translation.credential_ref.trim().is_empty()
+    {
+        String::new()
+    } else {
+        format!("env:{TRANSLATION_API_KEY_ENV_NAME}")
+    };
+    let payload = json!({
+        "schema_version": TRANSLATE_STAGE_SCHEMA_VERSION,
+        "stage": "translate",
+        "job": {
+            "job_id": request.job_id,
+            "job_root": job_paths.root,
+            "workflow": request.workflow,
+        },
+        "inputs": {
+            "source_json": source_json_path,
+            "source_pdf": source_pdf_path,
+            "layout_json": layout_json_path,
+            "ocr_stream_dir": ocr_stream_dir,
+        },
+        "params": {
+            "start_page": request.translation.start_page,
+            "end_page": request.translation.end_page,
+            "batch_size": request.translation.batch_size,
+            "workers": request.resolved_workers(),
+            "mode": request.translation.mode,
+            "math_mode": request.translation.math_mode,
+            "skip_title_translation": request.translation.skip_title_translation,
+            "classify_batch_size": request.translation.classify_batch_size,
+            "rule_profile_name": request.translation.rule_profile_name,
+            "custom_rules_text": request.translation.custom_rules_text,
+            "glossary_id": request.translation.glossary_id,
+            "glossary_name": request.translation.glossary_name,
+            "glossary_resource_entry_count": request.translation.glossary_resource_entry_count,
+            "glossary_inline_entry_count": request.translation.glossary_inline_entry_count,
+            "glossary_overridden_entry_count": request.translation.glossary_overridden_entry_count,
+            "glossary_entries": request.translation.glossary_entries,
+            "context_mode": request.translation.context_mode,
+            "glossary_mode": request.translation.glossary_mode,
+            "memory_mode": request.translation.memory_mode,
+            "model": request.translation.model,
+            "base_url": request.translation.base_url,
+            "credential_ref": credential_ref,
+            "preparation": request.translation.preparation,
+            "reviewer_model": request.translation.reviewer_model,
+            "reviewer_base_url": request.translation.reviewer_base_url,
+            "reviewer_credential_ref": reviewer_credential_ref_for_stage(request),
+            "api_protocol": request.translation.api_protocol,
+            "thinking": request.translation.thinking,
+            "reviewer_api_protocol": request.translation.reviewer_api_protocol,
+            "reviewer_thinking": request.translation.reviewer_thinking,
+            "engine": request.translation.engine,
+            // 这里曾经还写 4 个 render_prewarm_* key（输出路径 / render_mode /
+            // pdf_compress_dpi / source_cleanup_strategy）。阶段解耦之后 render
+            // prewarm 整体挪进了 render 阶段（见 translate_only_pipeline 里那段
+            // "Stage decoupling" 注释），translate 侧从 loader 到 stage 函数一路
+            // 接住却一个都不用——四层死字段。字段已删；params 的 key 集合现在由
+            // stage_specs_keep_python_loader_contract_keys 对齐黄金 fixture 钉死。
+        },
+    });
+    let content = serde_json::to_string_pretty(&payload)?;
+    fs::write(&spec_path, content)
+        .with_context(|| format!("write translate stage spec: {}", spec_path.display()))?;
+    Ok(spec_path)
+}
+
+/// render.spec.json 的 `params.refine`。mode=off 时也写全字段，Python 侧不用猜默认值。
+///
+/// mode 的决定规则：retry refine 的一次性覆盖 → 覆盖值 + trigger=manual；紧跟翻译的
+/// 那次渲染 → 任务的 `translation.refine` + trigger=auto（翻译引擎是 agent 时 off）；其余（普通重渲染等）→ off。
+/// 翻译模型沿用 params 里的 model/base_url/credential_ref；reviewer_* 留空时由 Python
+/// 回退到翻译模型。key 只经 env 注入，这里只写 env 引用。
+fn render_refine_params(request: &ResolvedJobSpec, refine: &RenderRefine) -> serde_json::Value {
+    // 翻译之后自动精修用任务里的上限；手动精修用这次请求的上限（没给就审全书，见
+    // RefineOverride），不沿用任务里存的老上限。
+    let job_limits = (request.translation.refine_max_items, request.translation.refine_max_tokens);
+    let (mode, trigger, start_page, end_page, (max_items, max_tokens)) = match refine {
+        RenderRefine::Off => ("off", "auto", None, None, job_limits),
+        // 翻译 agent 自带每页审校，翻译之后不再自动精修（不重复花钱）；手动精修照旧
+        RenderRefine::AfterTranslation if request.translation.engine == "agent" => {
+            ("off", "auto", None, None, job_limits)
+        }
+        RenderRefine::AfterTranslation => (
+            normalize_translation_refine_mode(&request.translation.refine),
+            "auto",
+            None,
+            None,
+            job_limits,
+        ),
+        RenderRefine::Manual(value) => (
+            normalize_translation_refine_mode(&value.mode),
+            "manual",
+            value.start_page,
+            value.end_page,
+            (
+                value.max_items.unwrap_or(DEFAULT_TRANSLATION_REFINE_MAX_ITEMS),
+                value.max_tokens.unwrap_or(DEFAULT_TRANSLATION_REFINE_MAX_TOKENS),
+            ),
+        ),
+    };
+    json!({
+        "mode": mode,
+        "trigger": trigger,
+        "start_page": start_page,
+        "end_page": end_page,
+        "max_items": max_items.max(0),
+        "max_tokens": max_tokens.max(0),
+        "reviewer_model": request.translation.reviewer_model,
+        "reviewer_base_url": request.translation.reviewer_base_url,
+        "reviewer_credential_ref": reviewer_credential_ref_for_stage(request),
+        "reviewer_api_protocol": request.translation.reviewer_api_protocol,
+        "reviewer_thinking": request.translation.reviewer_thinking,
+    })
+}
+
+pub(crate) fn write_render_stage_spec(
+    request: &ResolvedJobSpec,
+    job_paths: &JobPaths,
+    source_pdf_path: &Path,
+    translations_dir: &Path,
+    source_json_path: Option<&Path>,
+    refine: &RenderRefine,
+) -> Result<PathBuf> {
+    ensure_specs_dir(job_paths)?;
+    let spec_path = render_stage_spec_path(job_paths);
+    let credential_ref = if request.translation.api_key.trim().is_empty()
+        && request.translation.credential_ref.trim().is_empty()
+    {
+        String::new()
+    } else {
+        format!("env:{TRANSLATION_API_KEY_ENV_NAME}")
+    };
+    let payload = json!({
+        "schema_version": RENDER_STAGE_SCHEMA_VERSION,
+        "stage": "render",
+        "job": {
+            "job_id": request.job_id,
+            "job_root": job_paths.root,
+            "workflow": request.workflow,
+        },
+        "inputs": {
+            "source_pdf": source_pdf_path,
+            "translations_dir": translations_dir,
+            "translation_manifest": translations_dir.join("translation-manifest.json"),
+        },
+        "params": {
+            "start_page": request.translation.start_page,
+            "end_page": request.translation.end_page,
+            "render_mode": request.render.render_mode,
+            "compile_workers": request.render.compile_workers,
+            "typst_font_family": request.render.typst_font_family,
+            "pdf_compress_dpi": request.render.pdf_compress_dpi,
+            "translated_pdf_name": request.render.translated_pdf_name,
+            "body_font_size_factor": request.render.body_font_size_factor,
+            "body_leading_factor": request.render.body_leading_factor,
+            "inner_bbox_shrink_x": request.render.inner_bbox_shrink_x,
+            "inner_bbox_shrink_y": request.render.inner_bbox_shrink_y,
+            "inner_bbox_dense_shrink_x": request.render.inner_bbox_dense_shrink_x,
+            "inner_bbox_dense_shrink_y": request.render.inner_bbox_dense_shrink_y,
+            "font_unify_mode": request.render.font_unify_mode,
+            "source_cleanup_strategy": request.render.source_cleanup_strategy,
+            "engine": request.render.engine,
+            "model": request.translation.model,
+            "base_url": request.translation.base_url,
+            "credential_ref": credential_ref,
+            "api_protocol": request.translation.api_protocol,
+            "thinking": request.translation.thinking,
+            "refine": render_refine_params(request, refine),
+        },
+    });
+    let mut payload = payload;
+    if let Some(source_json_path) = source_json_path {
+        // OCR 归一化文档的准确位置。渲染准备（write_render_prepare_stage_spec）同样带它，渲染端两边用同一个
+        // 路径（准备步骤的指纹含路径）；不带时渲染端按译文目录推算。
+        payload["inputs"]["source_json"] = json!(source_json_path);
+    }
+    let content = serde_json::to_string_pretty(&payload)?;
+    fs::write(&spec_path, content)
+        .with_context(|| format!("write render stage spec: {}", spec_path.display()))?;
+    Ok(spec_path)
+}
+
+/// 渲染准备阶段（与翻译并行，提前做与译文无关的渲染准备）。参数取自与渲染阶段相同的字段，
+/// 渲染阶段会用指纹核对，所以两边必须同源；不带任何凭据。
+pub(crate) fn write_render_prepare_stage_spec(
+    request: &ResolvedJobSpec,
+    job_paths: &JobPaths,
+    source_json_path: &Path,
+    source_pdf_path: &Path,
+    translations_dir: &Path,
+) -> Result<PathBuf> {
+    ensure_specs_dir(job_paths)?;
+    let spec_path = render_prepare_stage_spec_path(job_paths);
+    let payload = json!({
+        "schema_version": RENDER_PREPARE_STAGE_SCHEMA_VERSION,
+        "stage": "render_prepare",
+        "job": {
+            "job_id": request.job_id,
+            "job_root": job_paths.root,
+            "workflow": request.workflow,
+        },
+        "inputs": {
+            "source_pdf": source_pdf_path,
+            "source_json": source_json_path,
+            "translations_dir": translations_dir,
+        },
+        "params": {
+            "start_page": request.translation.start_page,
+            "end_page": request.translation.end_page,
+            "render_mode": request.render.render_mode,
+            "engine": request.render.engine,
+            "math_mode": request.translation.math_mode,
+        },
+    });
+    let content = serde_json::to_string_pretty(&payload)?;
+    fs::write(&spec_path, content)
+        .with_context(|| format!("write render prepare stage spec: {}", spec_path.display()))?;
+    Ok(spec_path)
+}
+
+/// OCR 期间先做识别领域的辅助进程（`retainpdf_pipeline.translate.entrypoints.domain_prewarm`）的 spec：只要源 PDF 和翻译模型参数。
+/// 翻译阶段的 spec 要等 OCR 结果出来才写得了。key 只经 env 注入，这里只写 env 引用。
+pub(crate) fn write_domain_prewarm_stage_spec(
+    request: &ResolvedJobSpec,
+    job_paths: &JobPaths,
+    source_pdf_path: &Path,
+) -> Result<PathBuf> {
+    ensure_specs_dir(job_paths)?;
+    let spec_path = domain_prewarm_stage_spec_path(job_paths);
+    let payload = json!({
+        "schema_version": DOMAIN_PREWARM_STAGE_SCHEMA_VERSION,
+        "stage": "domain_prewarm",
+        "job": {
+            "job_id": request.job_id,
+            "job_root": job_paths.root,
+            "workflow": request.workflow,
+        },
+        "inputs": {
+            "source_pdf": source_pdf_path,
+        },
+        "params": {
+            "mode": request.translation.mode,
+            "model": request.translation.model,
+            "base_url": request.translation.base_url,
+            "api_protocol": request.translation.api_protocol,
+            "thinking": request.translation.thinking,
+            "credential_ref": format!("env:{TRANSLATION_API_KEY_ENV_NAME}"),
+        },
+    });
+    let content = serde_json::to_string_pretty(&payload)?;
+    fs::write(&spec_path, content)
+        .with_context(|| format!("write domain prewarm spec: {}", spec_path.display()))?;
+    Ok(spec_path)
+}
+
+pub(crate) fn write_provider_stage_spec(
+    request: &ResolvedJobSpec,
+    job_paths: &JobPaths,
+    upload_path: Option<&Path>,
+    stream_pages: bool,
+) -> Result<PathBuf> {
+    ensure_specs_dir(job_paths)?;
+    let spec_path = provider_stage_spec_path(job_paths);
+    let provider_kind = require_supported_provider(&request.ocr.provider)
+        .context("resolve OCR provider for provider stage spec")?;
+    let provider_credential_ref =
+        provider_credential_ref_for_stage(&request.ocr.provider, &provider_kind, &request.ocr)?;
+    let translation_credential_ref = if request.translation.api_key.trim().is_empty()
+        && request.translation.credential_ref.trim().is_empty()
+    {
+        String::new()
+    } else {
+        format!("env:{TRANSLATION_API_KEY_ENV_NAME}")
+    };
+    let payload = json!({
+        "schema_version": PROVIDER_STAGE_SCHEMA_VERSION,
+        "stage": "provider",
+        "job": {
+            "job_id": request.job_id,
+            "job_root": job_paths.root,
+            "workflow": request.workflow,
+        },
+        "source": {
+            "file_url": request.source.source_url,
+            "file_path": upload_path,
+        },
+        "ocr": {
+            "provider": request.ocr.provider,
+            "stream_pages": stream_pages,
+            "credential_ref": provider_credential_ref,
+            "model_version": request.ocr.model_version,
+            "paddle_api_url": request.ocr.paddle_api_url,
+            "paddle_model": request.ocr.paddle_model,
+            "is_ocr": request.ocr.is_ocr,
+            "disable_formula": request.ocr.disable_formula,
+            "disable_table": request.ocr.disable_table,
+            "language": request.ocr.language,
+            "page_ranges": request.ocr.page_ranges,
+            "data_id": request.ocr.data_id,
+            "no_cache": request.ocr.no_cache,
+            "cache_tolerance": request.ocr.cache_tolerance,
+            "extra_formats": request.ocr.extra_formats,
+            "poll_interval": request.ocr.poll_interval,
+            "poll_timeout": request.ocr.poll_timeout,
+            "options": provider_options_for_stage(&request.ocr.provider, &request.ocr.options),
+        },
+        "translation": {
+            "start_page": request.translation.start_page,
+            "end_page": request.translation.end_page,
+            "batch_size": request.translation.batch_size,
+            "workers": request.resolved_workers(),
+            "mode": request.translation.mode,
+            "math_mode": request.translation.math_mode,
+            "skip_title_translation": request.translation.skip_title_translation,
+            "classify_batch_size": request.translation.classify_batch_size,
+            "rule_profile_name": request.translation.rule_profile_name,
+            "custom_rules_text": request.translation.custom_rules_text,
+            "glossary_id": request.translation.glossary_id,
+            "glossary_name": request.translation.glossary_name,
+            "glossary_resource_entry_count": request.translation.glossary_resource_entry_count,
+            "glossary_inline_entry_count": request.translation.glossary_inline_entry_count,
+            "glossary_overridden_entry_count": request.translation.glossary_overridden_entry_count,
+            "glossary_entries": request.translation.glossary_entries,
+            "context_mode": request.translation.context_mode,
+            "glossary_mode": request.translation.glossary_mode,
+            "memory_mode": request.translation.memory_mode,
+            "model": request.translation.model,
+            "base_url": request.translation.base_url,
+            "credential_ref": translation_credential_ref,
+            "preparation": request.translation.preparation,
+            "reviewer_model": request.translation.reviewer_model,
+            "reviewer_base_url": request.translation.reviewer_base_url,
+            "reviewer_credential_ref": reviewer_credential_ref_for_stage(request),
+            "api_protocol": request.translation.api_protocol,
+            "thinking": request.translation.thinking,
+            "reviewer_api_protocol": request.translation.reviewer_api_protocol,
+            "reviewer_thinking": request.translation.reviewer_thinking,
+            "engine": request.translation.engine,
+        },
+        "render": {
+            "render_mode": request.render.render_mode,
+            "compile_workers": request.render.compile_workers,
+            "typst_font_family": request.render.typst_font_family,
+            "pdf_compress_dpi": request.render.pdf_compress_dpi,
+            "translated_pdf_name": request.render.translated_pdf_name,
+            "body_font_size_factor": request.render.body_font_size_factor,
+            "body_leading_factor": request.render.body_leading_factor,
+            "inner_bbox_shrink_x": request.render.inner_bbox_shrink_x,
+            "inner_bbox_shrink_y": request.render.inner_bbox_shrink_y,
+            "inner_bbox_dense_shrink_x": request.render.inner_bbox_dense_shrink_x,
+            "inner_bbox_dense_shrink_y": request.render.inner_bbox_dense_shrink_y,
+            "font_unify_mode": request.render.font_unify_mode,
+            "source_cleanup_strategy": request.render.source_cleanup_strategy,
+            "engine": request.render.engine,
+        },
+    });
+    let content = serde_json::to_string_pretty(&payload)?;
+    fs::write(&spec_path, content)
+        .with_context(|| format!("write provider stage spec: {}", spec_path.display()))?;
+    Ok(spec_path)
+}
+
+fn provider_credential_ref_for_stage(
+    provider: &str,
+    provider_kind: &crate::ocr_provider::OcrProviderKind,
+    ocr: &crate::models::request::OcrInput,
+) -> Result<String> {
+    if is_configured_command_provider(provider) {
+        if let Some(env_name) = configured_provider_credential_env(provider) {
+            return Ok(format!("env:{env_name}"));
+        }
+        let has_inline_credential = ["credential", "token", "api_key"].iter().any(|key| {
+            ocr.options
+                .get(*key)
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|value| !value.trim().is_empty())
+        });
+        return Ok(
+            if has_inline_credential || !ocr.credential_ref.trim().is_empty() {
+                format!("env:{OCR_CREDENTIAL_ENV_NAME}")
+            } else {
+                String::new()
+            },
+        );
+    }
+    if provider_token(provider_kind, ocr).is_empty() && ocr.credential_ref.trim().is_empty() {
+        return Ok(String::new());
+    }
+    let env_name = provider_token_env_name(provider_kind)
+        .context("resolve OCR provider token env for provider stage spec")?;
+    Ok(format!("env:{env_name}"))
+}
+
+fn provider_options_for_stage(
+    provider: &str,
+    overrides: &std::collections::BTreeMap<String, serde_json::Value>,
+) -> serde_json::Value {
+    let mut options = provider_public_definitions()
+        .into_iter()
+        .find(|definition| definition.key == provider.trim().to_ascii_lowercase())
+        .map(|definition| {
+            let mut options = serde_json::Map::new();
+            for (key, spec) in definition.options {
+                if !spec.default.is_null() {
+                    options.insert(key, spec.default);
+                }
+            }
+            options
+        })
+        .unwrap_or_default();
+    // 只能服务器定的选项（command、raw_provider、配置里带 env 的）只用配置里的值，请求里的不认。
+    // 建任务时已经 400（retainpdf-jobs validate_client_ocr_options）；这里是第二道，挡住老任务里存着的。
+    for (key, value) in overrides {
+        if is_server_owned_ocr_option(provider, key) {
+            continue;
+        }
+        options.insert(key.clone(), value.clone());
+    }
+    serde_json::Value::Object(options)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::request::OcrInput;
+    use crate::ocr_provider::OcrProviderKind;
+
+    #[test]
+    fn builtin_credential_ref_is_projected_as_provider_env_only() {
+        let mut ocr = OcrInput::default();
+        ocr.provider = "paddle".to_string();
+        ocr.credential_ref = "cred_ocr_paddle".to_string();
+
+        let credential_ref =
+            provider_credential_ref_for_stage("paddle", &OcrProviderKind::Paddle, &ocr)
+                .expect("build provider credential reference");
+
+        assert_eq!(
+            credential_ref,
+            format!(
+                "env:{}",
+                provider_token_env_name(&OcrProviderKind::Paddle).expect("paddle env")
+            )
+        );
+        assert!(!credential_ref.contains("cred_ocr_paddle"));
+    }
+
+    #[test]
+    fn configured_credential_ref_without_custom_env_uses_generic_env() {
+        let mut ocr = OcrInput::default();
+        ocr.provider = "local".to_string();
+        ocr.credential_ref = "cred_ocr_local".to_string();
+
+        let credential_ref =
+            provider_credential_ref_for_stage("local", &OcrProviderKind::Local, &ocr)
+                .expect("build configured provider credential reference");
+
+        assert_eq!(credential_ref, "env:RETAIN_OCR_CREDENTIAL");
+        assert!(!credential_ref.contains("cred_ocr_local"));
+    }
+
+    /// 审计 A2（2026-10-22）：请求里的 `ocr.options.command` / `raw_provider` 以前原样盖在配置
+    /// 默认值上，流水线拿 `command` 去 `subprocess.run`。建任务校验已经 400，这里是第二道：
+    /// 就算有一份老任务的请求带着它们，写进 stage spec 的也只能是服务器配置里的值。
+    #[test]
+    fn provider_stage_options_never_take_server_owned_options_from_the_request() {
+        let mut overrides = std::collections::BTreeMap::new();
+        overrides.insert("command".to_string(), json!("sh -c 'touch /tmp/pwned'"));
+        overrides.insert("raw_provider".to_string(), json!("attacker_adapter"));
+        overrides.insert("credential".to_string(), json!("inline-secret"));
+
+        let options = provider_options_for_stage("local", &overrides);
+
+        assert_eq!(options["command"], json!(""), "{options}");
+        assert_eq!(options["raw_provider"], json!("generic_flat_ocr"), "{options}");
+        // 客户端可填的照旧覆盖。
+        assert_eq!(options["credential"], json!("inline-secret"));
+
+        let mut paddle = std::collections::BTreeMap::new();
+        paddle.insert("transport".to_string(), json!("official_cli"));
+        paddle.insert("command".to_string(), json!("/bin/evil"));
+        let options = provider_options_for_stage("paddle", &paddle);
+        assert_eq!(options["transport"], json!("official_cli"));
+        assert!(options.get("command").is_none(), "{options}");
+    }
+
+    #[test]
+    fn missing_builtin_credential_keeps_stage_reference_empty() {
+        let mut ocr = OcrInput::default();
+        ocr.provider = "paddle".to_string();
+
+        let credential_ref =
+            provider_credential_ref_for_stage("paddle", &OcrProviderKind::Paddle, &ocr)
+                .expect("build empty provider credential reference");
+
+        assert!(credential_ref.is_empty());
+    }
+}

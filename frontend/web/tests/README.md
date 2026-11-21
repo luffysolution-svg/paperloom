@@ -9,14 +9,20 @@
 | 目录 | 放置内容 |
 | --- | --- |
 | `architecture/` | 源码分层、依赖方向、CSS/DOM 约束和测试布局门禁 |
+| `book-detail/` | 书籍详情弹窗：进度 Tab、失败卡、产物中心、选页翻译 |
 | `contracts/` | JSON Schema、API DTO、事件名及跨包数据契约 |
-| `home/` | 首页、上传、凭据、工作流和应用外壳 |
+| `credentials/` | 凭据域逻辑：校验流程、state port、翻译配置、桌面首启门禁 |
+| `editorial-room/` | 翻译编辑部：editorial.v1 事件解析、叠成状态、回放和画面 |
+| `home/` | 首页外壳、设置中心与凭据对话框、术语表、任务中心、更新提示 |
+| `ingest/` | 上传与翻译工作流：上传对话框、工作流 payload、提交就绪与提交流程 |
 | `jobs/` | 任务标准化、运行时、下载、错误和产物处理 |
-| `library/` | 书库、搜索、最近任务和详情 |
+| `layout/` | 用真浏览器（playwright）跑的布局与 iframe 沙箱门禁 |
+| `library/` | 书库、搜索、最近任务卡片与刷新 |
+| `platform/` | platform 层的 mock 与传输契约 |
 | `reader/` | 阅读器、Markdown、批注、问答、会话和 Reader 包边界 |
 | `shared/` | 被多个页面共同使用的客户端、hook、组件和装饰能力 |
 | `status/` | 状态卡、阶段进度和状态详情 |
-| `helpers/` | 测试加载器和共享基线，不放测试用例 |
+| `helpers/` | 测试加载器、共享基线和跨目录复用的测试工具，不放测试用例 |
 | `visual/baseline/` | 视觉回归基线图片，由视觉测试命令维护 |
 
 测试文件必须放在上述职责最接近的领域目录中；`tests/` 根目录不允许出现
@@ -63,7 +69,15 @@ npm --prefix frontend/web run visual:update   # 仅在确认视觉变化符合�
 - 新测试应使用 `node:test` 和 `node:assert/strict`，保持测试可独立运行。
 - 只对当前测试所需的浏览器 API 建立 jsdom 或最小 stub，并在测试结束时清理
   DOM、定时器、订阅和全局状态。
-- 可复用的加载或基线设施放入 `helpers/`；不要把业务断言藏在 helper 中。
+- 可复用的加载或基线设施放入 `helpers/`；不要把业务断言藏在 helper 中。常用的有：
+  - `helpers/async.mjs`：`wait` / `waitFor`（回传谓词的值，超时描述可以是惰性函数）/ `deferred`
+  - `helpers/dom.mjs`：`makeDom`（装 jsdom 全局，key 列表可覆盖）、`installReaderDom`
+    （带 `restore()`）、`byId` / `click` / `clickWithMouseDown` / `typeInput` / `selectOption`
+  - `helpers/home-app.mjs`：`bootHomeApp` 把整个 HomeApp 挂进 jsdom
+  - `helpers/source-text.mjs`：对源码文本断言前先剥注释（`code` / `body`）、用两个锚点切
+    片（`region`）、`importSpecifiers`
+- 只在一个目录里复用的夹具放该目录的 `helpers/`（如 `home/helpers/`、`reader/helpers/`）。
+- 单个文件一般不超过 ~800 行；超过时按主题拆分，用例整块搬移。
 
 ## Import 边界
 

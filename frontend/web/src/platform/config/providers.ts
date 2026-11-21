@@ -44,6 +44,32 @@ export const OCR_PROVIDER_DEFINITIONS = [
     // MinerU 整份一次交，它的接口单个文件最大 200MB。
     maxBytes: 200 * 1024 * 1024,
   },
+  {
+    // 智谱的版面解析（glm-ocr），和智谱翻译模型共用一个 key。任务里没有专用的 key 字段：
+    // 内联的 key 放进 ocr.options.credential（tokenField 为空、inlineOption 指明）。
+    // 只收上传的本地文件；网页端本来就只交上传的文件。
+    id: "glm_ocr",
+    label: "GLM-OCR",
+    description: "智谱版面解析，公式出 LaTeX、表格出 HTML，不限页数；和智谱翻译共用一个 key。",
+    // 设置里服务商卡片上的标志（和翻译「智谱」同一个）；没有标志的用线条图标。
+    logoUrl: "src/assets/providers/zai.svg",
+    tokenField: "",
+    inlineOption: "credential",
+    runtimeConfigKey: "glmOcrToken",
+    tokenLabel: "智谱 API Key",
+    tokenPlaceholder: "智谱 API Key（翻译用智谱时可以不填）",
+    validationButtonLabel: "",
+    validationIdleMessage: "未检测",
+    validationMissingMessage: "请先填写智谱 API Key；翻译用智谱时可以不填。",
+    validationUnavailableMessage: "翻译选了智谱时可以不填，用翻译的同一个 key。",
+    docsUrl: "https://open.bigmodel.cn/usercenter/apikeys",
+    docsLabel: "获取 Key",
+    supportsValidation: false,
+    // 分段识别，多长的书都行。
+    maxPages: 0,
+    // 同样切成 10 页一片交（glm_ocr_driver.py），它「≤50MB」的限制落在每一片上。
+    maxBytes: 0,
+  },
 ];
 
 /** 翻译接口是智谱（open.bigmodel.cn）吗：是的话 GLM-OCR 可以不填自己的 key，后端借翻译的 key。 */

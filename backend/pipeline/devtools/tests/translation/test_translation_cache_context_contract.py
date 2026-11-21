@@ -5,9 +5,9 @@ import json
 
 import pytest
 
-from retainpdf_pipeline.translate.core.context import build_item_context
-from retainpdf_pipeline.translate.llm.shared import cache
-from retainpdf_pipeline.translate.llm.shared.prompt_protocols import single_user_prompt
+from retainpdf_translation.core.context import build_item_context
+from retainpdf_translation.llm.shared import cache
+from retainpdf_translation.llm.shared.prompt_protocols import single_user_prompt
 
 
 OPTIONS = {"model": "qwen3.8-flash", "base_url": "https://example.invalid/v1"}

@@ -32,7 +32,7 @@ test("MinerU：Token 本机保存、明文回填，切回 Paddle 保留各自 To
     const pick = (provider) => byId(dom, "browser-ocr-provider-select").querySelector(`[data-ocr-provider-option="${provider}"]`).click();
     assert.deepEqual(
       [...byId(dom, "browser-ocr-provider-select").querySelectorAll("[role=radio]")].map((option) => option.dataset.ocrProviderOption),
-      ["paddle", "mineru"],
+      ["paddle", "mineru", "glm_ocr"],
     );
     await waitForDialogReady();
     typeInput(dom, byId(dom, "browser-paddle-token"), "paddle-ui-fixture");

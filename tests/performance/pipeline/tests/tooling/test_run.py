@@ -2,7 +2,6 @@ from support.paths import HERE
 import importlib.util
 import json
 import socket
-from pathlib import Path
 import sqlite3
 from types import SimpleNamespace
 from unittest import mock
@@ -101,8 +100,9 @@ def test_saved_qwen_config_and_payload_do_not_reuse_old_source(tmp_path):
     source, saved = bench.load_config(db, None)
     assert source == "qwen-old"
     args = SimpleNamespace(workers=8, batch_size=1, timeout=600)
-    payload = bench.build_payload(saved, "new-upload", "new-job", args)
+    payload = bench.build_payload(saved, "new-upload", args)
     assert payload["source"] == {"upload_id": "new-upload"}
+    assert "job_id" not in payload["runtime"]
     assert payload["translation"]["page_ranges"] == []
     assert payload["translation"]["api_key"] == "secret"
     assert payload["translation"]["workers"] == 8
@@ -113,7 +113,7 @@ def test_worker_override_preserves_executor_snapshot_and_source():
     config = {"translation": {"workers": 2, "execution_connection": {
         "id": "qwen", "concurrency": 2, "thinking": "off",
     }}}
-    payload = bench.build_payload(config, "upload", "job", SimpleNamespace(
+    payload = bench.build_payload(config, "upload", SimpleNamespace(
         workers=4, batch_size=None, timeout=600,
     ))
     assert payload["translation"]["execution_connection"] == {
@@ -158,7 +158,9 @@ def test_run_writes_metrics_without_credentials(tmp_path, monkeypatch, stage, re
             assert kwargs["json"]["workflow"] == ("book" if stage == "full" else stage)
             if reuse:
                 assert kwargs["json"]["source"] == {"artifact_job_id": "prior"}
-            job = kwargs["json"]["runtime"]["job_id"]
+            # 任务编号由服务器分配：请求里不许带 runtime.job_id，编号从返回里取。
+            assert "job_id" not in kwargs["json"]["runtime"]
+            job = "server-assigned-job"
             artifacts = tmp_path / "data/jobs" / job / "artifacts"
             artifacts.mkdir(parents=True)
             (artifacts / "translation_diagnostics.json").write_text(json.dumps({"request_counts": {"total_http_attempts": 2}}))

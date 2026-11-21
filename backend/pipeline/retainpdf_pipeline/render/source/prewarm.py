@@ -7,9 +7,9 @@ import time
 from retainpdf_pipeline.foundation.config import layout
 from retainpdf_pipeline.render.render_mode import resolve_effective_render_mode
 from retainpdf_pipeline.render.semantics.page_range import resolve_page_range
-from retainpdf_pipeline.services.pipeline_shared.events import emit_stage_progress
-from retainpdf_pipeline.services.pipeline_shared.events import get_active_pipeline_event_writer
-from retainpdf_pipeline.services.pipeline_shared.events import pipeline_event_writer_scope
+from retainpdf_base.events import emit_stage_progress
+from retainpdf_base.events import get_active_pipeline_event_writer
+from retainpdf_base.events import pipeline_event_writer_scope
 from retainpdf_pipeline.render.source.render_source import build_render_source_pdf
 from retainpdf_pipeline.render.source.prewarm_manifest import write_json_atomic
 from retainpdf_pipeline.render.source.prewarm_contracts import PAYLOAD_RENDER_ALGORITHM_VERSION
@@ -75,6 +75,7 @@ def _run_render_source_prewarm(spec: RenderPrewarmSpec, manifest_path: Path) -> 
                 source_pdf_path=spec.source_pdf_path,
                 translated_pages=spec.translated_pages,
                 manifest_path=manifest_path,
+                prepare_hooks=spec.prepare_hooks,
             )
         if prepared is None:
             cleanup_strategy = spec.source_cleanup_strategy if spec.include_source_cleanup else layout.SOURCE_CLEANUP_TYPST_FILL
@@ -92,6 +93,7 @@ def _run_render_source_prewarm(spec: RenderPrewarmSpec, manifest_path: Path) -> 
                 source_cleanup_strategy=cleanup_strategy,
                 document_analysis=document_analysis,
                 pdf_structure_profile_path=pdf_structure_profile_path,
+                prepare_hooks=spec.prepare_hooks,
             )
         payload_prewarm = build_payload_prewarm(
             source_pdf_path=spec.source_pdf_path,
@@ -104,6 +106,7 @@ def _run_render_source_prewarm(spec: RenderPrewarmSpec, manifest_path: Path) -> 
                 else layout.SOURCE_CLEANUP_TYPST_FILL
             ),
             bbox_text_strip_candidates=prepared.bbox_text_strip_candidates if spec.include_source_cleanup else None,
+            prepare_hooks=spec.prepare_hooks,
         )
         manifest = build_prewarm_manifest(
             manifest_path=manifest_path,

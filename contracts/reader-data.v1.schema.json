@@ -7,21 +7,19 @@
   "endpoints": [
     {
       "method": "GET",
-      "path": "/api/v1/jobs/:job_id/artifacts",
-      "output": "ReaderArtifactLinks",
-      "rust_view": "ArtifactLinksView (Reader-safe consumer subset)",
-      "ts_consumer": "@retainpdf/contracts/reader-data :: ReaderArtifactLinks"
+      "path": "/api/v1/jobs/:job_id/files",
+      "client_name": "listJobFiles",
+      "transport": "json",
+      "output": "JobFilesView",
+      "rust_view": "JobFilesView",
+      "ts_consumer": "@retainpdf/contracts/reader-data :: JobFilesView",
+      "note": "任务的文件清单：output 成品、pages 译文页预览、internal 中间产物（只有管理员和单机模式才有这个字段）。取代 /artifacts 和 /artifacts-manifest。"
     },
     {
       "method": "GET",
-      "path": "/api/v1/jobs/:job_id/artifacts-manifest",
-      "output": "ReaderArtifactManifestView",
-      "rust_view": "JobArtifactManifestView (Reader-safe consumer subset)",
-      "ts_consumer": "@retainpdf/contracts/reader-data :: ReaderArtifactManifestView"
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/jobs/:job_id/markdown/document",
+      "path": "/api/v1/jobs/:job_id/reader/markdown",
+      "client_name": "getReaderMarkdown",
+      "transport": "json",
       "output": "MarkdownDocumentView",
       "rust_view": "MarkdownDocumentView",
       "ts_consumer": "@retainpdf/contracts/reader-data :: MarkdownDocumentView"
@@ -29,125 +27,100 @@
     {
       "method": "GET",
       "path": "/api/v1/jobs/:job_id/reader/regions",
+      "client_name": "getReaderRegions",
+      "transport": "json",
       "output": "ReaderRegionsView",
       "rust_view": "ReaderRegionsView",
       "ts_consumer": "@retainpdf/contracts/reader-data :: ReaderRegionsView"
     },
     {
       "method": "GET",
+      "path": "/api/v1/jobs/:job_id/reader/regions/:item_id",
+      "client_name": "getReaderRegion",
+      "transport": "json",
+      "output": "ReaderRegionItem",
+      "rust_view": "ReaderRegionItemView",
+      "ts_consumer": "@retainpdf/contracts/reader-data :: ReaderRegionItem",
+      "note": "一个区块，和 reader/regions 的一项一样（引用一段用，不用取整本）。:item_id 写三位（p008-b009）、四位（p008-b0009）都认；没有这一块 404；任务还没有任何区块 404 + reason not_ready。"
+    },
+    {
+      "method": "GET",
       "path": "/api/v1/jobs/:job_id/reader/metadata",
+      "client_name": "getReaderMetadata",
+      "transport": "json",
       "output": "ReaderMetadataView",
       "rust_view": "ReaderMetadataView",
       "ts_consumer": "@retainpdf/contracts/reader-data :: ReaderMetadataView"
     },
     {
       "method": "GET",
-      "path": "/api/v1/jobs/:job_id/live-translation/layout",
+      "path": "/api/v1/jobs/:job_id/progress/layout",
+      "client_name": "getLiveLayout",
+      "transport": "json",
       "output": "LiveTranslationLayout",
       "rust_view": "LiveTranslationLayoutView",
       "ts_consumer": "@retainpdf/contracts/reader-data :: LiveTranslationLayout"
     },
     {
       "method": "GET",
-      "path": "/api/v1/jobs/:job_id/live-translation/pages/:page_idx",
+      "path": "/api/v1/jobs/:job_id/progress/pages/:page",
+      "client_name": "getLivePage",
+      "transport": "json",
       "output": "LiveTranslationPageSnapshot",
       "rust_view": "LiveTranslationPageView",
-      "ts_consumer": "@retainpdf/contracts/reader-data :: LiveTranslationPageSnapshot"
+      "ts_consumer": "@retainpdf/contracts/reader-data :: LiveTranslationPageSnapshot",
+      "note": ":page 是从 0 开始的页序号（第一页是 0），和返回的 page_idx 同一个数；不是非负整数时 400。"
     },
     {
       "method": "GET",
-      "path": "/api/v1/jobs/:job_id/live-events?after_seq=:seq",
+      "path": "/api/v1/jobs/:job_id/progress/stream?after_seq=:seq",
+      "transport": "sse",
       "output": "LiveTranslationCommitEvent",
       "rust_view": "LiveTranslationCommitEventView",
       "ts_consumer": "@retainpdf/contracts/reader-data :: LiveTranslationCommitEvent"
     }
   ],
   "definitions": {
-    "PublicResourceLink": {
+    "JobFileEntryView": {
       "type": "object",
-      "description": "A publicly routable API resource. path is an API path and url may be absolute; neither is a filesystem path.",
+      "description": "One downloadable file of a job. url is an absolute public URL of /api/v1/jobs/:job_id/files/<group>/<name>.",
       "additionalProperties": false,
-      "required": ["ready", "path", "url", "method", "content_type", "file_name", "size_bytes"],
+      "required": ["name", "url", "content_type", "ready", "on_demand", "size_bytes", "updated_at", "stage"],
       "properties": {
-        "ready": { "type": "boolean" },
-        "path": { "type": "string", "description": "Public API path, never a local filesystem path." },
-        "url": { "type": "string", "description": "Public absolute or API-relative URL." },
-        "method": { "type": "string", "const": "GET" },
+        "name": { "type": "string" },
+        "url": { "type": "string" },
         "content_type": { "type": "string" },
-        "file_name": { "type": ["string", "null"] },
-        "size_bytes": { "type": ["integer", "null"], "minimum": 0 }
+        "ready": { "type": "boolean", "description": "Whether the file can be fetched now. For on-demand files it means everything needed to generate it exists." },
+        "on_demand": { "type": "boolean", "description": "Generated on first request, so the first fetch is slower." },
+        "size_bytes": { "type": ["integer", "null"], "minimum": 0, "description": "Only files already on disk have a size." },
+        "updated_at": { "type": ["string", "null"], "description": "Update time from the artifact registry; null when the registry has no entry (on-demand files not generated yet)." },
+        "stage": { "type": ["string", "null"], "description": "Stage that produced the file (registry source_stage, e.g. ocr, translation, render); null when unknown." }
       }
     },
-    "ReaderArtifactLinks": {
-      "type": "object",
-      "description": "Reader-safe subset of ArtifactLinksView. The endpoint may carry compatibility fields outside this subset; hosts must ignore them and consume only public resource links/readiness values instead of artifact storage conventions.",
-      "additionalProperties": true,
-      "required": ["pdf_ready", "markdown_ready", "bundle_ready", "pdf_url", "markdown_url", "markdown_images_base_url", "bundle_url", "normalized_document_url", "normalization_report_url", "manifest_path", "manifest_url", "actions", "normalized_document", "normalization_report", "pdf", "markdown", "bundle"],
-      "properties": {
-        "pdf_ready": { "type": "boolean" },
-        "markdown_ready": { "type": "boolean" },
-        "bundle_ready": { "type": "boolean" },
-        "pdf_url": { "type": "string" },
-        "markdown_url": { "type": "string" },
-        "markdown_images_base_url": { "type": "string" },
-        "bundle_url": { "type": "string" },
-        "normalized_document_url": { "type": "string" },
-        "normalization_report_url": { "type": "string" },
-        "manifest_path": { "type": "string", "description": "Public API path for the artifact manifest." },
-        "manifest_url": { "type": "string", "description": "Public URL for the artifact manifest." },
-        "actions": { "type": "object", "description": "Existing job action links; this schema does not own their detailed control-plane shape." },
-        "normalized_document": { "$ref": "#/definitions/PublicResourceLink" },
-        "normalization_report": { "$ref": "#/definitions/PublicResourceLink" },
-        "pdf": { "$ref": "#/definitions/PublicResourceLink" },
-        "markdown": { "$ref": "#/definitions/MarkdownArtifactLink" },
-        "bundle": { "$ref": "#/definitions/PublicResourceLink" }
-      }
-    },
-    "MarkdownArtifactLink": {
-      "type": "object",
-      "description": "Published Markdown artifact links from ArtifactLinksView.",
-      "additionalProperties": false,
-      "required": ["ready", "json_path", "json_url", "raw_path", "raw_url", "images_base_path", "images_base_url", "file_name", "size_bytes"],
-      "properties": {
-        "ready": { "type": "boolean" },
-        "json_path": { "type": "string" },
-        "json_url": { "type": "string" },
-        "raw_path": { "type": "string" },
-        "raw_url": { "type": "string" },
-        "images_base_path": { "type": "string" },
-        "images_base_url": { "type": "string" },
-        "file_name": { "type": ["string", "null"] },
-        "size_bytes": { "type": ["integer", "null"], "minimum": 0 }
-      }
-    },
-    "ReaderArtifactManifestItem": {
-      "type": "object",
-      "description": "Reader-safe subset of a job artifact manifest entry. The endpoint may carry compatibility fields such as relative_path; hosts must discard those fields and use public resource links only.",
-      "additionalProperties": true,
-      "required": ["artifact_key", "artifact_group", "artifact_kind", "ready", "file_name", "content_type", "size_bytes", "checksum", "source_stage", "updated_at", "attempt", "resource_path", "resource_url"],
-      "properties": {
-        "artifact_key": { "type": "string" },
-        "artifact_group": { "type": "string" },
-        "artifact_kind": { "type": "string" },
-        "ready": { "type": "boolean" },
-        "file_name": { "type": ["string", "null"] },
-        "content_type": { "type": "string" },
-        "size_bytes": { "type": ["integer", "null"], "minimum": 0 },
-        "checksum": { "type": ["string", "null"] },
-        "source_stage": { "type": ["string", "null"] },
-        "updated_at": { "type": "string" },
-        "attempt": { "type": "integer", "minimum": 1, "description": "One-based durable pipeline attempt." },
-        "resource_path": { "type": ["string", "null"], "description": "Public API path when published." },
-        "resource_url": { "type": ["string", "null"], "description": "Public URL when published." }
-      }
-    },
-    "ReaderArtifactManifestView": {
+    "JobPagesView": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["job_id", "items"],
+      "required": ["url_template", "page_count"],
+      "properties": {
+        "url_template": { "type": "string", "description": "Replace {page} with a one-based page number." },
+        "page_count": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "JobFilesView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["job_id", "attempt", "source", "output", "pages"],
       "properties": {
         "job_id": { "type": "string" },
-        "items": { "type": "array", "items": { "$ref": "#/definitions/ReaderArtifactManifestItem" } }
+        "attempt": { "type": "integer", "minimum": 1, "description": "One-based durable pipeline attempt; increases after a rerun or stage retry. Same as the attempt of each manifest item." },
+        "source": { "$ref": "#/definitions/JobFileEntryView", "description": "The source PDF. It is a document file: the url is /api/v1/documents/:id/files/source.pdf. When no document id is known there is no address: url is an empty string and ready is false." },
+        "output": { "type": "array", "items": { "$ref": "#/definitions/JobFileEntryView" } },
+        "pages": { "$ref": "#/definitions/JobPagesView" },
+        "internal": {
+          "type": "array",
+          "description": "Intermediate artifacts. Present only for administrators (and in single-user mode); omitted otherwise.",
+          "items": { "$ref": "#/definitions/JobFileEntryView" }
+        }
       }
     },
     "MarkdownImageView": {
@@ -207,7 +180,12 @@
         "region_type": { "type": "string" },
         "status": { "type": "string" },
         "asset_ids": { "type": "array", "items": { "type": "string" } },
-        "asset_urls": { "type": "array", "items": { "type": "string" } }
+        "asset_urls": { "type": "array", "items": { "type": "string" } },
+        "reading_order": { "type": "integer", "description": "Page-local reading order. Items are emitted sorted by (source.page, reading_order), with source-only blocks interleaved." },
+        "sub_type": { "type": "string", "description": "Normalized document sub_type, e.g. body, heading, title, page_number, reference_entry, figure_caption, image_body, display_formula. Vocabulary depends on the OCR provider." },
+        "heading_level": { "type": "integer", "minimum": 1, "maximum": 6, "description": "Present only for title/heading blocks; 1 is the top level." },
+        "continuation_group_id": { "type": "string", "minLength": 1, "description": "Shared by the blocks of one paragraph that translation joined across blocks or pages." },
+        "translated_block_text": { "type": "string", "description": "Present with continuation_group_id: this block's own share of the translation, while translated.text carries the whole group." }
       }
     },
     "ReaderRegionsView": {

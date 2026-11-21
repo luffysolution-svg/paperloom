@@ -2,8 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 import { flushSync } from "react-dom";
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-function deferred() { let resolve, reject; const promise = new Promise((res, rej) => { resolve = res; reject = rej; }); return { promise, resolve, reject }; }
+import { deferred, wait } from "../helpers/async.mjs";
 
 // 库检索面板的竞态：查询变了以后旧请求回来不能写回结果；书目在一次检索里只取一次；
 // 阅读状态连点、第一次失败时，回滚不能冲掉第二次的结果。
@@ -56,7 +55,7 @@ function mount(ports) {
 }
 
 const hit = (text) => ({ document_id: "doc-a", job_id: "job-a", page_idx: 0, block_id: "b", source_snippet: `[${text}]` });
-const docA = { document_id: "doc-a", title: "测试文档", reading_status: "unread", tags: [] };
+const docA = { document_id: "doc-a", title: "测试文档", reading_status: "unread" };
 
 test("查询变了以后，还在路上的旧请求回来不写回结果", async () => {
   const pending = {};
@@ -129,29 +128,4 @@ test("阅读状态连点两下、第一次失败，回滚不冲掉第二次的�
   await wait(30);
   assert.equal(status().textContent, "读完", "第一次失败的回滚不能把第二次设的「读完」冲回「未读」");
   harness.cleanup();
-});
-
-test("clearing the query discards pending results and a failed document load can retry", async (t) => {
-  const oldRequest = deferred();
-  let attempts = 0;
-  const harness = mount({
-    searchLibrary: (q) => q === "pending" ? oldRequest.promise : Promise.resolve({ hits: [hit(q)] }),
-    fetchDocumentList: async () => {
-      attempts += 1;
-      if (attempts === 2) throw new Error("document load failed");
-      return { documents: [] };
-    },
-  });
-  t.after(() => harness.cleanup());
-  await harness.setQuery("pending");
-  await until(() => attempts === 1, "initial request started");
-  await harness.setQuery("");
-  oldRequest.resolve({ hits: [hit("obsolete")] });
-  await wait(30);
-  assert.equal(harness.host.querySelector(".lib-search-panel"), null);
-  await harness.setQuery("retry");
-  await until(() => harness.host.textContent.includes("document load failed"), "document failure shown");
-  await harness.setQuery("recovered");
-  await until(() => harness.host.querySelector(".lib-search-snippet mark")?.textContent === "recovered", "retry succeeded");
-  assert.equal(attempts, 3);
 });

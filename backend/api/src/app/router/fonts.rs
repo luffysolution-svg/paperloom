@@ -1,15 +1,12 @@
-use axum::extract::DefaultBodyLimit;
-use axum::routing::{get, post};
-use axum::Router;
+//! 字体：排版能用的字体。
 
 use crate::app::AppState;
 use crate::routes::fonts;
 
-pub(super) fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/api/v1/fonts", get(fonts::list_fonts))
-        .route(
-            "/api/v1/fonts/upload",
-            post(fonts::upload_font).layer(DefaultBodyLimit::disable()),
-        )
+crate::endpoints! {
+    state: AppState;
+    /// 能用的字体
+    GET "/api/v1/fonts" => fonts::list_fonts, signed;
+    /// 上传字体（不限请求体大小）
+    POST "/api/v1/fonts/upload" => fonts::upload_font, admin [unlimited_body];
 }

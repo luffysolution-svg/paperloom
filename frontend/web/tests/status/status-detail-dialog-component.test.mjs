@@ -1,6 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { JSDOM } from "jsdom";
+import { wait, waitFor } from "../helpers/async.mjs";
+import {
+  byId,
+  clickWithMouseDown as click,
+  DOM_GLOBAL_KEYS,
+  makeDom as makeHomeDom,
+  selectOption,
+  typeInput,
+} from "../helpers/dom.mjs";
+import { bootHomeApp } from "../helpers/home-app.mjs";
 
 // StatusDetailDialog(Phase 3 dialogs 群,蓝图 §1)组件级测试。覆盖蓝图 §1.4
 // 新增测试清单:4 tab 切换 + hidden 属性契约、overview 首屏占位→刷新两段渲染、
@@ -11,99 +20,11 @@ import { JSDOM } from "jsdom";
 // translation/*)均走各自模块内建的 isMockMode() 分支(镜像
 // status-card-component.test.mjs 的 makeDom 先例)。
 
-function makeDom(search) {
-  const dom = new JSDOM("<!doctype html><html><body></body></html>", {
-    url: `http://localhost/index.html${search}`,
-  });
-  for (const key of ["window", "document", "navigator", "DocumentFragment", "HTMLElement", "HTMLButtonElement", "HTMLFormElement", "HTMLInputElement", "HTMLSelectElement", "CustomEvent", "Event", "KeyboardEvent", "MouseEvent", "Node", "MutationObserver", "NodeFilter"]) {
-    Object.defineProperty(globalThis, key, {
-      value: dom.window[key] ?? dom.window,
-      writable: true,
-      configurable: true,
-    });
-  }
-  globalThis.window = dom.window;
-  globalThis.requestAnimationFrame = (callback) => setTimeout(() => callback(0), 0);
-  // Radix Presence/Tabs(阶段 B 引入)在 jsdom 下需要 cancelAnimationFrame
-  // (TabsContent 的 mount 动画计时器清理)和 getComputedStyle(Presence 读取
-  // animation-name 判断退场动画是否结束)——jsdom 的 window 上有实现,只是没有
-  // 像 requestAnimationFrame 一样被复制到裸 global 上,这里一并补上。NodeFilter
-  // 是阶段 C(StatusDetailDialog 换 Radix Dialog)新增的需要——Dialog.Content 的
-  // FocusScope 用它做可聚焦元素树遍历(@radix-ui/react-focus-scope 的
-  // getTabbableCandidates),不是 Tabs 需要的。
-  globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
-  globalThis.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
-  globalThis.IS_REACT_ACT_ENVIRONMENT = false;
-  return dom;
-}
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitFor(predicate, description) {
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    if (predicate()) {
-      return;
-    }
-    await wait(15);
-  }
-  assert.fail(`等待超时：${description}`);
-}
-
-function click(dom, element) {
-  // Radix Tabs 的 Trigger 激活逻辑挂在 onMouseDown(不是 onClick)上——阶段 B
-  // 迁移到 Radix Tabs 后(StatusDetailDialog 4 个 tab),只 dispatch "click" 不
-  // 会触发 tab 切换。真实浏览器点击本来就是 mousedown→mouseup→click 全套,这里
-  // 补上 mousedown 让模拟点击更贴近真实交互,而不是放宽任何断言。
-  element.dispatchEvent(new dom.window.MouseEvent("mousedown", { bubbles: true, button: 0 }));
-  element.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-}
-
-function typeInput(dom, element, value) {
-  const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value").set;
-  setter.call(element, value);
-  element.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
-}
-
-function selectOption(dom, element, value) {
-  const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLSelectElement.prototype, "value").set;
-  setter.call(element, value);
-  element.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
-}
-
-function byId(dom, id) {
-  return dom.window.document.getElementById(id);
-}
-
-async function bootHomeApp(dom) {
-  const { createRoot } = await import("react-dom/client");
-  const React = await import("react");
-  const { createHomeComposition } = await import("../../src/app/home/create-home-composition.js");
-  const { HomeApp } = await import("../../src/app/home/HomeApp.jsx");
-
-  const host = dom.window.document.createElement("div");
-  host.id = "home-root";
-  dom.window.document.body.appendChild(host);
-
-  const services = createHomeComposition({
-    fetchGlossaries: async () => ({ items: [] }),
-    loadPersistedDeveloperConfig: () => ({}),
-    loadPersistedBrowserConfig: () => ({}),
-  });
-  services.initialize();
-
-  const root = createRoot(host);
-  root.render(React.createElement(HomeApp, { services }));
-  await waitFor(() => byId(dom, "library-add-pdf-btn"), "HomeApp 首帧渲染");
-  // 主页那张页面级状态卡 #job-status-card 已下线(进度主场是书籍详情的「进度」
-  // Tab)。它曾经是本文件打开详情弹窗的入口,所以这里原本要先把它挂出来。
-  // 现在不需要了——见下面 openStatusDetailDialog 的说明。
-  await wait(0);
-
-  return { services, root, host };
-}
+// 详情对话框里有下拉框（HTMLSelectElement）；复制诊断信息走 platform/utils 的
+// clipboard / error-diagnostics，会读 navigator。
+const makeDom = (search) => makeHomeDom(search, {
+  keys: [...DOM_GLOBAL_KEYS, "navigator", "HTMLSelectElement"],
+});
 
 async function openStatusDetailDialog(dom, services) {
   const { getMockJobId } = await import("@/platform/mock/index.js");
@@ -123,7 +44,7 @@ async function openStatusDetailDialog(dom, services) {
 
 test("StatusDetailDialog：4 tab 切换 + hidden 属性契约（常驻挂载不卸载）", async () => {
   const dom = makeDom("?mock=failed");
-  const { services, root, host } = await bootHomeApp(dom);
+  const { services, root, host } = await bootHomeApp(dom, { readyId: "library-add-pdf-btn" });
   await openStatusDetailDialog(dom, services);
 
   const contractIds = [
@@ -166,7 +87,7 @@ test("StatusDetailDialog：4 tab 切换 + hidden 属性契约（常驻挂载不�
 
 test("StatusDetailDialog：overview 首屏占位（同步）→ 刷新两段渲染（异步补齐诊断字段）", async () => {
   const dom = makeDom("?mock=failed");
-  const { services, root, host } = await bootHomeApp(dom);
+  const { services, root, host } = await bootHomeApp(dom, { readyId: "library-add-pdf-btn" });
   await openStatusDetailDialog(dom, services);
 
   // 打开瞬间(同步链内)job-id 已经来自 currentJobStore 的占位快照,不是空白。
@@ -203,7 +124,7 @@ test("StatusDetailDialog：错误日志可展开、滚动阅读并一键复制",
     configurable: true,
     value: true,
   });
-  const { services, root, host } = await bootHomeApp(dom);
+  const { services, root, host } = await bootHomeApp(dom, { readyId: "library-add-pdf-btn" });
   const jobId = await openStatusDetailDialog(dom, services);
 
   click(dom, byId(dom, "detail-tab-failure"));
@@ -240,7 +161,7 @@ test("StatusDetailDialog：Paddle QueueFull 提供结构化恢复、Trace 复制
     configurable: true,
     value: true,
   });
-  const { services, root, host } = await bootHomeApp(dom);
+  const { services, root, host } = await bootHomeApp(dom, { readyId: "library-add-pdf-btn" });
   const originalJobId = await openStatusDetailDialog(dom, services);
   await waitFor(
     () => services.statusDetail.store.getSnapshot().overview.failure.summary === "任务失败，但这是前端 mock 场景。",
@@ -304,7 +225,7 @@ test("StatusDetailDialog：Paddle QueueFull 提供结构化恢复、Trace 复制
 // 「当前没有可识别的专门恢复状态。」
 test("StatusDetailDialog：失败面板渲染后端给的任意阶段恢复动作并能重试", async () => {
   const dom = makeDom("?mock=failed");
-  const { services, root, host } = await bootHomeApp(dom);
+  const { services, root, host } = await bootHomeApp(dom, { readyId: "library-add-pdf-btn" });
   const originalJobId = await openStatusDetailDialog(dom, services);
   await waitFor(
     () => services.statusDetail.store.getSnapshot().overview.failure.summary === "任务失败，但这是前端 mock 场景。",
@@ -369,7 +290,7 @@ test("StatusDetailDialog：失败面板渲染后端给的任意阶段恢复动�
 
 test("StatusDetailDialog：切换 OCR 服务只打开接口设置，不自动修改 provider", async () => {
   const dom = makeDom("?mock=failed");
-  const { services, root, host } = await bootHomeApp(dom);
+  const { services, root, host } = await bootHomeApp(dom, { readyId: "library-add-pdf-btn" });
   const originalJobId = await openStatusDetailDialog(dom, services);
   await waitFor(
     () => services.statusDetail.store.getSnapshot().overview.failure.summary === "任务失败，但这是前端 mock 场景。",
@@ -407,7 +328,7 @@ test("StatusDetailDialog：切换 OCR 服务只打开接口设置，不自动修
 
 test("StatusDetailDialog：StageHistoryList/EventsList 结构化 JSX 逐条渲染", async () => {
   const dom = makeDom("?mock=failed");
-  const { services, root, host } = await bootHomeApp(dom);
+  const { services, root, host } = await bootHomeApp(dom, { readyId: "library-add-pdf-btn" });
   await openStatusDetailDialog(dom, services);
 
   await waitFor(() => byId(dom, "overview-stage-list").querySelectorAll(".stage-history-item").length > 0, "阶段时间线渲染出条目");
@@ -441,7 +362,7 @@ test("StatusDetailDialog：StageHistoryList/EventsList 结构化 JSX 逐条渲�
 
 test("StatusDetailDialog：失败 tab 重放（rerun）成功 → 关闭对话框 + startPolling 联调", async () => {
   const dom = makeDom("?mock=failed");
-  const { services, root, host } = await bootHomeApp(dom);
+  const { services, root, host } = await bootHomeApp(dom, { readyId: "library-add-pdf-btn" });
   const originalJobId = await openStatusDetailDialog(dom, services);
 
   click(dom, byId(dom, "detail-tab-failure"));
@@ -454,7 +375,8 @@ test("StatusDetailDialog：失败 tab 重放（rerun）成功 → 关闭对话�
     () => services.features.jobRuntimeFeature.currentJobId() !== originalJobId,
     "rerun 成功后 startPolling 切换到新 job",
   );
-  assert.match(services.features.jobRuntimeFeature.currentJobId(), /^mock-rerun-/);
+  // 续跑走 resumeJob（POST /jobs/:id/actions/resume），不再走 rerun 地址。
+  assert.match(services.features.jobRuntimeFeature.currentJobId(), /^mock-resume-/);
 
   root.unmount();
   services.dispose();
@@ -463,7 +385,7 @@ test("StatusDetailDialog：失败 tab 重放（rerun）成功 → 关闭对话�
 
 test("StatusDetailDialog：OCR 请求不明确时二次确认风险并切换到恢复任务", async () => {
   const dom = makeDom("?mock=failed");
-  const { services, root, host } = await bootHomeApp(dom);
+  const { services, root, host } = await bootHomeApp(dom, { readyId: "library-add-pdf-btn" });
   const originalJobId = await openStatusDetailDialog(dom, services);
 
   click(dom, byId(dom, "detail-tab-failure"));
@@ -509,7 +431,7 @@ test("StatusDetailDialog：OCR 请求不明确时二次确认风险并切换到�
 
 test("StatusDetailDialog：按后端 receipt_fields 渲染绑定表单且关闭后清除敏感输入", async () => {
   const dom = makeDom("?mock=failed");
-  const { services, root, host } = await bootHomeApp(dom);
+  const { services, root, host } = await bootHomeApp(dom, { readyId: "library-add-pdf-btn" });
   const originalJobId = await openStatusDetailDialog(dom, services);
 
   click(dom, byId(dom, "detail-tab-failure"));
@@ -567,7 +489,7 @@ test("StatusDetailDialog：按后端 receipt_fields 渲染绑定表单且关闭�
 
 test("StatusDetailDialog：翻译调试 tab —— 摘要/筛选/选中/翻页/重放闭环", async () => {
   const dom = makeDom("?mock=done");
-  const { services, root, host } = await bootHomeApp(dom);
+  const { services, root, host } = await bootHomeApp(dom, { readyId: "library-add-pdf-btn" });
   const { getMockTranslationItems, getMockTranslationSummary } = await import("@/platform/mock/translation.js");
   const jobId = await openStatusDetailDialog(dom, services);
   const summary = getMockTranslationSummary(jobId).summary;
@@ -620,7 +542,7 @@ test("StatusDetailDialog：翻译调试 tab —— 摘要/筛选/选中/翻页/�
 
 test("StatusDetailDialog：数据源独立——status-detail 的 overview 不读 statusCardStore", async () => {
   const dom = makeDom("?mock=failed");
-  const { services, root, host } = await bootHomeApp(dom);
+  const { services, root, host } = await bootHomeApp(dom, { readyId: "library-add-pdf-btn" });
   await openStatusDetailDialog(dom, services);
   await wait(30);
 

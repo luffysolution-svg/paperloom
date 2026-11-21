@@ -1,6 +1,7 @@
 import type { JobListItemView } from "@retainpdf/contracts/job-status";
+import { JOB_STATUS_LABELS, jobStatusLabel, normalizeJobStatus } from "@retainpdf/domain/job";
 
-export type TaskCenterGroupKey = "running" | "queued" | "failed" | "completed";
+export type TaskCenterGroupKey = "running" | "queued" | "failed" | "completed" | "canceled";
 
 export type TaskCenterGroup = {
   key: TaskCenterGroupKey;
@@ -13,13 +14,15 @@ export const TASK_CENTER_GROUP_ORDER: TaskCenterGroupKey[] = [
   "queued",
   "failed",
   "completed",
+  "canceled",
 ];
 
 const GROUP_LABELS: Record<TaskCenterGroupKey, string> = {
-  running: "运行中",
-  queued: "排队中",
-  failed: "失败",
-  completed: "已完成",
+  running: JOB_STATUS_LABELS.running,
+  queued: JOB_STATUS_LABELS.queued,
+  failed: JOB_STATUS_LABELS.failed,
+  completed: JOB_STATUS_LABELS.succeeded,
+  canceled: JOB_STATUS_LABELS.canceled,
 };
 
 export function taskIdentity(job: Pick<JobListItemView, "job_id">): string {
@@ -40,23 +43,18 @@ export function taskWorkflowLabel(job: Pick<JobListItemView, "workflow">): strin
   }
 }
 
+// 文字统一出自 @retainpdf/domain/job：以前这里把运行中写成「运行中」，别处都是「处理中」。
 export function taskStatusLabel(job: Pick<JobListItemView, "status">): string {
-  switch (`${job.status || ""}`.trim().toLowerCase()) {
-    case "queued": return "排队中";
-    case "running": return "运行中";
-    case "failed": return "失败";
-    case "succeeded": return "已完成";
-    case "cancelled":
-    case "canceled": return "已取消";
-    default: return `${job.status || "未知状态"}`;
-  }
+  return jobStatusLabel(job.status, { idleLabel: "未知状态" });
 }
 
 export function taskGroupKey(job: Pick<JobListItemView, "status">): TaskCenterGroupKey {
-  switch (`${job.status || ""}`.trim().toLowerCase()) {
+  switch (normalizeJobStatus(job.status)) {
     case "running": return "running";
     case "queued": return "queued";
     case "failed": return "failed";
+    // 已取消不算「已完成」：以前落进 default，计数和分组标题都把它当成功的。
+    case "canceled": return "canceled";
     default: return "completed";
   }
 }
@@ -84,6 +82,7 @@ export function taskCenterCounts(items: JobListItemView[] = []): Record<TaskCent
     queued: groups.find((group) => group.key === "queued")?.items.length || 0,
     failed: groups.find((group) => group.key === "failed")?.items.length || 0,
     completed: groups.find((group) => group.key === "completed")?.items.length || 0,
+    canceled: groups.find((group) => group.key === "canceled")?.items.length || 0,
   };
 }
 

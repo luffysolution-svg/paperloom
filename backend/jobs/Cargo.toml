@@ -1,5 +1,5 @@
 [package]
-name = "retain-jobsd"
+name = "retainpdf-runnerd"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,12 +8,12 @@ name = "retain-jobsd"
 path = "src/main.rs"
 
 [dependencies]
-retain-core = { path = "../packages/retain-core" }
-retain-data = { path = "../packages/retain-data" }
-retain-jobs = { path = "../packages/retain-jobs" }
+retainpdf-core = { path = "../packages/retainpdf-core" }
+retainpdf-data = { path = "../packages/retainpdf-data" }
+retainpdf-runner = { path = "../packages/retainpdf-runner" }
+retainpdf-proc = { path = "../packages/retainpdf-proc" }
 anyhow = "1"
 axum = "0.7"
-serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"

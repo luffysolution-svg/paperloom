@@ -176,12 +176,79 @@ def detect_first_line_indent_pt_with_displaylist(
     rest_lefts = lefts[1:]
     rest_median = median(rest_lefts)
     indent_px = first_left - rest_median
-    indent_pt = indent_px / INDENT_RENDER_SCALE
-    threshold = max(4.0, min(8.0, font_size_pt * 0.75))
+    return _accepted_indent_pt(indent_px / INDENT_RENDER_SCALE, font_size_pt=font_size_pt)
+
+
+def _accepted_indent_pt(indent_pt: float, *, font_size_pt: float, precise: bool = False) -> float:
+    # 灰度图数墨迹有像素级噪声，门槛要高（0.75em，封顶 8pt）；文字层坐标是精确的，
+    # 半个字宽就够。按 0.75em 算的话，字号估成 10.76pt 时门槛正好 8pt，实测 8pt 的缩进
+    # （312.72 - 304.72 在浮点下差一点不到 8）被刷掉。
+    threshold = max(3.0, font_size_pt * 0.5) if precise else max(4.0, min(8.0, font_size_pt * 0.75))
     if indent_pt < threshold:
         return 0.0
     max_indent = max(8.0, font_size_pt * MAX_INDENT_EM)
     return round(max(0.0, min(indent_pt, max_indent)), 2)
+
+
+# 同一行被 PDF 拆成几段（换字体、上下标）时 y0 差不了这么多。
+TEXT_LINE_SAME_ROW_PT = 2.0
+TEXT_LINE_BBOX_TOLERANCE_PT = 2.0
+TEXT_LINE_FLAGS = fitz.TEXTFLAGS_DICT & ~fitz.TEXT_PRESERVE_IMAGES
+
+
+def page_text_line_boxes(page: fitz.Page) -> list[tuple[float, float, float, float]]:
+    """这一页文字层里每一行的 bbox。扫描件（没有文字层）返回空表。
+
+    可复制的 PDF 每行从哪个 x 开始，文字层里直接写着 —— 一页取一次，比把每个块渲染成
+    灰度图再数墨迹（detect_first_line_indent_pt_with_displaylist，给扫描件用的）省得多。
+    """
+    boxes: list[tuple[float, float, float, float]] = []
+    # 不要图片：默认的 "dict" 会把每张图解码进结果，扫描件一页 0.13 秒，481 页光这一步 60 秒（2026-11-02），
+    # 而这里只看文字行（图片块本来就跳过）。
+    for block in page.get_text("dict", flags=TEXT_LINE_FLAGS).get("blocks", []):
+        if block.get("type") != 0:
+            continue
+        for line in block.get("lines", []):
+            if not "".join(str(span.get("text", "")) for span in line.get("spans", [])).strip():
+                continue
+            x0, y0, x1, y1 = (float(value) for value in line["bbox"])
+            if x1 > x0 and y1 > y0:
+                boxes.append((x0, y0, x1, y1))
+    return boxes
+
+
+def detect_first_line_indent_pt_from_text_lines(
+    item: dict,
+    text_lines: list[tuple[float, float, float, float]],
+    *,
+    font_size_pt: float,
+    page_text_width_med: float,
+) -> float | None:
+    """文字层里读得到这一块至少两行 → 返回缩进（没有缩进就是 0.0）；
+    读不到（扫描件，或者文字层没盖住这一块）→ 返回 None，交给灰度图那条路。
+
+    是不是正文段落由调用方先用 is_first_line_indent_candidate 判过，这里不再判一次。
+    """
+    del page_text_width_med
+    if not text_lines:
+        return None
+    x0, y0, x1, y1 = (float(value) for value in item["bbox"])
+    tol = TEXT_LINE_BBOX_TOLERANCE_PT
+    inside = sorted(
+        (line for line in text_lines
+         if x0 - tol <= (line[0] + line[2]) / 2 <= x1 + tol and y0 - tol <= (line[1] + line[3]) / 2 <= y1 + tol),
+        key=lambda line: (line[1], line[0]),
+    )
+    rows: list[list[float]] = []
+    for line in inside:
+        if rows and abs(rows[-1][1] - line[1]) < TEXT_LINE_SAME_ROW_PT:
+            rows[-1][0] = min(rows[-1][0], line[0])
+        else:
+            rows.append([line[0], line[1]])
+    if len(rows) < MIN_DETECTED_LINES:
+        return None
+    indent_pt = rows[0][0] - median(row[0] for row in rows[1:])
+    return _accepted_indent_pt(indent_pt, font_size_pt=font_size_pt, precise=True)
 
 
 def is_first_line_indent_candidate(item: dict, *, page_text_width_med: float) -> bool:
@@ -195,6 +262,8 @@ def is_first_line_indent_candidate(item: dict, *, page_text_width_med: float) ->
 
 __all__ = [
     "detect_first_line_indent_pt",
+    "detect_first_line_indent_pt_from_text_lines",
+    "page_text_line_boxes",
     "detect_first_line_indent_pt_with_displaylist",
     "is_first_line_indent_candidate",
 ]

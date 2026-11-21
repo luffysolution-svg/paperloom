@@ -2,21 +2,17 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "retainpdf/contracts/create-job/v1",
   "title": "建任务请求契约（Create Job Request）",
-  "description": "POST /api/v1/jobs 的**请求**体单一真值。消费者是前端的 payload 构造器（frontend/web/src/features/ingest/domain/workflow/payload.ts），生产者是 retain-core models/input/*.rs 的 CreateJobInput 及其五个段。与 job-status.v1 的 PublicResolvedJobSpec / PublicTranslationInput 刻意分开：后者是**响应** DTO（api_key 置空、多一个 *_configured 标记），把它回灌去建任务会被 deny_unknown_fields 以 400 拒掉。每个段都 additionalProperties:false，对应 Rust 侧的 #[serde(deny_unknown_fields)]——这是本契约存在的理由。所有字段在 Rust 侧都带 #[serde(default)]，因此本契约不声明任何 required：请求可以只带需要覆盖的字段。字段集合由 retain-core 的 create_job_contract 测试双向钉住（Rust 多一个或 schema 多一个都会红）。",
+  "description": "POST /api/v1/jobs 的**请求**体单一真值。消费者是前端的 payload 构造器（frontend/web/src/features/ingest/domain/workflow/payload.ts），生产者是 retainpdf-core models/input/*.rs 的 CreateJobInput 及其五个段。与 job-status.v1 的 PublicResolvedJobSpec / PublicTranslationInput 刻意分开：后者是**响应** DTO（api_key 置空、多一个 *_configured 标记），把它回灌去建任务会被 deny_unknown_fields 以 400 拒掉。每个段都 additionalProperties:false，对应 Rust 侧的 #[serde(deny_unknown_fields)]——这是本契约存在的理由。所有字段在 Rust 侧都带 #[serde(default)]，因此本契约不声明任何 required：请求可以只带需要覆盖的字段。字段集合由 retainpdf-core 的 create_job_contract 测试双向钉住（Rust 多一个或 schema 多一个都会红）。",
   "base_path": "/api/v1/jobs",
   "endpoints": [
     {
       "method": "POST",
       "path": "/api/v1/jobs",
+      "client_name": "createJob",
+      "transport": "json",
       "input": "CreateJobInput",
       "rust_view": "routes/jobs.rs :: create_job",
       "ts_consumer": "frontend/web/src/features/ingest/domain/workflow/payload.ts"
-    },
-    {
-      "method": "POST",
-      "path": "/api/v1/ocr/jobs",
-      "input": "CreateJobInput",
-      "note": "WorkflowKind::Ocr 走 /api/v1/ocr/jobs 前缀，请求体形状与 book 一致"
     }
   ],
   "definitions": {
@@ -105,7 +101,6 @@
         "id": { "type": "string" },
         "revision": { "type": "integer", "minimum": 0 },
         "provider": { "enum": ["qwen", "deepseek", "openai_compatible"] },
-        "api_protocol": { "type": "string", "enum": ["openai", "openai_responses", "anthropic"], "default": "openai" },
         "base_url": { "type": "string" },
         "model": { "type": "string" },
         "credential_ref": {
@@ -143,7 +138,7 @@
           "description": "TRANSLATION_MATH_MODES"
         },
         "skip_title_translation": { "type": "boolean" },
-        "classify_batch_size": { "type": "integer", "maximum": 1000 },
+        "classify_batch_size": { "type": "integer" },
         "rule_profile_name": { "type": "string" },
         "custom_rules_text": { "type": "string" },
         "glossary_id": { "type": "string" },
@@ -154,6 +149,11 @@
         "glossary_entries": {
           "type": "array",
           "items": { "$ref": "#/definitions/GlossaryEntryInput" }
+        },
+        "glossary_inline_entries": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/GlossaryEntryInput" },
+          "description": "服务器写：建任务时用户真正内联的条目（规范化、去重后），客户端发了也会被覆盖。glossary_entries 是和术语表合并后的快照；重跑、阶段重试先换回这一份再按现在的表解析。空的时候不出现。2026-10-22 加。"
         },
         "context_mode": {
           "type": "string",
@@ -170,12 +170,84 @@
           "enum": ["matched", "broad", "off"],
           "description": "TRANSLATION_MEMORY_MODES"
         },
+        "preparation": {
+          "type": "string",
+          "enum": ["off", "artifacts_only", "terms", "terms+style", "editorial"],
+          "default": "off",
+          "description": "TRANSLATION_PREPARATION_MODES。译前准备（全书术语预扫 + 风格指南）。off：不生成产物，prompt 与缓存 key 与不带该字段时完全一致；artifacts_only：只生成并冻结 translated/term-base.v1.json、translated/style-guide.v1.json，不注入；terms：按块命中注入术语库（用户术语优先）；terms+style：再把风格指南放进 system 前缀；editorial：terms+style 之上由术语专员审定术语表（专业术语锁定、文献与期刊保留原文、人名机构不强制、通用词剔除，首现括注只标需要的专业术语）。"
+        },
+        "refine": {
+          "type": "string",
+          "enum": ["off", "review_only", "review_and_fix", "editorial"],
+          "default": "off",
+          "description": "TRANSLATION_REFINE_MODES。精修（挑错 + 定点修改），在渲染阶段、真正渲染之前运行，只在翻译之后紧接着的那次渲染里自动跑（普通的重新渲染不会再跑）。off：不挑错不修改，渲染行为与不带该字段时完全一致；review_only：只挑错，写 artifacts/refine_report.v1.json，不改译文；review_and_fix：再对 critical/major 问题做定点修改，经确定性检查通过才写回（走修订历史，可回退）。挑错模型用 reviewer_*，留空回退到翻译模型。editorial：编辑部模式——规则修正、审校挑错与质检出问题后，主编（模型）逐块在规则允许的动作里分流（局部改 / 整块重写 / 不改 / 交给人），修订执行并经同一套确定性检查验收，最多两轮，剩下的列入待人看；全程写 artifacts/editorial/ledger.jsonl。"
+        },
+        "refine_max_items": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "精修最多挑错多少块；0 = 不限（默认，审全书）。超出就停，报告里写明停在哪一页（review.next_page），可以从那一页接着精修。"
+        },
+        "refine_max_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "精修（挑错 + 修改）的总 token 上限；0 = 不限（默认）。给了上限、超出就停，报告里写明停在哪一页（review.next_page）。"
+        },
         "api_key": { "type": "string" },
         "credential_ref": { "type": "string" },
         "model": { "type": "string" },
-        "api_protocol": { "type": "string", "enum": ["openai", "openai_responses", "anthropic"], "default": "openai" },
-        "thinking": { "type": "string", "enum": ["auto", "off", "low", "medium", "high", "max"], "default": "auto" },
         "base_url": { "type": "string" },
+        "reviewer_model": {
+          "type": "string",
+          "default": "",
+          "description": "审校（挑错）模型。本期只留配置位；留空回退到 model。"
+        },
+        "reviewer_base_url": {
+          "type": "string",
+          "default": "",
+          "description": "审校模型的 endpoint；留空回退到 base_url。"
+        },
+        "reviewer_api_key": {
+          "type": "string",
+          "default": "",
+          "description": "审校模型的内联 key，与 api_key 同样处理：创建任务时导入凭据库换成 reviewer_credential_ref 并清空，不明文落库。与 reviewer_credential_ref 互斥。"
+        },
+        "reviewer_credential_ref": {
+          "type": "string",
+          "default": "",
+          "description": "审校模型 key 的凭据引用（kind=translation_api_key）。reviewer_api_key 与它都为空时：reviewer_base_url 为空或与 base_url 相同则回退翻译 key，否则不带 key。"
+        },
+        "api_protocol": {
+          "type": "string",
+          "enum": ["openai", "openai_responses", "anthropic"],
+          "default": "openai",
+          "description": "TRANSLATION_API_PROTOCOLS。翻译模型接口的协议。openai：POST {base_url}/chat/completions + Bearer；openai_responses：POST {base_url}/responses + Bearer（OpenAI Responses API，服务商明确支持才用）；anthropic：POST {base_url}/messages + x-api-key（Anthropic Messages API）。带 execution_connection 时只能是 openai。"
+        },
+        "thinking": {
+          "type": "string",
+          "enum": ["auto", "off", "low", "medium", "high", "max"],
+          "default": "auto",
+          "description": "TRANSLATION_THINKING_LEVELS。翻译模型的思考深度。auto：只对实测过的模型关掉或压低思考，其余由服务商默认；其余档位按协议与服务商换成对应字段，服务商不认时逐级退回，最后不带思考字段。"
+        },
+        "reviewer_api_protocol": {
+          "type": "string",
+          "enum": ["", "openai", "openai_responses", "anthropic"],
+          "default": "",
+          "description": "审校模型接口的协议；留空沿用 api_protocol。"
+        },
+        "reviewer_thinking": {
+          "type": "string",
+          "enum": ["", "auto", "off", "low", "medium", "high", "max"],
+          "default": "",
+          "description": "审校模型的思考深度；留空沿用 thinking。"
+        },
+        "engine": {
+          "type": "string",
+          "enum": ["legacy", "agent"],
+          "default": "legacy",
+          "description": "TRANSLATION_ENGINES。翻译引擎。legacy：现有流程；agent：翻译 agent（先通读全文，再逐页翻译并审校），要求 api_protocol=anthropic，公式按 direct_typst 处理。"
+        },
         "start_page": { "type": "integer" },
         "end_page": { "type": "integer" },
         "page_ranges": {
@@ -183,8 +255,8 @@
           "items": { "type": "integer", "minimum": 1 },
           "description": "显式的一基页码；空数组保持 start_page/end_page 的旧语义。"
         },
-        "batch_size": { "type": "integer", "maximum": 1000 },
-        "workers": { "type": "integer", "maximum": 1000 },
+        "batch_size": { "type": "integer" },
+        "workers": { "type": "integer" },
         "accepted_ambiguous_request_risk": { "type": "boolean" }
       }
     },
@@ -194,9 +266,9 @@
       "additionalProperties": false,
       "properties": {
         "render_mode": { "type": "string" },
-        "compile_workers": { "type": "integer", "maximum": 64 },
+        "compile_workers": { "type": "integer" },
         "typst_font_family": { "type": "string" },
-        "pdf_compress_dpi": { "type": "integer", "maximum": 1200 },
+        "pdf_compress_dpi": { "type": "integer" },
         "translated_pdf_name": { "type": "string" },
         "body_font_size_factor": { "type": "number" },
         "body_leading_factor": { "type": "number" },
@@ -209,6 +281,11 @@
           "type": "string",
           "enum": ["pikepdf_text_strip", "bbox_text_strip", "legacy", "redact_restore_formulas"],
           "description": "SOURCE_CLEANUP_STRATEGIES"
+        },
+        "engine": {
+          "type": "string",
+          "enum": ["typst", "rpr", "rpr_fit"],
+          "description": "RENDER_ENGINES：rpr_fit = 自研排版引擎，字号由引擎按测量决定、直接写 PDF（默认）；typst = 原 Typst 路线；rpr = 旧取值，照旧接受、按 rpr_fit 渲染（2026-11-02 起）。引擎不可用或失败时回退 typst"
         }
       }
     },
@@ -217,12 +294,14 @@
       "description": "models/input/runtime.rs :: RuntimeInput",
       "additionalProperties": false,
       "properties": {
-        "job_id": { "type": "string" },
-        "timeout_seconds": { "type": "integer", "maximum": 604800 },
+        "job_id": {
+          "type": "string",
+          "description": "任务编号由服务器分配。公开入口（POST /jobs、书库的翻译和 OCR）收到非空的 runtime.job_id 会返回 400，请留空或不要发。"
+        },
+        "timeout_seconds": { "type": "integer" },
         "no_output_timeout_seconds": {
           "type": "integer",
-          "description": "空闲检测：多久没有 stdout 输出就判定 worker 卡死（秒）。0 表示关闭，也是默认值。与 timeout_seconds 相互独立——后者是整段执行的上限，要按最坏情况给。",
-          "maximum": 604800
+          "description": "空闲检测：多久没有 stdout 输出就判定 worker 卡死（秒）。0 表示关闭，也是默认值。与 timeout_seconds 相互独立——后者是整段执行的上限，要按最坏情况给。"
         },
         "render_after_translation": {
           "type": "boolean",

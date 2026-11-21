@@ -1,10 +1,3 @@
-import sys
-from pathlib import Path
-
-
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
 from retainpdf_pipeline.ocr.document_schema.provider_adapters.paddle.page_reader import build_page_spec
 
 

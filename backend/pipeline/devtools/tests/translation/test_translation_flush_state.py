@@ -1,17 +1,14 @@
 from __future__ import annotations
 
-import sys
 import time
 import pytest
 from pathlib import Path
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
-from retainpdf_pipeline.translate.services.results import (
+from retainpdf_translation.services.results import (
     flush as flush_module,
 )
-from retainpdf_pipeline.translate.services.results.flush import (
+from retainpdf_translation.services.results.flush import (
     TranslationFlushState,
 )
 
@@ -65,7 +62,7 @@ def test_flush_keeps_submillisecond_samples_until_export(monkeypatch, tmp_path):
 
 
 def test_diagnostics_reads_latest_checkpoint_metrics_and_safe_repair_counts():
-    from retainpdf_pipeline.translate.artifacts.aggregator import TranslationRunDiagnostics
+    from retainpdf_translation.artifacts.aggregator import TranslationRunDiagnostics
     diagnostics = TranslationRunDiagnostics("fake", "fake", "https://example.invalid", 1, 1, 1)
     metrics = {"persist_count": 1, "persist_elapsed_ms": 1.25}
     diagnostics.set_checkpoint_metrics_provider(lambda: dict(metrics))

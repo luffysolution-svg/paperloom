@@ -1,0 +1,58 @@
+/* 状态详情 · 翻译条目筛选。（TranslationFilterPanel）
+ *
+ * @owns translation, info-value, info-row, detail-info-list, status-panel-note, ring */
+
+@utility translation-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+
+  @media (max-width: 720px) {
+    align-items: stretch;
+  }
+}
+
+
+
+@utility translation-filter-field {
+  display: grid;
+  gap: 4px;
+  min-width: 140px;
+
+  & input {
+    min-height: 36px;
+    padding: 0 12px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--paper);
+    color: var(--ink);
+    font-size: 13px;
+  }
+
+  & select {
+    min-height: 36px;
+    padding: 0 12px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--paper);
+    color: var(--ink);
+    font-size: 13px;
+  }
+
+  @media (max-width: 720px) {
+    flex: 1 1 100%;
+    min-width: 100%;
+  }
+}
+
+
+
+@utility translation-filter-search {
+  flex: 1 1 240px;
+
+  @media (max-width: 720px) {
+    flex: 1 1 100%;
+    min-width: 100%;
+  }
+}

@@ -59,3 +59,86 @@ async fn jobs_list_route_prefers_live_pipeline_stage_snapshot() {
     assert_eq!(item["stage_snapshot"]["stage"], "translating");
     assert_eq!(item["stage_snapshot"]["display_stage"], "translation");
 }
+
+async fn get_json(state: &crate::AppState, uri: &str) -> (StatusCode, serde_json::Value) {
+    let response = build_app(state.clone())
+        .oneshot(
+            Request::builder()
+                .uri(uri)
+                .header("X-API-Key", "test-key")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    let status = response.status();
+    (status, read_json(response).await)
+}
+
+fn save_plain_jobs(state: &crate::AppState, count: usize) {
+    for index in 0..count {
+        let mut job = JobSnapshot::new(
+            format!("job-page-{index:04}"),
+            CreateJobInput::default(),
+            vec![],
+        );
+        job.updated_at = format!("2026-01-01T00:{:02}:{:02}Z", index / 60, index % 60);
+        state.db.save_job(&job).expect("save job");
+    }
+}
+
+#[tokio::test]
+async fn jobs_list_echoes_limit_offset_and_has_more() {
+    let state = test_state("list-paging-echo");
+    save_plain_jobs(&state, 3);
+
+    let (status, body) = get_json(&state, "/api/v1/jobs?limit=2&include_live_stage=false").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["data"]["limit"], 2);
+    assert_eq!(body["data"]["offset"], 0);
+    assert_eq!(body["data"]["has_more"], true);
+    assert_eq!(body["data"]["items"].as_array().unwrap().len(), 2);
+
+    let (_, body) = get_json(&state, "/api/v1/jobs?limit=2&offset=2&include_live_stage=false").await;
+    assert_eq!(body["data"]["offset"], 2);
+    assert_eq!(body["data"]["has_more"], false);
+    assert_eq!(body["data"]["items"].as_array().unwrap().len(), 1);
+
+    // 默认 limit 也回显。
+    let (_, body) = get_json(&state, "/api/v1/jobs?include_live_stage=false").await;
+    assert_eq!(body["data"]["limit"], 20);
+    assert_eq!(body["data"]["has_more"], false);
+}
+
+#[tokio::test]
+async fn jobs_list_limit_out_of_range_is_400() {
+    let state = test_state("list-paging-400");
+    for uri in [
+        "/api/v1/jobs?limit=0",
+        "/api/v1/jobs?limit=501",
+        "/api/v1/jobs?limit=4000000000",
+    ] {
+        let (status, body) = get_json(&state, uri).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{uri}");
+        assert!(
+            body["message"].as_str().unwrap_or_default().contains("limit must be 1..=500"),
+            "{uri}: {body}"
+        );
+    }
+    let (status, _) = get_json(&state, "/api/v1/jobs?limit=500").await;
+    assert_eq!(status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn jobs_list_q_filters_by_id_and_is_case_insensitive() {
+    let state = test_state("list-paging-q");
+    save_plain_jobs(&state, 3);
+    let (status, body) = get_json(&state, "/api/v1/jobs?q=PAGE-0001&include_live_stage=false").await;
+    assert_eq!(status, StatusCode::OK);
+    let items = body["data"]["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["job_id"], "job-page-0001");
+    let (_, body) = get_json(&state, "/api/v1/jobs?job_ids=job-page-0000,job-page-0002&limit=1&include_live_stage=false").await;
+    assert_eq!(body["data"]["items"].as_array().unwrap().len(), 1);
+    assert_eq!(body["data"]["has_more"], true);
+}

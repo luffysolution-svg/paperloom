@@ -1,0 +1,31 @@
+/* 设置 → 通知 分栏：开关、授权状态、试发一条。按钮、勾选框用 @retainpdf/ui 的。
+ *
+ * @owns notify-settings */
+
+.notify-settings {
+  display: grid;
+  gap: 12px;
+  max-width: 560px;
+}
+
+.notify-settings-toggle {
+  font-size: var(--ui-text-base);
+  font-weight: 600;
+}
+
+.notify-settings-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--ui-text-sm);
+  line-height: 1.6;
+}
+
+.notify-settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.notify-settings-actions:empty {
+  display: none;
+}

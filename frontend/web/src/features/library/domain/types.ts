@@ -1,7 +1,9 @@
 // library 域共享类型：网格卡片 item、controller 契约、viewPort / viewStore。
 // 字段从 shapeDocumentCardItem / mergeLibraryJobItem / cardSignatureOf 反推。
 
+import type { PatchDocumentInput } from "@retainpdf/contracts/library-documents";
 import type { DialogStore } from "@/platform/store/dialog-store.js";
+import type { RecentJobsStatePort } from "./recent-jobs/state.js";
 import type {
   Store,
   StoreChangeMeta,
@@ -38,7 +40,7 @@ export type {
 
 /**
  * 书架网格/列表/详情共用的卡片投影。
- * - 已翻译：真实 job_id + library/books 活态
+ * - 已翻译：真实 job_id + 任务活态（/jobs?job_ids=）
  * - 馆藏：library_only + 合成 job_id `doc:<document_id>`
  *
  * 扩展字段经 index signature 放行；已知字段尽量列全，避免 any。
@@ -114,30 +116,18 @@ export type DocumentJobSummary = LibraryCardItem & {
 
 /** POST /documents/:id/translate 返回（JobSubmissionView） */
 
-export type UpdateDocumentPayload = {
-  title?: string;
-  reading_status?: string;
-  tags?: string[];
-  [key: string]: unknown;
-};
+// PATCH /documents/:id 只认这两个字段；后端之后会拒绝不认识的字段（400），这里不留任意键。
+/** 改书名、阅读状态：形状以契约 PatchDocumentInput 为准（reading_status 只有 unread / reading / done）。 */
+export type UpdateDocumentPayload = PatchDocumentInput;
 
 export type DeleteCardTarget = {
   documentId?: string;
   jobId?: string;
 };
 
-/** 批量删除里被收藏锚点挡住的一篇（DELETE_BLOCKED_BY_FAVORITES）。 */
-export type DeleteBlockedDocument = {
-  documentId: string;
-  favoriteCount: number;
-  clearFavoritesPath: string;
-};
-
 export type DeleteDocumentsResult = {
   confirmed: number;
   failed: number;
-  /** 被收藏挡住、需要用户确认清空收藏后重试的条目。 */
-  blocked: DeleteBlockedDocument[];
 };
 
 export type ReloadRecentJobsOptions = {
@@ -193,7 +183,7 @@ export type LibraryControllerDeps = {
     },
   ) => void;
   /** 网格状态端口（供 selectJob 的 findItem 内聚到 controller） */
-  recentJobsStatePort?: any | null;
+  recentJobsStatePort?: Pick<RecentJobsStatePort, "getSnapshot"> | null;
 };
 
 export type LibraryController = {
@@ -208,6 +198,11 @@ export type LibraryController = {
     documentId?: string | null,
     payload?: OcrDocumentPayload,
   ) => Promise<JobSubmissionView | null>;
+  /** 统一提交入口：payload.workflow==="ocr" 走 ocrDocument，否则 translateDocument。 */
+  submitDocument: (
+    documentId?: string | null,
+    payload?: TranslateDocumentPayload | OcrDocumentPayload,
+  ) => Promise<JobSubmissionView | null>;
   getDocumentJobs: (
     documentId?: string | null,
   ) => Promise<{ items: DocumentJobSummary[] }>;
@@ -221,14 +216,11 @@ export type LibraryController = {
     stage?: string | null,
     payload?: Record<string, unknown>,
   ) => Promise<JobSubmissionView | null>;
+  /** 从断点继续（POST /jobs/:id/actions/resume），回执 promote 到详情 payload。 */
+  resumeJob: (jobId?: string | null) => Promise<JobSubmissionView | null>;
   /** 取消文档下的任务（workflow==="ocr" 走 OCR cancel 端点，其余走通用 cancel）。 */
   cancelJob: (jobId?: string | null, workflow?: string | null) => Promise<unknown>;
   deleteDocument: (documentId?: string | null) => Promise<void>;
-  /**
-   * DELETE clear_favorites_path（DELETE_BLOCKED_BY_FAVORITES 的
-   * error.details 里给好的路径），返回实际删除的收藏条数。
-   */
-  clearFavorites: (clearFavoritesPath?: string | null) => Promise<number>;
   deleteDocuments: (
     documentIds?: Array<string | null | undefined>,
   ) => Promise<DeleteDocumentsResult>;
@@ -258,6 +250,36 @@ export type LibraryController = {
   ) => void;
 };
 
+/** 书架动作：网格选任务 / 删除 / 打开阅读器，加上 LibraryController 对外的那些。
+ *  组合根（app/home/composition/create-library-domain）装配，书架上下文下发。 */
+export type RecentJobActions = {
+  selectJob: (jobId: string) => unknown;
+  deleteJob: (jobId: string) => Promise<unknown> | unknown;
+  /** options.pinJob：点名看这个任务，阅读器不按整本改写。看这本书的入口不传。 */
+  openJobReader: (jobId: string, documentId?: string, options?: { pinJob?: boolean }) => unknown;
+  recoverActiveJob: (items?: unknown[]) => unknown;
+};
+
+export type LibraryActions = RecentJobActions & {
+  openSourceReader: LibraryController["openSourceReader"];
+  translateDocument: LibraryController["translateDocument"];
+  ocrDocument: LibraryController["ocrDocument"];
+  submitDocument: LibraryController["submitDocument"];
+  getDocumentJobs: LibraryController["getDocumentJobs"];
+  getDocumentByJobId: LibraryController["getDocumentByJobId"];
+  getJobStageActions: LibraryController["getJobStageActions"];
+  retryJobStage: LibraryController["retryJobStage"];
+  resumeJob: LibraryController["resumeJob"];
+  cancelJob: LibraryController["cancelJob"];
+  deleteDocument: LibraryController["deleteDocument"];
+  deleteDocuments: LibraryController["deleteDocuments"];
+  deleteCard: LibraryController["deleteCard"];
+  openBookDetail: LibraryController["openBookDetail"];
+  updateDocument: LibraryController["updateDocument"];
+  storeOnly: LibraryController["storeOnly"];
+  attachJobProgress: LibraryController["attachJobProgress"];
+};
+
 // ─── View store / viewPort ───────────────────────────────────────
 
 export type LibraryViewMode = "loading" | "empty" | "error" | "list" | string;
@@ -283,7 +305,6 @@ export type LibraryViewActions = {
 export type LibraryViewStore = Store<LibraryViewState, LibraryViewActions>;
 
 export type RecentJobsViewPortHandlers = {
-  onOpen?: ((jobId: string) => void) | null;
   onLoadMore?: (() => void) | null;
   onSearch?: ((query: string) => void) | null;
   isSuspended?: () => boolean;
@@ -294,7 +315,8 @@ export type RecentJobsReactViewPortOptions = {
 };
 
 export type AutoLoadCheckOptions = {
-  isSuspended?: boolean;
+  /** refresh-scheduler 传的是判断函数，不是布尔值（检查时才问「现在暂停了吗」）。 */
+  isSuspended?: () => boolean;
   [key: string]: unknown;
 };
 
@@ -302,7 +324,6 @@ export type RecentJobsReactViewPort = {
   store: LibraryViewStore;
   handlersRef: { current: RecentJobsViewPortHandlers };
   bindEvents: (handlers?: Partial<RecentJobsViewPortHandlers>) => void;
-  hasView: () => boolean;
   registerAutoLoadChecker: (
     checker: ((options?: AutoLoadCheckOptions) => void) | null | undefined,
   ) => () => void;
@@ -310,9 +331,7 @@ export type RecentJobsReactViewPort = {
   renderError: (message?: string, options?: { reset?: boolean }) => void;
   renderList: (options?: { hasMore?: boolean; [key: string]: unknown }) => void;
   renderLoading: () => void;
-  replaceCard: (...args: unknown[]) => boolean;
   scheduleAutoLoadCheck: (options?: AutoLoadCheckOptions) => void;
-  setDialogOpen: (...args: unknown[]) => void;
   setLoadMoreLoading: () => void;
 };
 

@@ -14,12 +14,12 @@ if str(PIPELINE_ROOT) not in sys.path:
 
 from retainpdf_pipeline.foundation.shared.stage_specs import RENDER_STAGE_SCHEMA_VERSION
 from retainpdf_pipeline.foundation.shared.stage_specs import TRANSLATE_STAGE_SCHEMA_VERSION
-from retainpdf_pipeline.translate.workflow.batching.batching import _is_low_risk_batchable_item
-from retainpdf_pipeline.translate.services.context.execution_context import context_with_memory_guidance
-from retainpdf_pipeline.translate.services.fast_path.keep_origin import _is_fast_path_keep_origin_item
-from retainpdf_pipeline.translate.services.fast_path.keep_origin import _plan_item_view
-from retainpdf_pipeline.translate.llm.shared.control_context import build_translation_control_context
-from retainpdf_pipeline.translate.services.memory import JobMemoryStore
+from retainpdf_translation.workflow.batching.batching import _is_low_risk_batchable_item
+from retainpdf_translation.services.context.execution_context import context_with_memory_guidance
+from retainpdf_translation.services.fast_path.keep_origin import _is_fast_path_keep_origin_item
+from retainpdf_translation.services.fast_path.keep_origin import _plan_item_view
+from retainpdf_translation.llm.shared.control_context import build_translation_control_context
+from retainpdf_translation.services.memory import JobMemoryStore
 
 
 def _job_root_from_arg(value: str) -> Path:

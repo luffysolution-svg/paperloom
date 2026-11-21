@@ -87,6 +87,18 @@ const PAGE_BUNDLES = [
     entry: path.join(frontendRoot, "src/app/reader/entry.tsx"),
     out: "reader.bundle",
   },
+  // 管理后台（多用户模式、管理员）：admin.html → src/app/admin/entry.tsx → dist/admin.bundle.js
+  {
+    name: "admin",
+    entry: path.join(frontendRoot, "src/app/admin/entry.tsx"),
+    out: "admin.bundle",
+  },
+  // 翻译编辑部演示（模拟事件回放）：editorial.html → src/app/editorial/entry.tsx → dist/editorial.bundle.js
+  {
+    name: "editorial",
+    entry: path.join(frontendRoot, "src/app/editorial/entry.tsx"),
+    out: "editorial.bundle",
+  },
 ];
 
 // mathjax-full/js/components/version.js 在未定义 PACKAGE_VERSION 时会

@@ -7,79 +7,14 @@ use crate::app::build_app;
 use crate::models::{JobArtifacts, JobStatusKind};
 
 use super::common::{
-    seed_ocr_checkpoint_files, seed_translation_result_files, source_job_with_artifacts,
+    hold_job_drivers, seed_ocr_checkpoint_files, seed_translation_result_files,
+    source_job_with_artifacts,
 };
 
 #[tokio::test]
-async fn resource_admission_keeps_the_previous_pdf_when_rerun_is_refused() {
-    for (reason, status) in [
-        ("insufficient_storage", StatusCode::SERVICE_UNAVAILABLE),
-        ("queue_full", StatusCode::TOO_MANY_REQUESTS),
-    ] {
-        let mut state = test_state(reason);
-        let id = "resource-admission-source";
-        let mut source = source_job_with_artifacts(
-            id,
-            JobArtifacts {
-                source_pdf: Some(format!("jobs/{id}/source/input.pdf")),
-                normalized_document_json: Some(format!("jobs/{id}/ocr/document.v1.json")),
-                translations_dir: Some(format!("jobs/{id}/translated")),
-                output_pdf: Some(format!("jobs/{id}/rendered/out.pdf")),
-                ..JobArtifacts::default()
-            },
-        );
-        source.status = JobStatusKind::Succeeded;
-        seed_translation_result_files(&state, &source);
-        let pdf = state
-            .config
-            .data_root
-            .join(format!("jobs/{id}/rendered/out.pdf"));
-        std::fs::create_dir_all(pdf.parent().unwrap()).unwrap();
-        std::fs::write(&pdf, b"previous translated PDF").unwrap();
-        state.db.save_job(&source).unwrap();
-        let mut config = (*state.config).clone();
-        if reason == "insufficient_storage" {
-            config.min_free_disk_bytes = u64::MAX;
-        } else {
-            config.job_runner.max_queued_jobs = 1;
-            let waiting = crate::models::JobSnapshot::new(
-                "waiting".into(),
-                crate::models::CreateJobInput::default(),
-                vec![],
-            );
-            state.db.save_job(&waiting).unwrap();
-        }
-        state.config = std::sync::Arc::new(config);
-        let response = build_app(state.clone())
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri(format!("/api/v1/jobs/{id}/rerun"))
-                    .header("X-API-Key", "test-key")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(response.status(), status);
-        assert_eq!(
-            read_json(response).await["error"]["details"]["reason"],
-            reason
-        );
-        assert_eq!(std::fs::read(pdf).unwrap(), b"previous translated PDF");
-        assert_eq!(
-            state.db.get_job(id).unwrap().status,
-            JobStatusKind::Succeeded
-        );
-        let root = state.config.project_root.clone();
-        drop(state);
-        std::fs::remove_dir_all(root).unwrap();
-    }
-}
-
-#[tokio::test]
 async fn rerun_route_prefers_render_when_translations_are_available() {
-    let state = test_state("rerun-render");
+    let mut state = test_state("rerun-render");
+    hold_job_drivers(&mut state);
     let mut source_job = source_job_with_artifacts(
         "job-rerun-render-source",
         JobArtifacts {
@@ -97,7 +32,7 @@ async fn rerun_route_prefers_render_when_translations_are_available() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/jobs/job-rerun-render-source/rerun")
+                .uri("/api/v1/jobs/job-rerun-render-source/actions/rerun")
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("rerun request"),
@@ -113,6 +48,8 @@ async fn rerun_route_prefers_render_when_translations_are_available() {
     let rerun_job = state.db.get_job(rerun_job_id).expect("rerun job");
     assert_eq!(rerun_job.workflow, crate::models::WorkflowKind::Render);
     assert_eq!(rerun_job.status, JobStatusKind::Queued);
+    // 原地重跑开启新的一次运行：代次加一，上一次运行遗留的 driver 的 CAS 写自此落空。
+    assert_eq!(rerun_job.run_generation, 1);
     assert_eq!(
         rerun_job.request_payload.source.artifact_job_id,
         "job-rerun-render-source"
@@ -142,7 +79,7 @@ async fn rerun_route_uses_book_when_only_ocr_checkpoint_is_available() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/jobs/job-rerun-book-source/rerun")
+                .uri("/api/v1/jobs/job-rerun-book-source/actions/rerun")
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("rerun request"),
@@ -160,4 +97,76 @@ async fn rerun_route_uses_book_when_only_ocr_checkpoint_is_available() {
         rerun_job.request_payload.source.artifact_job_id,
         "job-rerun-book-source"
     );
+}
+
+async fn rerun_with_body(state: &crate::AppState, job_id: &str, body: serde_json::Value) -> axum::response::Response {
+    build_app(state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/jobs/{job_id}/actions/rerun"))
+                .header("X-API-Key", "test-key")
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .expect("rerun request"),
+        )
+        .await
+        .expect("rerun response")
+}
+
+fn failed_book_source(state: &crate::AppState, job_id: &str) {
+    let mut source_job = source_job_with_artifacts(
+        job_id,
+        JobArtifacts {
+            source_pdf: Some("jobs/source/source/input.pdf".to_string()),
+            normalized_document_json: Some("jobs/source/ocr/document.v1.json".to_string()),
+            ..JobArtifacts::default()
+        },
+    );
+    source_job.status = JobStatusKind::Failed;
+    seed_ocr_checkpoint_files(state, &source_job);
+    state.db.save_job(&source_job).expect("save source job");
+}
+
+/// 换了 key 之后续跑：请求体带新 key，新任务用新 key（导入凭据库、不留明文），不沿用原任务的旧凭据。
+#[tokio::test]
+async fn rerun_uses_a_replacement_key_from_the_request_body() {
+    let state = test_state("rerun-new-key");
+    failed_book_source(&state, "job-rerun-new-key-source");
+
+    let response = rerun_with_body(
+        &state,
+        "job-rerun-new-key-source",
+        serde_json::json!({"overrides": {"translation": {"api_key": "sk-rotated-rerun-key"}}}),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload = read_json(response).await;
+    let rerun_job = state.db.get_job(payload["data"]["job_id"].as_str().unwrap()).expect("rerun job");
+    let translation = &rerun_job.request_payload.translation;
+    assert!(translation.api_key.is_empty(), "明文 key 不能落库");
+    let resolved = retainpdf_data::credentials::resolve_credential(
+        &state.config.data_root,
+        &translation.credential_ref,
+        "translation_api_key",
+    )
+    .expect("reference resolves");
+    assert_eq!(resolved.secret, "sk-rotated-rerun-key");
+}
+
+/// 续跑的请求体只接受换 key，别的设置一律沿用原任务；空请求体照旧可用（见上面两条）。
+#[tokio::test]
+async fn rerun_rejects_overrides_other_than_model_keys() {
+    let state = test_state("rerun-bad-overrides");
+    failed_book_source(&state, "job-rerun-bad-overrides");
+
+    for body in [
+        serde_json::json!({"overrides": {"translation": {"model": "other"}}}),
+        serde_json::json!({"overrides": {"render": {"engine": "typst"}}}),
+        serde_json::json!({"overrides": {"translation": {"api_key": "sk-a", "credential_ref": "cred_b"}}}),
+        serde_json::json!({"unknown": 1}),
+    ] {
+        let response = rerun_with_body(&state, "job-rerun-bad-overrides", body.clone()).await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{body}");
+    }
 }

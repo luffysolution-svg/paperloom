@@ -12,14 +12,13 @@
   负责把输入目录解析成明确的 `source_json/source_pdf`。
 - `job_dirs.py`
   负责解析和校验标准 job 目录契约：`source/ocr/translated/rendered/artifacts/logs`。
-- `local_env.py`
-  负责从显式参数、环境变量或 `scripts/.env/` 中读取密钥。
+- 读密钥（原 `local_env.py`）已经下放到底座包 `retainpdf_base.local_env`，默认目录 `backend/pipeline/.env/`。
 - `prompt_loader.py`
   负责从 `scripts/foundation/prompts/` 加载可编辑提示词模板。
 - `job_cleanup.py`
   负责输出目录清理相关逻辑。
 - `stage_specs.py`
-  负责阶段 spec schema 常量、JSON loader 和 `credential_ref` 解析。
+  负责阶段 spec schema 常量和 JSON loader；`credential_ref` 解析在 `retainpdf_base.credentials`。
 
 ## 在总流程中的位置
 
@@ -79,5 +78,5 @@
 - 上层脚本不要自己拼 `output/<job-id>/...` 路径，优先走 `job_dirs.py`
 - Python worker 只消费 stage spec，不再暴露业务长参数入口
 - 如果是阶段 worker，优先新增/消费 `stage_specs.py` 里的 schema，而不是继续扩 CLI 参数
-- 密钥读取不要散落在业务代码里，优先走 `local_env.py`
+- 密钥读取不要散落在业务代码里，优先走 `retainpdf_base.local_env`
 - 提示词不要硬编码在业务模块里，优先走 `prompt_loader.py`

@@ -9,19 +9,23 @@
 export * from "./domains/http.js";
 export * from "./domains/credentials.js";
 export * from "./domains/jobs.js";
-export * from "./domains/library-books.js";
 export * from "./domains/jobs-events.js";
 export * from "./domains/jobs-artifacts.js";
 export * from "./domains/jobs-actions.js";
 export * from "./domains/jobs-submit.js";
 export * from "./domains/documents.js";
 export * from "./domains/collections.js";
-export * from "./domains/favorites.js";
 export * from "./domains/providers.js";
 export * from "./domains/glossaries.js";
+export * from "./domains/backups.js";
+export * from "./domains/sync.js";
 export * from "./domains/translation-debug.js";
+export * from "./domains/usage.js";
+export * from "./domains/quality.js";
+export * from "./domains/job-data.js";
 export * from "./domains/obsidian.js";
 export * from "./domains/zotero.js";
+export * from "./domains/batch-export.js";
 
 // search — kept in the barrel (not ./domains) because the architecture gate
 // asserts the canonical `@retainpdf/api/search` wiring is present in this file.

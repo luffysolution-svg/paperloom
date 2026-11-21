@@ -91,3 +91,20 @@ research/
 # launch.json 都是跟踪的。worktree 正常跑完会自己清掉，但进程被打断就会残留，
 # 而它是一整个仓库副本，误 `git add -A` 一次就炸。
 .claude/worktrees/
+
+# Python 虚拟环境。**不要提交它**，哪怕是个符号链接。
+.venv
+.venv/
+
+# 本地测试用的 API 配置（含明文 key），绝不进仓库
+.env.local
+.env.*.local
+
+# rpr 排版引擎的复制品（backend/rendering-engine/sync.sh）：上面的 data/、output/ 规则会误伤引擎源码。
+!backend/rendering-engine/engine/data/
+!backend/rendering-engine/engine/data/**
+# Rust 包里的源码目录也叫 data（任务包的 src/data/），上面的 data/ 规则会把它挡掉。
+!backend/packages/*/src/**/data/
+!backend/packages/*/src/**/data/**
+!backend/rendering-engine/engine/src/output/
+!backend/rendering-engine/engine/src/output/**

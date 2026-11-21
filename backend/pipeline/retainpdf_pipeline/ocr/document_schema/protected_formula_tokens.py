@@ -1,7 +1,7 @@
 """OCR-local inline-formula protection (stage-contract duplicate).
 
 Duplicated formula-only subset of
-retainpdf_pipeline.translate.core.payload.formula_protection
+retainpdf_translation.core.payload.formula_protection
 (``PROTECTED_TOKEN_RE``, ``protect_inline_formulas``).
 
 The ocr stage only protects provider-text inline math while building

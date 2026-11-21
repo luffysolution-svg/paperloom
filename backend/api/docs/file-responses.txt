@@ -1,0 +1,537 @@
+# 文件出口的返回快照。由 src/api_tests/file_responses.rs 生成，不要手改：
+#   UPDATE_FILE_RESPONSES=1 cargo test -p retainpdf-api --lib file_responses
+# PDF / zip 只记类型；ETag、Last-Modified、Content-Length 不记；content-range 的总长记成 *。
+
+## 新：任务的文件清单
+GET /api/v1/jobs/files-contract-job/files
+  status: 200
+  content-type: application/json
+  | {
+  |   "code": 0,
+  |   "data": {
+  |     "attempt": 1,
+  |     "internal": [
+  |       {
+  |         "content_type": "application/json",
+  |         "name": "normalized-document.json",
+  |         "on_demand": false,
+  |         "ready": true,
+  |         "size_bytes": 35,
+  |         "stage": "normalizing",
+  |         "url": "http://127.0.0.1:41000/api/v1/jobs/files-contract-job/files/internal/normalized-document.json"
+  |       },
+  |       {
+  |         "content_type": "application/json",
+  |         "name": "normalization-report.json",
+  |         "on_demand": false,
+  |         "ready": true,
+  |         "size_bytes": 47,
+  |         "stage": "normalizing",
+  |         "url": "http://127.0.0.1:41000/api/v1/jobs/files-contract-job/files/internal/normalization-report.json"
+  |       },
+  |       {
+  |         "content_type": "application/json",
+  |         "name": "pipeline-summary.json",
+  |         "on_demand": false,
+  |         "ready": true,
+  |         "size_bytes": 15,
+  |         "stage": "rendering",
+  |         "url": "http://127.0.0.1:41000/api/v1/jobs/files-contract-job/files/internal/pipeline-summary.json"
+  |       },
+  |       {
+  |         "content_type": "text/plain; charset=utf-8",
+  |         "name": "typst/source.typ",
+  |         "on_demand": false,
+  |         "ready": false,
+  |         "size_bytes": null,
+  |         "stage": "rendering",
+  |         "url": "http://127.0.0.1:41000/api/v1/jobs/files-contract-job/files/internal/typst/source.typ"
+  |       },
+  |       {
+  |         "content_type": "application/pdf",
+  |         "name": "typst/render.pdf",
+  |         "on_demand": false,
+  |         "ready": false,
+  |         "size_bytes": null,
+  |         "stage": "rendering",
+  |         "url": "http://127.0.0.1:41000/api/v1/jobs/files-contract-job/files/internal/typst/render.pdf"
+  |       },
+  |       {
+  |         "content_type": "application/json",
+  |         "name": "ocr-provider/result.json",
+  |         "on_demand": false,
+  |         "ready": true,
+  |         "size_bytes": 27,
+  |         "stage": "ocr",
+  |         "url": "http://127.0.0.1:41000/api/v1/jobs/files-contract-job/files/internal/ocr-provider/result.json"
+  |       }
+  |     ],
+  |     "job_id": "files-contract-job",
+  |     "output": [
+  |       {
+  |         "content_type": "application/pdf",
+  |         "name": "translated.pdf",
+  |         "on_demand": false,
+  |         "ready": true,
+  |         "size_bytes": 329,
+  |         "stage": "rendering",
+  |         "url": "http://127.0.0.1:41000/api/v1/jobs/files-contract-job/files/output/translated.pdf"
+  |       },
+  |       {
+  |         "content_type": "application/pdf",
+  |         "name": "side-by-side.pdf",
+  |         "on_demand": true,
+  |         "ready": true,
+  |         "size_bytes": null,
+  |         "stage": null,
+  |         "url": "http://127.0.0.1:41000/api/v1/jobs/files-contract-job/files/output/side-by-side.pdf"
+  |       },
+  |       {
+  |         "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  |         "name": "translated.docx",
+  |         "on_demand": true,
+  |         "ready": true,
+  |         "size_bytes": null,
+  |         "stage": null,
+  |         "url": "http://127.0.0.1:41000/api/v1/jobs/files-contract-job/files/output/translated.docx"
+  |       },
+  |       {
+  |         "content_type": "text/markdown; charset=utf-8",
+  |         "name": "ocr.md",
+  |         "on_demand": false,
+  |         "ready": true,
+  |         "size_bytes": 39,
+  |         "stage": "ocr",
+  |         "url": "http://127.0.0.1:41000/api/v1/jobs/files-contract-job/files/output/ocr.md"
+  |       },
+  |       {
+  |         "content_type": "application/zip",
+  |         "name": "ocr.zip",
+  |         "on_demand": true,
+  |         "ready": true,
+  |         "size_bytes": null,
+  |         "stage": "ocr",
+  |         "url": "http://127.0.0.1:41000/api/v1/jobs/files-contract-job/files/output/ocr.zip"
+  |       },
+  |       {
+  |         "content_type": "application/zip",
+  |         "name": "all.zip",
+  |         "on_demand": true,
+  |         "ready": true,
+  |         "size_bytes": null,
+  |         "stage": null,
+  |         "url": "http://127.0.0.1:41000/api/v1/jobs/files-contract-job/files/output/all.zip"
+  |       }
+  |     ],
+  |     "pages": {
+  |       "page_count": 1,
+  |       "url_template": "http://127.0.0.1:41000/api/v1/jobs/files-contract-job/files/pages/{page}.jpg"
+  |     },
+  |     "source": {
+  |       "content_type": "application/pdf",
+  |       "name": "source.pdf",
+  |       "on_demand": false,
+  |       "ready": true,
+  |       "size_bytes": 329,
+  |       "stage": "upload",
+  |       "url": "http://127.0.0.1:41000/api/v1/documents/<doc>/files/source.pdf"
+  |     }
+  |   },
+  |   "message": "ok"
+  | }
+
+## 新：译文 PDF（浏览器里打开）
+GET /api/v1/jobs/files-contract-job/files/output/translated.pdf
+  status: 200
+  content-type: application/pdf
+  content-disposition: inline; filename="zh______translated.pdf"; filename*=UTF-8''zh_%E5%85%89%E8%B0%B1%E7%BB%BC%E8%BF%B0_translated.pdf
+  accept-ranges: bytes
+  | pdf
+
+## 新：译文 PDF（下载）
+GET /api/v1/jobs/files-contract-job/files/output/translated.pdf?download=1
+  status: 200
+  content-type: application/pdf
+  content-disposition: attachment; filename="zh______translated.pdf"; filename*=UTF-8''zh_%E5%85%89%E8%B0%B1%E7%BB%BC%E8%BF%B0_translated.pdf
+  accept-ranges: bytes
+  | pdf
+
+## 新：对照 PDF
+GET /api/v1/jobs/files-contract-job/files/output/side-by-side.pdf
+  status: 200
+  content-type: application/pdf
+  content-disposition: inline; filename="dual______side-by-side.pdf"; filename*=UTF-8''dual_%E5%85%89%E8%B0%B1%E7%BB%BC%E8%BF%B0_side-by-side.pdf
+  accept-ranges: bytes
+  | pdf
+
+## 新：Word（默认清晰度）
+GET /api/v1/jobs/files-contract-job/files/output/translated.docx?download=1
+  status: 200
+  content-type: application/vnd.openxmlformats-officedocument.wordprocessingml.document
+  content-disposition: attachment; filename="zh______layout.docx"; filename*=UTF-8''zh_%E5%85%89%E8%B0%B1%E7%BB%BC%E8%BF%B0_layout.docx
+  accept-ranges: bytes
+  | 17 字节，sha256 b1797ec64dd37cdb
+
+## 新：Word（dpi=150）
+GET /api/v1/jobs/files-contract-job/files/output/translated.docx?download=1&dpi=150
+  status: 200
+  content-type: application/vnd.openxmlformats-officedocument.wordprocessingml.document
+  content-disposition: attachment; filename="zh______layout.docx"; filename*=UTF-8''zh_%E5%85%89%E8%B0%B1%E7%BB%BC%E8%BF%B0_layout.docx
+  accept-ranges: bytes
+  | 17 字节，sha256 d8a707e3a84a55dc
+
+## 新：原文 Markdown
+GET /api/v1/jobs/files-contract-job/files/output/ocr.md
+  status: 200
+  content-type: text/markdown; charset=utf-8
+  content-disposition: inline; filename="orig______ocr.md"; filename*=UTF-8''orig_%E5%85%89%E8%B0%B1%E7%BB%BC%E8%BF%B0_ocr.md
+  accept-ranges: bytes
+  | 39 字节，sha256 5be549bc5513125d
+
+## 新：原文 Markdown + 图片
+GET /api/v1/jobs/files-contract-job/files/output/ocr.zip
+  status: 200
+  content-type: application/zip
+  content-disposition: inline; filename="orig______markdown.zip"; filename*=UTF-8''orig_%E5%85%89%E8%B0%B1%E7%BB%BC%E8%BF%B0_markdown.zip
+  accept-ranges: bytes
+  | zip
+
+## 新：Markdown 图片
+GET /api/v1/jobs/files-contract-job/files/output/ocr/images/page-1/fig.png
+  status: 200
+  content-type: image/png
+  accept-ranges: bytes
+  | 8 字节，sha256 6fc1ef73e2efe0bf
+
+## 新：全部打包
+GET /api/v1/jobs/files-contract-job/files/output/all.zip?download=1
+  status: 200
+  content-type: application/zip
+  content-disposition: attachment; filename="_____bundle.zip"; filename*=UTF-8''%E5%85%89%E8%B0%B1%E7%BB%BC%E8%BF%B0_bundle.zip
+  accept-ranges: bytes
+  x-job-id: files-contract-job
+  | zip
+
+## 新：译文第 1 页预览
+GET /api/v1/jobs/files-contract-job/files/pages/1.jpg
+  status: 200
+  content-type: image/jpeg
+  cache-control: private, max-age=0, must-revalidate
+  accept-ranges: bytes
+  | 20 字节，sha256 63af4870cbd5da14
+
+## 新：中间产物 规范化文档
+GET /api/v1/jobs/files-contract-job/files/internal/normalized-document.json
+  status: 200
+  content-type: application/json
+  content-disposition: inline; filename="normalized-document.json"; filename*=UTF-8''normalized-document.json
+  accept-ranges: bytes
+  | {
+  |   "pages": [],
+  |   "schema": "document.v1"
+  | }
+
+## 新：中间产物 规范化报告
+GET /api/v1/jobs/files-contract-job/files/internal/normalization-report.json
+  status: 200
+  content-type: application/json
+  content-disposition: inline; filename="normalization-report.json"; filename*=UTF-8''normalization-report.json
+  accept-ranges: bytes
+  | {
+  |   "normalization": {
+  |     "defaults": {
+  |       "pages_seen": 1
+  |     }
+  |   }
+  | }
+
+## 新：中间产物 OCR 原始返回
+GET /api/v1/jobs/files-contract-job/files/internal/ocr-provider/result.json
+  status: 200
+  content-type: application/json
+  content-disposition: inline; filename="ocr-provider-result.json"; filename*=UTF-8''ocr-provider-result.json
+  accept-ranges: bytes
+  | {
+  |   "layoutParsingResults": []
+  | }
+
+## 新：中间产物 流水线摘要
+GET /api/v1/jobs/files-contract-job/files/internal/pipeline-summary.json
+  status: 200
+  content-type: application/json
+  content-disposition: inline; filename="pipeline-summary.json"; filename*=UTF-8''pipeline-summary.json
+  accept-ranges: bytes
+  | {
+  |   "status": "ok"
+  | }
+
+## 新：书的文件清单
+GET /api/v1/documents/<doc>/files
+  status: 200
+  content-type: application/json
+  | {
+  |   "code": 0,
+  |   "data": {
+  |     "document_id": "<doc>",
+  |     "files": [
+  |       {
+  |         "content_type": "application/pdf",
+  |         "name": "source.pdf",
+  |         "on_demand": false,
+  |         "ready": true,
+  |         "url": "http://127.0.0.1:41000/api/v1/documents/<doc>/files/source.pdf"
+  |       },
+  |       {
+  |         "content_type": "image/jpeg",
+  |         "name": "cover.jpg",
+  |         "on_demand": true,
+  |         "ready": true,
+  |         "url": "http://127.0.0.1:41000/api/v1/documents/<doc>/files/cover.jpg"
+  |       },
+  |       {
+  |         "content_type": "image/jpeg",
+  |         "name": "thumbnail.jpg",
+  |         "on_demand": true,
+  |         "ready": true,
+  |         "url": "http://127.0.0.1:41000/api/v1/documents/<doc>/files/thumbnail.jpg"
+  |       }
+  |     ],
+  |     "pages": {
+  |       "page_count": 1,
+  |       "url_template": "http://127.0.0.1:41000/api/v1/documents/<doc>/files/pages/{page}.jpg"
+  |     }
+  |   },
+  |   "message": "ok"
+  | }
+
+## 新：书的原文（浏览器里打开）
+GET /api/v1/documents/<doc>/files/source.pdf
+  status: 200
+  content-type: application/pdf
+  content-disposition: inline; filename="orig______source.pdf"; filename*=UTF-8''orig_%E5%85%89%E8%B0%B1%E7%BB%BC%E8%BF%B0_source.pdf
+  accept-ranges: bytes
+  | pdf
+
+## 新：书的原文（下载）
+GET /api/v1/documents/<doc>/files/source.pdf?download=1
+  status: 200
+  content-type: application/pdf
+  content-disposition: attachment; filename="orig______source.pdf"; filename*=UTF-8''orig_%E5%85%89%E8%B0%B1%E7%BB%BC%E8%BF%B0_source.pdf
+  accept-ranges: bytes
+  | pdf
+
+## 新：书的封面
+GET /api/v1/documents/<doc>/files/cover.jpg
+  status: 200
+  content-type: image/jpeg
+  cache-control: private, max-age=0, must-revalidate
+  accept-ranges: bytes
+  | 19 字节，sha256 d5e238020f7eb5e8
+
+## 新：书的缩略图
+GET /api/v1/documents/<doc>/files/thumbnail.jpg
+  status: 200
+  content-type: image/jpeg
+  cache-control: private, max-age=0, must-revalidate
+  accept-ranges: bytes
+  | 23 字节，sha256 3209301db0cb66de
+
+## 新：原文第 1 页预览
+GET /api/v1/documents/<doc>/files/pages/1.jpg
+  status: 200
+  content-type: image/jpeg
+  cache-control: private, max-age=0, must-revalidate
+  accept-ranges: bytes
+  | 25 字节，sha256 96581d3dc2db72ba
+
+## 新报错：没有这个文件
+GET /api/v1/jobs/files-contract-job/files/output/translated.PDF
+  status: 404
+  content-type: application/json
+  | {
+  |   "code": 40400,
+  |   "error": {
+  |     "code": "NOT_FOUND",
+  |     "details": {},
+  |     "http_status": 404
+  |   },
+  |   "message": "no such file: output/translated.PDF"
+  | }
+
+## 新报错：layout.json 和 ocr-provider/result.json 重复，只留后者
+GET /api/v1/jobs/files-contract-job/files/internal/layout.json
+  status: 404
+  content-type: application/json
+  | {
+  |   "code": 40400,
+  |   "error": {
+  |     "code": "NOT_FOUND",
+  |     "details": {},
+  |     "http_status": 404
+  |   },
+  |   "message": "no such file: internal/layout.json"
+  | }
+
+## 新报错：页码从 1 开始
+GET /api/v1/jobs/files-contract-job/files/pages/0.jpg
+  status: 404
+  content-type: application/json
+  | {
+  |   "code": 40400,
+  |   "error": {
+  |     "code": "NOT_FOUND",
+  |     "details": {},
+  |     "http_status": 404
+  |   },
+  |   "message": "no such file: pages/0.jpg"
+  | }
+
+## 新报错：页码超过总页数
+GET /api/v1/jobs/files-contract-job/files/pages/2.jpg
+  status: 404
+  content-type: application/json
+  | {
+  |   "code": 40400,
+  |   "error": {
+  |     "code": "NOT_FOUND",
+  |     "details": {},
+  |     "http_status": 404
+  |   },
+  |   "message": "no such file: pages/2.jpg"
+  | }
+
+## 新报错：书的页码超过总页数
+GET /api/v1/documents/<doc>/files/pages/2.jpg
+  status: 404
+  content-type: application/json
+  | {
+  |   "code": 40400,
+  |   "error": {
+  |     "code": "NOT_FOUND",
+  |     "details": {},
+  |     "http_status": 404
+  |   },
+  |   "message": "no such file: pages/2.jpg"
+  | }
+
+## 新报错：书没有这个文件
+GET /api/v1/documents/<doc>/files/cover.png
+  status: 404
+  content-type: application/json
+  | {
+  |   "code": 40400,
+  |   "error": {
+  |     "code": "NOT_FOUND",
+  |     "details": {},
+  |     "http_status": 404
+  |   },
+  |   "message": "no such file: cover.png"
+  | }
+
+## 新报错：还在跑，不能打包
+GET /api/v1/jobs/files-contract-running/files/output/all.zip
+  status: 404
+  content-type: application/json
+  | {
+  |   "code": 40400,
+  |   "error": {
+  |     "code": "NOT_FOUND",
+  |     "details": {
+  |       "reason": "not_ready"
+  |     },
+  |     "http_status": 404
+  |   },
+  |   "message": "all.zip not ready"
+  | }
+
+## 新报错：任务不存在
+GET /api/v1/jobs/no-such-job/files/output/translated.pdf
+  status: 404
+  content-type: application/json
+  | {
+  |   "code": 40400,
+  |   "error": {
+  |     "code": "NOT_FOUND",
+  |     "details": {},
+  |     "http_status": 404
+  |   },
+  |   "message": "job not found: no-such-job"
+  | }
+
+## 新报错：还在跑，译文 PDF 没就绪
+GET /api/v1/jobs/files-contract-running/files/output/translated.pdf
+  status: 404
+  content-type: application/json
+  | {
+  |   "code": 40400,
+  |   "error": {
+  |     "code": "NOT_FOUND",
+  |     "details": {
+  |       "reason": "not_ready"
+  |     },
+  |     "http_status": 404
+  |   },
+  |   "message": "translated.pdf not ready"
+  | }
+
+## 新报错：还在跑，原文 Markdown 没就绪
+GET /api/v1/jobs/files-contract-running/files/output/ocr.md
+  status: 404
+  content-type: application/json
+  | {
+  |   "code": 40400,
+  |   "error": {
+  |     "code": "NOT_FOUND",
+  |     "details": {
+  |       "reason": "not_ready"
+  |     },
+  |     "http_status": 404
+  |   },
+  |   "message": "ocr.md not ready"
+  | }
+
+## 新报错：还在跑，译文页预览没就绪
+GET /api/v1/jobs/files-contract-running/files/pages/1.jpg
+  status: 404
+  content-type: application/json
+  | {
+  |   "code": 40400,
+  |   "error": {
+  |     "code": "NOT_FOUND",
+  |     "details": {
+  |       "reason": "not_ready"
+  |     },
+  |     "http_status": 404
+  |   },
+  |   "message": "translated.pdf not ready"
+  | }
+
+## 新报错：还在跑，中间产物没就绪
+GET /api/v1/jobs/files-contract-running/files/internal/normalized-document.json
+  status: 404
+  content-type: application/json
+  | {
+  |   "code": 40400,
+  |   "error": {
+  |     "code": "NOT_FOUND",
+  |     "details": {
+  |       "reason": "not_ready"
+  |     },
+  |     "http_status": 404
+  |   },
+  |   "message": "normalized-document.json not ready"
+  | }
+
+## 新报错：Markdown 图片路径越界
+GET /api/v1/jobs/files-contract-job/files/output/ocr/images/..%2F..%2Fsecret
+  status: 400
+  content-type: application/json
+  | {
+  |   "code": 40000,
+  |   "error": {
+  |     "code": "BAD_REQUEST",
+  |     "details": {},
+  |     "http_status": 400
+  |   },
+  |   "message": "parent-relative markdown image path is not allowed"
+  | }

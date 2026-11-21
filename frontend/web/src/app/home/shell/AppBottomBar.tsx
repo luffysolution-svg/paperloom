@@ -12,6 +12,7 @@
 // showSearch=false 用于"分类"tab:该 tab 下搜索语义不同,不渲染 input(测试
 // 断言分类 tab 下 #library-search-input 不存在),只留添加/设置。
 
+import { IconButton } from "@retainpdf/ui";
 import { useHomeDialogStore, useHomeSettingsHub, useHomeWorkflowDialog } from "../home-services-context.js";
 import { useStoreSnapshot } from "@/ui/hooks/use-store.js";
 import { useLibrarySearchBinding } from "@/features/library/index.js";
@@ -26,7 +27,6 @@ export function openTaskCenter() {
   document.dispatchEvent(new CustomEvent(HOME_TASK_CENTER_OPEN_EVENT));
 }
 
-// Zotero 导入弹窗入口：同任务中心，由 HomeApp 监听后打开。
 export const HOME_ZOTERO_IMPORT_OPEN_EVENT = "paperloom:open-zotero-import";
 
 export function openZoteroImport() {
@@ -67,20 +67,18 @@ export function AppBottomBar({ showSearch = true, hidden = false }) {
         <span className="library-bottom-icon-btn-ornament" aria-hidden="true" />
       </button>
 
-      <button
-        id="library-home-zotero-btn"
-        type="button"
+      <IconButton
+        id="library-home-zotero-trigger"
+        label="从 Zotero 导入"
         className="library-bottom-icon-btn"
-        aria-label="从 Zotero 导入"
-        title="从 Zotero 导入"
-        aria-controls="home-zotero-dialog"
+        aria-controls="zotero-import-dialog"
         onClick={openZoteroImport}
       >
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M6 5h12L6 19h12" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
         <span className="library-bottom-icon-btn-ornament" aria-hidden="true" />
-      </button>
+      </IconButton>
 
       {showSearch ? (
         <div className="library-bottom-search" role="search">

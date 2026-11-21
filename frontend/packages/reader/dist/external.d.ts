@@ -4,7 +4,6 @@ import type { createReaderPageConfigPort } from "./runtime/config.js";
 import type { ReaderPdfPort } from "./contracts/pdf.js";
 import type { ReaderSessionDataPort } from "./contracts/session.js";
 import { resolveReaderDownloadName as defaultResolveReaderDownloadName, resolveReaderDownloadUrls as defaultResolveReaderDownloadUrls } from "./shared/state/downloads/resolve.js";
-import type { CreateServerFavoritesPortOptions } from "./shared/types/types.js";
 export declare const isMockMode: (...args: any[]) => boolean;
 export declare const MOCK_DOCUMENT_SOURCE_PDF_URL = "";
 export declare const READER_DIALOG_MESSAGES: Readonly<{
@@ -42,18 +41,4 @@ export declare const fetchDocumentByJobId: (...args: [string, string]) => Promis
     active_job_id?: string | null;
     active_version_id?: string | null;
 }>;
-export declare const fetchFavorites: (apiPrefix?: string, options?: {
-    documentId?: string;
-}) => Promise<{
-    favorites?: import("./runtime/state.js").ServerFavoriteRaw[];
-}>;
-export declare function createReaderServerFavoritesPort(options?: CreateServerFavoritesPortOptions): Readonly<{
-    loadServerFavorites: () => Promise<import("./external.js").ServerFavorite[]>;
-    recreateFavoriteNote: (annotation?: Partial<import("./external.js").ServerFavorite>, note?: string) => Promise<import("./external.js").ServerFavorite>;
-    removeServerFavorite: (favoriteId: string) => Promise<boolean>;
-    resolveDocumentId: () => Promise<string>;
-    syncFavorite: (quote?: import("./runtime/state.js").SelectionQuote) => Promise<import("./runtime/state.js").FavoriteApiRecord>;
-}>;
-export { normalizeServerFavorite } from "./shared/state/server-favorites-port.js";
-export type { ServerFavorite } from "./shared/types/types.js";
 //# sourceMappingURL=external.d.ts.map

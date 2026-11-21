@@ -1,79 +1,55 @@
-//! 图书馆数据层的最小 API:documents / favorites / 全文检索。
-//! 前端图书馆改版前,现有 /api/v1/library/books 投影接口保持不动。
+//! 图书馆数据层的最小 API:documents / 全文检索。
 //!
 //! All handlers go through library_api (PR2–PR4).
 
 use axum::extract::State;
 use axum::http::HeaderMap;
-use axum::response::Response;
+use axum::response::{IntoResponse, Response};
 use axum::Json;
+use serde_json::Value;
 
+use crate::auth::Principal;
 use crate::error::AppError;
 use crate::models::api::{
-    ApiResponse, ApplyDocumentMetadataSuggestionInput, CreateDocumentMetadataSuggestionInput,
-    CreateFavoriteInput, DocumentDeleteResultView, DocumentJobListView, DocumentListView,
+    ApiResponse, JobFilesQuery, ApplyDocumentMetadataSuggestionInput, CreateDocumentMetadataSuggestionInput,
+    DocumentDeleteResultView, DocumentJobListView, DocumentJobRequest, DocumentListView,
     DocumentMetadataSuggestionApplyView, DocumentMetadataSuggestionListView,
-    DocumentMetadataSuggestionView, DocumentRecord, FavoriteListView, FavoriteMutationResult,
-    FavoriteRecord, FavoritesClearedResult, JobSubmissionView, LibraryDeleteQuery,
+    DeleteDocumentQuery, DocumentMetadataSuggestionView, DocumentRecord, JobSubmissionView,
     ListDocumentJobsQuery, ListDocumentMetadataSuggestionsQuery, ListDocumentsQuery,
-    ListFavoritesQuery, PatchDocumentInput, PatchFavoriteInput, SearchQuery, SearchResultView,
+    PatchDocumentInput, SearchQuery, SearchResultView,
 };
-use crate::models::request::CreateJobInput;
 use crate::routes::common::{
-    build_jobs_download_route_deps, build_jobs_route_deps, build_library_route_deps, ok_json,
-    request_base_url, run_job_query_once, ApiJson, ApiPath, ApiQuery,
+    build_jobs_route_deps, build_library_route_deps, jobs_facade, ok_json, request_base_url,
+    run_job_query_once, run_library_blocking, run_state_blocking, ApiJson, ApiPath, ApiQuery,
 };
-use crate::routes::job_helpers::stream_file;
-use crate::services::library::api::{
-    apply_document_metadata_suggestion_view, clear_favorites_for_document_view,
-    clear_favorites_for_job_view, create_document_metadata_suggestion_view, create_favorite_view,
-    delete_document_view, delete_favorite_view, document_cover_download,
-    document_source_pdf_download, document_thumbnail_download, get_document,
-    list_document_metadata_suggestions_view, list_documents, list_favorites_view,
-    ocr_document_view, patch_document, patch_favorite_view, search_blocks_view,
-    translate_document_view, BatchExportInput, BatchExportView,
+use crate::routes::download_response::file_download_response;
+use crate::services::library::{
+    apply_document_metadata_suggestion_view, create_document_metadata_suggestion_view,
+    delete_document_view, document_delete_job_ids_view, document_files, document_reading,
+    document_translation_coverage,
+    get_document, list_document_metadata_suggestions_view, list_documents, ocr_document_view,
+    open_document_file, patch_document, search_blocks_view, translate_document_view, Disposition,
+    DocumentFile, DocumentReadingView, TranslationCoverageView,
 };
 use crate::AppState;
 
 // --- documents ---
 
-pub(crate) async fn export_documents_route(
-    State(state): State<AppState>,
-    ApiJson(input): ApiJson<BatchExportInput>,
-) -> Result<Json<ApiResponse<BatchExportView>>, AppError> {
-    Ok(ok_json(
-        build_jobs_download_route_deps(&state)
-            .downloads
-            .export_batch(input)
-            .await?,
-    ))
-}
-
-pub(crate) async fn download_document_export_route(
-    State(state): State<AppState>,
-    ApiPath(name): ApiPath<String>,
-    headers: HeaderMap,
-) -> Result<Response, AppError> {
-    let file = build_jobs_download_route_deps(&state)
-        .downloads
-        .batch_export_download(&name)?;
-    stream_file(
-        file.path,
-        &file.content_type,
-        file.download_name,
-        Some(&headers),
-    )
-    .await
-}
-
 pub async fn list_documents_route(
     State(state): State<AppState>,
+    principal: Principal,
     headers: HeaderMap,
     ApiQuery(query): ApiQuery<ListDocumentsQuery>,
 ) -> Result<Json<ApiResponse<DocumentListView>>, AppError> {
     let deps = build_library_route_deps(&state);
     let base_url = request_base_url(&headers, deps.default_port, &deps.bind_host);
-    Ok(ok_json(list_documents(&deps.library, &query, &base_url)?))
+    let owner = principal.owner_filter().map(str::to_string);
+    Ok(ok_json(
+        run_library_blocking(&state, move |library| {
+            list_documents(library, &query, &base_url, owner.as_deref())
+        })
+        .await?,
+    ))
 }
 
 pub async fn get_document_route(
@@ -83,64 +59,81 @@ pub async fn get_document_route(
 ) -> Result<Json<ApiResponse<DocumentRecord>>, AppError> {
     let deps = build_library_route_deps(&state);
     let base_url = request_base_url(&headers, deps.default_port, &deps.bind_host);
-    Ok(ok_json(get_document(
-        &deps.library,
-        &document_id,
-        &base_url,
-    )?))
+    Ok(ok_json(
+        run_library_blocking(&state, move |library| get_document(library, &document_id, &base_url)).await?,
+    ))
 }
 
-/// GET /api/v1/documents/:id/source.pdf — 无翻译 job 也能读源文件。
-pub async fn download_document_source_pdf_route(
+/// GET /api/v1/documents/:id/reading —— 阅读器该打开哪个任务。
+///
+/// 一个任务就覆盖了整本：返回它。多次范围翻译（或单个只覆盖一部分的任务）：按需生成
+/// 合并目录，返回它的虚拟任务 id。生成要跑子进程，放进阻塞线程。
+pub async fn get_document_reading_route(
+    State(state): State<AppState>,
+    ApiPath(document_id): ApiPath<String>,
+) -> Result<Json<ApiResponse<DocumentReadingView>>, AppError> {
+    let deps = build_library_route_deps(&state);
+    Ok(ok_json(document_reading(&deps.library, &document_id).await?))
+}
+
+/// GET /api/v1/documents/:id/translation-coverage —— 翻译覆盖和任务记录（书籍详情「进度」）。
+///
+/// 只计算合并计划、不生成合并目录；读每个输出 PDF 的页数，放进阻塞线程。
+pub async fn get_document_translation_coverage_route(
+    State(state): State<AppState>,
+    ApiPath(document_id): ApiPath<String>,
+) -> Result<Json<ApiResponse<TranslationCoverageView>>, AppError> {
+    let deps = build_library_route_deps(&state);
+    Ok(ok_json(document_translation_coverage(&deps.library, &document_id).await?))
+}
+
+async fn document_file(
+    state: &AppState,
+    headers: &HeaderMap,
+    document_id: &str,
+    file: DocumentFile,
+    disposition: Disposition,
+) -> Result<Response, AppError> {
+    let deps = build_library_route_deps(state);
+    let download =
+        open_document_file(&deps.library, &state.download_generation, document_id, file, disposition)
+            .await?;
+    file_download_response(download, headers).await
+}
+
+/// GET /api/v1/documents/:id/files —— 书本身有哪些文件（原文、封面、缩略图、原文页预览）。
+pub async fn list_document_files_route(
     State(state): State<AppState>,
     headers: HeaderMap,
     ApiPath(document_id): ApiPath<String>,
 ) -> Result<Response, AppError> {
     let deps = build_library_route_deps(&state);
-    let file = document_source_pdf_download(&deps.library, &document_id)?;
-    stream_file(
-        file.path,
-        file.content_type,
-        file.download_name,
-        Some(&headers),
-    )
-    .await
+    let base_url = request_base_url(&headers, deps.default_port, &deps.bind_host);
+    let view =
+        run_library_blocking(&state, move |library| document_files(library, &document_id, &base_url)).await?;
+    Ok(ok_json(view).into_response())
 }
 
-/// GET /api/v1/documents/:id/cover
-pub async fn download_document_cover_route(
+/// GET /api/v1/documents/:id/files/:name —— 默认在浏览器里打开，`?download=1` 直接下载。
+pub async fn document_file_route(
     State(state): State<AppState>,
     headers: HeaderMap,
-    ApiPath(document_id): ApiPath<String>,
+    ApiPath((document_id, name)): ApiPath<(String, String)>,
+    ApiQuery(query): ApiQuery<JobFilesQuery>,
 ) -> Result<Response, AppError> {
-    let deps = build_library_route_deps(&state);
-    let file =
-        document_cover_download(&deps.library, &state.download_generation, &document_id).await?;
-    stream_file(
-        file.path,
-        file.content_type,
-        file.download_name,
-        Some(&headers),
-    )
-    .await
+    let disposition = if query.wants_download() { Disposition::Attachment } else { Disposition::Inline };
+    document_file(&state, &headers, &document_id, DocumentFile::named(&name)?, disposition).await
 }
 
-/// GET /api/v1/documents/:id/thumbnail
-pub async fn download_document_thumbnail_route(
+/// GET /api/v1/documents/:id/files/pages/:page —— 原文那一页的预览图（`3.jpg`）。
+pub async fn document_page_file_route(
     State(state): State<AppState>,
     headers: HeaderMap,
-    ApiPath(document_id): ApiPath<String>,
+    ApiPath((document_id, page)): ApiPath<(String, String)>,
+    ApiQuery(query): ApiQuery<JobFilesQuery>,
 ) -> Result<Response, AppError> {
-    let deps = build_library_route_deps(&state);
-    let file = document_thumbnail_download(&deps.library, &state.download_generation, &document_id)
-        .await?;
-    stream_file(
-        file.path,
-        file.content_type,
-        file.download_name,
-        Some(&headers),
-    )
-    .await
+    let file = DocumentFile::page(&page, &query)?;
+    document_file(&state, &headers, &document_id, file, Disposition::Inline).await
 }
 
 pub async fn patch_document_route(
@@ -151,25 +144,24 @@ pub async fn patch_document_route(
 ) -> Result<Json<ApiResponse<DocumentRecord>>, AppError> {
     let deps = build_library_route_deps(&state);
     let base_url = request_base_url(&headers, deps.default_port, &deps.bind_host);
-    Ok(ok_json(patch_document(
-        &deps.library,
-        &document_id,
-        &payload,
-        &base_url,
-    )?))
+    Ok(ok_json(
+        run_library_blocking(&state, move |library| {
+            patch_document(library, &document_id, &payload, &base_url)
+        })
+        .await?,
+    ))
 }
 
+/// 读原文 PDF、规范化文档的那段在阻塞线程里跑（前端每个 OCR / 翻译任务成功后都会调一次）。
 pub async fn create_document_metadata_suggestion_route(
     State(state): State<AppState>,
     ApiPath(document_id): ApiPath<String>,
     ApiJson(input): ApiJson<CreateDocumentMetadataSuggestionInput>,
 ) -> Result<Json<ApiResponse<DocumentMetadataSuggestionView>>, AppError> {
     let deps = build_library_route_deps(&state);
-    Ok(ok_json(create_document_metadata_suggestion_view(
-        &deps.library,
-        &document_id,
-        &input,
-    )?))
+    Ok(ok_json(
+        create_document_metadata_suggestion_view(&deps.library, &document_id, &input).await?,
+    ))
 }
 
 pub async fn list_document_metadata_suggestions_route(
@@ -177,73 +169,98 @@ pub async fn list_document_metadata_suggestions_route(
     ApiPath(document_id): ApiPath<String>,
     ApiQuery(query): ApiQuery<ListDocumentMetadataSuggestionsQuery>,
 ) -> Result<Json<ApiResponse<DocumentMetadataSuggestionListView>>, AppError> {
-    let deps = build_library_route_deps(&state);
-    Ok(ok_json(list_document_metadata_suggestions_view(
-        &deps.library,
-        &document_id,
-        &query,
-    )?))
+    run_state_blocking(&state, "document metadata suggestions", move |state| {
+        let deps = build_library_route_deps(state);
+        Ok(ok_json(list_document_metadata_suggestions_view(
+            &deps.library,
+            &document_id,
+            &query,
+        )?))
+    })
+    .await
 }
 
 pub async fn apply_document_metadata_suggestion_route(
     State(state): State<AppState>,
+    headers: HeaderMap,
     ApiPath((document_id, suggestion_id)): ApiPath<(String, String)>,
     ApiJson(input): ApiJson<ApplyDocumentMetadataSuggestionInput>,
 ) -> Result<Json<ApiResponse<DocumentMetadataSuggestionApplyView>>, AppError> {
-    let deps = build_library_route_deps(&state);
-    Ok(ok_json(apply_document_metadata_suggestion_view(
-        &deps.library,
-        &document_id,
-        &suggestion_id,
-        &input,
-    )?))
+    run_state_blocking(&state, "document metadata suggestion", move |state| {
+        let deps = build_library_route_deps(state);
+        let base_url = request_base_url(&headers, deps.default_port, &deps.bind_host);
+        Ok(ok_json(apply_document_metadata_suggestion_view(
+            &deps.library,
+            &document_id,
+            &suggestion_id,
+            &input,
+            &base_url,
+        )?))
+    })
+    .await
 }
 
 /// DELETE /api/v1/documents/:id —— 彻底删除文档(行 + jobs + uploads + 文件)。
-/// 被收藏引用 → 409;运行中 job 需 ?force=true。
+/// 运行中 job 需 ?force=true;不认识的查询参数 400(拼错的 force 不会当成不强删)。
 pub async fn delete_document_route(
     State(state): State<AppState>,
     ApiPath(document_id): ApiPath<String>,
-    ApiQuery(query): ApiQuery<LibraryDeleteQuery>,
+    ApiQuery(query): ApiQuery<DeleteDocumentQuery>,
 ) -> Result<Json<ApiResponse<DocumentDeleteResultView>>, AppError> {
-    let deps = build_library_route_deps(&state);
-    Ok(ok_json(delete_document_view(
-        &deps.library,
-        &document_id,
-        query.force,
-    )?))
+    if query.force {
+        // 强删文档：名下运行中的任务先走取消的同一条路径（登记取消 + 终止 worker），再删。
+        let id = document_id.clone();
+        let job_ids =
+            run_library_blocking(&state, move |library| document_delete_job_ids_view(library, &id)).await?;
+        jobs_facade(build_jobs_route_deps(&state))
+            .cancel_before_delete(&job_ids)
+            .await;
+    }
+    // 删库行、删任务目录都是同步活（几百 MB 的书要好几秒），放进阻塞线程。
+    let force = query.force;
+    Ok(ok_json(
+        run_library_blocking(&state, move |library| delete_document_view(library, &document_id, force))
+            .await?,
+    ))
 }
 
 // --- translate ---
 
 /// POST /api/v1/documents/:id/translate
 /// 复用馆藏文档已存的源 PDF 发起 book 翻译流水线，完成后 lifecycle 会回填 active_job_id。
+/// 请求体和 `POST /jobs` 一样先收成 JSON 再解析（同样的 `invalid job payload: …` 提示）。
 pub async fn translate_document_route(
     State(state): State<AppState>,
     headers: HeaderMap,
     ApiPath(document_id): ApiPath<String>,
-    ApiJson(request): ApiJson<CreateJobInput>,
+    ApiJson(payload): ApiJson<Value>,
 ) -> Result<Json<ApiResponse<JobSubmissionView>>, AppError> {
-    let deps = build_library_route_deps(&state);
-    let jobs = build_jobs_route_deps(&state).jobs;
-    let base_url = request_base_url(&headers, deps.default_port, &deps.bind_host);
-    Ok(ok_json(translate_document_view(
-        &deps.library,
-        &jobs,
-        &document_id,
-        request,
-        &base_url,
-    )?))
+    let request = DocumentJobRequest::from_api_value(payload)?;
+    run_state_blocking(&state, "document translation", move |state| {
+        let deps = build_library_route_deps(state);
+        let jobs = build_jobs_route_deps(state).jobs;
+        let base_url = request_base_url(&headers, deps.default_port, &deps.bind_host);
+        Ok(ok_json(translate_document_view(
+            &deps.library,
+            &jobs,
+            &document_id,
+            request,
+            &base_url,
+        )?))
+    })
+    .await
 }
 
 /// POST /api/v1/documents/:id/ocr
 /// Reuse the document's stored source PDF and create an OCR-only job.
+/// 要分清客户端写没写 `workflow`，所以先收成 JSON。
 pub async fn ocr_document_route(
     State(state): State<AppState>,
     headers: HeaderMap,
     ApiPath(document_id): ApiPath<String>,
-    ApiJson(request): ApiJson<CreateJobInput>,
+    ApiJson(payload): ApiJson<Value>,
 ) -> Result<Json<ApiResponse<JobSubmissionView>>, AppError> {
+    let request = DocumentJobRequest::from_api_value(payload)?;
     let deps = build_library_route_deps(&state);
     let jobs = build_jobs_route_deps(&state).jobs;
     let base_url = request_base_url(&headers, deps.default_port, &deps.bind_host);
@@ -271,76 +288,18 @@ pub async fn list_document_jobs_route(
     Ok(ok_json(view))
 }
 
-// --- favorites ---
-
-pub async fn create_favorite_route(
-    State(state): State<AppState>,
-    ApiJson(payload): ApiJson<CreateFavoriteInput>,
-) -> Result<Json<ApiResponse<FavoriteRecord>>, AppError> {
-    let deps = build_library_route_deps(&state);
-    Ok(ok_json(create_favorite_view(&deps.library, payload)?))
-}
-
-pub async fn list_favorites_route(
-    State(state): State<AppState>,
-    ApiQuery(query): ApiQuery<ListFavoritesQuery>,
-) -> Result<Json<ApiResponse<FavoriteListView>>, AppError> {
-    let deps = build_library_route_deps(&state);
-    Ok(ok_json(list_favorites_view(&deps.library, &query)?))
-}
-
-pub async fn patch_favorite_route(
-    State(state): State<AppState>,
-    ApiPath(favorite_id): ApiPath<String>,
-    ApiJson(payload): ApiJson<PatchFavoriteInput>,
-) -> Result<Json<ApiResponse<FavoriteMutationResult>>, AppError> {
-    let deps = build_library_route_deps(&state);
-    Ok(ok_json(patch_favorite_view(
-        &deps.library,
-        &favorite_id,
-        &payload,
-    )?))
-}
-
-pub async fn delete_favorite_route(
-    State(state): State<AppState>,
-    ApiPath(favorite_id): ApiPath<String>,
-) -> Result<Json<ApiResponse<FavoriteMutationResult>>, AppError> {
-    let deps = build_library_route_deps(&state);
-    Ok(ok_json(delete_favorite_view(&deps.library, &favorite_id)?))
-}
-
-/// 清空一篇文档名下的全部收藏,与 `DELETE /documents/{id}` 的收藏保护配套。
-pub async fn clear_document_favorites_route(
-    State(state): State<AppState>,
-    ApiPath(document_id): ApiPath<String>,
-) -> Result<Json<ApiResponse<FavoritesClearedResult>>, AppError> {
-    let deps = build_library_route_deps(&state);
-    Ok(ok_json(clear_favorites_for_document_view(
-        &deps.library,
-        &document_id,
-    )?))
-}
-
-/// 清空引用某个 run(及其 -ocr 子任务)的全部收藏,与
-/// `DELETE /library/books/{job_id}` 的收藏保护配套。
-pub async fn clear_book_favorites_route(
-    State(state): State<AppState>,
-    ApiPath(job_id): ApiPath<String>,
-) -> Result<Json<ApiResponse<FavoritesClearedResult>>, AppError> {
-    let deps = build_library_route_deps(&state);
-    Ok(ok_json(clear_favorites_for_job_view(
-        &deps.library,
-        &job_id,
-    )?))
-}
-
 // --- search ---
 
 pub async fn search_blocks_route(
     State(state): State<AppState>,
+    principal: Principal,
     ApiQuery(query): ApiQuery<SearchQuery>,
 ) -> Result<Json<ApiResponse<SearchResultView>>, AppError> {
-    let deps = build_library_route_deps(&state);
-    Ok(ok_json(search_blocks_view(&deps.library, &query)?))
+    let owner = principal.owner_filter().map(str::to_string);
+    Ok(ok_json(
+        run_library_blocking(&state, move |library| {
+            search_blocks_view(library, &query, owner.as_deref())
+        })
+        .await?,
+    ))
 }

@@ -129,13 +129,49 @@ export interface PublicTranslationInput {
   context_mode: string;
   glossary_mode: string;
   memory_mode: string;
+  /**
+   * TRANSLATION_PREPARATION_MODES：off / artifacts_only / terms / terms+style / editorial。
+   */
+  preparation?: string;
+  /**
+   * TRANSLATION_REFINE_MODES：off / review_only / review_and_fix / editorial。
+   */
+  refine?: string;
+  refine_max_items?: number;
+  refine_max_tokens?: number;
   api_key: string;
   api_key_configured: boolean;
   credential_ref: string;
   model: string;
-  api_protocol?: "openai" | "openai_responses" | "anthropic";
-  thinking?: "auto" | "off" | "low" | "medium" | "high" | "max";
   base_url: string;
+  reviewer_model?: string;
+  reviewer_base_url?: string;
+  /**
+   * 恒为空，仅暴露 reviewer_api_key_configured。
+   */
+  reviewer_api_key?: string;
+  reviewer_api_key_configured?: boolean;
+  reviewer_credential_ref?: string;
+  /**
+   * TRANSLATION_API_PROTOCOLS：openai / openai_responses / anthropic。
+   */
+  api_protocol?: string;
+  /**
+   * TRANSLATION_THINKING_LEVELS：auto / off / low / medium / high / max。
+   */
+  thinking?: string;
+  /**
+   * 留空沿用 api_protocol。
+   */
+  reviewer_api_protocol?: string;
+  /**
+   * 留空沿用 thinking。
+   */
+  reviewer_thinking?: string;
+  /**
+   * TRANSLATION_ENGINES：legacy（现有流程）/ agent（翻译 agent）。
+   */
+  engine?: string;
   start_page: number;
   end_page: number;
   page_ranges: number[];
@@ -156,7 +192,6 @@ export interface ModelConnection {
   id: string;
   revision: number;
   provider: "qwen" | "deepseek" | "openai_compatible";
-  api_protocol?: "openai" | "openai_responses" | "anthropic";
   base_url: string;
   model: string;
   credential_ref: string;
@@ -185,6 +220,7 @@ export interface RenderInput {
   inner_bbox_dense_shrink_y: number;
   font_unify_mode: string;
   source_cleanup_strategy: string;
+  engine: string;
 }
 export interface RuntimeInput {
   job_id: string;
@@ -217,7 +253,7 @@ export interface JobProgressView {
   total?: number | null;
   percent?: number | null;
   /**
-   * page|batch|step|percent，skip_serializing_if None
+   * page|batch|block|step|percent，skip_serializing_if None
    */
   unit?: string | null;
 }
@@ -253,13 +289,32 @@ export interface JobActionsView {
   open_job: ActionLinkView;
   open_artifacts: ActionLinkView;
   cancel: ActionLinkView;
-  rerun: ActionLinkView;
+  resume: ActionLinkView1;
+  rerun: ActionLinkView2;
   download_pdf: ActionLinkView;
   open_markdown: ActionLinkView;
   open_markdown_raw: ActionLinkView;
   download_bundle: ActionLinkView;
 }
 export interface ActionLinkView {
+  enabled: boolean;
+  method: string;
+  path: string;
+  url: string;
+}
+/**
+ * 从断点续跑：POST /api/v1/jobs/:job_id/actions/resume。
+ */
+export interface ActionLinkView1 {
+  enabled: boolean;
+  method: string;
+  path: string;
+  url: string;
+}
+/**
+ * 旧名，和 resume 同值，地址是旧地址 actions/rerun。新代码读 resume。
+ */
+export interface ActionLinkView2 {
   enabled: boolean;
   method: string;
   path: string;
@@ -330,6 +385,10 @@ export interface BookSummaryView {
    */
   thumbnail_url?: string | null;
   file_size_bytes?: number | null;
+  /**
+   * 书的编号（原文 PDF 的 sha256），原文、封面在 /documents/{document_id}/files/ 下；查不到书的任务是 null
+   */
+  document_id?: string | null;
 }
 export interface JobContractsView {
   schema_version: string;
@@ -519,11 +578,24 @@ export interface TranslationRequestRecoveryView {
 export interface JobListView {
   items: JobListItemView[];
   invocation_summary: JobListInvocationSummaryView;
+  /**
+   * 实际生效的条数上限。越界（0 或大于 500）是 400，不会被夹，所以总等于请求的值；没传是 20。
+   */
+  limit: number;
+  offset: number;
+  /**
+   * 这一页之后还有没有。
+   */
+  has_more: boolean;
 }
 /**
  * job_types.rs :: JobListItemView — 列表卡用；关键字段 job_id / display_name / workflow / status / stage_snapshot / progress(经 stage_snapshot.progress) / cover_url 均在契约内。
  */
 export interface JobListItemView {
+  /**
+   * 复用了哪个任务的产物（OCR / 译文）；顺着它能找到真正持有译文的任务。没有复用时为 null。
+   */
+  source_artifact_job_id?: string | null;
   job_id: string;
   display_name: string;
   workflow: WorkflowKind;
@@ -551,12 +623,50 @@ export interface JobListItemView {
   updated_at: string;
   detail_path: string;
   detail_url: string;
+  failure?: JobFailureBriefView;
+}
+/**
+ * backend/packages/retainpdf-jobs/src/views/job_types.rs :: JobFailureBriefView — 列表里那份精简失败信息。只有失败的任务才带（JobListItemView.failure），成功 / 进行中的任务整个键不出现，不是 null。只放「一眼能判断该怎么办」的几项，不带 raw_excerpt / traceback；要完整错误按需去打任务详情（那边的 failure 是 JobFailureInfo）。root_cause / suggestion / provider 为空时整个键不出现（不是 null）。
+ */
+export interface JobFailureBriefView {
+  /**
+   * 面向用户的分类：provider / translation / timeout / render / internal …
+   */
+  category: string;
+  /**
+   * 失败发生在哪一段：ocr / translation / render
+   */
+  stage: string;
+  /**
+   * 能不能重试。
+   */
+  retryable: boolean;
+  /**
+   * 一句话结论。
+   */
+  summary: string;
+  /**
+   * 根因；没有时键不出现。
+   */
+  root_cause?: string;
+  /**
+   * 建议的处理办法；没有时键不出现。
+   */
+  suggestion?: string;
+  /**
+   * 上游是谁（mineru / deepseek …），排查时第一眼要看的；没有时键不出现。
+   */
+  provider?: string;
 }
 export interface JobListInvocationSummaryView {
   stage_spec_count: number;
   unknown_count: number;
 }
 export interface ListJobsQuery {
+  /**
+   * false 只读库里的任务摘要，不导入事件历史（首屏更快）；省略或 true 是完整的实时阶段。
+   */
+  include_live_stage?: boolean;
   limit?: number;
   offset?: number;
   status?: JobStatusKind;

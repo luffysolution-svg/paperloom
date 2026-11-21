@@ -1,7 +1,7 @@
 """OCR-local glossary JSON parsing (stage-contract duplicate).
 
 Duplicated normalization from
-retainpdf_pipeline.translate.core.terms.glossary (``parse_glossary_json``).
+retainpdf_translation.core.terms.glossary (``parse_glossary_json``).
 
 Stage boundary note: this returns plain ``list[dict]`` payloads, not
 translate's ``GlossaryEntry`` objects. The translate stage normalizes dicts

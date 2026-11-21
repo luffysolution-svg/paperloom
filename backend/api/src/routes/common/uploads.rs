@@ -1,9 +1,9 @@
 use std::num::NonZeroU64;
 
-use retain_core::config::effective_upload_max_bytes;
+use retainpdf_core::config::effective_upload_max_bytes;
 
 use crate::app::AppState;
-use crate::services::uploads::api::UploadApiDeps;
+use crate::services::ingest::UploadApiDeps;
 
 pub struct UploadRouteDeps<'a> {
     pub(crate) uploads: UploadApiDeps<'a>,

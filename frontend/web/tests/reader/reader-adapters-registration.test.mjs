@@ -70,13 +70,12 @@ test("host registration injects only declared ReaderAdapters fields", () => {
 });
 
 test("host registration preserves the exact injected host implementations", () => {
-  assert.equal(retainPdfReaderAdapters.askDocumentAi, ext.askLibraryAi);
+  // 这里只列**还存在**的适配器。曾经还列着 askDocumentAi / aiOperations /
+  // conversations / askChat（AI 问答面板）和 createFavorite 那三个（收藏）——
+  // 两边都被删光之后，assert.equal(undefined, undefined) 恒真，那几行守的是空气。
   assert.equal(retainPdfReaderAdapters.credentialsPort, ext.defaultCredentialsStatePort);
   assert.equal(retainPdfReaderAdapters.apiPrefix, ext.API_PREFIX);
   assert.equal(retainPdfReaderAdapters.fetchDocumentByJobId, ext.fetchDocumentByJobId);
-  assert.equal(retainPdfReaderAdapters.createFavorite, ext.createFavorite);
-  assert.equal(retainPdfReaderAdapters.fetchFavorites, ext.fetchFavorites);
-  assert.equal(retainPdfReaderAdapters.deleteFavorite, ext.deleteFavorite);
   assert.equal(retainPdfReaderAdapters.resolveMarkdownAssetUrl, ext.resolveMarkdownAssetUrl);
   assert.equal(retainPdfReaderAdapters.resolveReaderDownloadUrls, ext.resolveReaderDownloadUrls);
   assert.equal(retainPdfReaderAdapters.resolveReaderDownloadName, ext.resolveReaderDownloadName);
@@ -87,7 +86,4 @@ test("host registration preserves the exact injected host implementations", () =
   assert.equal(retainPdfReaderAdapters.liveTranslation, ext.liveTranslationPort);
   assert.equal(retainPdfReaderAdapters.pdf, ext.pdfPort);
   assert.equal(retainPdfReaderAdapters.sessionData, ext.sessionDataPort);
-  assert.equal(retainPdfReaderAdapters.aiOperations, ext.aiOperationsPort);
-  assert.equal(retainPdfReaderAdapters.conversations, ext.conversationPort);
-  assert.equal(retainPdfReaderAdapters.askChat, ext.askChatPort);
 });

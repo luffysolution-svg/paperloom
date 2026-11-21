@@ -73,6 +73,10 @@ export function summarizeMathMode(job: { request_payload_math_mode?: unknown } |
 }
 
 export function formatSizeBytes(value: unknown): string {
+  // 没有大小（按需生成、还没生成的文件）是 null：不能经 Number(null) 变成「0 B」。
+  if (value === null || value === undefined || `${value}`.trim() === "") {
+    return "-";
+  }
   const size = Number(value);
   if (!Number.isFinite(size) || size < 0) {
     return "-";
@@ -128,6 +132,20 @@ export function summarizeArtifactLabel(key: unknown): string {
       return "Pipeline Summary";
     case "events_jsonl":
       return "Events JSONL";
+    case "side_by_side_pdf":
+      return "对照 PDF";
+    case "layout_docx":
+      return "Word 排版稿";
+    case "artifact_bundle_zip":
+      return "完整任务包";
+    case "render_config_json":
+      return "Render Config";
+    case "translation_checkpoint_json":
+      return "Translation Checkpoint";
+    case "translation_request_journal_jsonl":
+      return "Translation Requests JSONL";
+    case "typst_source":
+      return "Typst Source";
     default:
       return `${key || "-"}`.trim() || "-";
   }

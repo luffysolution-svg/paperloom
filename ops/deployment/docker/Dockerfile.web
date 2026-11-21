@@ -45,6 +45,8 @@ COPY --from=frontend-builder /app/frontend/web/ /usr/share/nginx/html/
 COPY ops/deployment/docker/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY ops/deployment/docker/nginx-mjs.types.conf /etc/nginx/conf.d/mjs.types.conf
 COPY ops/deployment/docker/entrypoint-web.sh /docker-entrypoint.d/99-runtime-config.sh
+# 排在 20-envsubst-on-templates.sh 前面：占位 key 换成 app 生成的那把再展开模板。
+COPY ops/deployment/docker/backend-api-key.envsh /docker-entrypoint.d/15-backend-api-key.envsh
 COPY LICENSE LICENSE-MIT THIRD_PARTY_NOTICES.md CORRESPONDING_SOURCE.md /usr/share/licenses/paperloom/
 COPY resources/licenses /usr/share/licenses/paperloom/dependencies/
 
@@ -58,6 +60,6 @@ RUN rm -rf \
   /usr/share/nginx/html/tailwind.config.js \
   /usr/share/nginx/html/.gitignore
 
-RUN chmod +x /docker-entrypoint.d/99-runtime-config.sh
+RUN chmod +x /docker-entrypoint.d/99-runtime-config.sh /docker-entrypoint.d/15-backend-api-key.envsh
 
 EXPOSE 80

@@ -102,7 +102,12 @@ if (indexHtml.includes("runtime-config.local.js")) {
   fail("Desktop index.html still references runtime-config.local.js");
 }
 
-const appBundleJs = readFile("dist/app.bundle.js");
+const appEntryJs = readFile("dist/app.bundle.js");
+const appChunkFiles = collectFiles(path.join(frontendRoot, "dist", "chunks", "app"), new Set([".js"]));
+if (!appChunkFiles.length) {
+  fail("Desktop frontend is missing home lazy chunks (dist/chunks/app)");
+}
+const appBundleJs = [appEntryJs, ...appChunkFiles.map((file) => fs.readFileSync(file, "utf8"))].join("\n");
 if (!appBundleJs.includes("./vendor/") && !appBundleJs.includes("vendor/pdfjs")) {
   // bundle may inline resolver strings differently; require credentials gate markers
 }

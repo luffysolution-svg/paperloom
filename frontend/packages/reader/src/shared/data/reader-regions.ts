@@ -18,30 +18,19 @@ export type ReaderRegion = {
   status: string;
   assetIds: string[];
   assetUrls: string[];
+  /** 页内阅读顺序（后端已按 (页, 顺序) 排好；老后端没有这几项）。 */
+  readingOrder?: number;
+  /** document.v1 的 sub_type，词表随 provider 不同（见 reader-blocks.ts）。 */
+  subType?: string;
+  /** title = 1，heading = 2；只在标题块上有。 */
+  headingLevel?: number;
+  /** 同一段被拆成几块（跨页 / 跨栏）时共享的组 id。 */
+  continuationGroupId?: string;
+  /** 组内成员各自那一截译文；translated.text 在组内每个成员上都是整段。 */
+  translatedBlockText?: string;
 };
 
 export type ReaderRegionKind = "formula" | "table" | "figure" | "text" | "region";
-
-export type ReaderRegionSelection = {
-  selectionType: "region";
-  region: ReaderRegion;
-  kind: ReaderRegionKind;
-  page: number;
-  pane: ReaderPaneId;
-  /** 视口坐标，用于浮条定位。 */
-  rect: ReaderRegionRect;
-};
-
-export type ReaderTextSelection = {
-  selectionType: "text";
-  quote: string;
-  page: number;
-  pane: ReaderPaneId;
-  /** 视口坐标，用于浮条定位。 */
-  rect: ReaderRegionRect;
-};
-
-export type ReaderSelection = ReaderRegionSelection | ReaderTextSelection;
 
 export type ReaderPageMetadata = {
   page: number;
@@ -115,9 +104,35 @@ function normalizeBox(value: unknown): ReaderRegionBox | null {
   };
 }
 
+// 两种拼写都认：第一次归一化读的是接口的 snake_case，第二次读的是自己产出的 camelCase。
+function optionalBlockFields(item: Record<string, unknown> | null): Partial<ReaderRegion> {
+  const out: Partial<ReaderRegion> = {};
+  const order = Number(item?.reading_order ?? item?.readingOrder);
+  if (item?.reading_order != null || item?.readingOrder != null) {
+    if (Number.isFinite(order)) out.readingOrder = order;
+  }
+  const level = Number(item?.heading_level ?? item?.headingLevel);
+  if (Number.isFinite(level) && level > 0) out.headingLevel = level;
+  const subType = `${item?.sub_type ?? item?.subType ?? ""}`.trim();
+  if (subType) out.subType = subType;
+  const group = `${item?.continuation_group_id ?? item?.continuationGroupId ?? ""}`.trim();
+  if (group) out.continuationGroupId = group;
+  const blockText = item?.translated_block_text ?? item?.translatedBlockText;
+  if (typeof blockText === "string" && blockText) out.translatedBlockText = blockText;
+  return out;
+}
+
+/**
+ * 接口响应（`{ items: [...] }`，可带 `{ data }` 信封）→ ReaderRegion[]。
+ *
+ * 必须幂等：宿主的 loadSessionSnapshot 已经归一化过一次，session-assets 又会再调一次。
+ * 以前这里只认 `{ items }`，第二次拿到的是数组，直接返回空 —— 阅读器里的内容块数恒为 0，
+ * 悬停红框、整块复制、点块浮条全部失效（接口明明返回了 875 块）。
+ */
 export function normalizeReaderRegions(payload: unknown): ReaderRegion[] {
-  const object = asObject(unwrapData(payload));
-  const items = Array.isArray(object?.items) ? object.items : [];
+  const unwrapped = unwrapData(payload);
+  const object = asObject(unwrapped);
+  const items = Array.isArray(unwrapped) ? unwrapped : Array.isArray(object?.items) ? object.items : [];
   const regions: ReaderRegion[] = [];
   for (const raw of items) {
     const item = asObject(raw);
@@ -132,12 +147,13 @@ export function normalizeReaderRegions(payload: unknown): ReaderRegion[] {
       markdown: `${item?.markdown || ""}`,
       regionType: `${item?.region_type || item?.regionType || ""}`,
       status: `${item?.status || ""}`,
-      assetIds: (Array.isArray(item?.asset_ids) ? item.asset_ids : [])
+      assetIds: (Array.isArray(item?.asset_ids) ? item.asset_ids : Array.isArray(item?.assetIds) ? item.assetIds : [])
         .map((value) => `${value || ""}`.trim())
         .filter(Boolean),
-      assetUrls: (Array.isArray(item?.asset_urls) ? item.asset_urls : [])
+      assetUrls: (Array.isArray(item?.asset_urls) ? item.asset_urls : Array.isArray(item?.assetUrls) ? item.assetUrls : [])
         .map((value) => `${value || ""}`.trim())
         .filter(Boolean),
+      ...optionalBlockFields(item),
     });
   }
   return regions;
@@ -188,6 +204,18 @@ export function readerRegionContent(region: ReaderRegion, pane: ReaderPaneId): s
   const box = regionBoxForPane(region, pane);
   // source 必须优先原文；否则 translation markdown 会让源文件复制出译文。
   return `${box.text || region.markdown || ""}`.trim();
+}
+
+/**
+ * 悬停「复制」写进剪贴板的内容。
+ * - 译文栏没有译文（公式、保留原文的块）时退回原文 —— 右栏这时显示的就是原文；
+ * - 行间公式给 LaTeX（去掉 `$$` 包裹），和浮条里「复制 LaTeX」一致；
+ * - 正文里的行内公式本来就是 `$m$` 这种写法，原样保留。
+ */
+export function readerRegionCopyText(region: ReaderRegion, pane: ReaderPaneId): string {
+  const content = readerRegionContent(region, pane)
+    || (pane === "translated" ? `${region.source.text || ""}`.trim() : "");
+  return readerRegionKindForRegion(region) === "formula" ? extractReaderFormulaLatex(content) : content;
 }
 
 export function extractReaderFormulaLatex(value: string): string {
@@ -348,9 +376,14 @@ function normalizeReaderAssetPath(value: unknown): string {
   } catch {
     try { path = decodeURIComponent(path); } catch { /* keep raw path */ }
   }
-  const apiMarker = "/markdown/images/";
-  const apiIndex = path.toLowerCase().indexOf(apiMarker);
-  if (apiIndex >= 0) path = path.slice(apiIndex + apiMarker.length);
+  // 新地址 /files/output/ocr/images/、旧地址 /markdown/images/ 都认。
+  for (const apiMarker of ["/files/output/ocr/images/", "/markdown/images/"]) {
+    const apiIndex = path.toLowerCase().indexOf(apiMarker);
+    if (apiIndex >= 0) {
+      path = path.slice(apiIndex + apiMarker.length);
+      break;
+    }
+  }
   return path.replace(/^\.?\/?(?:images\/)?/i, "").replace(/\/{2,}/g, "/");
 }
 

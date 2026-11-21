@@ -3,7 +3,7 @@
 后端测试镜像在 backend-root/contracts/pipeline-stdout.v1.schema.json；本测试保证
 python worker 的发射面与契约一致：常量文件与 schema 双向对齐、每个契约
 标签在源码里有真实发射点、artifact_published 的 key 不超出契约。
-消费者侧锁在 rust_api crates/retain-jobs stdout_parser/contract_lock.rs。
+消费者侧锁在 rust_api crates/retainpdf-runner stdout_parser/contract_lock.rs。
 改协议先改 schema，两端测试同步变绿才算完成。
 """
 
@@ -11,13 +11,11 @@ from __future__ import annotations
 
 import json
 import re
-import sys
 from pathlib import Path
 
 REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
-from retainpdf_pipeline.services.pipeline_shared import contracts  # noqa: E402
+from retainpdf_base import contracts  # noqa: E402
 
 BACKEND_ROOT = REPO_SCRIPTS_ROOT.parent
 SCHEMA_ROOT = BACKEND_ROOT / "contracts"
@@ -31,6 +29,7 @@ EMIT_SCAN_DIRS = [
     REPO_SCRIPTS_ROOT / "retainpdf_pipeline" / "entrypoints",
     REPO_SCRIPTS_ROOT / "retainpdf_pipeline" / "ocr",
     REPO_SCRIPTS_ROOT / "retainpdf_pipeline" / "translate",
+    BACKEND_ROOT / "translation" / "retainpdf_translation",
     REPO_SCRIPTS_ROOT / "retainpdf_pipeline" / "render",
 ]
 
@@ -111,8 +110,8 @@ def test_checkpoint_event_has_real_producer() -> None:
     checkpoint_contract = SCHEMA["checkpoint_event"]
     assert checkpoint_contract["event_type"] == "pipeline_checkpoint"
     session_source = (
-        REPO_SCRIPTS_ROOT
-        / "retainpdf_pipeline/translate/workflow/checkpoint/session.py"
+        BACKEND_ROOT
+        / "translation/retainpdf_translation/workflow/checkpoint/session.py"
     ).read_text(encoding="utf-8")
     assert '"event_type": "pipeline_checkpoint"' in session_source
     for field in checkpoint_contract["required_payload_fields"]:
@@ -123,8 +122,8 @@ def test_stage_observation_event_has_real_producer() -> None:
     stage_contract = SCHEMA["stage_observation_event"]
     assert stage_contract["schema"] == "pipeline_stage_observation_v1"
     events_source = (
-        REPO_SCRIPTS_ROOT
-        / "retainpdf_pipeline/services/pipeline_shared/events.py"
+        BACKEND_ROOT
+        / "base/retainpdf_base/events.py"
     ).read_text(encoding="utf-8")
     assert "PIPELINE_STAGE_OBSERVATION_SCHEMA" in events_source
     for event_type in stage_contract["event_types"]:

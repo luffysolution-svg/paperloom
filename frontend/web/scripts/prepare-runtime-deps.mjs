@@ -19,17 +19,17 @@ function ensureDependencyRoot(packageName) {
   }
 }
 
-function copyAsset(from, target) {
+function copyPath(from, to) {
   const stat = fs.statSync(from);
   if (stat.isDirectory()) {
-    fs.mkdirSync(target, { recursive: true });
-    for (const child of fs.readdirSync(from)) {
-      copyAsset(path.join(from, child), path.join(target, child));
+    fs.mkdirSync(to, { recursive: true });
+    for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
+      copyPath(path.join(from, entry.name), path.join(to, entry.name));
     }
     return;
   }
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  fs.copyFileSync(from, target);
+  fs.mkdirSync(path.dirname(to), { recursive: true });
+  fs.copyFileSync(from, to);
 }
 
 function copyPackageAssets(packageName, entries, targetDirName = packageName) {
@@ -40,7 +40,9 @@ function copyPackageAssets(packageName, entries, targetDirName = packageName) {
     if (!fs.existsSync(from)) {
       throw new Error(`Missing frontend runtime dependency asset: ${from}`);
     }
-    copyAsset(from, path.join(targetRoot, entry));
+    const target = path.join(targetRoot, entry);
+    fs.rmSync(target, { recursive: true, force: true });
+    copyPath(from, target);
   }
 }
 

@@ -1,18 +1,12 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 from unittest import mock
 
 import requests
 
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-
-from retainpdf_pipeline.translate.workflow.batching.pending_units import _translate_batch_or_keep_origin
-from retainpdf_pipeline.translate.llm.shared.control_context import build_translation_control_context
+from retainpdf_translation.workflow.batching.pending_units import _translate_batch_or_keep_origin
+from retainpdf_translation.llm.shared.control_context import build_translation_control_context
 
 
 def _item(item_id: str, text: str, **overrides):
@@ -34,7 +28,7 @@ def test_translate_batch_wrapper_marks_transport_failure_failed() -> None:
         _item("b", "This paragraph keeps enough content for translation even when the network request times out."),
     ]
     with mock.patch(
-        "retainpdf_pipeline.translate.workflow.batching.pending_units.translate_batch",
+        "retainpdf_translation.workflow.batching.pending_units.translate_batch",
         side_effect=requests.ConnectionError("Read timed out"),
     ):
         result = _translate_batch_or_keep_origin(

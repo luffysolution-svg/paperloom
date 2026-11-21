@@ -41,8 +41,8 @@ async fn job_events_route_prefers_formal_failure_fields() {
         raw_error_excerpt: Some("deadline exceeded".to_string()),
         raw_diagnostic: None,
         ai_diagnostic: None,
-        resume_from: None,
-        recovery_hint: None,
+            resume_from: None,
+            recovery_hint: None,
     }));
     state.db.save_job(&job).expect("save job");
     state
@@ -95,7 +95,7 @@ async fn job_events_route_prefers_formal_failure_fields() {
     let response = app
         .oneshot(
             Request::builder()
-                .uri(format!("/api/v1/jobs/{}/events", job.job_id))
+                .uri(format!("/api/v1/jobs/{}/progress/events", job.job_id))
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("events request"),
@@ -197,7 +197,7 @@ async fn failed_job_events_include_contract_readiness_payload() {
     let response = app
         .oneshot(
             Request::builder()
-                .uri(format!("/api/v1/jobs/{job_id}/events"))
+                .uri(format!("/api/v1/jobs/{job_id}/progress/events"))
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("events request"),

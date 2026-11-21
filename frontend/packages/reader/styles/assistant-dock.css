@@ -1,55 +1,22 @@
-/* 阅读辅助 Dock：PDF 模式属于顶栏，Markdown / AI 属于独立右侧工具层。 */
-.reader-assistant-rail {
-  position: fixed;
-  top: 50%;
-  right: 12px;
-  z-index: 34;
-  display: grid;
-  gap: 4px;
-  padding: 5px;
-  border: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--paper) 88%, transparent);
-  box-shadow: 0 12px 34px color-mix(in srgb, var(--shadow-color) 11%, transparent);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  transform: translateY(-50%);
-}
-
-.reader-assistant-rail-button {
-  display: grid;
-  place-items: center;
-  gap: 2px;
-  width: 38px;
-  height: 40px;
-  padding: 3px 0;
-  border: 0;
-  border-radius: 13px;
-  color: color-mix(in srgb, var(--ink) 62%, var(--muted));
-  background: transparent;
-  font: inherit;
-  cursor: pointer;
-  transition: color 130ms ease, background 130ms ease, transform 100ms ease;
-}
-
-.reader-assistant-rail-button span {
-  font-size: 8px;
-  font-weight: 760;
-  letter-spacing: 0.04em;
-}
-
-.reader-assistant-rail-button:hover,
-.reader-assistant-rail-button:focus-visible {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
-  outline: none;
-}
-
-.reader-assistant-rail-button:active {
-  transform: scale(0.94);
-}
-
+/* 阅读页**唯一**的面板启动器。按钮在顶栏托盘里（chrome.css 的 .reader-panel-toggle），开着 = 面板顶上的 tab 条。
+ *
+ * 这里原来只管一半：竖条上只有 Markdown / AI / 阅读路径 / 画布 / 终端，
+ * 批注 / AI 批注 / 摘录 和三路下载在另一个可拖动圆钮（FAB）里。而这份文件
+ * 底下曾经有一条
+ *
+ *     .reader-react-root.is-assistant-open .reader-fab { opacity: 0; ... }
+ *
+ * 也就是说**只要任何 dock 面板开着，那 6 个功能就全部不可达**，键盘也没有
+ * 入口。圆钮整套已经删掉，这条规则连同它一起走了。
+ *
+ * 加面板时这里一行都不用改：两种形态都从 readerDockTabs() 渲染。 */
 .reader-assistant-dock-header {
+  /* 容器查询钉在 header 上而不是 tab 条上：tab 条是 flex 子项，给它
+     container-type: inline-size 等于 contain: inline-size，宽度就不再由内容
+     决定，`flex: 0 1 auto` 会塌成 0。header 有显式宽度（= dock 宽度），
+     是唯一安全的查询对象。 */
+  container-type: inline-size;
+  container-name: reader-dock;
   position: fixed;
   top: 60px;
   right: 0;
@@ -67,13 +34,45 @@
   -webkit-backdrop-filter: blur(18px);
 }
 
+/* 8 个 tab 放不下怎么办。
+ *
+ * dock 最窄 30vw（reader-ai-split-constraints.ts 的 MIN_ASSISTANT_PERCENT），
+ * 1280 的屏上只有 384px。8 个带中文标签的 tab 一行要 ~560px —— 必然放不下。
+ * 三层降级，从轻到重：
+ *
+ *   1. min-width: 0 + 横向滚动：永远不把关闭按钮挤出去，也不撑破 header；
+ *   2. dock 窄于 700px（容器查询）只留图标，标签走 title。700 是量出来的：
+ *      8 个带中文标签的 tab 连同内边距要 ~664px，加上关闭按钮和 header 的
+ *      内边距正好在 720 附近临界 —— 1280 的屏上默认 50vw = 640，必须落在
+ *      图标那一侧，否则一打开就带着 51px 的横向滚动；
+ *   3. 只剩图标还是放不下时就横向滚动（滚动条藏起来，但滑得动）。
+ *
+ * 顺序要紧：容器查询那段必须写在 .reader-assistant-dock-tab 的基础规则**之后**，
+ * 否则同特异性下被后面的 padding/gap 覆盖回去 —— 看上去写了降级，实际没生效。
+ *
+ * 用容器查询而不是 @media：dock 的宽度是可拖的（--reader-ai-split-width），
+ * 和视口宽度没有固定关系，按视口判断会在窄 dock + 宽屏时判错。 */
 .reader-assistant-dock-tabs {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 3px;
   padding: 3px;
   border-radius: 11px;
   background: color-mix(in srgb, var(--ink) 4%, transparent);
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.reader-assistant-dock-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+/* 关闭按钮永远不被 tab 条挤掉 —— 挤掉了就只能靠 Esc 关面板。 */
+.reader-assistant-dock-close {
+  flex: 0 0 auto;
 }
 
 .reader-assistant-dock-tab,
@@ -89,12 +88,55 @@
 }
 
 .reader-assistant-dock-tab {
+  position: relative;
+  flex: 0 0 auto;
   gap: 6px;
   min-height: 30px;
   padding: 0 10px;
   border-radius: 8px;
   font-size: 11.5px;
   font-weight: 680;
+  white-space: nowrap;
+}
+
+.reader-assistant-dock-tab:disabled {
+  opacity: 0.34;
+  cursor: default;
+}
+
+/* 条数角标：0 不画（「0 条」比不画更像坏了），但**tab 本身永远在** ——
+ * 条数为 0 恰恰是最需要入口的时候（用户根本不知道有 AI 批注这回事）。 */
+.reader-assistant-dock-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font-size: 9.5px;
+  font-weight: 750;
+  line-height: 1;
+}
+
+@container reader-dock (max-width: 700px) {
+  .reader-assistant-dock-tab-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  .reader-assistant-dock-tab {
+    gap: 0;
+    padding: 0 7px;
+  }
 }
 
 .reader-assistant-dock-tab.is-active {
@@ -121,13 +163,31 @@
   transition: none;
 }
 
-.reader-react-root.is-assistant-open .reader-react-hud {
+/* 书页铺到窗口底，页码缩放那一条浮在书页上（2026-11-06 用户要的：以前底下给它留出 66px 一条灰带，书页截在灰带上面）。
+ * 书末尾垫出同样高的空白：滚到最后一页，最后几行能滚到浮条上面，不被它压着。 */
+.reader-react-grid {
+  padding-bottom: var(--reader-hud-room, 66px);
+}
+
+/* dock 打开时，视口右半边是面板，所以「居中」得按 PDF 栏算，不是按视口。
+ *
+ * 只有 HUD 一直是这么做的；两条错误提示原来留在 left: 50%，中心正好落在分栏线
+ * 上 —— 一半画在 PDF 上、一半画在面板上，而它们偏偏是最需要读清楚的两条文案。
+ */
+.reader-react-root.is-assistant-open .reader-react-hud,
+.reader-react-root.is-assistant-open .reader-react-error,
+.reader-react-root.is-assistant-open .reader-error-notice {
   left: calc((100dvw - var(--reader-ai-split-width)) / 2);
 }
 
-.reader-react-root.is-assistant-open .reader-fab {
-  opacity: 0;
-  pointer-events: none;
+/* 宽度也得按栏算：PDF 栏最窄到 35vw（见 reader-ai-split-constraints.ts），
+ * 1280 宽的屏上只剩 448px，居中了照样两头溢到面板上。 */
+.reader-react-root.is-assistant-open .reader-react-error {
+  max-width: min(480px, calc(100dvw - var(--reader-ai-split-width) - 32px));
+}
+
+.reader-react-root.is-assistant-open .reader-error-notice {
+  max-width: min(520px, calc(100dvw - var(--reader-ai-split-width) - 32px));
 }
 
 .reader-react-root.is-assistant-open .reader-notes-panel--workspace,
@@ -149,10 +209,6 @@
 }
 
 @media (max-width: 899px) {
-  .reader-assistant-rail {
-    right: 8px;
-  }
-
   .reader-assistant-dock-header {
     top: 58px;
     width: 100dvw;
@@ -162,6 +218,13 @@
   .reader-react-root.is-assistant-open .reader-react-scroll-shell {
     visibility: hidden;
     pointer-events: none;
+  }
+
+  /* 面板铺满全屏时 PDF 栏整个藏掉了，HUD 控制的东西看不见；它还按「PDF 栏中心」
+   * 定位，正好压在 Markdown 面板底部的「译文/原文/双语」和搜索框上，375 宽时
+   * 页码按钮直接跑到屏幕外（left=-29）。关面板 HUD 就回来。 */
+  .reader-react-root.is-assistant-open .reader-react-hud {
+    display: none;
   }
 
   .reader-react-root.is-assistant-open .reader-notes-panel--workspace,
@@ -179,8 +242,3 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .reader-assistant-rail-button {
-    transition: none;
-  }
-}

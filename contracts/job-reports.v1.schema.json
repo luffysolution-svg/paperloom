@@ -1,0 +1,957 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "retainpdf/contracts/job-reports/v1",
+  "title": "任务报告契约（Job Reports）",
+  "description": "任务报告 /api/v1/jobs/:job_id/reports/…：失败原因、质量体检卡、质量问题逐条清单、翻译诊断。生产者：backend/packages/retainpdf-jobs/src/views/job_types.rs（JobDiagnosticsView、OcrAmbiguityView）、reports/quality/mod.rs（QualitySummaryView、QualityItemsView）、views/translation.rs（TranslationDiagnosticsView）、backend/api/src/routes/jobs/reports.rs（查询参数 QualityItemsParams）；消费者：@retainpdf/contracts/job-reports 生成 DTO（前端以后用它换掉 frontend/packages/api/src/quality.ts、jobs-actions.ts 里手写的类型）。模型用量 reports/usage 在 token-usage.v1，精修报告 reports/refine 在 refine-report.v1；reports/translation-qa、reports/layout-fit 还没有契约。所有响应为 {code, message, data} 信封，本契约描述 data 部分。键的写法照 Rust 实际序列化：类型是 [\"x\", \"null\"] 的键总在、空时是 null；没写进 required 的返回键是空时整个省掉（不是 null）。查询参数 additionalProperties: false 对应 Rust 的 deny_unknown_fields。JsonValue、TranslationRequestRecoveryView 是 job-status.v1 的副本，OcrAmbiguityResolutionKind 和 job-actions.v1 共用（契约只许本文件内 $ref），contracts/tests/job-shared-definitions-parity.test.mjs 守着结构一致。Rust 侧由 backend/api/src/api_tests/job_actions_reports_contract.rs 对真实接口的返回钉键集合。改契约先改本文件，再重新生成 DTO 并让两端测试变绿。",
+  "base_path": "/api/v1",
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/api/v1/jobs/:job_id/reports/failure",
+      "client_name": "getFailureReport",
+      "transport": "json",
+      "output": "JobDiagnosticsView",
+      "rust_view": "JobDiagnosticsView",
+      "ts_consumer": "@retainpdf/contracts/job-reports :: JobDiagnosticsView",
+      "note": "失败原因。任务没失败也是 200（summary 写「任务当前没有失败诊断」，failure_code 为 null）。OCR 派发拿不准时 failure_code=ocr_request_ambiguous、ocr_ambiguity 给出怎么处理（见 job-actions.v1 的 resolveOcrAmbiguity）。任务不存在 404；旧目录格式的任务 409。"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/jobs/:job_id/reports/quality",
+      "client_name": "getQualityReport",
+      "transport": "json",
+      "output": "QualitySummaryView",
+      "rust_view": "QualitySummaryView",
+      "ts_consumer": "@retainpdf/contracts/job-reports :: QualitySummaryView",
+      "note": "质量体检卡：译前准备、质检、排版、精修各取报告的 summary 段，外加没翻译的块数。哪份报告还没有，那一段就是 null（不是错误）；任务还没有输出目录也是 200。任务不存在 404；旧目录格式的任务 409。"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/jobs/:job_id/reports/quality/items",
+      "client_name": "listQualityItems",
+      "transport": "json",
+      "query": "QualityItemsQuery",
+      "output": "QualityItemsView",
+      "rust_view": "QualityItemsView",
+      "ts_consumer": "@retainpdf/contracts/job-reports :: QualityItemsView",
+      "note": "质量问题逐条清单（阅读页标注用）。kind 不对、limit 不在 1..=1000、不认识的参数 400。报告还没有时是空清单。任务不存在 404；旧目录格式的任务 409。"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/jobs/:job_id/reports/translation",
+      "client_name": "getTranslationReport",
+      "transport": "json",
+      "output": "TranslationDiagnosticsView",
+      "rust_view": "TranslationDiagnosticsView",
+      "ts_consumer": "@retainpdf/contracts/job-reports :: TranslationDiagnosticsView",
+      "note": "翻译诊断：流水线写的翻译诊断文件原样给出（去掉了请求里的密钥）。任务在、报告还没生成 404，error.details.reason=not_ready；任务不存在是普通 404；旧目录格式的任务 409。"
+    }
+  ],
+  "definitions": {
+    "JobDiagnosticsView": {
+      "type": "object",
+      "description": "job_types.rs :: JobDiagnosticsView。render_diagnostics、translation_request_recovery 没有时整个键不出现；ocr_ambiguity 没有时是 null。",
+      "additionalProperties": false,
+      "required": [
+        "failure_code",
+        "failed_stage",
+        "failed_substage",
+        "summary",
+        "detail",
+        "suggestion",
+        "retryable",
+        "resume_available",
+        "ocr_ambiguity"
+      ],
+      "properties": {
+        "failure_code": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "失败分类；OCR 派发拿不准时是 ocr_request_ambiguous"
+        },
+        "failed_stage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "failed_substage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "summary": {
+          "type": "string"
+        },
+        "detail": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "suggestion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "resume_available": {
+          "type": "boolean",
+          "description": "同 GET actions/resume 的 can_resume"
+        },
+        "render_diagnostics": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/JsonValue"
+          },
+          "description": "流水线 summary 里的 render_diagnostics 原样给出"
+        },
+        "translation_request_recovery": {
+          "$ref": "#/definitions/TranslationRequestRecoveryView"
+        },
+        "ocr_ambiguity": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/OcrAmbiguityView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "只在任务失败 / 已取消、且最近一次 OCR 派发拿不准时才有"
+        }
+      }
+    },
+    "JsonValue": {
+      "description": "可安全跨线传输的任意 JSON 值；用于 provider 扩展 options 与事件 payload。",
+      "tsType": "null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue }",
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JsonValue"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/JsonValue"
+          }
+        }
+      ]
+    },
+    "LayoutSummary": {
+      "type": "object",
+      "description": "reports/quality/mod.rs :: LayoutSummary。",
+      "additionalProperties": false,
+      "required": [
+        "blocks",
+        "shrunk_blocks",
+        "small_blocks",
+        "small_scale_threshold",
+        "overflow_blocks",
+        "overflow_pages",
+        "min_scale",
+        "min_final_font_size",
+        "math_formulas",
+        "math_failed"
+      ],
+      "properties": {
+        "blocks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "shrunk_blocks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "small_blocks": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "缩放比例低于 small_scale_threshold 的块数"
+        },
+        "small_scale_threshold": {
+          "type": "number",
+          "description": "目前是 0.75"
+        },
+        "overflow_blocks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "overflow_pages": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": "有溢出块的页（从 1 开始），升序去重"
+        },
+        "min_scale": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "min_final_font_size": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "math_formulas": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "math_failed": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "OcrAmbiguityReceiptFieldView": {
+      "type": "object",
+      "description": "job_types.rs :: OcrAmbiguityReceiptFieldView。",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "label",
+        "required",
+        "secret"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "enum": [
+            "task_id",
+            "batch_id",
+            "upload_url",
+            "trace_id"
+          ],
+          "description": "resolve-ocr-ambiguity 请求体里的字段名"
+        },
+        "label": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "secret": {
+          "type": "boolean",
+          "description": "true 时界面按密码框处理，值不进日志"
+        }
+      }
+    },
+    "OcrAmbiguityResolutionKind": {
+      "type": "string",
+      "enum": [
+        "bind_existing_receipt",
+        "accept_duplicate_risk"
+      ],
+      "description": "job_types.rs :: OcrAmbiguityResolutionKind。bind_existing_receipt = 绑定服务商那边已有的任务回执，不再派发；accept_duplicate_risk = 接受可能重复派发（可能重复扣费）。"
+    },
+    "OcrAmbiguityView": {
+      "type": "object",
+      "description": "job_types.rs :: OcrAmbiguityView（presentation/ocr_ambiguity.rs 生成）。",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "provider",
+        "operation",
+        "resolution_revision",
+        "allowed_resolutions",
+        "receipt_fields"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "ambiguous"
+          ]
+        },
+        "provider": {
+          "type": "string",
+          "enum": [
+            "paddle",
+            "mineru"
+          ]
+        },
+        "operation": {
+          "type": "string",
+          "enum": [
+            "submit_local_file",
+            "submit_remote_url",
+            "create_extract_task",
+            "apply_upload_url"
+          ]
+        },
+        "resolution_revision": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "提交 resolve-ocr-ambiguity 时原样带回"
+        },
+        "allowed_resolutions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/OcrAmbiguityResolutionKind"
+          }
+        },
+        "receipt_fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/OcrAmbiguityReceiptFieldView"
+          },
+          "description": "绑定已有回执时要填的字段"
+        }
+      }
+    },
+    "PreparationStatus": {
+      "type": "object",
+      "description": "reports/quality/mod.rs :: PreparationStatus。",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "term_base",
+        "style_guide",
+        "problems"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "description": "term-base.v1.json 的 preparation_mode；没有术语表时是空串"
+        },
+        "term_base": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TermBaseStatus"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "style_guide": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/StyleGuideStatus"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "problems": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "term_base_incomplete",
+              "style_guide_fallback"
+            ]
+          },
+          "description": "空数组表示完整"
+        }
+      }
+    },
+    "QaSnapshot": {
+      "type": "object",
+      "description": "reports/quality/mod.rs :: QaSnapshot。精修前后的质检计数。",
+      "additionalProperties": false,
+      "required": [
+        "violation_count",
+        "by_severity"
+      ],
+      "properties": {
+        "violation_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "by_severity": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "QaSummary": {
+      "type": "object",
+      "description": "reports/quality/mod.rs :: QaSummary。by_* 原样取自报告 summary（键是严重程度 / 检查项 / 问题类型，值是条数）。",
+      "additionalProperties": false,
+      "required": [
+        "generated_at",
+        "item_count",
+        "checked_item_count",
+        "violation_count",
+        "by_severity",
+        "by_check",
+        "by_type"
+      ],
+      "properties": {
+        "generated_at": {
+          "type": "string"
+        },
+        "item_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "checked_item_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "violation_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "by_severity": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": "critical / major / minor → 条数"
+        },
+        "by_check": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "by_type": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "QualityItem": {
+      "type": "object",
+      "description": "reports/quality/mod.rs :: QualityItem。前四个键总在；其余按 kind 出现（Rust 里是 #[serde(flatten)] 的 detail）：layout 有 scale / final_font_size / overflow_pt（报告里没有时是 null），untranslated 有 skip_reason，qa 有 id / check / type / severity / message，escalated 有 categories / attempts。",
+      "additionalProperties": false,
+      "required": [
+        "item_id",
+        "translation_item_id",
+        "page",
+        "reason"
+      ],
+      "properties": {
+        "item_id": {
+          "type": "string",
+          "description": "阅读页的块编号（四位，和 reader/regions 的 item_id 同一套），跳转、取框用它"
+        },
+        "translation_item_id": {
+          "type": "string",
+          "description": "译文条目编号（三位），改译文、看修订历史的接口用它"
+        },
+        "page": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "页码（从 1 开始）；从报告里推不出来时为 null"
+        },
+        "reason": {
+          "type": "string",
+          "description": "layout：overflow / small_scale；untranslated：failed / formula / model_kept / other；qa：问题类型（同 type）；escalated：留给人的原因"
+        },
+        "scale": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "final_font_size": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "overflow_pt": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "skip_reason": {
+          "type": "string"
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "质检问题编号 qa-00001…"
+        },
+        "check": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "severity": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "critical / major / minor"
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "categories": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "attempts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "每次尝试的 动作:结果，例如 patch:rejected/crosses_protected_token"
+        }
+      }
+    },
+    "QualityItemsQuery": {
+      "type": "object",
+      "description": "routes/jobs/reports.rs :: QualityItemsParams（deny_unknown_fields，不认识的参数 400）。",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "layout",
+            "untranslated",
+            "qa",
+            "escalated"
+          ]
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "只看这一页（从 1 开始）"
+        },
+        "severity": {
+          "type": "string",
+          "description": "只对 kind=qa 起作用：critical / major / minor；空串等于不筛"
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "默认 0"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "description": "默认 200"
+        }
+      }
+    },
+    "QualityItemsView": {
+      "type": "object",
+      "description": "reports/quality/mod.rs :: QualityItemsView。",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "total",
+        "offset",
+        "limit",
+        "has_more",
+        "items"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "layout",
+            "untranslated",
+            "qa",
+            "escalated"
+          ]
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "筛选后的总条数"
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "has_more": {
+          "type": "boolean"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/QualityItem"
+          }
+        }
+      }
+    },
+    "QualitySummaryView": {
+      "type": "object",
+      "description": "reports/quality/mod.rs :: QualitySummaryView。哪份报告缺了，那一段就是 null。",
+      "additionalProperties": false,
+      "required": [
+        "job_id",
+        "preparation",
+        "qa",
+        "layout",
+        "refine",
+        "untranslated"
+      ],
+      "properties": {
+        "job_id": {
+          "type": "string"
+        },
+        "preparation": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PreparationStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "译前准备（术语表、风格指南）；两样都没有时为 null"
+        },
+        "qa": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/QaSummary"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "artifacts/translation_qa.v1.json 的摘要"
+        },
+        "layout": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/LayoutSummary"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "artifacts/fit_report.v1.json 的摘要"
+        },
+        "refine": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/RefineSummary"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "artifacts/refine_report.v1.json 的摘要；没精修过为 null"
+        },
+        "untranslated": {
+          "$ref": "#/definitions/UntranslatedSummary"
+        }
+      }
+    },
+    "RefineSummary": {
+      "type": "object",
+      "description": "reports/quality/mod.rs :: RefineSummary。",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "status",
+        "stopped_reason",
+        "generated_at",
+        "qa_before",
+        "qa_after",
+        "applied",
+        "rejected",
+        "skipped",
+        "reject_reasons",
+        "skip_reasons",
+        "escalated_count"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "stopped_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "generated_at": {
+          "type": "string"
+        },
+        "qa_before": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/QaSnapshot"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "qa_after": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/QaSnapshot"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "applied": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rejected": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reject_reasons": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "skip_reasons": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "escalated_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "StyleGuideStatus": {
+      "type": "object",
+      "description": "reports/quality/mod.rs :: StyleGuideStatus。",
+      "additionalProperties": false,
+      "required": [
+        "complete",
+        "llm_status",
+        "rule_count"
+      ],
+      "properties": {
+        "complete": {
+          "type": "boolean"
+        },
+        "llm_status": {
+          "type": "string",
+          "description": "ok 以外都算退回了规则版"
+        },
+        "rule_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "TermBaseStatus": {
+      "type": "object",
+      "description": "reports/quality/mod.rs :: TermBaseStatus。",
+      "additionalProperties": false,
+      "required": [
+        "complete",
+        "term_count",
+        "locked_count",
+        "conflict_count",
+        "batch_count",
+        "failed_batch_ids"
+      ],
+      "properties": {
+        "complete": {
+          "type": "boolean"
+        },
+        "term_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "locked_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "conflict_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "batch_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed_batch_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "TranslationDiagnosticsView": {
+      "type": "object",
+      "description": "views/translation.rs :: TranslationDiagnosticsView。",
+      "additionalProperties": false,
+      "required": [
+        "job_id",
+        "summary"
+      ],
+      "properties": {
+        "job_id": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/JsonValue"
+          },
+          "description": "流水线写的翻译诊断文件原样给出，请求里的密钥已替换掉；字段由流水线定，这里不展开"
+        }
+      }
+    },
+    "TranslationRequestRecoveryView": {
+      "type": "object",
+      "required": [
+        "status",
+        "journal_ready",
+        "unresolved_dispatches",
+        "active_ambiguous_request_keys",
+        "historical_ambiguous_request_keys",
+        "requires_confirmation",
+        "supported_retry_policies",
+        "detail"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "clean",
+            "ambiguous",
+            "corrupt",
+            "blocked",
+            "running",
+            "paused"
+          ]
+        },
+        "journal_ready": {
+          "type": "boolean"
+        },
+        "unresolved_dispatches": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "active_ambiguous_request_keys": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "historical_ambiguous_request_keys": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "requires_confirmation": {
+          "type": "boolean"
+        },
+        "supported_retry_policies": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "block",
+              "accept_duplicate_risk"
+            ]
+          }
+        },
+        "detail": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "UntranslatedSummary": {
+      "type": "object",
+      "description": "reports/quality/mod.rs :: UntranslatedSummary。没翻译的块按原因分开计：只有 failed 是问题，公式、模型判定不用翻（编号、DOI、版权声明……）不是。",
+      "additionalProperties": false,
+      "required": [
+        "failed",
+        "formula",
+        "model_kept",
+        "other"
+      ],
+      "properties": {
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "formula": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "model_kept": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "other": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

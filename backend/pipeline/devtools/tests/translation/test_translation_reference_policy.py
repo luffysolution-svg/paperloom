@@ -1,15 +1,10 @@
-import sys
-from pathlib import Path
 
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
-
-from retainpdf_pipeline.translate.services.policy.payload_rules.legacy_policy_mutations import apply_ref_text_skip
-from retainpdf_pipeline.translate.services.policy.payload_rules.policy_mutations import apply_reference_zone_skip
-from retainpdf_pipeline.translate.services.policy.config import build_translation_policy_config
-from retainpdf_pipeline.translate.services.policy.flow import apply_translation_policies
+from retainpdf_translation.services.policy.payload_rules.legacy_policy_mutations import apply_ref_text_skip
+from retainpdf_translation.services.policy.payload_rules.policy_mutations import apply_reference_zone_skip
+from retainpdf_translation.services.policy.config import build_translation_policy_config
+from retainpdf_translation.services.policy.flow import apply_translation_policies
 
 
 def test_apply_reference_zone_skip_uses_top_level_contract_fields_without_metadata() -> None:

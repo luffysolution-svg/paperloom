@@ -8,9 +8,11 @@ import {
   fetchDocumentByJobId as defaultFetchDocumentByJobId,
   fetchDocumentJobs as defaultFetchDocumentJobs,
   fetchJobStageActions as defaultFetchJobStageActions,
+  resumeJob as defaultResumeJob,
   retryJobStage as defaultRetryJobStage,
 } from "@/platform/api/index.js";
 import type {
+  DocumentJobSummary,
   JobSubmissionView,
   LibraryCardItem,
   LibraryControllerDeps,
@@ -55,6 +57,7 @@ export function createDocumentJobActions({
   fetchDocumentByJobId = defaultFetchDocumentByJobId,
   fetchJobStageActions = defaultFetchJobStageActions,
   retryJobStageApi = defaultRetryJobStage,
+  resumeJobApi = defaultResumeJob,
   cancelJobApi = defaultCancelJob,
   cancelOcrJobApi = defaultCancelOcrJob,
 }: {
@@ -70,6 +73,7 @@ export function createDocumentJobActions({
   fetchDocumentByJobId?: typeof defaultFetchDocumentByJobId;
   fetchJobStageActions?: typeof defaultFetchJobStageActions;
   retryJobStageApi?: typeof defaultRetryJobStage;
+  resumeJobApi?: typeof defaultResumeJob;
   cancelJobApi?: typeof defaultCancelJob;
   cancelOcrJobApi?: typeof defaultCancelOcrJob;
 }) {
@@ -77,7 +81,7 @@ export function createDocumentJobActions({
   async function getDocumentJobs(documentId?: string | null) {
     const normalizedId = `${documentId || ""}`.trim();
     if (!normalizedId) return { items: [] };
-    return fetchDocumentJobs(API_PREFIX, normalizedId) as Promise<any>;
+    return fetchDocumentJobs(API_PREFIX, normalizedId) as Promise<{ items: DocumentJobSummary[] }>;
   }
 
   // 前置条件: jobId 为真实 id(合成 `doc:` 返回 null)。
@@ -139,7 +143,20 @@ export function createDocumentJobActions({
     return result || null;
   }
 
-  // 取消文档下的任务。OCR 走 /ocr/jobs/:id/cancel，其余走 /jobs/:id/cancel。
+  // 「从断点继续」。和阶段重试一样要把回执 promote 到详情 payload：只交给 documentJobs 的话，
+  // 详情的 item 还停在旧的失败任务上（封面不转、进度区显示失败、「翻译」还能点）。
+  // 从渲染续跑时后端原地沿用同一个 job_id，promote 照样把状态改成排队。
+  async function resumeJob(jobId?: string | null): Promise<JobSubmissionView | null> {
+    const normalizedJobId = `${jobId || ""}`.trim();
+    if (!normalizedJobId || normalizedJobId.startsWith("doc:")) return null;
+    const result = await resumeJobApi(normalizedJobId, API_PREFIX) as JobSubmissionView | null;
+    const base = (bookDetailStore.getState().payload || {}) as LibraryCardItem;
+    const documentId = `${result?.document_id || base.document_id || ""}`.trim();
+    if (result && documentId) promoteDocumentToJob(documentId, result, normalizedJobId);
+    return result || null;
+  }
+
+  // 取消文档下的任务。都走 /jobs/:id/cancel（后端按任务类型分支）；OCR 仍经 cancelOcrJob，只为保留演示模式的分流。
   async function cancelJob(
     jobId?: string | null,
     workflow?: string | null,
@@ -151,5 +168,5 @@ export function createDocumentJobActions({
       : cancelJobApi(normalizedJobId, API_PREFIX);
   }
 
-  return { getDocumentJobs, getDocumentByJobId, getJobStageActions, retryJobStage, cancelJob };
+  return { getDocumentJobs, getDocumentByJobId, getJobStageActions, retryJobStage, resumeJob, cancelJob };
 }

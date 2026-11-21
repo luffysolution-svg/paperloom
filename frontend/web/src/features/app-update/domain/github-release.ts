@@ -56,7 +56,13 @@ function versionParts(value = "") {
   };
 }
 
-function compareCoreVersion(latestParts, currentParts) {
+type VersionParts = {
+  core: number[];
+  beta: number | null;
+  stable: boolean;
+};
+
+function compareCoreVersion(latestParts: number[], currentParts: number[]) {
   const length = Math.max(latestParts.length, currentParts.length);
   for (let index = 0; index < length; index += 1) {
     const latestPart = latestParts[index] || 0;
@@ -71,7 +77,7 @@ function compareCoreVersion(latestParts, currentParts) {
   return 0;
 }
 
-function compareBetaVersion(latestParts, currentParts) {
+function compareBetaVersion(latestParts: VersionParts, currentParts: VersionParts) {
   const latestIsBeta = latestParts.beta !== null;
   const currentIsBeta = currentParts.beta !== null;
   if (latestParts.stable && currentIsBeta) {
@@ -83,10 +89,10 @@ function compareBetaVersion(latestParts, currentParts) {
   if (!latestIsBeta || !currentIsBeta) {
     return 0;
   }
-  return latestParts.beta - currentParts.beta;
+  return (latestParts.beta ?? 0) - (currentParts.beta ?? 0);
 }
 
-function compareVersions(latest, current) {
+function compareVersions(latest: string, current: string) {
   const latestParts = versionParts(latest);
   const currentParts = versionParts(current);
   const coreResult = compareCoreVersion(latestParts.core, currentParts.core);

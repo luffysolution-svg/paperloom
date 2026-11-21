@@ -51,6 +51,16 @@
 脚本入口仅作为未安装包环境的兼容回退；`process_contract` 同时识别两种命令形态，
 因此成功产物校验不会因为启动方式变化而被绕过。
 
+另有一个**辅助进程**（不是 stage，不改任务状态）：`render_prepare.stage.v1`
+（`python -m retainpdf_pipeline.render.workflow.prepare_stage`，spec 为
+`specs/render-prepare.spec.json`）。翻译之后紧接着渲染时，Rust 在启动 translate 的同时拉起它，
+提前做与译文无关的渲染准备（缓存在 `artifacts/render_prepare/`；任务结束后按 `RUST_API_DERIVED_CACHE_RETENTION_DAYS` 回收，
+缺了 render 照常现做），translate 成功后限时等它收尾
+再进 render；它起不来、失败、超时都只记日志（`logs/render-prepare.log`），render 照常现做。
+rpr_fit 路线下它还假定每块都翻成，先把每页的底色 / 字色算好存进按页缓存（2026-11-02），翻译完渲染时只重采对不上的页。
+参数取自与 `render.stage.v1` 相同的字段，不带凭据。入口代码：
+[render_prepare.rs](../packages/retainpdf-runner/src/job_runner/render_prepare.rs)。
+
 `provider.stage.v1` 仍保留给 legacy/local `run_provider_case.py` wrapper；当前生产主链的 OCR provider
 transport 由 Rust `ocr_flow` 直接编排，然后只把 normalize 交给 Python worker。
 
@@ -65,7 +75,7 @@ OCR child job
   -> provider transport
   -> normalize
 parent job
-  -> translate
+  -> translate   （并行：render prepare 辅助进程）
   -> render
 ```
 
@@ -73,7 +83,7 @@ parent job
 
 入口代码：
 
-- [translation_flow.rs](../packages/retain-jobs/src/job_runner/translation_flow.rs)
+- [translation_flow.rs](../packages/retainpdf-runner/src/job_runner/translation_flow.rs)
 
 ### 3.2 `workflow=translate`
 
@@ -100,7 +110,7 @@ reuse source.artifact_job_id
 
 入口代码：
 
-- [render_flow.rs](../packages/retain-jobs/src/job_runner/render_flow.rs)
+- [render_flow.rs](../packages/retainpdf-runner/src/job_runner/render_flow.rs)
 
 ### 3.4 `workflow=ocr`
 
@@ -113,7 +123,7 @@ provider transport
 
 入口代码：
 
-- [ocr_flow/mod.rs](../packages/retain-jobs/src/job_runner/ocr_flow/mod.rs)
+- [ocr_flow/mod.rs](../packages/retainpdf-runner/src/job_runner/ocr_flow/mod.rs)
 
 当前额外约束：
 
@@ -137,7 +147,7 @@ provider transport
 
 文件：
 
-- [lifecycle.rs](../packages/retain-jobs/src/job_runner/lifecycle.rs)
+- [lifecycle.rs](../packages/retainpdf-runner/src/job_runner/lifecycle.rs)
 
 职责：
 
@@ -167,9 +177,9 @@ provider transport
 
 文件：
 
-- [worker_command.rs](../packages/retain-data/src/worker_command.rs)
-- [worker_command/stage_specs.rs](../packages/retain-data/src/worker_command/stage_specs.rs)
-- [worker_command/entrypoints.rs](../packages/retain-data/src/worker_command/entrypoints.rs)
+- [worker_command.rs](../packages/retainpdf-data/src/worker_command.rs)
+- [worker_command/stage_specs.rs](../packages/retainpdf-data/src/worker_command/stage_specs.rs)
+- [worker_command/entrypoints.rs](../packages/retainpdf-data/src/worker_command/entrypoints.rs)
 
 职责：
 
@@ -181,7 +191,7 @@ provider transport
 
 文件：
 
-- [worker_process.rs](../packages/retain-jobs/src/job_runner/worker_process.rs)
+- [worker_process.rs](../packages/retainpdf-runner/src/job_runner/worker_process.rs)
 
 职责：
 
@@ -193,13 +203,13 @@ provider transport
 
 文件：
 
-- [process_runner.rs](../packages/retain-jobs/src/job_runner/process_runner.rs)
-- [process_runner/startup.rs](../packages/retain-jobs/src/job_runner/process_runner/startup.rs)
-- [process_runner/execution.rs](../packages/retain-jobs/src/job_runner/process_runner/execution.rs)
-- [process_runner/result_support.rs](../packages/retain-jobs/src/job_runner/process_runner/result_support.rs)
-- [process_runner/timeout_support.rs](../packages/retain-jobs/src/job_runner/process_runner/timeout_support.rs)
-- [process_runner/failure_ai_diagnosis.rs](../packages/retain-jobs/src/job_runner/process_runner/failure_ai_diagnosis.rs)
-- [process_runner/io_support.rs](../packages/retain-jobs/src/job_runner/process_runner/io_support.rs)
+- [process_runner.rs](../packages/retainpdf-runner/src/job_runner/process_runner.rs)
+- [process_runner/startup.rs](../packages/retainpdf-runner/src/job_runner/process_runner/startup.rs)
+- [process_runner/execution.rs](../packages/retainpdf-runner/src/job_runner/process_runner/execution.rs)
+- [process_runner/result_support.rs](../packages/retainpdf-runner/src/job_runner/process_runner/result_support.rs)
+- [process_runner/timeout_support.rs](../packages/retainpdf-runner/src/job_runner/process_runner/timeout_support.rs)
+- [process_runner/failure_ai_diagnosis.rs](../packages/retainpdf-runner/src/job_runner/process_runner/failure_ai_diagnosis.rs)
+- [process_runner/io_support.rs](../packages/retainpdf-runner/src/job_runner/process_runner/io_support.rs)
 
 职责：
 
@@ -222,7 +232,7 @@ provider transport
 
 文件：
 
-- [runtime_state.rs](../packages/retain-jobs/src/job_runner/runtime_state.rs)
+- [runtime_state.rs](../packages/retainpdf-runner/src/job_runner/runtime_state.rs)
 
 职责：
 
@@ -265,7 +275,7 @@ Python worker 通过 stdout 回传运行线索。
 
 当前重要标签在：
 
-- [stdout_parser/mod.rs](../packages/retain-jobs/src/job_runner/stdout_parser/mod.rs)
+- [stdout_parser/mod.rs](../packages/retainpdf-runner/src/job_runner/stdout_parser/mod.rs)
 
 例如：
 
@@ -294,8 +304,8 @@ Python worker 通过 stdout 回传运行线索。
 
 模块：
 
-- [cancel_registry.rs](../packages/retain-jobs/src/job_runner/cancel_registry.rs)
-- [worker_process.rs](../packages/retain-jobs/src/job_runner/worker_process.rs)
+- [cancel_registry.rs](../packages/retainpdf-runner/src/job_runner/cancel_registry.rs)
+- [worker_process.rs](../packages/retainpdf-runner/src/job_runner/worker_process.rs)
 
 语义：
 
@@ -306,14 +316,18 @@ Python worker 通过 stdout 回传运行线索。
 
 语义：
 
-- timeout 秒数来自 `request_payload.runtime.timeout_seconds`
+- `request_payload.runtime.timeout_seconds`：多久没有进展就判卡住（从最近一次新的阶段/进度、检查点、产物算起，
+  见 `process_runner/io_support.rs` 的 `ProgressMark`）；2026-10-31 以前从进程启动算整段时长
+- 绝对上限 `RUST_API_WORKER_MAX_RUNTIME_SECS`（默认 24 小时，`0` 不限；`timeout_seconds` 更大时取它）
+- `request_payload.runtime.no_output_timeout_seconds`：多久没有任何 stdout（默认 `0` 关闭）
 - 超时后 runner 负责 kill worker
 - 然后把 job 标为 `failed`
 
 当前 detail：
 
-- `normalizing` -> `normalization timeout`
-- 其他 provider transport 阶段 -> `provider timeout`
+- 没有进展 -> `no progress for {N}s`（以前是 `normalization timeout` / `provider timeout`）
+- 跑满绝对上限 -> `max runtime {N}s exceeded`
+- 没有输出 -> `no output for {N}s`
 
 ## 8. 成功与失败的判定
 
@@ -331,7 +345,7 @@ Python worker 通过 stdout 回传运行线索。
 
 这部分规则集中在：
 
-- [process_runner.rs](../packages/retain-jobs/src/job_runner/process_runner.rs)
+- [process_runner.rs](../packages/retainpdf-runner/src/job_runner/process_runner.rs)
 
 ## 9. artifacts contract
 
@@ -354,8 +368,8 @@ Python worker 通过 stdout 回传运行线索。
 - stage 切换时，尽量通过 artifacts 传递下游输入
 - 不要让下游重新猜路径
 - Rust 侧 readiness 判断集中在：
-  - [stage_contract.rs](../packages/retain-jobs/src/job_runner/stage_contract.rs)
-  - [process_contract.rs](../packages/retain-jobs/src/job_runner/process_contract.rs)
+  - [stage_contract.rs](../packages/retainpdf-runner/src/job_runner/stage_contract.rs)
+  - [process_contract.rs](../packages/retainpdf-runner/src/job_runner/process_contract.rs)
 - `stage_contract.rs` 决定跨 stage 是否可以继续：
   - OCR -> translate 需要 `source_pdf`、`normalized_document_json`
   - translate -> render 需要 `source_pdf`、`translations_dir`、`translation-manifest.json`

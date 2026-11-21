@@ -1,0 +1,18 @@
+/* 书架卡右上角状态徽标：完整显示，禁止省略号。（BookCard）
+ *
+ * @owns book-card */
+
+/* 书架卡右上角徽标：完整显示「已翻译/馆藏/失败」，禁止省略号 */
+.book-card-status-badge {
+  max-width: none !important;
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: visible;
+}
+
+.book-card-status-badge > span {
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: nowrap !important;
+  flex-shrink: 0;
+}

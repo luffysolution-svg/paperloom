@@ -4,6 +4,8 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { importSpecifiers } from "../helpers/source-text.mjs";
+
 const TESTS_ROOT = fileURLToPath(new URL("../", import.meta.url));
 const REPO_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 const WEB_SOURCE_ROOT = join(REPO_ROOT, "frontend/web/src");
@@ -50,11 +52,6 @@ function filesUnder(root) {
     }
   }
   return files.sort();
-}
-
-function importSpecifiers(source) {
-  const pattern = /\b(?:import\s*(?:\(|(?:type\s+)?(?:[^"'();]*?\s+from\s+)?)|export\s+(?:type\s+)?[^"';]*?\s+from\s+|require\s*\()\s*["']([^"']+)["']/g;
-  return Array.from(source.matchAll(pattern), (match) => match[1]);
 }
 
 function sourcePathLiterals(source) {

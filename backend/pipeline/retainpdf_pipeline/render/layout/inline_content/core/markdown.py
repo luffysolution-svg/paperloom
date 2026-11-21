@@ -5,7 +5,7 @@ from retainpdf_pipeline.render.layout.inline_content.core.inline_math import bui
 from retainpdf_pipeline.render.layout.inline_content.core.inline_math import demote_text_heavy_inline_math
 from retainpdf_pipeline.render.layout.inline_content.core.inline_math import escape_markdown_literal_asterisks
 from retainpdf_pipeline.render.layout.inline_content.core.inline_math import surround_inline_math_with_spaces
-from retainpdf_pipeline.render.layout.inline_content.fallback.latex_normalizer import normalize_formula_for_latex_math
+from retainpdf_math.normalize import normalize_formula_for_latex_math
 from retainpdf_pipeline.render.layout.text_analysis import analyze_text
 
 

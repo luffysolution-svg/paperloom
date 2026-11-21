@@ -1,15 +1,10 @@
-import sys
-from pathlib import Path
 
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
-
-from retainpdf_pipeline.translate.services.quality import review_translation_batch
-from retainpdf_pipeline.translate.services.quality import review_translation_item
-from retainpdf_pipeline.translate.services.terms import GlossaryEntry
-from retainpdf_pipeline.translate.workflow.phases.repair import _fast_agent_repair_limit
+from retainpdf_translation.services.quality import review_translation_batch
+from retainpdf_translation.services.quality import review_translation_item
+from retainpdf_translation.services.terms import GlossaryEntry
+from retainpdf_translation.workflow.phases.repair import _fast_agent_repair_limit
 
 
 def _body_item(item_id: str, source_text: str, **overrides) -> dict:
@@ -197,7 +192,7 @@ def test_quality_allows_normal_length_chinese_translation() -> None:
 
 
 def test_long_english_residue_span_skips_data_dense_nmr_segments() -> None:
-    from retainpdf_pipeline.translate.llm.validation.english_residue import _has_long_english_residue_span
+    from retainpdf_translation.llm.validation.english_residue import _has_long_english_residue_span
 
     # NMR 谱线数据数字密集,是合法保留的数据而非未译散文
     nmr = (
@@ -211,7 +206,7 @@ def test_long_english_residue_span_skips_data_dense_nmr_segments() -> None:
 
 
 def test_agent_repair_skips_items_already_repaired_in_flight() -> None:
-    from retainpdf_pipeline.translate.services.agents.repair_pipeline import _already_repaired_in_flight
+    from retainpdf_translation.services.agents.repair_pipeline import _already_repaired_in_flight
 
     repaired = {
         "item_id": "p009-b008",

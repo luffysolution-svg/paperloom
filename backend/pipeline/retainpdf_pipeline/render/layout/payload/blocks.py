@@ -11,7 +11,6 @@ from retainpdf_pipeline.render.layout.payload.emit import emit_render_blocks
 from retainpdf_pipeline.render.layout.model.models import RenderBlock
 from retainpdf_pipeline.render.layout.payload.render_item import seed_render_fields
 from retainpdf_pipeline.render.layout.payload.reading_sort import sort_payloads_by_reading_order
-from retainpdf_pipeline.render.layout.typography_memory.learning import observe_payload_typography
 
 
 def build_render_blocks(
@@ -22,7 +21,11 @@ def build_render_blocks(
     book_body_font_target: float | None = None,
 ) -> list[RenderBlock]:
     for item in translated_items:
-        seed_render_fields(item)
+        # 已经过 prepare_render_payloads_by_page 的 item 不能再 seed：那一步把翻译组的
+        # 整段译文按框切好 / 合并进了 render_protected_text，这里再 seed 一遍会按
+        # 「组成员取整组译文」重算，每个成员框里都画一遍整段（摘要重复三遍）。
+        if "render_protected_text" not in item:
+            seed_render_fields(item)
     block_payloads, page_text_width_med = build_block_payloads(
         translated_items,
         page_width=page_width,
@@ -41,7 +44,6 @@ def build_render_blocks(
         unify_annotation_fonts(ordered_payloads)
     recover_underfilled_annotation_density(ordered_payloads)
     mark_adjacent_collision_risk(ordered_payloads)
-    observe_payload_typography(ordered_payloads)
     return emit_render_blocks(block_payloads)
 
 

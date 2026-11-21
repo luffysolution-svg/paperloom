@@ -1,13 +1,8 @@
-import sys
-from pathlib import Path
 
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
-
-from retainpdf_pipeline.translate.services.classification.rule_engine import should_include
-from retainpdf_pipeline.translate.services.policy.payload_rules.policy_mutations import apply_classification_labels
+from retainpdf_translation.services.classification.rule_engine import should_include
+from retainpdf_translation.services.policy.payload_rules.policy_mutations import apply_classification_labels
 
 
 def test_apply_classification_labels_marks_model_no_trans_as_keep_origin() -> None:

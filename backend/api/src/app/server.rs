@@ -6,9 +6,11 @@ use anyhow::Result;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
-use super::jobs::resume_requeued_pipeline_jobs;
+use super::jobs::{
+    acquire_owned_runtime_lock, resume_requeued_pipeline_jobs, start_driverless_sweeper,
+};
 use crate::app::cleanup::{
-    log_startup_settings_with_interval, run_cleanup_once, spawn_periodic_cleanup_guarded,
+    log_startup_settings_with_interval, run_cleanup_blocking, spawn_periodic_cleanup_with_interval,
     RetentionSettings,
 };
 use crate::app::{build_app, build_simple_app, build_state};
@@ -34,36 +36,50 @@ async fn serve_with_shutdown(
     config: Arc<AppConfig>,
     shutdown: impl std::future::Future<Output = ()> + Send + 'static,
 ) -> Result<()> {
+    // 先拿运行时锁再 build_state：build_state 里的启动对账会杀掉库里 running 任务的 worker，
+    // 同一个 data/ 上的第二个实例必须在这之前就退出（换了端口的话 bind 也拦不住它）。
+    // 锁一直拿到服务退出。
+    let _runtime_owner = acquire_owned_runtime_lock(&config)?;
     crate::services::backups::apply_pending(&config)?;
     let state = build_state(config.clone())?;
     let resumed = resume_requeued_pipeline_jobs(&state)?;
     if resumed > 0 {
         tracing::warn!("startup requeued {resumed} durable pipeline job(s) for resume");
     }
+    // 只在真实服务里开（和下面的清理一样），单测里的 build_state 不带后台任务。
+    let _driverless_sweep_handle = start_driverless_sweeper(&state);
 
     // Retention/cleanup is operational maintenance, not startup correctness
-    // (unlike `reconcile_stale_running_jobs`/`cleanup_legacy_workflows`
-    // inside `build_state`), so it only runs here - once when the real
+    // (unlike `reconcile_owned_runtime` inside `build_state`), so it only runs here - once when the real
     // server actually starts serving - rather than in `build_state` itself,
     // which is also called directly by many unit tests that don't want
     // background retention sweeps touching their fixtures.
     let retention_settings = RetentionSettings::from_env();
     log_startup_settings_with_interval(&retention_settings, config.cleanup.interval);
-    if let Err(error) = run_cleanup_once(&retention_settings, state.db.as_ref()) {
+    let data_root = state.config.data_root.clone();
+    if let Err(error) =
+        run_cleanup_blocking(retention_settings, state.db.clone(), data_root.clone()).await
+    {
         tracing::warn!("startup retention cleanup sweep failed: {error:#}");
     }
-    let _cleanup_handle = spawn_periodic_cleanup_guarded(
+    let _cleanup_handle = spawn_periodic_cleanup_with_interval(
         retention_settings,
         state.db.clone(),
+        data_root,
         config.cleanup.interval,
-        Some(state.backups.gate.clone()),
     );
 
     // 端点使用计数:同样属于运维观测,只在真实服务启动时开,不打扰单测。
     // 计数累加式落盘,重启不清零——要的是跨天的样本。
-    super::route_usage::init(&state.config.data_root);
-    let _usage_handle = spawn_periodic_route_usage_flush();
+    // 计数是进程全局的（谁先 init 归谁），单测进程里起真实服务（停机测试）时不开，
+    // 否则后面所有接口测试的请求都记到那个服务的目录下。
+    let _usage_handle = (!cfg!(test)).then(|| {
+        super::route_usage::init(&state.config.data_root);
+        spawn_periodic_route_usage_flush()
+    });
 
+    let sync_service = state.sync.clone();
+    let backup_service = state.backup.clone();
     let app = build_app(state.clone());
     let simple_app = build_simple_app(state);
 
@@ -80,10 +96,11 @@ async fn serve_with_shutdown(
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     let simple_listener = tokio::net::TcpListener::bind(simple_addr).await?;
+    let runtime_record = write_runtime_record(&config, listener.local_addr()?);
 
     let shutdown_signal = Arc::new(tokio::sync::Notify::new());
     let shutdown_waiter = shutdown_signal.clone();
-    // watch 通道给长生命周期后台任务（ai_supervisor）：Notify 的一次性
+    // watch 通道给长生命周期后台任务（同步、备份、jobsd 监督）：Notify 的一次性
     // notify_waiters 可能在任务未处于 await 时错过，watch 不会。
     let (shutdown_tx_watch, shutdown_rx_watch) = tokio::sync::watch::channel(false);
     tokio::spawn(async move {
@@ -93,6 +110,12 @@ async fn serve_with_shutdown(
     });
 
     // Phase 3（ADR-002）：RUST_API_JOBS_SUPERVISE=1 且 RUST_API_JOBS_MODE=remote 时壳监督 jobsd
+    // 多设备同步:关着时每轮直接跳过,开着时定时与对端交换书库。
+    let _sync_handle = sync_service.spawn_loop(shutdown_rx_watch.clone());
+    // 数据库每天自动备份一份(间隔见平台包 retainpdf-platform 的 backup)。
+    let _backup_handle = backup_service.spawn_loop(shutdown_rx_watch.clone());
+
+    let mut drain_rx = shutdown_rx_watch.clone();
     let jobsd_supervisor_handle =
         crate::runtime::jobsd_supervisor::spawn_jobsd_supervisor(config.clone(), shutdown_rx_watch);
     if jobsd_supervisor_handle.is_some() {
@@ -106,11 +129,66 @@ async fn serve_with_shutdown(
     let simple_server = axum::serve(simple_listener, simple_app)
         .with_graceful_shutdown(async move { shutdown_signal.notified().await });
 
-    tokio::try_join!(full_server, simple_server)?;
+    // 优雅停机会等每一条还开着的连接：进度流（SSE）只在客户端断开时才结束，页面开着就一直等，
+    // `docker stop` 等满 10 秒直接 SIGKILL，监督的子进程来不及收尾。所以收到信号以后最多再等
+    // `shutdown_grace_secs`，到点就不等了：丢掉 serve 的 future 往下收尾，剩下的连接在进程退出时断开。
+    let grace = std::time::Duration::from_secs(config.shutdown_grace_secs);
+    let drain_deadline = async move {
+        // 发送端没了（不会再有停机信号）就一直等，不能当成收到了信号。
+        if drain_rx.wait_for(|stopping| *stopping).await.is_err() {
+            pending::<()>().await;
+        }
+        tokio::time::sleep(grace).await;
+    };
+    let served = tokio::select! {
+        served = async { tokio::try_join!(full_server, simple_server) } => served,
+        () = drain_deadline => {
+            tracing::warn!(
+                "shutdown: open connections did not finish within {}s (progress streams and the like); closing them",
+                grace.as_secs()
+            );
+            Ok(((), ()))
+        }
+    };
+    if let Some(home) = runtime_record {
+        let _ = home.clear_backend_runtime(std::process::id());
+    }
+    served?;
     if let Some(handle) = jobsd_supervisor_handle {
         let _ = handle.await;
     }
     Ok(())
+}
+
+/// 记下正在运行的后端(`~/.retainpdf/run/backend.json`),命令行 `retainpdf` 靠它找到后端。
+/// 只在 `RUST_API_WRITE_RUNTIME_FILE=1` 时写(桌面版、开发脚本打开):测试和别的部署起的后端
+/// 不该改用户目录里的东西。
+fn write_runtime_record(config: &AppConfig, bound: SocketAddr) -> Option<retainpdf_config::ConfigHome> {
+    if std::env::var("RUST_API_WRITE_RUNTIME_FILE").as_deref() != Ok("1") {
+        return None;
+    }
+    let home = match retainpdf_config::ConfigHome::locate() {
+        Ok(home) => home,
+        Err(error) => {
+            tracing::warn!("runtime record skipped: {error:#}");
+            return None;
+        }
+    };
+    let host = if bound.ip().is_unspecified() { "127.0.0.1".to_string() } else { bound.ip().to_string() };
+    let record = retainpdf_config::BackendRuntime {
+        api_base: format!("http://{host}:{}", bound.port()),
+        api_key: config.api_keys.iter().min().cloned().unwrap_or_default(),
+        data_dir: config.data_root.to_string_lossy().to_string(),
+        pid: std::process::id(),
+        started_at: crate::models::domain::now_iso(),
+    };
+    match home.write_backend_runtime(&record) {
+        Ok(()) => Some(home),
+        Err(error) => {
+            tracing::warn!("runtime record not written: {error:#}");
+            None
+        }
+    }
 }
 
 pub async fn run_servers(config: AppConfig) -> Result<()> {

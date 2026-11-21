@@ -1,25 +1,8 @@
-import sys
 import unittest
-from pathlib import Path
 
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-from retainpdf_pipeline.render.layout.font_fit import estimate_font_size_pt
-from retainpdf_pipeline.render.layout.font_fit import estimate_leading_em
-from retainpdf_pipeline.render.layout.font_fit import is_body_text_candidate
-from retainpdf_pipeline.render.layout.font_fit import local_font_size_pt
-from retainpdf_pipeline.render.layout.font_fit import normalize_leading_em_for_font_size
-from retainpdf_pipeline.render.layout.font_fit import BODY_LEADING_MAX
-from retainpdf_pipeline.render.layout.font_fit import BODY_LEADING_MIN
-from retainpdf_pipeline.render.layout.payload.block_seed_body_policy import is_dense_small_box
-from retainpdf_pipeline.render.layout.payload.block_seed_body_policy import is_heavy_dense_small_box
 from retainpdf_pipeline.render.layout.payload.blocks import build_render_blocks
 from retainpdf_pipeline.render.layout.payload.block_seed import _relax_wide_aspect_body_leading
-from retainpdf_pipeline.render.layout.payload.fit import fit_translated_block_metrics
-from retainpdf_pipeline.render.layout.typography.measurement import source_visual_line_count
-from retainpdf_pipeline.render.layout.typography.measurement import visual_line_count
 
 
 def _sample_item(*, wide_aspect: bool) -> dict:

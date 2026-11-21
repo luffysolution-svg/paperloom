@@ -1,1 +1,1 @@
-export { fetchJobList, fetchJobPayload } from "./jobs.js";
+export { fetchJobList, fetchJobPayload, fetchJobsByIds } from "./jobs.js";

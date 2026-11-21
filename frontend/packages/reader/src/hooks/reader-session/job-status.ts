@@ -7,7 +7,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { readerSessionDataPort } from "../../external.js";
-import { normalizeJobStatus, TERMINAL_JOB_STATUSES } from "./session-helpers.js";
+import { normalizeJobStatus } from "./session-helpers.js";
+import { isFinishedJobStatus } from "@retainpdf/domain/job";
 
 export type JobStatusPolling = {
   jobPayload: Record<string, unknown> | null;
@@ -60,7 +61,7 @@ export function useJobStatusPolling(options: {
   const scopedJobPayload = payloadSessionIdentity === sessionIdentity ? jobPayload : null;
   const scopedManifestPayload = payloadSessionIdentity === sessionIdentity ? manifestPayload : null;
   const jobStatus = normalizeJobStatus(scopedJobPayload);
-  const jobTerminal = TERMINAL_JOB_STATUSES.has(jobStatus);
+  const jobTerminal = isFinishedJobStatus(jobStatus);
 
   const refreshJobArtifacts = useCallback(() => {
     setJobRefreshRevision((revision) => revision + 1);
@@ -129,7 +130,9 @@ export function useJobStatusPolling(options: {
 
   useEffect(() => {
     if (!sessionJobId || jobTerminal || !scopedJobPayload) return;
+    // 页面在后台（标签页切走）时不再每秒问任务状态，切回来下一秒接着问。
     const timer = window.setInterval(() => {
+      if (document.visibilityState === "hidden") return;
       void refreshJobStatus();
     }, 1_000);
     return () => window.clearInterval(timer);

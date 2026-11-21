@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from devtools.architecture_checks import translation_surface as checks
 
 
@@ -27,18 +24,18 @@ def _check_sources(tmp_path, monkeypatch, script="", recovery=""):
 def test_repair_can_import_only_the_public_operation(tmp_path, monkeypatch):
     assert not _check_sources(
         tmp_path, monkeypatch,
-        script="from retainpdf_pipeline.translate.public import prepare_relocated_translation_copy as recover\n",
-        recovery="from retainpdf_pipeline.translate.workflow.checkpoint.store import CheckpointStore\n",
+        script="from retainpdf_translation.public import prepare_relocated_translation_copy as recover\n",
+        recovery="from retainpdf_translation.workflow.checkpoint.store import CheckpointStore\n",
     )
 
 
 @pytest.mark.parametrize("statement", [
-    "from retainpdf_pipeline.translate.workflow.checkpoint.store import CheckpointStore",
-    "from retainpdf_pipeline.translate.public import CheckpointStore",
-    "from retainpdf_pipeline.translate.public import *",
-    "import retainpdf_pipeline.translate.public as translation",
-    "from retainpdf_pipeline.translate.public.recovery import prepare_relocated_translation_copy",
-    "def nested():\n    from retainpdf_pipeline.translate.core.payload import manifest as m",
+    "from retainpdf_translation.workflow.checkpoint.store import CheckpointStore",
+    "from retainpdf_translation.public import CheckpointStore",
+    "from retainpdf_translation.public import *",
+    "import retainpdf_translation.public as translation",
+    "from retainpdf_translation.public.recovery import prepare_relocated_translation_copy",
+    "def nested():\n    from retainpdf_translation.core.payload import manifest as m",
 ])
 def test_repair_cannot_reach_translation_internals_or_widen_its_api(tmp_path, monkeypatch, statement):
     errors = _check_sources(tmp_path, monkeypatch, script=statement)
@@ -49,7 +46,6 @@ def test_repair_cannot_reach_translation_internals_or_widen_its_api(tmp_path, mo
     "retainpdf_pipeline.ocr.mineru_provider.artifacts",
     "retainpdf_pipeline.ocr.document_schema.adapters",
     "devtools.repair_mineru_cross_page",
-    "retainpdf_ai.document_operations",
 ])
 def test_translation_recovery_cannot_import_provider_or_caller_implementations(tmp_path, monkeypatch, module):
     errors = _check_sources(tmp_path, monkeypatch, recovery=f"import {module} as implementation\n")
@@ -57,7 +53,7 @@ def test_translation_recovery_cannot_import_provider_or_caller_implementations(t
 
 
 def test_recovery_does_not_export_checkpoint_implementation_helpers():
-    from retainpdf_pipeline.translate import public
+    from retainpdf_translation import public
 
     assert "prepare_relocated_translation_copy" in public.__all__
     assert not set(public.__all__) & {
@@ -69,6 +65,6 @@ def test_recovery_does_not_export_checkpoint_implementation_helpers():
 def test_recovery_boundary_ignores_comments_and_literals(tmp_path, monkeypatch):
     assert not _check_sources(
         tmp_path, monkeypatch,
-        script='# from retainpdf_pipeline.translate.public import CheckpointStore\n',
+        script='# from retainpdf_translation.public import CheckpointStore\n',
         recovery='NOTE = "import retainpdf_pipeline.ocr.mineru_provider"\n',
     )

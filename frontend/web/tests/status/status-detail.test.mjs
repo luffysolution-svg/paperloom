@@ -1,21 +1,16 @@
+// 状态详情 · 运行时与协调器：快照的公开阶段、阶段历史、runtime port、恢复操作、
+// 概览协调器与译文 Tab 的数据 port / 协调器。
+// 本文件原有 1500+ 行，已按主题拆成同目录的 status-detail-*.test.mjs，用例原样搬移。
+
 import test from "node:test";
 import assert from "node:assert/strict";
-
 import { createLegacyStateFixture } from "../helpers/legacy-state-fixture.mjs";
 import * as currentJobStateModule from "../../src/features/jobs/domain/runtime/current-job-state.js";
 import { createSecondaryResourceStatePort } from "../../src/features/jobs/domain/runtime/secondary-resource-cache.js";
 import { createJobRenderContextPort } from "../../src/features/jobs/domain/runtime/render-context.js";
-import { normalizedStageEventRecord } from "@retainpdf/domain/job-status";
-import { buildEventsPresentation } from "../../src/features/job-detail/domain/snapshot/events.js";
-import { buildFailureLogText, buildStatusDetailSnapshot } from "../../src/features/job-detail/domain/snapshot/snapshot.js";
-import {
-  resolveStageHistoryDuration,
-  stageHistoryDisplay,
-} from "@retainpdf/domain/job";
-import { resolveLiveDurations } from "@retainpdf/domain/job";
+import { buildStatusDetailSnapshot } from "../../src/features/job-detail/domain/snapshot/snapshot.js";
+import { stageHistoryDisplay } from "@retainpdf/domain/job";
 import { buildStageHistoryPresentation } from "../../src/features/job-detail/domain/snapshot/history.js";
-import { buildStatusCardSnapshot } from "@retainpdf/domain/job-status";
-import { buildJobStatusViewModel } from "@retainpdf/domain/job-status";
 // bootstrap/status-detail-runtime-port.js 已随 cutover 删除;这是它的纯逻辑
 // 拷贝(job-runtime 三个 kept 端口的字面量组合,零 DOM),迁移指向 pages/home
 // 的同名实现(两者函数体完全一致,仅头部注释与相对导入路径不同)。
@@ -24,42 +19,10 @@ import { createTranslationState } from "../../src/features/job-detail/domain/dia
 import { createStatusDetailTranslationDataPort } from "../../src/features/job-detail/domain/dialog/translation-data-port.js";
 import { createStatusDetailTranslationTabCoordinator } from "../../src/features/job-detail/domain/dialog/translation-tab-coordinator.js";
 import { createStatusDetailOverviewCoordinator } from "../../src/features/job-detail/domain/dialog/overview-coordinator.js";
-import { createStatusDetailConfigPort } from "../../src/features/job-detail/domain/dialog/config-port.js";
 import {
   rerunCurrentJob,
   syncRerunAction,
 } from "../../src/features/job-detail/domain/dialog/resume-actions.js";
-import {
-  buildJobDetailEventViewModel,
-  buildJobDetailStatusViewModel,
-} from "../../src/features/job-detail/domain/page/status-view-model.js";
-import { createJobDetailConfigPort } from "../../src/features/job-detail/domain/page/config-port.js";
-import { createJobDetailDataPort } from "../../src/features/job-detail/domain/page/data-port.js";
-import { createJobDetailResumePort } from "../../src/features/job-detail/domain/page/resume-port.js";
-import {
-  renderJobDetailFailureSummary,
-  renderJobDetailRuntimeSummary,
-  summarizeMathMode,
-} from "../../src/features/job-detail/domain/page/summary.js";
-import {
-  isReaderActionEnabled,
-  renderJobDetailActionLinks,
-} from "../../src/features/job-detail/domain/page/action-links.js";
-import {
-  loadAndRenderMarkdownFlow,
-} from "../../src/features/job-detail/domain/page/markdown-flow.js";
-import { renderJobDetailOverview } from "../../src/features/job-detail/domain/page/overview-renderer.js";
-import {
-  createJobDetailPageState,
-  revokeJobDetailMarkdownImageUrls,
-} from "../../src/features/job-detail/domain/page/page-state.js";
-import {
-  buildOcrAmbiguityRequest,
-  ocrRecoveryJobId,
-  readOcrAmbiguityView,
-  requiresOcrAmbiguityResolution,
-  resolveOcrAmbiguityRecovery,
-} from "../../src/features/job-detail/domain/ocr-ambiguity-recovery.js";
 
 // createStatusDetailRuntimePort 现在要求组合层注入 job-runtime 三个 kept 端口；
 // 测试从 jobs 域直接构造同一份端口（与组合层 create-status-domain.ts 等价）。
@@ -77,146 +40,6 @@ global.window.location ||= {
   origin: "http://localhost",
   pathname: "/",
 };
-
-const OCR_AMBIGUITY_DESCRIPTOR = {
-  status: "ambiguous",
-  provider: "mineru",
-  operation: "apply_upload_url",
-  resolution_revision: 4,
-  allowed_resolutions: ["bind_existing_receipt", "accept_duplicate_risk"],
-  receipt_fields: [
-    { name: "batch_id", label: "Batch ID", required: true, secret: false },
-    { name: "upload_url", label: "Upload URL", required: true, secret: true },
-    { name: "trace_id", label: "Trace ID", required: false, secret: false },
-  ],
-};
-
-test("failure log:汇总诊断字段、保留日志并隐藏密钥", () => {
-  const logText = buildFailureLogText({
-    job_id: "job-log-1",
-    status: "failed",
-    request_payload: {
-      translation: { api_key: "must-never-be-copied" },
-    },
-    diagnostics: {
-      failed_stage: "translation",
-      failure_code: "PROVIDER_RATE_LIMIT",
-      trace_id: "trace-log-1",
-      summary: "翻译服务限流",
-      raw_exception_message: "Authorization: Bearer live-secret-token",
-      traceback: "RuntimeError: api_key=inline-secret",
-    },
-    log_tail: ["retry 2/3", "access_token=tail-secret"],
-  });
-
-  assert.match(logText, /Job ID: job-log-1/);
-  assert.match(logText, /阶段: translation/);
-  assert.match(logText, /错误码: PROVIDER_RATE_LIMIT/);
-  assert.match(logText, /Trace ID: trace-log-1/);
-  assert.match(logText, /retry 2\/3/);
-  assert.match(logText, /\[REDACTED\]/);
-  assert.doesNotMatch(logText, /must-never-be-copied/);
-  assert.doesNotMatch(logText, /live-secret-token|inline-secret|tail-secret/);
-});
-
-test("OCR ambiguity recovery:识别 diagnostics 契约并生成最小回执请求", () => {
-  assert.equal(requiresOcrAmbiguityResolution({
-    job: { failure: { failure_code: "ocr_request_ambiguous" } },
-  }), true);
-  assert.equal(requiresOcrAmbiguityResolution({
-    failure: { category: "OCR_REQUEST_AMBIGUOUS" },
-  }), true);
-  assert.equal(requiresOcrAmbiguityResolution({
-    failure: { category: "provider_timeout" },
-  }), false);
-  assert.equal(ocrRecoveryJobId({
-    data: { submission: { job_id: "ocr-recovery-2" } },
-  }), "ocr-recovery-2");
-  assert.deepEqual(readOcrAmbiguityView({
-    diagnostics: { ocr_ambiguity: OCR_AMBIGUITY_DESCRIPTOR },
-  }), OCR_AMBIGUITY_DESCRIPTOR);
-  assert.deepEqual(buildOcrAmbiguityRequest(
-    OCR_AMBIGUITY_DESCRIPTOR,
-    "bind_existing_receipt",
-    {
-      batch_id: " batch-1 ",
-      upload_url: " https://signed.example/upload ",
-      trace_id: "",
-      task_id: "must-not-be-sent",
-    },
-  ), {
-    resolution: "bind_existing_receipt",
-    resolution_revision: 4,
-    batch_id: "batch-1",
-    upload_url: "https://signed.example/upload",
-  });
-  assert.throws(
-    () => buildOcrAmbiguityRequest(OCR_AMBIGUITY_DESCRIPTOR, "bind_existing_receipt", {}),
-    /Batch ID/,
-  );
-});
-
-test("OCR ambiguity recovery:显式接受重复风险后切换到新任务轮询", async () => {
-  const calls = [];
-  const pending = [];
-  const statuses = [];
-  const result = await resolveOcrAmbiguityRecovery({
-    job: { job_id: "ocr-source-1" },
-    descriptor: OCR_AMBIGUITY_DESCRIPTOR,
-    resolution: "accept_duplicate_risk",
-    apiPrefix: "/api/v1",
-    resolveOcrAmbiguity: async (jobId, apiPrefix, request) => {
-      calls.push([jobId, apiPrefix, request]);
-      return { submission: { job_id: "ocr-recovery-1" } };
-    },
-    startPolling: (jobId) => calls.push(["poll", jobId]),
-    closeDialog: () => calls.push(["close"]),
-    setPending: (value) => pending.push(value),
-    setStatus: (value) => statuses.push(value),
-    setGlobalError: (value) => calls.push(["error", value]),
-  });
-
-  assert.deepEqual(result, { ok: true, conflict: false });
-  assert.deepEqual(calls, [
-    ["ocr-source-1", "/api/v1", {
-      resolution: "accept_duplicate_risk",
-      resolution_revision: 4,
-    }],
-    ["close"],
-    ["error", ""],
-    ["poll", "ocr-recovery-1"],
-  ]);
-  assert.deepEqual(pending, [true, false]);
-  assert.deepEqual(statuses, ["正在创建新的 OCR 恢复任务…"]);
-});
-
-test("OCR ambiguity recovery:409 时刷新诊断且不启动旧恢复任务", async () => {
-  const calls = [];
-  const statuses = [];
-  const conflict = new Error("revision stale");
-  conflict.status = 409;
-  const result = await resolveOcrAmbiguityRecovery({
-    job: { job_id: "ocr-source-failed" },
-    descriptor: OCR_AMBIGUITY_DESCRIPTOR,
-    resolution: "bind_existing_receipt",
-    values: {
-      batch_id: "batch-2",
-      upload_url: "https://signed.example/2",
-    },
-    resolveOcrAmbiguity: async () => {
-      throw conflict;
-    },
-    refreshDiagnostics: async () => calls.push("refresh"),
-    closeDialog: () => calls.push("close"),
-    startPolling: () => calls.push("poll"),
-    setStatus: (value) => statuses.push(value),
-  });
-
-  assert.deepEqual(result, { ok: false, conflict: true });
-  assert.deepEqual(calls, ["refresh"]);
-  assert.match(statuses.at(-1), /状态已变化/);
-});
-
 
 test("status detail snapshot runtime stage follows public presentation", () => {
   const snapshot = buildStatusDetailSnapshot({
@@ -324,377 +147,6 @@ test("stage history presentation accepts backend runtime stage history payload",
   assert.equal(/后端未返回 runtime\.stage_history|render_preprocess/.test(presentation.markup), false);
 });
 
-test("status detail config port owns detail page urls", () => {
-  const port = createStatusDetailConfigPort({
-    buildPageUrl(path, params) {
-      return `app://${path}?job_id=${params.job_id}`;
-    },
-  });
-
-  assert.equal(port.buildDetailPageUrl("job-123"), "app://./detail.html?job_id=job-123");
-  assert.equal(port.buildDetailPageUrl(""), "");
-});
-
-test("job detail config port owns reader detail urls and share note", () => {
-  const port = createJobDetailConfigPort({
-    buildPageUrl(path, params) {
-      return `app://${path}?job_id=${params.job_id}`;
-    },
-    isMock: () => true,
-  });
-
-  assert.equal(port.buildReaderPageUrl("job-123"), "app://./reader.html?job_id=job-123");
-  assert.equal(port.buildReaderPageUrl(""), "");
-  assert.equal(port.buildDetailPageUrl("job-456"), "app://./detail.html?job_id=job-456");
-  assert.equal(port.buildDetailPageUrl(""), "");
-  assert.equal(port.detailShareNote(), "当前为 mock 明细页，可直接分享当前链接。");
-
-  const normalPort = createJobDetailConfigPort({
-    buildPageUrl: () => "",
-    isMock: () => false,
-  });
-  assert.equal(normalPort.detailShareNote(), "当前详情页可直接通过 URL 分享给其他人。");
-});
-
-test("job detail data port owns overview markdown and action API calls", async () => {
-  const calls = [];
-  const port = createJobDetailDataPort({
-    apiPrefix: "/detail-api",
-    loadJob: async (jobId, options) => {
-      const apiPrefix = typeof options === "string" ? options : options?.apiPrefix;
-      calls.push(["job", jobId, apiPrefix]);
-      return { job_id: jobId };
-    },
-    loadManifest: async (jobId, apiPrefix) => {
-      calls.push(["manifest", jobId, apiPrefix]);
-      return { items: [] };
-    },
-    loadDiagnostics: async (jobId, apiPrefix) => {
-      calls.push(["diagnostics", jobId, apiPrefix]);
-      throw new Error("diagnostics unavailable");
-    },
-    loadResumePlan: async (jobId, apiPrefix) => {
-      calls.push(["resume-plan", jobId, apiPrefix]);
-      throw new Error("resume unavailable");
-    },
-    // job-detail 只用 /markdown JSON；/markdown/document 已弃用（端点可删）。
-    loadMarkdown: async (jobId, apiPrefix) => {
-      calls.push(["markdown", jobId, apiPrefix]);
-      return { content: "# ok" };
-    },
-    loadEvents: async (jobId, apiPrefix, query) => {
-      calls.push(["events", jobId, apiPrefix, query]);
-      return { items: [] };
-    },
-    rerun: async (url) => {
-      calls.push(["rerun", url]);
-      return { job_id: "job-rerun" };
-    },
-    resume: async (jobId, apiPrefix) => {
-      calls.push(["resume", jobId, apiPrefix]);
-      return { job_id: "job-resume" };
-    },
-    fetchProtectedResource: async (url) => ({ url }),
-  });
-
-  assert.deepEqual(await port.loadOverview("job-detail"), {
-    diagnosticsPayload: null,
-    manifestPayload: { items: [] },
-    payloadRaw: { job_id: "job-detail" },
-    resumePlan: null,
-  });
-  assert.deepEqual(await port.loadMarkdownPayload("job-detail"), { content: "# ok" });
-  assert.deepEqual(await port.fetchJobEvents("job-detail", port.apiPrefix, { limit: 10, cursor: "test-cursor" }), { items: [] });
-  assert.deepEqual(await port.resumeJob("job-detail", port.apiPrefix), { job_id: "job-resume" });
-  assert.deepEqual(await port.rerunJob("/rerun"), { job_id: "job-rerun" });
-  assert.deepEqual(await port.fetchProtected("http://asset.test/file.pdf"), {
-    url: "http://asset.test/file.pdf",
-  });
-  assert.deepEqual(calls, [
-    ["job", "job-detail", "/detail-api"],
-    ["manifest", "job-detail", "/detail-api"],
-    ["diagnostics", "job-detail", "/detail-api"],
-    ["resume-plan", "job-detail", "/detail-api"],
-    ["markdown", "job-detail", "/detail-api"],
-    ["events", "job-detail", "/detail-api", { limit: 10, cursor: "test-cursor" }],
-    ["resume", "job-detail", "/detail-api"],
-    ["rerun", "/rerun"],
-  ]);
-});
-
-
-test("job detail resume port chooses resume by job id before rerun url", async () => {
-  const calls = [];
-  const port = createJobDetailResumePort({
-    apiPrefix: "/detail-api",
-    resumeJob: async (jobId, apiPrefix) => {
-      calls.push(["resume", jobId, apiPrefix]);
-      return { job_id: "job-resumed" };
-    },
-    rerunJob: async (url) => {
-      calls.push(["rerun", url]);
-      return { job_id: "job-rerun" };
-    },
-  });
-
-  assert.deepEqual(await port.submit({ actionUrl: "/rerun-old", jobId: "job-current" }), {
-    job_id: "job-resumed",
-  });
-  assert.deepEqual(await port.submit({ actionUrl: "/rerun-old", jobId: "" }), {
-    job_id: "job-rerun",
-  });
-  assert.deepEqual(calls, [
-    ["resume", "job-current", "/detail-api"],
-    ["rerun", "/rerun-old"],
-  ]);
-});
-
-test("job detail summary renderer owns runtime and failure text fields", () => {
-  const fields = {};
-  const setText = (id, value) => {
-    fields[id] = value;
-  };
-  const job = {
-    status: "failed",
-    retry_count: 2,
-    last_stage_transition_at: "2026-06-16T01:02:03Z",
-    terminal_reason: "provider_error",
-    request_payload_math_mode: "placeholder",
-    invocation_protocol: "book.v1",
-    stage_spec_version: "stage.v2",
-    failure: {
-      failure_category: "translation",
-      failed_stage: "translation",
-      retryable: true,
-      suggestion: "retry later",
-    },
-    failure_diagnostic: {
-      root_cause: "rate limit",
-    },
-    final_failure_summary: "翻译失败",
-    log_tail: ["line a", "last line"],
-  };
-
-  renderJobDetailRuntimeSummary({
-    durations: {
-      stageElapsedText: "1分钟",
-      totalElapsedText: "2分钟",
-    },
-    job,
-    setText,
-    statusViewModel: {
-      stageDetail: "翻译失败",
-      runtimeCurrentStage: "翻译",
-    },
-  });
-  renderJobDetailFailureSummary({ job, setText });
-
-  assert.equal(fields["detail-status-summary"], "任务已失败，请检查报错提示后重试。");
-  assert.equal(fields["detail-stage-detail"], "翻译失败");
-  assert.equal(fields["detail-runtime-current-stage"], "翻译");
-  assert.equal(fields["detail-runtime-stage-elapsed"], "1分钟");
-  assert.equal(fields["detail-runtime-total-elapsed"], "2分钟");
-  assert.equal(fields["detail-runtime-retry-count"], "2");
-  assert.equal(fields["detail-runtime-terminal-reason"], "provider_error");
-  assert.equal(fields["detail-runtime-math-mode"], "placeholder - 公式占位保护");
-  assert.equal(fields["detail-failure-summary"], "翻译失败");
-  assert.equal(fields["detail-failure-category"], "translation");
-  assert.equal(fields["detail-failure-stage"], "translation");
-  assert.equal(fields["detail-failure-root-cause"], "rate limit");
-  assert.equal(fields["detail-failure-suggestion"], "retry later");
-  assert.equal(fields["detail-failure-last-log-line"], "last line");
-  assert.equal(fields["detail-failure-retryable"], "是");
-  assert.equal(summarizeMathMode({ request_payload_math_mode: "direct_typst" }), "direct_typst - 模型直出公式");
-});
-
-test("job detail action links own reader and pdf readiness rules", () => {
-  const links = {};
-  const setActionLink = (id, url, enabled) => {
-    links[id] = { enabled: Boolean(enabled), url };
-  };
-  const manifestPayload = {
-    items: [
-      { artifact_key: "source_pdf", ready: true },
-      { artifact_key: "translated_pdf", ready: true },
-    ],
-  };
-  const job = { job_id: "job-reader" };
-  const actions = {
-    pdf: "/api/v1/jobs/job-reader/pdf",
-    pdfEnabled: true,
-  };
-
-  assert.equal(isReaderActionEnabled({ actions, job, manifestPayload }), true);
-  renderJobDetailActionLinks({ actions, job, manifestPayload, setActionLink });
-
-  assert.equal(links["detail-reader-btn"].enabled, true);
-  assert.match(links["detail-reader-btn"].url, /reader\.html\?job_id=job-reader/);
-  assert.deepEqual(links["detail-pdf-btn"], {
-    enabled: true,
-    url: "/api/v1/jobs/job-reader/pdf",
-  });
-  assert.equal(isReaderActionEnabled({
-    actions,
-    job,
-    manifestPayload: { items: [{ artifact_key: "translated_pdf", ready: true }] },
-  }), false);
-});
-
-test("job detail markdown flow owns loading state and status fallbacks", async () => {
-  const previousDocument = globalThis.document;
-  globalThis.document = {
-    getElementById() {
-      return null;
-    },
-  };
-  const fields = {};
-  const links = {};
-  const state = {};
-  const setText = (id, value) => {
-    fields[id] = value;
-  };
-  const setActionLink = (id, url, enabled) => {
-    links[id] = { enabled: Boolean(enabled), url };
-  };
-  const markdownPayload = {
-    content: "# ok",
-    file_name: "book.md",
-    raw_url: "/raw.md",
-    json_url: "/markdown/document",
-    images: [],
-  };
-
-  try {
-    await loadAndRenderMarkdownFlow({
-      fetchProtected: async () => {
-        throw new Error("no image fetch expected");
-      },
-      job: {
-        markdown_ready: true,
-        artifacts: { markdown: { ready: true } },
-      },
-      jobId: "job-md",
-      loadMarkdownPayload: async (jobId) => {
-        assert.equal(jobId, "job-md");
-        return markdownPayload;
-      },
-      markdownImageUrls: [],
-      setActionLink,
-      setText,
-      state,
-    });
-
-    assert.equal(state.markdownPayload, markdownPayload);
-    assert.equal(fields["detail-markdown-status"], "已加载 /markdown JSON · book.md");
-    assert.equal(fields["detail-markdown-image-count"], "0");
-    assert.equal(fields["detail-markdown-preview"], "# ok");
-    assert.equal(links["detail-markdown-raw-btn"].enabled, true);
-    assert.equal(links["detail-markdown-json-btn"].enabled, true);
-
-    await loadAndRenderMarkdownFlow({
-      fetchProtected: async () => ({}),
-      job: {
-        markdown_ready: true,
-        artifacts: { markdown: { ready: true } },
-      },
-      jobId: "job-md",
-      loadMarkdownPayload: async () => {
-        throw new Error("markdown unavailable");
-      },
-      markdownImageUrls: [],
-      setActionLink,
-      setText,
-      state: {},
-    });
-
-    assert.equal(fields["detail-markdown-status"], "markdown unavailable");
-  } finally {
-    globalThis.document = previousDocument;
-  }
-});
-
-
-
-test("job detail overview renderer owns state updates and rerun status", () => {
-  const previousDocument = globalThis.document;
-  const rerunButton = { disabled: false };
-  globalThis.document = {
-    getElementById(id) {
-      return id === "detail-rerun-btn" ? rerunButton : null;
-    },
-  };
-  const state = { markdownImageUrls: [], eventsPayload: null };
-  const fields = {};
-  const links = {};
-  try {
-    renderJobDetailOverview({
-      diagnosticsPayload: null,
-      job: {
-        job_id: "job-overview",
-        status: "succeeded",
-        actions: { rerun: { enabled: true, url: "/rerun/job-overview" } },
-      },
-      manifestPayload: { items: [] },
-      resumePlan: { can_resume: true, from_stage: "translation" },
-      setActionLink(id, url, enabled) {
-        links[id] = { enabled: Boolean(enabled), url };
-      },
-      setEventsStatus(value) {
-        fields.eventsStatus = value;
-      },
-      setText(id, value) {
-        fields[id] = value;
-      },
-      state,
-    });
-  } finally {
-    globalThis.document = previousDocument;
-  }
-
-  assert.equal(state.job.job_id, "job-overview");
-  assert.deepEqual(state.manifestPayload, { items: [] });
-  assert.equal(state.resumePlan.can_resume, true);
-  assert.match(state.rerunActionUrl, /\/rerun\/job-overview$/);
-  assert.equal(rerunButton.disabled, false);
-  assert.equal(fields["detail-rerun-status"], "可从 translation 恢复");
-  assert.equal(fields.eventsStatus, "尚未加载");
-  assert.equal(links["detail-reader-btn"].enabled, false);
-});
-
-test("job detail page state owns initial shape and markdown image cleanup", () => {
-  const state = createJobDetailPageState();
-  assert.deepEqual(Object.keys(state), [
-    "job",
-    "manifestPayload",
-    "markdownPayload",
-    "markdownImageUrls",
-    "eventsPayload",
-    "eventsLoadingPromise",
-    "rerunActionUrl",
-    "resumePlan",
-  ]);
-  assert.equal(state.job, null);
-  assert.deepEqual(state.markdownImageUrls, []);
-
-  const revoked = [];
-  const previousUrl = globalThis.URL;
-  globalThis.URL = {
-    ...previousUrl,
-    revokeObjectURL(url) {
-      revoked.push(url);
-    },
-  };
-  try {
-    state.markdownImageUrls.push("blob:a", "blob:b");
-    revokeJobDetailMarkdownImageUrls(state);
-  } finally {
-    globalThis.URL = previousUrl;
-  }
-
-  assert.deepEqual(revoked, ["blob:a", "blob:b"]);
-  assert.deepEqual(state.markdownImageUrls, []);
-});
-
 test("status detail runtime port narrows current job cache access", () => {
   const state = createLegacyStateFixture();
   const port = createRuntimePort(state);
@@ -792,19 +244,18 @@ test("status detail resume actions route UI side effects through view port", asy
   const textCalls = [];
   const pollingCalls = [];
   const resolveActions = (job) => ({
-    rerun: job.actions.rerun.url,
-    rerunEnabled: job.actions.rerun.enabled,
+    resumeEnabled: job.actions.rerun.enabled,
   });
 
-  const actionUrl = syncRerunAction({
+  const resumeJobId = syncRerunAction({
     ...rerunContext,
     viewPort,
     resolveActions,
   });
   await rerunCurrentJob({
     rerunContext,
-    rerunJob: async (url) => {
-      calls.push(["rerun", url]);
+    resumeJob: async (jobId) => {
+      calls.push(["resume", jobId]);
       return { job_id: "job-resumed-action" };
     },
     setText: (...args) => textCalls.push(args),
@@ -813,12 +264,13 @@ test("status detail resume actions route UI side effects through view port", asy
     resolveActions,
   });
 
-  assert.match(actionUrl, /\/api\/v1\/jobs\/job-resume-action\/rerun$/);
+  // 续跑一律 POST /jobs/<当前任务>/actions/resume，不再用 actions.rerun.url。
+  assert.equal(resumeJobId, "job-resume-action");
   assert.deepEqual(calls, [
     ["action", true, "可从 translation 恢复"],
     ["action", true, "正在提交恢复任务..."],
     ["disabled", true],
-    ["rerun", actionUrl],
+    ["resume", "job-resume-action"],
     ["close"],
     // finally 语义：settled 即解禁，成功也不残留禁用。
     ["disabled", false],
@@ -1149,419 +601,87 @@ test("status detail translation tab coordinator applies filters and replays sele
   assert.deepEqual(renderCalls.map((call) => call[0]), ["replay-loading", "replay"]);
 });
 
-test("job detail status view model follows main lane display stage", () => {
-  const snapshot = buildJobDetailStatusViewModel(
-    {
-      job_id: "job-detail",
-      status: "running",
-      display_stage: "translation",
-      stage: "translating",
-      substage: "translation_batches",
-      progress: { unit: "batch", current: 28, total: 5216 },
-    },
-    {
-      items: [
-        {
-          seq: 41,
-          display_stage: "render",
-          stage: "render_preprocess",
-          substage: "render_prewarm",
-          lane: "background",
-          progress: { unit: "step", current: 1, total: 3 },
-          message: "render payload prewarm",
-        },
-        {
-          seq: 42,
-          display_stage: "translation",
-          stage: "translating",
-          substage: "translation_batches",
-          lane: "main",
-          progress: { unit: "batch", current: 29, total: 5216 },
-        },
-      ],
-    },
+test("status detail rerun: 409 translation ambiguity asks for confirmation, second click retries translation with duplicate risk (#132)", async () => {
+  const { createStatusDetailResumeActions } = await import(
+    "../../src/features/job-detail/domain/dialog/controller-resume.js"
   );
-
-  assert.equal(snapshot.stageKey, "translate");
-  assert.equal(snapshot.progressText, "第 29/5216 批");
-  assert.match(snapshot.runtimeCurrentStage, /翻译|第 29\/5216 批/);
-});
-
-test("job detail status view model does not expose legacy stage detail fallback", () => {
-  const snapshot = buildJobDetailStatusViewModel(
-    {
-      job_id: "job-detail-legacy-fallback",
-      status: "running",
-      display_stage: "translation",
-      stage: "render_preprocess",
-      current_stage: "render_preprocess",
-      stage_detail: "render payload prewarm: ready",
-      progress: { unit: "batch", current: 30, total: 100 },
-    },
-    { items: [] },
+  const { TRANSLATION_DUPLICATE_RISK_PROMPT } = await import(
+    "../../src/features/job-detail/domain/dialog/resume-actions.js"
   );
-
-  assert.equal(snapshot.stageKey, "translate");
-  assert.equal(/render|prewarm|渲染/.test(snapshot.runtimeCurrentStage), false);
-});
-
-test("job detail status view model does not use legacy user_stage as runtime stage", () => {
-  const snapshot = buildJobDetailStatusViewModel(
-    {
-      job_id: "job-detail-legacy-user-stage",
-      status: "running",
-      user_stage: "translation",
-      stage: "render_preprocess",
-      current_stage: "render_preprocess",
-      progress: { unit: "batch", current: 30, total: 100 },
-    },
-    { items: [] },
-  );
-
-  assert.equal(snapshot.stageKey, "running");
-  assert.equal(/translation|翻译|render|渲染/.test(snapshot.runtimeCurrentStage), false);
-});
-
-test("job detail event view model uses structured progress fields", () => {
-  const viewModel = buildJobDetailEventViewModel({
-    seq: 99,
-    display_stage: "translation",
-    stage: "render_preprocess",
-    substage: "translation_batches",
-    lane: "main",
-    event_type: "progress",
-    progress: { unit: "batch", current: 4000, total: 5216 },
-    stage_detail: "book: completed batch 1/2",
-    message: "book: completed batch 1/2",
+  const jobFor = (jobId) => ({
+    job_id: jobId,
+    status: "failed",
+    actions: { rerun: { enabled: true, url: `/api/v1/jobs/${jobId}/rerun` } },
   });
-
-  assert.equal(viewModel.displayStage, "translation");
-  assert.equal(viewModel.substage, "translation_batches");
-  assert.equal(viewModel.lane, "main");
-  assert.equal(viewModel.progressText, "第 4000/5216 批");
-  assert.equal(viewModel.progressCurrent, 4000);
-  assert.equal(viewModel.progressTotal, 5216);
-  assert.equal(viewModel.progressUnit, "batch");
-});
-
-test("job detail event view model does not promote canonical events without display_stage", () => {
-  const viewModel = buildJobDetailEventViewModel({
-    seq: 100,
-    lane: "main",
-    user_stage: "render",
-    stage: "render_preprocess",
-    substage: "render_prewarm",
-    event_type: "progress",
-    progress: { unit: "step", current: 1, total: 3 },
-  });
-
-  assert.equal(viewModel.displayStage, "");
-  assert.equal(viewModel.stageText, "进度 1/3");
-  assert.equal(viewModel.lane, "main");
-  assert.equal(viewModel.progressCurrent, 1);
-  assert.equal(viewModel.progressTotal, 3);
-});
-
-test("normalized event display record prefers structured progress over provider text", () => {
-  const record = normalizedStageEventRecord({
-    seq: 100,
-    display_stage: "translation",
-    stage: "translating",
-    substage: "translation_batches",
-    lane: "main",
-    event_type: "progress",
-    progress: { unit: "batch", current: 4000, total: 5216 },
-    stage_detail: "book: completed batch 1/2",
-    message: "book: completed batch 1/2",
-  });
-
-  assert.equal(record.displayStage, "translation");
-  assert.equal(record.stageText, "第 4000/5216 批");
-  assert.equal(record.progressText, "第 4000/5216 批");
-  assert.equal(record.progress.current, 4000);
-  assert.equal(record.progress.total, 5216);
-});
-
-test("status detail event presentation uses normalized progress records", () => {
-  const presentation = buildEventsPresentation({
-    items: [
-      {
-        seq: 101,
-        display_stage: "translation",
-        stage: "translating",
-        substage: "translation_batches",
-        lane: "main",
-        event_type: "progress",
-        progress: { unit: "batch", current: 4001, total: 5216 },
-        stage_detail: "book: completed batch 1/2",
-        message: "book: completed batch 1/2",
-      },
-    ],
-  });
-
-  assert.equal(presentation.count, 1);
-  assert.match(presentation.markup, /translation/);
-  assert.match(presentation.markup, /translation_batches/);
-  assert.match(presentation.markup, /第 4001\/5216 批/);
-});
-
-test("job status view model preserves status card snapshot fields", () => {
-  const job = {
-    job_id: "job-status-model",
-    status: "succeeded",
-    display_stage: "done",
-    output_pdf_ready: true,
-    progress_percent: 100,
-    actions: {
-      download_pdf: {
-        enabled: true,
-        url: "/api/v1/jobs/job-status-model/pdf",
+  let currentJob = jobFor("job-ambiguous");
+  const overviews = [];
+  const calls = [];
+  const resume = createStatusDetailResumeActions({
+    runtimePort: { rerunContext: () => ({ job: currentJob, resumePlan: null }) },
+    store: {
+      actions: {
+        setOverview: (patch) => overviews.push(patch.rerun),
+        setRerunPending: () => {},
       },
     },
-  };
-  const events = { items: [] };
-  const stagePresentation = {
-    label: "完成",
-    detail: "翻译 PDF 已生成",
-    stageKey: "done",
-    visualStageKey: "done",
-    progressCurrent: 100,
-    progressTotal: 100,
-    progressPercent: 100,
-    progressText: "已完成",
-    progressUnit: "percent",
-    progressIndeterminate: false,
-    substageKey: "done",
-    stageProgressByKey: {
-      done: {
-        current: 100,
-        total: 100,
-        percent: 100,
-        unit: "percent",
-      },
+    dialogStore: { close: () => calls.push(["close"]) },
+    resumeJob: async (jobId) => {
+      calls.push(["resume", jobId]);
+      throw new Error("提交失败: 409 translation request outcome is ambiguous; generic rerun is paused. Use retry-stage with stage=translation and ambiguous_request_policy=accept_duplicate_risk");
     },
-  };
-  const input = {
-    state: createLegacyStateFixture(),
-    job,
-    jobId: job.job_id,
-    stagePresentation,
-    events,
-    manifest: null,
-    stageActions: null,
-    publicErrorText: "-",
-  };
-
-  const viewModel = buildJobStatusViewModel(input);
-  const snapshot = buildStatusCardSnapshot(input);
-
-  assert.deepEqual(snapshot, viewModel);
-  assert.equal(viewModel.jobId, "job-status-model");
-  assert.equal(viewModel.stageKey, "done");
-  assert.equal(viewModel.progressText, "已完成");
-  assert.equal(viewModel.errorText, "");
-  assert.equal(viewModel.pdfReady, true);
-});
-
-test("job status view model carries manifest actions and retry actions", () => {
-  const job = {
-    job_id: "job-status-actions",
-    status: "succeeded",
-    display_stage: "done",
-    output_pdf_ready: true,
-    artifacts: {},
-  };
-  const manifest = {
-    items: [
-      {
-        artifact_key: "source_pdf",
-        ready: true,
-        resource_path: "/api/v1/jobs/job-status-actions/artifacts/source_pdf",
-      },
-      {
-        artifact_key: "markdown_bundle_zip",
-        ready: true,
-        resource_path: "/api/v1/jobs/job-status-actions/artifacts/markdown_bundle_zip",
-      },
-      {
-        artifact_key: "pdf",
-        ready: true,
-        resource_path: "/api/v1/jobs/job-status-actions/pdf",
-      },
-    ],
-  };
-  const viewModel = buildJobStatusViewModel({
-    state: createLegacyStateFixture(),
-    job,
-    jobId: job.job_id,
-    events: { items: [] },
-    manifest,
-    stageActions: {
-      stages: [
-        {
-          stage: "translation",
-          label: "重新翻译",
-          can_retry: true,
-        },
-        {
-          stage: "render",
-          can_retry: false,
-          disabled_reason: "等待翻译完成",
-        },
-      ],
+    retryTranslationWithRisk: async (jobId) => {
+      calls.push(["retry-translation", jobId]);
+      return { job_id: "job-retried" };
     },
-    publicErrorText: "",
-    stagePresentation: {
-      label: "完成",
-      detail: "翻译 PDF 已生成",
-      stageKey: "done",
-      visualStageKey: "done",
-      progressCurrent: 100,
-      progressTotal: 100,
-      progressPercent: 100,
-      progressText: "已完成",
-      progressUnit: "percent",
-      progressIndeterminate: false,
-      substageKey: "done",
-    },
+    setText: () => {},
+    startPolling: (jobId) => calls.push(["poll", jobId]),
+    resolveActions: (job) => ({ resumeEnabled: job.actions.rerun.enabled }),
   });
 
-  assert.equal(viewModel.readerReady, true);
-  assert.equal(viewModel.sourcePdfReady, true);
-  assert.match(viewModel.sourcePdfUrl, /source_pdf/);
-  assert.equal(viewModel.markdownBundleReady, true);
-  assert.match(viewModel.markdownBundleUrl, /include_job_dir=true/);
-  assert.equal(viewModel.stageRetryActions.translate.canRetry, true);
-  assert.equal(viewModel.stageRetryActions.translate.stage, "translation");
-  assert.equal(viewModel.stageRetryActions.render.canRetry, false);
-  assert.equal(viewModel.stageRetryActions.render.disabledReason, "等待翻译完成");
+  // 第一次：通用重跑被 409 拦下 → 不报英文原文，给出二次确认提示，按钮仍可点。
+  await resume.rerunCurrentJob();
+  assert.deepEqual(calls, [["resume", "job-ambiguous"]]);
+  assert.equal(overviews.at(-1).status, TRANSLATION_DUPLICATE_RISK_PROMPT);
+  assert.equal(overviews.at(-1).enabled, true);
+
+  // 换了任务：确认不能带过去，仍先走通用重跑。
+  currentJob = jobFor("job-other");
+  await resume.rerunCurrentJob();
+  assert.deepEqual(calls.at(-1), ["resume", "job-other"]);
+
+  // 回到原任务需要重新确认：再被 409 拦一次 → 第二次点击才走 retry-stage(translation)。
+  currentJob = jobFor("job-ambiguous");
+  calls.length = 0;
+  await resume.rerunCurrentJob();
+  await resume.rerunCurrentJob();
+  assert.deepEqual(calls, [
+    ["resume", "job-ambiguous"],
+    ["retry-translation", "job-ambiguous"],
+    ["close"],
+    ["poll", "job-retried"],
+  ]);
+
+  // 确认只用一次：之后再点又回到通用重跑。
+  calls.length = 0;
+  await resume.rerunCurrentJob();
+  assert.deepEqual(calls[0], ["resume", "job-ambiguous"]);
 });
 
-test("live duration helpers use explicit timing inputs instead of runtime globals", () => {
-  const job = {
-    status: "succeeded",
-    display_stage: "done",
-    created_at: "2026-01-01T00:00:00Z",
-    updated_at: "2026-01-01T00:03:00Z",
-    stage_history: [
-      {
-        stage: "rendering",
-        enter_at: "2026-01-01T00:02:00Z",
-      },
-    ],
-  };
-
-  const durations = resolveLiveDurations(job, {
-    finishedAtFallback: "2026-01-01T00:05:00Z",
-  });
-
-  assert.equal(durations.totalElapsedText, "5分 0秒");
-  assert.equal(
-    resolveStageHistoryDuration(job.stage_history[0], job, {
-      finishedAtFallback: "2026-01-01T00:05:00Z",
-    }),
-    180000,
-  );
-});
-
-test("live duration helpers keep ambiguous succeeded payloads running", () => {
-  const job = {
-    status: "succeeded",
-    created_at: "2026-01-01T00:00:00Z",
-    updated_at: "2026-01-01T00:03:00Z",
-    stage_started_at: "2026-01-01T00:02:00Z",
-    stage_history: [
-      {
-        stage: "translating",
-        enter_at: "2026-01-01T00:02:00Z",
-      },
-    ],
-  };
-
-  const durations = resolveLiveDurations(job, {
-    finishedAtFallback: "2026-01-01T00:05:00Z",
-    now: "2026-01-01T00:06:00Z",
-  });
-
-  assert.equal(durations.stageElapsedText, "4分 0秒");
-  assert.equal(durations.totalElapsedText, "6分 0秒");
-  assert.equal(
-    resolveStageHistoryDuration(job.stage_history[0], job, {
-      finishedAtFallback: "2026-01-01T00:05:00Z",
-      now: "2026-01-01T00:06:00Z",
-    }),
-    240000,
-  );
-});
-
-test("job status view model accepts explicit finished-at fallback", () => {
-  const job = {
-    job_id: "job-status-duration",
-    status: "succeeded",
-    display_stage: "done",
-    created_at: "2026-01-01T00:00:00Z",
-    updated_at: "2026-01-01T00:02:00Z",
-  };
-  const viewModel = buildJobStatusViewModel({
-    state: createLegacyStateFixture(),
-    job,
-    jobId: job.job_id,
-    events: { items: [] },
-    manifest: null,
-    stageActions: null,
-    publicErrorText: "",
-    finishedAtFallback: "2026-01-01T00:04:00Z",
-    stagePresentation: {
-      label: "完成",
-      detail: "翻译 PDF 已生成",
-      stageKey: "done",
-      visualStageKey: "done",
-      progressCurrent: 100,
-      progressTotal: 100,
-      progressPercent: 100,
-      progressText: "已完成",
-      progressUnit: "percent",
-      progressIndeterminate: false,
-      substageKey: "done",
+test("status detail rerun: non-ambiguity errors are still shown as-is", async () => {
+  const overviews = [];
+  await rerunCurrentJob({
+    rerunContext: {
+      job: { job_id: "job-x", status: "failed", actions: { rerun: { enabled: true, url: "/r" } } },
+      resumePlan: null,
     },
-  });
-
-  assert.equal(viewModel.elapsed, "4分 0秒");
-});
-
-test("job status view model does not read runtime finished-at fallback implicitly", () => {
-  const localState = createLegacyStateFixture();
-  localState.currentJobFinishedAt = "2026-01-01T00:10:00Z";
-  const job = {
-    job_id: "job-status-explicit-duration",
-    status: "succeeded",
-    display_stage: "done",
-    created_at: "2026-01-01T00:00:00Z",
-    updated_at: "2026-01-01T00:02:00Z",
-  };
-
-  const viewModel = buildJobStatusViewModel({
-    state: localState,
-    job,
-    jobId: job.job_id,
-    events: { items: [] },
-    manifest: null,
-    stageActions: null,
-    publicErrorText: "",
-    stagePresentation: {
-      label: "完成",
-      detail: "翻译 PDF 已生成",
-      stageKey: "done",
-      visualStageKey: "done",
-      progressCurrent: 100,
-      progressTotal: 100,
-      progressPercent: 100,
-      progressText: "已完成",
-      progressUnit: "percent",
-      progressIndeterminate: false,
-      substageKey: "done",
+    resumeJob: async () => { throw new Error("提交失败: 500 boom"); },
+    retryTranslationWithRisk: async () => { throw new Error("must not be called"); },
+    viewPort: {
+      closeDialog: () => {},
+      setRerunAction: (payload) => overviews.push(payload.status),
+      setRerunDisabled: () => {},
     },
+    resolveActions: () => ({ resumeEnabled: true }),
   });
-
-  assert.equal(viewModel.elapsed, "2分 0秒");
+  assert.equal(overviews.at(-1), "提交失败: 500 boom");
 });

@@ -1,6 +1,7 @@
 """The offline entrypoint must not select live tools or hide pytest failures."""
 import importlib.util
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -39,7 +40,9 @@ def test_default_suites_and_failure_propagation(monkeypatch):
     assert command[6:8] == list(map(str, runner.ARCHITECTURE_TESTS))
     assert options["timeout"] == 300
     assert "RETAIN_TRANSLATION_CAPTURE_DIR" not in options["env"]
-    assert options["env"]["PYTHONPATH"] == str(runner.SERVICES / "pipeline")
+    paths = options["env"]["PYTHONPATH"].split(os.pathsep)
+    # 本仓库自己的包都在、pipeline 排第一：worktree 里测的是这份检出的代码
+    assert paths[0] == str(runner.SERVICES / "pipeline") and str(runner.SERVICES / "translation") in paths
     assert not Path(options["env"]["OUTPUT_ROOT"]).exists()
 
 
@@ -63,15 +66,16 @@ def test_child_default_caches_use_isolated_output_root(tmp_path):
     runner = _runner()
     child = runner.subprocess.run(
         [runner.sys.executable, "-c",
-         "import json; from retainpdf_pipeline.foundation.config import paths; "
+         "import json; from retainpdf_base import paths; "
          "print(json.dumps([str(paths.TRANSLATION_UNIT_CACHE_DIR), "
-         "str(paths.DOMAIN_CONTEXT_CACHE_DIR), str(paths.RENDER_TYPOGRAPHY_MEMORY_DIR)]))"],
+         "str(paths.DOMAIN_CONTEXT_CACHE_DIR), "
+         "str(paths.AGENT_REQUEST_CACHE_DIR)]))"],
         env=runner.test_environment(str(tmp_path)), capture_output=True, text=True,
         check=True, timeout=20,
     )
     assert json.loads(child.stdout) == [
         str(tmp_path / name) for name in
-        ("_translation_unit_cache", "_domain_context_cache", "_render_typography_memory")
+        ("_translation_unit_cache", "_domain_context_cache", "_agent_request_cache")
     ]
 
 

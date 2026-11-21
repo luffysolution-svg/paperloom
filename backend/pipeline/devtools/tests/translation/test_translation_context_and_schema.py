@@ -1,23 +1,18 @@
 from __future__ import annotations
 
-import sys
 import tempfile
 import time
 from pathlib import Path
 
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-
-from retainpdf_pipeline.translate.services.continuation import review as continuation_review
-from retainpdf_pipeline.translate.core.context import build_item_context
-from retainpdf_pipeline.translate.llm import domain_context
-from retainpdf_pipeline.translate.llm.shared import control_context
-from retainpdf_pipeline.translate.core.terms import matched_glossary_entries
-from retainpdf_pipeline.translate.core.terms import normalize_glossary_entries
-from retainpdf_pipeline.translate.services.postprocess import garbled_reconstruction
-from retainpdf_pipeline.translate.services.context import session_context
+from retainpdf_translation.services.continuation import review as continuation_review
+from retainpdf_translation.core.context import build_item_context
+from retainpdf_translation.llm import domain_context
+from retainpdf_translation.llm.shared import control_context
+from retainpdf_translation.core.terms import matched_glossary_entries
+from retainpdf_translation.core.terms import normalize_glossary_entries
+from retainpdf_translation.services.postprocess import garbled_reconstruction
+from retainpdf_translation.services.context import session_context
 from retainpdf_pipeline.ocr.document_schema.text_flow import classify_text_flow_for_role
 
 
@@ -246,6 +241,30 @@ def test_domain_context_cache_round_trip() -> None:
         assert loaded == payload
 
 
+def test_domain_context_caches_reject_escape_damaged_guidance() -> None:
+    # 旧解析器把 \beta / \theta / \rho 解成退格 / 制表 / 回车的指引已经落进了
+    # per-job domain-context.json（还会被 Rust 续跑拷进新任务）和跨任务共享缓存；
+    # 这些坏缓存不能再被复用，要回落到重新识别。
+    damaged = {
+        "domain": "quantum chemistry",
+        "summary": "cached",
+        "translation_guidance": "函数（如 $\rho(\x08oldsymbol{r})$）、$\x08eta$、$\theta$ 保持原样。",
+        "preview_text": "preview",
+    }
+    clean = {**damaged, "translation_guidance": "函数（如 $\\rho(\\boldsymbol{r})$）保持原样。\n- 术语保留英文。"}
+    with tempfile.TemporaryDirectory() as tmp:
+        output_dir = Path(tmp)
+        domain_context.save_domain_context(output_dir, damaged)
+        assert domain_context.load_cached_domain_context(output_dir) is None
+        domain_context.save_domain_context(output_dir, clean)
+        assert domain_context.load_cached_domain_context(output_dir) == clean
+
+    domain_context._store_shared_domain_context("preview", model="m", context=damaged)
+    assert domain_context._load_shared_domain_context("preview", model="m") is None
+    domain_context._store_shared_domain_context("preview", model="m", context=clean)
+    assert domain_context._load_shared_domain_context("preview", model="m") == clean
+
+
 def test_domain_context_raw_response_round_trip() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         output_dir = Path(tmp)
@@ -256,11 +275,12 @@ def test_domain_context_raw_response_round_trip() -> None:
 def test_domain_context_deadline_interrupts_slow_call() -> None:
     started = time.perf_counter()
     try:
-        with domain_context._domain_context_deadline(1):
+        # setitimer 认小数秒：0.2 秒就够证明会被打断（以前等满 1 秒）
+        with domain_context._domain_context_deadline(0.2):
             time.sleep(5)
     except domain_context.DomainContextTimeoutError:
         elapsed = time.perf_counter() - started
-        assert elapsed < 2.5
+        assert elapsed < 1.5
     else:
         raise AssertionError("domain context deadline did not interrupt slow call")
 

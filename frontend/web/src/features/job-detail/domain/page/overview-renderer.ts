@@ -4,6 +4,10 @@ import { applyDiagnostics, renderFailureDebugContext } from "./failure.js";
 import { renderJobDetailActionLinks } from "./action-links.js";
 import { renderInitialMarkdownContract } from "./markdown-flow.js";
 import { summarizeResumePlan } from "./resume.js";
+import type { JobLike, JobPayload, ManifestPayload } from "@retainpdf/domain/job";
+import type { ResumePlanLike } from "../dialog/resume-actions.js";
+import type { DetailSetActionLink, DetailSetText } from "./page-ports.js";
+import type { JobDetailPageState } from "./page-state.js";
 import { buildJobDetailStatusViewModel } from "./status-view-model.js";
 import {
   renderJobDetailFailureSummary,
@@ -20,6 +24,15 @@ export function renderJobDetailOverview({
   setEventsStatus,
   setText,
   state,
+}: {
+  diagnosticsPayload?: Record<string, unknown> | null;
+  job: JobLike | JobPayload;
+  manifestPayload?: ManifestPayload | null;
+  resumePlan?: ResumePlanLike | null;
+  setActionLink: DetailSetActionLink;
+  setEventsStatus: (text: string) => void;
+  setText: DetailSetText;
+  state?: JobDetailPageState | null;
 }) {
   if (state) {
     state.job = job;
@@ -29,9 +42,6 @@ export function renderJobDetailOverview({
   const durations = resolveLiveDurations(job);
   const actions = resolveJobActions(job);
   const statusViewModel = buildJobDetailStatusViewModel(job, state?.eventsPayload);
-  if (state) {
-    state.rerunActionUrl = actions.rerun;
-  }
 
   renderArtifactsManifest(manifestPayload);
   renderInitialMarkdownContract({
@@ -45,9 +55,9 @@ export function renderJobDetailOverview({
   applyDiagnostics(diagnosticsPayload, job, setText);
   renderFailureDebugContext(job);
 
-  const rerunEnabled = Boolean(resumePlan?.can_resume || (actions.rerunEnabled && actions.rerun));
+  const rerunEnabled = Boolean(resumePlan?.can_resume || actions.resumeEnabled);
   if (document.getElementById("detail-rerun-btn")) {
-    (document.getElementById("detail-rerun-btn") as any).disabled = !rerunEnabled;
+    (document.getElementById("detail-rerun-btn") as HTMLButtonElement).disabled = !rerunEnabled;
   }
   setText("detail-rerun-status", summarizeResumePlan(resumePlan));
   renderJobDetailPublicError({ job, setText });

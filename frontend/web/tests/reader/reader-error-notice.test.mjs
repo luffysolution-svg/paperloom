@@ -4,64 +4,14 @@ import { readFileSync } from "node:fs";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { JSDOM } from "jsdom";
 
 import { ReaderErrorNotice } from "../../../../frontend/packages/reader/src/components/react-pdf/ReaderErrorNotice.tsx";
 import { ReaderReactBoot } from "../../../../frontend/packages/reader/src/components/react-pdf/ReaderReactBoot.tsx";
 import { useReaderReactController } from "../../../../frontend/packages/reader/src/hooks/use-reader-react-controller.ts";
 import { setReaderAdapters } from "../../../../frontend/packages/reader/src/adapters.ts";
+import { installReaderDom } from "../helpers/dom.mjs";
 
-function installDom(url = "http://localhost/reader.html?job_id=job-errors") {
-  const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", {
-    url,
-    pretendToBeVisual: true,
-  });
-  const keys = [
-    "window",
-    "document",
-    "history",
-    "location",
-    "localStorage",
-    "HTMLElement",
-    "Element",
-    "Node",
-    "Event",
-    "MouseEvent",
-    "MutationObserver",
-    "getSelection",
-    "requestAnimationFrame",
-    "cancelAnimationFrame",
-    "addEventListener",
-    "removeEventListener",
-    "dispatchEvent",
-  ];
-  const previous = Object.fromEntries(keys.map((key) => [key, globalThis[key]]));
-  for (const key of keys) {
-    const value = key === "getSelection"
-      ? dom.window.getSelection.bind(dom.window)
-      : [
-          "requestAnimationFrame",
-          "cancelAnimationFrame",
-          "addEventListener",
-          "removeEventListener",
-          "dispatchEvent",
-        ].includes(key)
-        ? dom.window[key].bind(dom.window)
-        : dom.window[key];
-    Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
-  }
-  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-  return {
-    dom,
-    restore() {
-      for (const [key, value] of Object.entries(previous)) {
-        Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
-      }
-      delete globalThis.IS_REACT_ACT_ENVIRONMENT;
-      dom.window.close();
-    },
-  };
-}
+const installDom = (url = "http://localhost/reader.html?job_id=job-errors") => installReaderDom({ url });
 
 function readerSource(relative) {
   return readFileSync(new URL(relative, import.meta.url), "utf8");

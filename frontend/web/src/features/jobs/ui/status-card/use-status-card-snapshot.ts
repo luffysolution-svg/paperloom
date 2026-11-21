@@ -20,6 +20,7 @@ export type StatusCardSnapshotDerivation = {
   flowStageKey: string;
   selection: StatusCardSelection;
   cancelDisabled: boolean;
+  cancelError: string;
   cancelCurrentJob: (() => unknown) | undefined;
 };
 
@@ -36,7 +37,12 @@ export function useStatusCardSnapshot({
   const snapshot = (embedded
     ? mergeSnapshotWithFallback(rawSnapshot, fallbackItem)
     : rawSnapshot) as StatusCardSnapshot;
-  const cancelDisabled = stateSnapshot.cancelDisabled;
+  // 取消按钮调的 cancelCurrentJob 取消的是全局运行时在跟的任务（rawSnapshot）。merge 把快照隔离成
+  // 本书的另一条任务时，点下去会取消别的书，所以禁用。
+  const rawJobId = `${rawSnapshot?.jobId || ""}`.trim();
+  const shownJobId = `${snapshot?.jobId || ""}`.trim();
+  const cancelDisabled = stateSnapshot.cancelDisabled || Boolean(rawJobId && shownJobId && rawJobId !== shownJobId);
+  const cancelError = `${stateSnapshot.cancelError || ""}`;
 
   const ids = useMemo(
     () => (embedded ? createPrefixedStatusCardIds(idPrefix) : STATUS_CARD_IDS),
@@ -52,5 +58,5 @@ export function useStatusCardSnapshot({
     currentStageKey: flowStageKey || snapshot.stageKey,
   }) as StatusCardSelection;
 
-  return { snapshot, ids, flowStageKey, selection, cancelDisabled, cancelCurrentJob };
+  return { snapshot, ids, flowStageKey, selection, cancelDisabled, cancelError, cancelCurrentJob };
 }

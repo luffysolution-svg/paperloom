@@ -12,11 +12,17 @@
 // 没有鉴权头，后端会 401）。委托与谁渲染了按钮无关，但 id 必须原样保留。
 //
 // 数据源沿用旧卡那套 model，保证 ready/url 的口径不变。
+//
+// 但全局 statusCard 只有一张，播的是最近一次被轮询的任务——可能是另一本书的（打开一本
+// 已完成的书时详情不会 attach 它自己的任务）。所以只在卡片的 jobId 属于本书
+// （documentJobIds，即 documentJobs.jobs）时才渲染，否则会把别的书的产物挂到这本书上。
 import { ResultActions, useStatusCardModel } from "@/features/jobs/index.js";
 
-export function ProcessingResultActions() {
+export function ProcessingResultActions({ documentJobIds = [] }: { documentJobIds?: string[] }) {
   const model = useStatusCardModel({ embedded: true });
+  const cardJobId = `${model?.snapshot?.jobId || ""}`.trim();
   const primaryActions = (model?.display?.primaryActions || {}) as Record<string, unknown>;
+  if (!cardJobId || !documentJobIds.includes(cardJobId)) return null;
   const hasActions = Boolean(
     primaryActions.markdownBundleReady
     || primaryActions.pdfReady
@@ -28,7 +34,7 @@ export function ProcessingResultActions() {
     <div className="book-detail-processing-result-actions">
       <ResultActions
         {...primaryActions}
-        onReaderClick={() => model.reader?.openReader?.(model.snapshot?.jobId)}
+        onReaderClick={() => model.reader?.openReader?.(cardJobId, null, "", { pinJob: true })}
       />
     </div>
   );

@@ -16,12 +16,11 @@
 //   disposeWorkflowDialogEvents → disposeDocumentEvents（解绑 retryStage / returnHome）→
 //   jobRuntimeFeature.stopPolling()。事件生产者/消费者对照见 js/contracts/app-contract.ts。
 
+import { mountedFeature } from "./feature-registry.js";
 import { APP_EVENTS } from "@/platform/contracts/app-contract.js";
 import { requestedReaderJobIdFromLocation } from "@/features/reader/domain.js";
-import { normalizeJobPayload, summarizeStatus } from "@retainpdf/domain/job";
 import { readActiveJobId } from "@/features/jobs/index.js";
 import { isMockMode } from "@/platform/config/runtime.js";
-import { resetStatusDetailRuntimeView } from "@/features/job-detail/index.js";
 import { parseDetailJobId } from "@/platform/navigation/pages.js";
 
 import type { HomeBridge, HomeFeatures } from "./types.js";
@@ -55,17 +54,13 @@ export function createLifecycle({
   function initializeIdleView() {
     initializeIdleAppView({
       configPort: defaultAppShellConfigPort,
-      jobPresentationPort: { normalizeJobPayload, summarizeStatus },
       setText: bridge.setText,
       setWorkflowSections: bridge.setWorkflowSections,
-      setLinearProgress: bridge.setLinearProgress,
-      updateActionButtons: bridge.updateActionButtons,
       renderPageRangeSummary: bridge.renderPageRangeSummary,
       resetUploadProgress: bridge.resetUploadProgress,
       resetUploadedFile: bridge.resetUploadedFile,
       applyWorkflowMode: bridge.applyWorkflowMode,
       updateJobWarning: bridge.updateJobWarning,
-      resetEventsList: bridge.resetEventsList,
       activateDetailTab: bridge.activateDetailTab,
     });
   }
@@ -75,9 +70,9 @@ export function createLifecycle({
       const detail = hasRecordDetail(event) ? event.detail : {};
       const stage = `${detail.stage || ""}`.trim();
       const jobId = `${detail.jobId || detail.job_id || ""}`.trim();
-      if (stage) features.jobRuntimeFeature.retryStage(stage, jobId ? { jobId } : {});
+      if (stage) mountedFeature(features, "jobRuntimeFeature").retryStage(stage, jobId ? { jobId } : {});
     };
-    const onReturnHome = () => features.jobRuntimeFeature.returnToHome();
+    const onReturnHome = () => mountedFeature(features, "jobRuntimeFeature").returnToHome();
     documentRef.addEventListener(APP_EVENTS.retryStage, onRetryStage);
     documentRef.addEventListener(APP_EVENTS.returnHome, onReturnHome);
     return () => {
@@ -94,7 +89,7 @@ export function createLifecycle({
     if (!jobId) return;
     // 普通首页刷新没有 job_id 查询参数。此时必须从持久化的活动任务恢复
     // currentJobStore，否则后台仍在执行，详情页却会表现成“任务断开”。
-    features.jobRuntimeFeature.startPolling(jobId, fromActiveSession && !fromReader && !fromQuery
+    mountedFeature(features, "jobRuntimeFeature").startPolling(jobId, fromActiveSession && !fromReader && !fromQuery
       ? { silent: true, showWorkflow: false, publishLibrary: false, recovering: true }
       : undefined);
   }
@@ -123,7 +118,6 @@ export function createLifecycle({
       ["documentEvents", disposeDocumentEvents],
       ["recentJobsEvents", features.recentJobsFeature?.disposeFeatureEvents],
       ["artifactDownloadsEvents", disposeArtifactDownloadsEvents],
-      ["appUpdateEvents", features.appUpdateFeature?.dispose],
       ["jobRuntimePolling", features.jobRuntimeFeature?.stopPolling],
     ];
   }
@@ -148,18 +142,16 @@ export function createLifecycle({
   };
 }
 
-// ── idle 首帧：把主页外壳（进度条 / 摘要 / 上传区 / 工作流）打回空态。 ──
+// ── idle 首帧：把主页外壳（上传区 / 页码 / 工作流 / 状态详情弹窗的页签）打回空态。 ──
 //
 // 原在 src/js/features/app-shell/idle-reset.ts + config-port.ts，后拆到 idle-view.ts；
 // 现并入本文件与 initialize/dispose 同住（idle 视图是壳生命周期的一环）。
 //   - createAppShellConfigPort 存在的唯一目的就是把 isMock 喂给
 //     initializeIdleAppView（mock 模式下才清 error-box），没有第二个消费方。
-//   - 状态详情弹窗那半（resetStatusDetailRuntimeView）留在 features/job-detail，
-//     这里跨功能经它的出口 @/features/job-detail/index.js 取。
 
 export function createAppShellConfigPort({
   isMock = isMockMode,
-}: any = {}) {
+}: { isMock?: () => boolean } = {}) {
   return {
     isMock,
   };
@@ -169,29 +161,30 @@ export const defaultAppShellConfigPort = createAppShellConfigPort();
 
 export function initializeIdleAppView({
   configPort,
-  jobPresentationPort = {},
   setText,
   setWorkflowSections,
-  setLinearProgress,
-  updateActionButtons,
   renderPageRangeSummary,
   resetUploadProgress,
   resetUploadedFile,
   applyWorkflowMode,
   updateJobWarning,
-  resetEventsList,
   activateDetailTab,
-}: any) {
-  const normalizeJobPayload = jobPresentationPort.normalizeJobPayload || ((payload) => payload);
-  const summarizeStatus = jobPresentationPort.summarizeStatus || ((status) => status);
-
-  updateActionButtons(normalizeJobPayload({}));
+}: {
+  configPort?: { isMock?: () => boolean };
+  setText: (id: string, value: string) => void;
+  setWorkflowSections: (job: unknown) => void;
+  renderPageRangeSummary: () => void;
+  resetUploadProgress: () => void;
+  resetUploadedFile: () => void;
+  applyWorkflowMode: () => void;
+  updateJobWarning: (mode: string) => void;
+  activateDetailTab: (name?: string) => void;
+}) {
+  // 以前这里还往文字仓库写首页旧状态卡的摘要 / 阶段 / 耗时、状态详情弹窗的 18 个
+  // 运行时与失败字段，再调三个空函数（进度条、操作按钮、事件列表）。旧状态卡早已
+  // 下线，弹窗的字段由它自己的 store 渲染，文字仓库只有 error-box 有人读——都删了。
   setWorkflowSections(null);
-  setLinearProgress("job-progress-bar", "job-progress-text", NaN, NaN, "-");
-  setText("job-summary", summarizeStatus("idle"));
-  setText("job-stage-detail", "-");
-  setText("query-job-duration", "-");
-  resetStatusDetailRuntimeView({ setText, resetEventsList, activateDetailTab });
+  activateDetailTab("overview");
   if (configPort?.isMock?.()) {
     setText("error-box", "-");
   }

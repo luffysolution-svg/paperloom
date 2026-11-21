@@ -2,6 +2,8 @@
 
 [Jobs API index](jobs.md) · [API spec index](../../API_SPEC.md)
 
+> Address note: `/jobs/{job_id}/…` is grouped into eight categories (`actions`, `progress`, `files`, `reports`, `reader`, `translations`, `data`; `ai` was removed on 2026-11-03). The old addresses were removed on 2026-10-18 and now return 404; use the new ones (a book's cover and thumbnail are `GET /documents/{document_id}/files/cover.jpg` and `/files/thumbnail.jpg`). Old-to-new table: [`docs/api/01-任务/04-任务接口分类.md`](../../../../docs/api/01-任务/04-任务接口分类.md); every endpoint: [`docs/api/00-接口目录.md`](../../../../docs/api/00-接口目录.md).
+
 ## Frontend Library Contract
 
 The backend is the source of truth for book/library state. Frontend clients should not persist
@@ -27,15 +29,35 @@ Storage ownership:
   "message": "ok",
   "data": {
     "documents": [],
-    "total": 128
+    "total": 128,
+    "limit": 24,
+    "offset": 0,
+    "has_more": true
   }
 }
 ```
 
-`reading_status`, `tag`, `collection_id`, and `q` apply identically to the page
+`reading_status`, `collection_id`, and `q` apply identically to the page
 and to `total`. Documents without a backing upload are excluded from both.
 `limit` and `offset` affect only `documents`. With `job_id`, an associated
 document returns `total: 1`; a miss returns an empty page with `total: 0`.
+
+Paging (2026-10-22, rules in `docs/api/00-约定/03-分页.md`):
+
+- `limit` (default `50`) outside `1..=500` is rejected with `400`
+  (`limit must be 1..=500`); it used to be clamped silently.
+- `limit`, `offset` and `has_more` are echoed. `has_more` is
+  `offset + documents.length < total`; the page and `total` are read from one
+  SQLite snapshot and no rows are skipped, so the comparison is exact.
+- Ordering is `added_at DESC, document_id DESC`: documents added in the same
+  second (a batch upload) no longer move between pages.
+- With `job_id` the request is a lookup, not a page: `reading_status`,
+  `collection_id`, `q` and `offset` have no effect, at most one document is
+  returned, `limit` is still validated, `limit`/`offset` are echoed as sent and
+  `has_more` is always `false`.
+- Unknown query parameters are rejected with `400`
+  (``unknown field `tag`, expected one of ... in the query string``). Tags were
+  removed on 2026-09-26; `tag` used to be ignored silently.
 
 `q` is document-level text search: a document matches when either its `title`
 or its original `source_filename` contains the query (case-insensitive for
@@ -50,6 +72,30 @@ Because `total` reflects the same filter, clients can paginate search results
 normally. Before `q` existed, clients had to fetch a large first page and
 filter locally, which silently dropped matches beyond that page.
 
+Each document (list items and `GET /api/v1/documents/:document_id`) carries
+`has_translation: bool` — whether the document has **any** succeeded job that is
+not OCR-only. It answers "can this book be read side by side" and is independent
+of `active_job_id`: while a re-translation or re-render is running, or after it
+failed, an earlier translation is still readable, and `GET
+/api/v1/documents/:document_id/reading` still resolves to it. The flag is a
+database-only check (one indexed lookup per row); it does not open output PDFs,
+so the reading endpoint remains the authority on what actually opens. Older
+clients can ignore the field.
+
+When several range translations have to be merged, the reading endpoint
+returns a virtual job id `merged-<document_id>-<fingerprint>` backed by
+`data/documents/<document_id>/merged/<fingerprint>/`. Every read of that id
+refreshes a `.last-used` marker inside the directory; an older merged directory
+is pruned only after it has gone unread for 24 hours and a newer merge for the
+same book is built (the one the reading endpoint currently points at is never
+pruned). Reads of a pruned id return `404` with
+`error.details.reason = "merged_reading_expired"` (message unchanged:
+`job not found: <id>`); clients call the reading endpoint again for a fresh id.
+Concurrent reading requests for the same merge build it once; at most two
+merges build at a time per process. The book's page count is the source PDF's
+actual page count (cached by file stamp), falling back to `documents.page_count`
+only when the PDF cannot be read; `/translation-coverage` uses the same count.
+
 Book display metadata:
 
 - list items expose `display_name`, `page_count`, `source_file_name`, `cover_url`,
@@ -62,8 +108,10 @@ Book display metadata:
 
 Book media endpoints:
 
-- `GET /api/v1/jobs/{job_id}/cover`
-- `GET /api/v1/jobs/{job_id}/thumbnail`
+- `GET /api/v1/documents/{document_id}/files/cover.jpg`
+- `GET /api/v1/documents/{document_id}/files/thumbnail.jpg`
+
+The old per-job addresses `GET /api/v1/jobs/{job_id}/cover` and `/thumbnail` were removed on 2026-10-18. A job's `cover_url` / `thumbnail_url` already point at the book's address, and are `null` when the job has no document id.
 
 ## Document-scoped task and Agent version history
 
@@ -73,10 +121,15 @@ addition to `items` and `invocation_summary`, this projection returns:
 
 - `total`: authoritative number of jobs linked through `jobs.document_id`
 - `limit` / `offset`: the effective page request
-- `has_more`: whether another page exists
+- `has_more`: whether another page exists. Since 2026-10-22 it is computed by
+  reading one extra row (like `GET /api/v1/jobs`), not from `total`: unreadable
+  rows are skipped by the list but still counted by `COUNT(*)`, which used to
+  make the last page report `has_more: true`. `total` is unchanged.
+- Unknown query parameters are rejected with `400` (2026-10-22); only `limit`
+  and `offset` are accepted.
 
-The omitted `limit` defaults to `20`; the effective value is clamped to
-`1..500`. Ordering is `updated_at DESC, job_id DESC`, so equal timestamps do
+The omitted `limit` defaults to `20`; a `limit` outside `1..=500` is rejected
+with `400` (not clamped, rule 3 of `docs/api/00-约定/03-分页.md`). Ordering is `updated_at DESC, job_id DESC`, so equal timestamps do
 not move records between repeated page reads.
 
 Every `JobListItemView` exposes durable retry metadata from `runtime_json`:
@@ -84,21 +137,5 @@ Every `JobListItemView` exposes durable retry metadata from `runtime_json`:
 items expose the same one-based `attempt`; clients must not infer it from event
 counts or timestamps.
 
-`GET /api/v1/documents/:document_id/agent-versions?limit=50&offset=0` returns
-the safe document-level Agent candidate/commit history. Each item includes the
-version and operation identity, status, active flag, content hash, timestamps,
-and an authenticated `download_path` / `download_url`. Internal `artifact_key`
-and filesystem paths are never returned.
-
-For Agent versions, omitted `limit` defaults to `50` and is clamped to
-`1..100`; `offset` defaults to zero. Ordering is
-`created_at DESC, version_id DESC`. The response contains `versions`,
-`active_version_id`, `total`, the effective `limit`, `offset`, and `has_more`.
-The path is usable only while the owning operation is `result_ready` or
-`committed`; callers should use the public operation projection's
-`candidate_available` / `allowed_actions` before offering a download.
-
-This endpoint is version history, not live operation state. To render and act
-on the current draft/run/validation lifecycle, clients use the conversation
-operation list and public CAS actions described in the
-[AI control-plane contract](ai-control-plane.md#public-operation-projection-and-actions).
+`GET /api/v1/documents/:document_id/agent-versions` (Agent candidate/commit history) was removed on 2026-11-03
+together with RetainPDF's own AI service.

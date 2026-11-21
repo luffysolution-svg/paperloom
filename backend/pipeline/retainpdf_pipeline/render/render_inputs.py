@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-# Duplicated from retainpdf_pipeline.translate.core.payload.manifest
+# Duplicated from retainpdf_translation.core.payload.manifest
 # (stage-decouple: render must not import translate; file-contract duplicate).
 TRANSLATION_MANIFEST_FILE_NAME = "translation-manifest.json"
 
@@ -16,6 +16,8 @@ class RenderInputs:
     source_pdf_path: Path
     translations_dir: Path
     translation_manifest_path: Path | None
+    # OCR 归一化文档；None 时按老约定从译文目录推算（document_path_for_render）。
+    document_path: Path | None = None
 def _ensure_existing_file(path: Path, *, label: str) -> Path:
     if not path.exists():
         raise RuntimeError(f"{RENDER_INPUT_ERROR_PREFIX}: {label} not found: {path}")
@@ -37,6 +39,7 @@ def resolve_render_inputs(
     source_pdf_path: Path,
     translations_dir: Path | None = None,
     translation_manifest_path: Path | None = None,
+    document_path: Path | None = None,
 ) -> RenderInputs:
     resolved_source_pdf_path = _ensure_existing_file(Path(source_pdf_path), label="source PDF")
 
@@ -77,4 +80,5 @@ def resolve_render_inputs(
         source_pdf_path=resolved_source_pdf_path,
         translations_dir=resolved_translations_dir,
         translation_manifest_path=resolved_manifest_path,
+        document_path=Path(document_path) if document_path is not None else None,
     )

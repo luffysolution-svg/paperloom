@@ -1,0 +1,127 @@
+/* Markdown 面板的按块视图（.reader-markdown-content.is-blocks）。
+ * 每块和 PDF 上的一块互相定位：悬停 / PDF 那边悬停到同一块时，用和 PDF 悬停框同一身
+ * 红色虚线（.reader-text-hover-frame），两边一眼能对上。 */
+
+.reader-markdown-content.is-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.reader-md-block {
+  position: relative;
+  margin: 0 -8px;
+  padding: 2px 8px;
+  border: 2px dashed transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  /* 离屏块跳过布局 / 绘制：几百块的书滚动才不卡。 */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 72px;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.reader-md-block-body {
+  min-width: 0;
+}
+
+.reader-md-block > * > :first-child {
+  margin-top: 0;
+}
+
+.reader-md-block > * > :last-child {
+  margin-bottom: 0;
+}
+
+.reader-md-block:hover,
+.reader-md-block.is-linked {
+  border-color: color-mix(in srgb, var(--danger) 88%, transparent);
+  background: color-mix(in srgb, var(--danger) 4%, transparent);
+}
+
+.reader-md-block:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+.reader-md-block.is-heading {
+  margin-top: 10px;
+}
+
+.reader-md-block.is-caption,
+.reader-md-block.is-footnote,
+.reader-md-block.is-meta {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.reader-md-block.is-reference {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.reader-md-block.is-figure img {
+  display: block;
+  max-width: 100%;
+  margin: 4px auto;
+}
+
+/* 公式编号贴在公式右侧，和论文里一样。 */
+.reader-md-block.is-formula > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* marked 会在行间公式前后各留一个空 <p>：不藏的话三个 flex 子项平分宽度，公式被压成三分之一。 */
+.reader-md-block p:empty {
+  display: none;
+}
+
+.reader-md-block.is-formula > div > :not(.reader-md-formula-label) {
+  min-width: 0;
+  flex: 1;
+  overflow-x: auto;
+}
+
+.reader-md-formula-label {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* 双语：原文在上、浅色；译文在下，正常颜色。 */
+.reader-md-block-source {
+  color: var(--muted);
+}
+
+.reader-md-block-translated {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px dotted var(--line);
+}
+
+.reader-md-view-switch {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--paper) 90%, transparent);
+}
+
+.reader-md-view-switch button {
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.reader-md-view-switch button.is-active {
+  color: var(--paper);
+  background: var(--ink);
+}

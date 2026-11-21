@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import sys
 from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
@@ -9,14 +8,11 @@ from types import SimpleNamespace
 import pytest
 
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-from retainpdf_pipeline.translate.core.payload import save_translations
-from retainpdf_pipeline.translate.workflow import book_flow
-from retainpdf_pipeline.translate.workflow import execution_runner
-from retainpdf_pipeline.translate.workflow.checkpoint import TRANSLATION_CHECKPOINT_FILE_NAME
-from retainpdf_pipeline.translate.workflow.execution import TranslationExecutionRequest
+from retainpdf_translation.core.payload import save_translations
+from retainpdf_translation.workflow import book_flow
+from retainpdf_translation.workflow import execution_runner
+from retainpdf_translation.workflow.checkpoint import TRANSLATION_CHECKPOINT_FILE_NAME
+from retainpdf_translation.workflow.execution import TranslationExecutionRequest
 
 
 def _request(tmp_path: Path) -> TranslationExecutionRequest:
@@ -32,9 +28,8 @@ def _request(tmp_path: Path) -> TranslationExecutionRequest:
 
 
 def _plan():
-    from retainpdf_pipeline.translate.artifacts.aggregator import TranslationRunDiagnostics
+    from retainpdf_translation.artifacts.aggregator import TranslationRunDiagnostics
     return SimpleNamespace(
-        connection_profile=SimpleNamespace(protocol="openai", thinking="auto"),
         data={},
         start=0,
         stop=0,

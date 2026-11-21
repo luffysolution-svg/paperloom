@@ -3,7 +3,7 @@ from unittest import mock
 import pytest
 import requests
 
-from retainpdf_pipeline.translate.llm.shared.rust_executor import (
+from retainpdf_translation.llm.shared.rust_executor import (
     AmbiguousModelRequest, ExecutorError, ExecutorUnavailable, RustModelExecutorClient,
 )
 

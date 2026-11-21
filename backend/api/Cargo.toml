@@ -1,35 +1,48 @@
 [package]
-# NOTE: Package name stays `rust_api` for compatibility. Renaming to `retain-api`
-# would change the binary to `retain-api`/`retain_api` and require coordinated
-# updates in services/docker/Dockerfile.app, services/docker/entrypoint-app.sh,
-# frontend/desktop/scripts/prepare-app.mjs, backend/api/src/main.rs (`use rust_api::...`),
-# and Cargo.lock. Defer rename until a coordinated `retain-api` migration is planned.
-name = "rust_api"
+# 包名 2026-10-16 从 `rust_api` 改成 `retainpdf-api`（库的 crate 名随之是 `retainpdf_api`）。
+# 可执行文件名不变，仍是 `rust_api`：Docker 的 entrypoint-app.sh、桌面版打包脚本、
+# ops/development/dev_stack.py 和 CI 的 desktop 打包都按这个名字找它。
+name = "retainpdf-api"
 version = "0.1.0"
 edition = "2021"
 build = "build.rs"
 
+[[bin]]
+name = "rust_api"
+path = "src/main.rs"
+
 [dependencies]
-retain-core = { path = "../packages/retain-core" }
-retain-data = { path = "../packages/retain-data" }
-retain-jobs = { path = "../packages/retain-jobs" }
-retain-proc = { path = "../packages/retain-proc" }
-axum = { version = "0.7", features = ["multipart", "macros"] }
+retainpdf-api-base = { path = "../packages/retainpdf-api-base" }
+retainpdf-accounts = { path = "../packages/retainpdf-accounts" }
+retainpdf-core = { path = "../packages/retainpdf-core" }
+retainpdf-files = { path = "../packages/retainpdf-files" }
+retainpdf-glossaries = { path = "../packages/retainpdf-glossaries" }
+retainpdf-ingest = { path = "../packages/retainpdf-ingest" }
+retainpdf-jobs = { path = "../packages/retainpdf-jobs" }
+retainpdf-library = { path = "../packages/retainpdf-library" }
+retainpdf-platform = { path = "../packages/retainpdf-platform" }
+retainpdf-providers = { path = "../packages/retainpdf-providers" }
+retainpdf-data = { path = "../packages/retainpdf-data" }
+retainpdf-config = { path = "../packages/retainpdf-config" }
+retainpdf-runner = { path = "../packages/retainpdf-runner" }
+retainpdf-proc = { path = "../packages/retainpdf-proc" }
+axum = { version = "0.7", features = ["multipart", "macros", "ws"] }
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["io"] }
-tower-http = { version = "0.5", features = ["cors", "trace"] }
+tower-http = { version = "0.5", features = ["compression-gzip", "cors", "trace"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream", "multipart"] }
-thiserror = "1"
 anyhow = "1"
 chrono = { version = "0.4", features = ["serde", "clock"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
 regex = "1"
 once_cell = "1"
-mime_guess = "2"
 md5 = "0.7"
 walkdir = "2"
+url = "2"
+htmd = "0.5"
+roxmltree = "0.21"
 zip = { version = "0.6", default-features = false, features = ["deflate"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
@@ -38,14 +51,15 @@ fastrand = "2"
 libc = "0.2"
 csv = "1"
 base64 = "0.22"
-url = "2"
+httpdate = "1"
+# fx 终端的 WebSocket 代理：浏览器 → rust_api → ai_service。
+# axum 的 ws 只管服务端那一半，连出去要客户端实现。
+tokio-tungstenite = { version = "0.21", default-features = false, features = ["connect", "handshake"] }
 sha2 = "0.11.0"
-hmac = "0.13"
-getrandom = "0.2"
 futures-util = "0.3"
-htmd = "0.5"
-roxmltree = "0.21"
-fs2 = "0.4"
 
 [dev-dependencies]
+retainpdf-api-base = { path = "../packages/retainpdf-api-base", features = ["test-fixtures"] }
+retainpdf-ingest = { path = "../packages/retainpdf-ingest", features = ["test-fixtures"] }
+retainpdf-jobs = { path = "../packages/retainpdf-jobs", features = ["test-fixtures"] }
 tower = { version = "0.5", features = ["util"] }

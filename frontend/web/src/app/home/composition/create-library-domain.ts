@@ -5,15 +5,16 @@
 // libraryController(唯一业务入口)→ collections(独立域,并行返回)。
 // 业务前置条件见 features/library/domain/controller.ts 各方法注释。
 
+import { mountedFeature } from "./feature-registry.js";
 import { API_PREFIX } from "@/platform/config/api-constants.js";
 import { APP_EVENTS } from "@/platform/contracts/app-contract.js";
 import { createStore } from "@/platform/store/store.js";
-// library-books 的 mock 包装统一由 platform/api 提供，避免在此重写第二份。
+// 任务列表 / 删除的 mock 包装统一由 platform/api 提供，避免在此重写第二份。
 import {
   fetchDocumentList,
   fetchJobPayload,
-  fetchLibraryBookList,
-  deleteLibraryBook,
+  fetchJobsByIds,
+  deleteJob,
 } from "@/platform/api/index.js";
 import {
   createRecentJobsStatePort,
@@ -30,7 +31,7 @@ import {
   createLibraryController,
   createRecentJobsReactViewPort,
 } from "@/features/library/index.js";
-import { createCollectionsController } from "@/features/collections/index.js";
+import { createCollectionsController, type CollectionRecord } from "@/features/collections/index.js";
 import type {
   CollectionsController,
   CollectionsReloadSignal,
@@ -62,7 +63,7 @@ export function createLibraryDomain({ features, documentRef }: CreateLibraryDoma
   const recentJobsViewPort = createRecentJobsReactViewPort() as RecentJobsReactViewPort;
   const documentLibraryResource = createDocumentLibraryResource({
     fetchDocumentList,
-    fetchLibraryBookList,
+    fetchJobsByIds,
     fetchJobPayload,
     apiPrefix: API_PREFIX,
   });
@@ -71,7 +72,7 @@ export function createLibraryDomain({ features, documentRef }: CreateLibraryDoma
   const recentJobsJobRuntimePort = createRecentJobsRuntimePort({
     // 网格点任务：仅 silent 轮询（进度在详情 Tab）；不抬主工作流
     openJob: (jobId: string) => (
-      features.jobRuntimeFeature.startPolling(jobId, {
+      mountedFeature(features, "jobRuntimeFeature").startPolling(jobId, {
         silent: true,
         showWorkflow: false,
         publishLibrary: false,
@@ -79,13 +80,13 @@ export function createLibraryDomain({ features, documentRef }: CreateLibraryDoma
     ),
     // 冷启动恢复活跃任务：silent，不抬主状态区、不刷库 create 事件
     recoverJob: (jobId: string) => (
-      features.jobRuntimeFeature.startPolling(jobId, { silent: true })
+      mountedFeature(features, "jobRuntimeFeature").startPolling(jobId, { silent: true })
     ),
-    currentJobId: () => features.jobRuntimeFeature.currentJobId() || "",
+    currentJobId: () => mountedFeature(features, "jobRuntimeFeature").currentJobId() || "",
   });
 
   const recentJobsReaderPort = createRecentJobsReaderPort({
-    openReader: (jobId: string, anchor: ReaderAnchor = null, documentId = "") => {
+    openReader: (jobId: string, anchor: ReaderAnchor | null = null, documentId = "", options: { pinJob?: boolean } = {}) => {
       const normalizedJobId = `${jobId || ""}`.trim();
       if (!normalizedJobId) return;
       // Reader 会在自己的 iframe/session 内读取 job、产物和 live translation。
@@ -95,25 +96,25 @@ export function createLibraryDomain({ features, documentRef }: CreateLibraryDoma
         detail: {
           jobId: normalizedJobId,
           documentId: `${documentId || ""}`.trim(),
-          pageIdx: Number.isFinite(anchor?.pageIdx) ? anchor.pageIdx : null,
+          pageIdx: typeof anchor?.pageIdx === "number" && Number.isFinite(anchor.pageIdx) ? anchor.pageIdx : null,
           blockId: anchor?.blockId || "",
+          // 点名看某个任务（产物「查看」、实时译文）：ReaderNavigation 不再按整本改写 job_id。
+          pinJob: options?.pinJob === true,
         },
       }));
     },
   });
 
   const recentJobsNavigationPort = createRecentJobsNavigationPort({
-    closeDialog: () => {},
-    currentJobId: () => features.jobRuntimeFeature.currentJobId() || "",
+    currentJobId: () => mountedFeature(features, "jobRuntimeFeature").currentJobId() || "",
     jobRuntimePort: recentJobsJobRuntimePort,
     readerPort: recentJobsReaderPort,
-    doc: documentRef,
   });
 
-  // startPolling/openReader/closeRecentJobsDialog 可由 navigationPort 兜底；签名仍标必填。
+  // startPolling/openReader 可由 navigationPort 兜底；签名仍标必填。
   const recentJobActions = createRecentJobActions({
     apiPrefix: API_PREFIX,
-    deleteLibraryBook,
+    deleteJobById: deleteJob,
     activeJobRecoveryPort: { readActiveJobId },
     navigationPort: recentJobsNavigationPort,
     renderCurrentRecentJobs: () => {},
@@ -127,7 +128,7 @@ export function createLibraryDomain({ features, documentRef }: CreateLibraryDoma
     documentRef,
     libraryEventPort,
     reloadRecentJobs: async (opts?: ReloadRecentJobsOptions) => {
-      await features.recentJobsFeature.loadRecentJobs(opts);
+      await mountedFeature(features, "recentJobsFeature").loadRecentJobs(opts);
     },
     removeLibraryDocuments: (documentIds: string[]) => {
       const selectedDocumentIdSet = new Set((documentIds || []).map((id) => `${id || ""}`.trim()).filter(Boolean));
@@ -154,8 +155,8 @@ export function createLibraryDomain({ features, documentRef }: CreateLibraryDoma
     deleteJob: async (jobId: string) => {
       await recentJobActions.deleteJob(jobId);
     },
-    buildTranslateConfig: (pageRanges?: string) => features.workflowFeature.buildTranslateJobConfig(pageRanges),
-    buildOcrConfig: (pageRanges?: string) => features.workflowFeature.buildOcrJobConfig(pageRanges),
+    buildTranslateConfig: (pageRanges?: string) => mountedFeature(features, "workflowFeature").buildTranslateJobConfig(pageRanges),
+    buildOcrConfig: (pageRanges?: string) => mountedFeature(features, "workflowFeature").buildOcrJobConfig(pageRanges),
     startPolling: (jobId: string, options?: {
       silent?: boolean;
       publishLibrary?: boolean;
@@ -163,7 +164,7 @@ export function createLibraryDomain({ features, documentRef }: CreateLibraryDoma
       seedPayload?: Record<string, unknown> | null;
       recovering?: boolean;
     }) => {
-      features.jobRuntimeFeature.startPolling(jobId, options);
+      mountedFeature(features, "jobRuntimeFeature").startPolling(jobId, options);
     },
     recentJobsStatePort,
   }) as LibraryController;
@@ -181,7 +182,7 @@ export function createLibraryDomain({ features, documentRef }: CreateLibraryDoma
     bookDetailStore: libraryController.bookDetailStore as DialogStore<LibraryCardItem | null>,
     collectionsController: createCollectionsController({ apiPrefix: API_PREFIX }),
     // payload = 正在编辑的 CollectionRecord，null 表示新建模式。
-    collectionManageDialogStore: createDialogStore(null),
+    collectionManageDialogStore: createDialogStore<CollectionRecord | null>(null),
     collectionsReloadSignal: createStore<
       { version: number },
       { bump: (state: { version: number }) => { version: number } }

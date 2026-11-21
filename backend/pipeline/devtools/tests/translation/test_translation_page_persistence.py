@@ -1,8 +1,8 @@
 from copy import deepcopy
 import json
 
-from retainpdf_pipeline.translate.core.orchestration.units import refresh_translation_units_by_page
-from retainpdf_pipeline.translate.services.results.page_io import save_pages
+from retainpdf_translation.core.orchestration.units import refresh_translation_units_by_page
+from retainpdf_translation.services.results.page_io import save_pages
 
 
 def payload():

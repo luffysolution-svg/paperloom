@@ -9,6 +9,7 @@
 // 网络语义、调用顺序、boot 文案与进度数字与拆分前逐行一致。
 
 import { useEffect, useState } from "react";
+import { documentSourcePdfPath } from "@retainpdf/domain/job";
 import type { ProtectedPdfFile } from "../../pdf/useProtectedPdfFile.js";
 import {
   isMockMode,
@@ -39,6 +40,7 @@ import {
   setBootProgress,
 } from "./session-helpers.js";
 import {
+  expiredMergedReadingDocumentId,
   isStaleDocumentJobFailure,
   parseDocumentLink,
   planJobLoad,
@@ -50,6 +52,7 @@ import {
   downloadJobPdfs,
   downloadOnePdf,
 } from "./session-pdf-download.js";
+import { reopenExpiredMergedReading } from "./merged-reading-recovery.js";
 
 export type SessionAssets = {
   sourceUrl: string;
@@ -59,6 +62,7 @@ export type SessionAssets = {
   assetsReady: boolean;
   title: string;
   regions: ReaderRegion[];
+  regionsSettled: boolean;
   readerMetadata: ReaderMetadata;
   readerErrors: ReaderOptionalArtifactErrors;
   boot: ReaderSessionState["boot"];
@@ -126,6 +130,7 @@ export function useSessionAssets(options: {
   const [assetsReady, setAssetsReady] = useState(false);
   const [title, setTitle] = useState("");
   const [regions, setRegions] = useState<ReaderRegion[]>([]);
+  const [regionsSettled, setRegionsSettled] = useState(false);
   const [readerMetadata, setReaderMetadata] = useState<ReaderMetadata>(() => ({
     source: null,
     translated: null,
@@ -162,8 +167,12 @@ export function useSessionAssets(options: {
       };
     }
 
+    /** 块和页尺寸还在路上（拆开加载时，露页面之后才到）：到之前 regionsSettled 不置上。 */
+    let optionalPending = false;
+
     function failBoot(text: string, progressText: string): void {
       fence.markFailed();
+      setRegionsSettled(true);
       setBoot({
         loading: false,
         percent: 100,
@@ -176,6 +185,8 @@ export function useSessionAssets(options: {
 
     function readyBoot(): void {
       setAssetsReady(true);
+      // 没有在路上的块（只读原文、一并加载过了）：这次就是没有，不用等。
+      if (!optionalPending) setRegionsSettled(true);
       setBoot({
         loading: false,
         percent: 100,
@@ -194,20 +205,15 @@ export function useSessionAssets(options: {
         )
         : isMockMode()
           ? MOCK_DOCUMENT_SOURCE_PDF_URL
-          : dataPort.resolveResourceUrl(`/api/v1/documents/${encodeURIComponent(routeDocumentId)}/source.pdf`);
+          : dataPort.resolveResourceUrl(documentSourcePdfPath(routeDocumentId));
     }
 
     async function loadSourceOnlyDocument(): Promise<void> {
       // OCR 吸怪：document_id 直开时，若文档已有 active_job_id（OCR-only 已回填），则按 job 链路加载以提供 Markdown/译文
       let link: DocumentLink = { activeJobId: "", activeVersionId: "" };
       try {
-        const docResp = await dataPort.fetchProtected(
-          dataPort.resolveResourceUrl(`/api/v1/documents/${encodeURIComponent(routeDocumentId)}`),
-        );
-        if (docResp?.ok) {
-          const docJson: unknown = await docResp.json().catch(() => null);
-          link = parseDocumentLink(docJson);
-        }
+        const doc = await dataPort.fetchDocument?.(routeDocumentId);
+        if (doc) link = parseDocumentLink(doc);
       } catch {
         /* ignore, fallback to pure source */
       }
@@ -283,12 +289,24 @@ export function useSessionAssets(options: {
       // 历史翻译任务会因为 document.active_version_id 而失去对照阅读。
       // Reader 当前会话内完成 Agent 提交时，refreshCommittedDocument
       // 会显式设置 committedDocumentSource，并切换到新的文档源版本。
+      // committedSource 分支会丢弃 regions/metadata（旧页序已失效），
+      // 直接跳过这两个可选请求，避免无效网络往返。
+      const wantOptional = !committedSource;
+      // 宿主能单独给可选产物时，snapshot 只取 job / manifest，regions / metadata
+      // 并行另取：PDF 地址只依赖前者，下载不必排在 regions（可达数百 KB）后面。
+      // loadReaderOptionalArtifacts 永不 reject（失败降级进 readerErrors）。
+      const splitOptional = Boolean(
+        wantOptional && dataPort.loadSessionSnapshot && dataPort.loadReaderOptionalArtifacts,
+      );
+      const optionalPromise = splitOptional
+        ? dataPort.loadReaderOptionalArtifacts!(sessionJobId)
+        : null;
       const snapshot = await dataPort.loadSessionSnapshot?.({
         jobId: sessionJobId,
         documentId: routeDocumentId,
         routeDocumentId,
         committedSource,
-        includeOptionalArtifacts: !committedSource,
+        includeOptionalArtifacts: wantOptional && !splitOptional,
       });
       const payload = snapshot ? {
         jobPayload: snapshot.sourcePayload,
@@ -297,19 +315,22 @@ export function useSessionAssets(options: {
         regionsPayload: snapshot.regions,
         readerErrors: snapshot.readerErrors,
       } : await dataPort.loadReaderPayload(sessionJobId, {
-        // committedSource 分支会丢弃 regions/metadata（旧页序已失效），
-        // 直接跳过这两个可选请求，避免无效网络往返。
-        includeOptionalArtifacts: !committedSource,
+        includeOptionalArtifacts: wantOptional,
       });
       if (fence.isInactive()) return;
       let linkedDocument: LinkedDocumentRecord | null = null;
       if (jobId && !routeDocumentId) {
-        try {
-          linkedDocument = await dataPort.fetchDocumentByJobId(API_PREFIX, sessionJobId) as LinkedDocumentRecord | null;
-        } catch {
-          // Standalone/package consumers may not provide document lookup.
+        if (snapshot && snapshot.linkedDocument !== undefined) {
+          // 宿主在 snapshot 里已经查过（和 job / manifest 并行），不再串行查第二遍。
+          linkedDocument = snapshot.linkedDocument;
+        } else {
+          try {
+            linkedDocument = await dataPort.fetchDocumentByJobId(API_PREFIX, sessionJobId) as LinkedDocumentRecord | null;
+          } catch {
+            // Standalone/package consumers may not provide document lookup.
+          }
+          if (fence.isInactive()) return;
         }
-        if (fence.isInactive()) return;
       }
       const payloadDocumentId = resolveJobDocumentId(payload.jobPayload)
         || `${linkedDocument?.document_id || ""}`.trim();
@@ -353,7 +374,7 @@ export function useSessionAssets(options: {
           committedSource.revision,
         )
         : resolvedSourceFinal || (sourceDocumentId
-          ? dataPort.resolveResourceUrl(`/api/v1/documents/${encodeURIComponent(sourceDocumentId)}/source.pdf`)
+          ? dataPort.resolveResourceUrl(documentSourcePdfPath(sourceDocumentId))
           : "");
       // 文档操作产生的是新的源版本；旧 job 的译文、region 与 metadata
       // 仍对应旧页序，不能继续和新源文件并排显示。
@@ -367,26 +388,47 @@ export function useSessionAssets(options: {
         manifestPayload: (payload.manifestPayload as Record<string, unknown>) || null,
         sessionIdentity,
       });
-      setRegions(committedSource ? [] : normalizeReaderRegions(payload.regionsPayload));
-      setReaderMetadata(committedSource
-        ? { source: null, translated: null }
-        : normalizeReaderMetadata(payload.readerMetadata));
-      setReaderErrors(committedSource
-        ? NO_OPTIONAL_ARTIFACT_ERRORS
-        : payload.readerErrors ?? NO_OPTIONAL_ARTIFACT_ERRORS);
-
-      if (!sourceFinal && !translatedFinal) {
-        failBoot(READER_PROGRESS_COPY.failed, READER_PROGRESS_COPY.failed);
-        return;
-      }
-
-      // 先下完所有 PDF，再允许界面挂载 Document
-      const result = await downloadJobPdfs({
+      // 拆开加载可选产物时，PDF 下载先发出去，再等 regions / metadata —— 两者并行。
+      // 下载的失败要等发布完可选产物后在下面的 await 里照旧抛出；先挂一个空
+      // catch，免得等 regions 的这段时间里被当成未处理的 rejection。
+      const startDownloads = () => downloadJobPdfs({
         sourceFinal: sourceFinal || "",
         translatedFinal,
         fence,
         setBoot,
       });
+      const hasPdf = Boolean(sourceFinal || translatedFinal);
+      const earlyDownload = optionalPromise && hasPdf ? startDownloads() : null;
+      earlyDownload?.catch(() => {});
+      const applyOptional = (optional: Pick<typeof payload, "regionsPayload" | "readerMetadata" | "readerErrors">) => {
+        // 被关闭 / 换会话：不往新会话里写。
+        if (fence.isInactive()) return;
+        setRegions(committedSource ? [] : normalizeReaderRegions(optional.regionsPayload));
+        setReaderMetadata(committedSource
+          ? { source: null, translated: null }
+          : normalizeReaderMetadata(optional.readerMetadata));
+        setReaderErrors(committedSource
+          ? NO_OPTIONAL_ARTIFACT_ERRORS
+          : optional.readerErrors ?? NO_OPTIONAL_ARTIFACT_ERRORS);
+        setRegionsSettled(true);
+      };
+      // 块和页尺寸不挡着露页面：它们只给悬停、高亮、目录、搜索、引用用，排版靠 PDF 自己。大书的块要好几秒、
+      // 好几 MB（726 页 3 秒、8.4 MB），PDF 早下完了；以前要等它们到了才拿掉启动遮罩。到了再补上
+      // （永不 reject，失败记进 readerErrors）。
+      if (optionalPromise) {
+        optionalPending = true;
+        void optionalPromise.then(applyOptional);
+      } else {
+        applyOptional(payload);
+      }
+
+      if (!hasPdf) {
+        failBoot(READER_PROGRESS_COPY.failed, READER_PROGRESS_COPY.failed);
+        return;
+      }
+
+      // 先下完所有 PDF，再允许界面挂载 Document
+      const result = await (earlyDownload ?? startDownloads());
       if (result.status === "inactive") return;
       if (result.status === "incomplete") {
         failBoot("PDF 下载失败，请重试", "PDF 下载失败");
@@ -404,6 +446,7 @@ export function useSessionAssets(options: {
       setSourceFile(null);
       setTranslatedFile(null);
       setRegions([]);
+      setRegionsSettled(false);
       setReaderMetadata({ source: null, translated: null });
       setReaderErrors(NO_OPTIONAL_ARTIFACT_ERRORS);
       setBootProgress(setBoot, 8, READER_PROGRESS_COPY.metadata, "metadata");
@@ -429,8 +472,20 @@ export function useSessionAssets(options: {
         // overwrite this terminal state with another progress update.
         fence.markFailed();
         const status = Number((err as Error & { status?: number })?.status);
+        const reason = `${(err as Error & { reason?: string })?.reason || ""}`;
+        const expiredMergeDocumentId = expiredMergedReadingDocumentId({ status, reason, sessionJobId });
+        if (expiredMergeDocumentId) {
+          // 合并阅读的临时目录被清理了：按书号重新问阅读入口，换成新编号重开（见 merged-reading-recovery）。
+          const reopened = await reopenExpiredMergedReading({
+            apiPrefix: API_PREFIX,
+            documentId: expiredMergeDocumentId,
+            expiredJobId: sessionJobId,
+          });
+          if (reopened || fence.isClosedOrStale()) return;
+        }
         if (isStaleDocumentJobFailure({
           status,
+          reason,
           jobId,
           routeDocumentId,
           documentJobId,
@@ -467,6 +522,7 @@ export function useSessionAssets(options: {
     assetsReady,
     title,
     regions,
+    regionsSettled,
     readerMetadata,
     readerErrors,
     boot,

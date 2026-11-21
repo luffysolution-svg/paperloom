@@ -1,6 +1,7 @@
 import {
   RECENT_JOBS_LOADING_STATES,
 } from "./loading-state-contract.js";
+import type { RecentJobsPageFetcher } from "./pagination.js";
 import {
   RECENT_JOBS_PAGE_SIZE,
 } from "./pagination.js";
@@ -52,26 +53,43 @@ export interface LibraryBooksResourcePort {
     options?: { cache?: boolean },
   ) => Promise<LibraryBooksResourceSnapshot>;
   invalidate?: () => void;
-  reset?: (options?: { keepCache?: boolean }) => unknown;
+  /** 丢掉在途请求（资源层会把同参数的在途请求合并，挂住的那个不丢掉，重试拿到的还是它）。 */
+  reset?: (options?: { keepCache?: boolean }) => void;
+}
+
+/** 列表请求多久没回应就算失败。以前没有超时：请求一挂住，书架永远停在「正在加载最近任务…」，
+ *  而且加载锁不释放，之后所有刷新都只能排队，后端恢复了也不会再请求。 */
+export const RECENT_JOBS_LOAD_TIMEOUT_MS = 20_000;
+/** 加载失败后自动重试的间隔（成功后从头算）。后端重启、断网恢复后，书架自己回来。 */
+export const RECENT_JOBS_RETRY_DELAYS_MS = [3_000, 6_000, 12_000, 30_000] as const;
+
+class RecentJobsLoadTimeout extends Error {
+  constructor() {
+    super("recent jobs load timed out");
+    this.name = "RecentJobsLoadTimeout";
+  }
+}
+
+/** 给用户看的失败原因：浏览器的网络错误是英文（Failed to fetch），说中文。 */
+export function recentJobsLoadErrorText(error: unknown): string {
+  if (error instanceof RecentJobsLoadTimeout) return "后端迟迟没有响应，正在自动重试…";
+  const message = `${(error as { message?: string } | null)?.message || ""}`.trim();
+  if (/failed to fetch|networkerror|load failed|network request failed/i.test(message)) {
+    return "连不上后端服务，正在自动重试…";
+  }
+  return message ? `${message}（正在自动重试…）` : "读取最近任务失败，正在自动重试…";
 }
 
 export interface CreateRecentJobsLoaderOptions {
-  fetchJobList?: (
-    apiPrefix?: string,
-    params?: Record<string, unknown>,
-  ) => Promise<unknown>;
-  fetchLibraryBookList?: (
-    apiPrefix?: string,
-    params?: Record<string, unknown>,
-  ) => Promise<unknown>;
-  apiPrefix?: string;
+  fetchJobList?: RecentJobsPageFetcher;
+  apiPrefix: string;
   getQuery?: () => string;
   recentJobActions?: RecentJobActionsPort;
-  runtimePatches?: RecentJobsRuntimePatches;
-  activeRefreshLoop?: (() => ActiveRefreshLoopPort | null | undefined) | null;
+  runtimePatches: RecentJobsRuntimePatches;
+  activeRefreshLoop: () => ActiveRefreshLoopPort | null | undefined;
   scheduleAutoLoadIfNeeded?: (() => void) | null;
-  homeStatePort?: Pick<HomeStatePort, "setRecentJobsLoadingState">;
-  recentJobsStatePort?: Pick<
+  homeStatePort: Pick<HomeStatePort, "setRecentJobsLoadingState">;
+  recentJobsStatePort: Pick<
     RecentJobsStatePort,
     | "getSnapshot"
     | "resetPagination"
@@ -81,8 +99,8 @@ export interface CreateRecentJobsLoaderOptions {
     | "setInvocationSummary"
     | "setItems"
   >;
-  storeDrivenRendering?: boolean;
-  viewPort?: RecentJobsCommitViewPort;
+  /** 只剩「加载中 / 加载更多中」两个信号还经 viewPort；列表本身由 React 订阅 store。 */
+  viewPort: Required<Pick<RecentJobsCommitViewPort, "renderLoading" | "setLoadMoreLoading">>;
   libraryBooksResource?: LibraryBooksResourcePort;
 }
 
@@ -94,7 +112,6 @@ export interface RecentJobsLoader {
 
 export function createRecentJobsLoader({
   fetchJobList,
-  fetchLibraryBookList,
   apiPrefix,
   getQuery,
   recentJobActions,
@@ -103,21 +120,17 @@ export function createRecentJobsLoader({
   scheduleAutoLoadIfNeeded,
   homeStatePort,
   recentJobsStatePort,
-  storeDrivenRendering = false,
   viewPort,
   libraryBooksResource = createLibraryBooksResource({
     fetchJobList,
-    fetchLibraryBookList,
     apiPrefix,
   }) as LibraryBooksResourcePort,
 }: CreateRecentJobsLoaderOptions): RecentJobsLoader {
   let loading = false;
   let pendingLoad: LoadRecentJobsOptions | null = null;
   let disposed = false;
-  let loadGeneration = 0;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
-  let loadTimer: ReturnType<typeof setTimeout> | null = null;
-  let cancelLoad: (() => void) | null = null;
+  let retryAttempt = 0;
 
   function isLoading() {
     return loading;
@@ -127,12 +140,21 @@ export function createRecentJobsLoader({
   function dispose() {
     disposed = true;
     pendingLoad = null;
-    cancelLoad?.();
-    cancelLoad = null;
-    if (retryTimer != null) clearTimeout(retryTimer);
-    if (loadTimer != null) clearTimeout(loadTimer);
-    retryTimer = null;
-    loadTimer = null;
+    if (retryTimer !== null) {
+      clearTimeout(retryTimer);
+      retryTimer = null;
+    }
+  }
+
+  function scheduleRetry() {
+    if (disposed || retryTimer !== null) return;
+    const delay = RECENT_JOBS_RETRY_DELAYS_MS[Math.min(retryAttempt, RECENT_JOBS_RETRY_DELAYS_MS.length - 1)];
+    retryAttempt += 1;
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+      // 静默重试：失败提示留在原处，成功了直接换成列表，不闪「加载中」。
+      void load({ reset: true, silent: true });
+    }, delay);
   }
 
   async function loadLibraryBooksPage(params: {
@@ -147,26 +169,20 @@ export function createRecentJobsLoader({
     latestInvocationSummary: RecentJobsInvocationSummary;
     nextOffset: number;
   }> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        libraryBooksResource.reset?.({ keepCache: true });
+        reject(new RecentJobsLoadTimeout());
+      }, RECENT_JOBS_LOAD_TIMEOUT_MS);
+    });
     let snapshot: LibraryBooksResourceSnapshot;
     try {
-      snapshot = await Promise.race([
-        libraryBooksResource.load(params, { cache: false }),
-        new Promise<never>((_, reject) => {
-          cancelLoad = () => reject(new Error("读取书库已停止。"));
-          loadTimer = setTimeout(() => {
-            loadGeneration += 1;
-            libraryBooksResource.reset?.({ keepCache: true });
-            reject(new Error("读取书库超时，请稍后重试。"));
-          }, 20_000);
-        }),
-      ]);
+      snapshot = await Promise.race([libraryBooksResource.load(params, { cache: false }), timeout]);
     } finally {
-      if (loadTimer != null) clearTimeout(loadTimer);
-      loadTimer = null;
-      cancelLoad = null;
+      clearTimeout(timer);
     }
     if (snapshot.status === "error") {
-      if ((snapshot.error as Error)?.name === "TimeoutError") throw new Error("读取书库超时，请稍后重试。");
       throw snapshot.error || new Error("读取最近任务失败");
     }
     return (snapshot.data || {
@@ -198,12 +214,6 @@ export function createRecentJobsLoader({
       };
       return;
     }
-    if (!viewPort.hasView()) {
-      return;
-    }
-    if (retryTimer != null) clearTimeout(retryTimer);
-    retryTimer = null;
-    const generation = ++loadGeneration;
     loading = true;
     if (!silent) {
       homeStatePort.setRecentJobsLoadingState(RECENT_JOBS_LOADING_STATES.LOADING);
@@ -235,23 +245,17 @@ export function createRecentJobsLoader({
         existingJobIds,
         query,
         onPreview: ({ collected = [] }) => {
-          if (disposed || generation !== loadGeneration || pendingLoad?.reset || !collected.length) return;
+          if (disposed || pendingLoad?.reset || !collected.length) return;
           // Initial empty view only: refreshes retain already hydrated cards.
           if (recentJobsStatePort.getSnapshot().items.length) return;
           const items = runtimePatches.applyExisting?.(collected) || collected;
           recentJobsStatePort.setItems(items);
           homeStatePort.setRecentJobsLoadingState(RECENT_JOBS_LOADING_STATES.READY);
-          if (!storeDrivenRendering) {
-            viewPort.renderList({
-              items, allItems: items, reset: true,
-              onSelect: recentJobActions?.selectJob,
-              onDelete: recentJobActions?.deleteJob,
-              onReader: recentJobActions?.openJobReader,
-            });
-          }
         },
       });
 
+      // 请求成功（哪怕结果是空的）就从头计重试间隔。
+      retryAttempt = 0;
       if (disposed || pendingLoad?.reset) {
         return;
       }
@@ -261,8 +265,6 @@ export function createRecentJobsLoader({
           invocationSummary: latestInvocationSummary,
           homeStatePort,
           recentJobsStatePort,
-          storeDrivenRendering,
-          viewPort,
         });
         return;
       }
@@ -270,8 +272,6 @@ export function createRecentJobsLoader({
         commitRecentJobsNoMore({
           homeStatePort,
           recentJobsStatePort,
-          storeDrivenRendering,
-          viewPort,
         });
         return;
       }
@@ -288,24 +288,16 @@ export function createRecentJobsLoader({
         activeRefreshLoop,
         scheduleAutoLoadIfNeeded,
         recentJobsStatePort,
-        storeDrivenRendering,
-        viewPort,
       });
       homeStatePort.setRecentJobsLoadingState(RECENT_JOBS_LOADING_STATES.READY);
     } catch (err) {
-      if (disposed || pendingLoad?.reset) return;
       commitRecentJobsError({
-        error: err as { message?: string } | Error | null,
+        error: { message: recentJobsLoadErrorText(err) },
         reset,
         homeStatePort,
         recentJobsStatePort,
-        storeDrivenRendering,
-        viewPort,
       });
-      retryTimer = setTimeout(() => {
-        retryTimer = null;
-        void load({ reset: true, silent: true, query: getQuery?.() || query });
-      }, 3_000);
+      scheduleRetry();
     } finally {
       loading = false;
       if (!disposed && pendingLoad) {

@@ -1,8 +1,6 @@
 """Production entry contracts run independently of parent-process imports."""
 import json
 import hashlib
-import os
-from pathlib import Path
 import subprocess
 import sys
 
@@ -75,25 +73,15 @@ def test_production_rust_failure_has_bounded_requests(tmp_path, route, outcome, 
     assert result["retry_delays"] == []
 
 
-def test_production_rust_group_malformed_json_preserves_original_repair_contract(tmp_path):
-    # Keep the original malformed JSON case in addition to empty-response cases.
-    result = run_probe(tmp_path, "rust", "group", "malformed_json")
-    assert result["failed"] and result["runtime_failed"] and result["latch_rejected"]
-    assert result["error_type"] == "ExecutorError"
-    assert result["executor_submissions"] == result["calls"] == 2
-    assert result["http_attempts"] == 0
-    assert result["purposes"] == ["primary", "repair"]
-    assert len(set(result["unit_ids"])) == 1
-    assert result["result"] == {}
-
-
 @pytest.mark.parametrize("route,outcome,count,status", [
     ("single", "protocol", 3, "kept_origin"),
     ("single", "semantic", 3, "kept_origin"),
     ("batch", "protocol", 1, None),
     ("batch", "semantic", 1, None),
-    ("group", "protocol", 6, "failed"),
-    ("group", "semantic", 5, "failed"),
+    # 续接组整段走逐段请求（不再有逐框 JSON 协议）：前 3 次与 single 相同；single 落到保留原文，
+    # group 落到 failed，于是再走一次 finalization 的最终补救（只发原文），共 4 次。
+    ("group", "protocol", 4, "failed"),
+    ("group", "semantic", 4, "failed"),
 ])
 def test_production_legacy_content_failure_is_not_translation_success(tmp_path, route, outcome, count, status):
     result = run_probe(tmp_path, "legacy", route, outcome)

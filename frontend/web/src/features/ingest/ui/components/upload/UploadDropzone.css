@@ -1,0 +1,315 @@
+/* 上传拖放区：文件块、图标、文件信息、上传进度与状态行。（UploadDropzone）
+ *
+ * @owns upload, translation-workflow-card, translation-budget-note, result-panel, form, math-mode-inline, page-range, credential-gate, progress-track, progress-bar
+ * @uses hidden */
+
+@utility upload-dropzone-stack {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 22px;
+  width: 100%;
+  min-height: 0;
+}
+
+@utility upload-format-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 34px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+
+  & i {
+    font-style: normal;
+  }
+}
+
+@utility upload-tile {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  min-height: 200px;
+  min-width: 0;
+  padding: 20px 18px;
+  border: 1px solid var(--line);
+  border-radius: 26px;
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease;
+  background:
+    radial-gradient(
+      circle at 50% 0%,
+      color-mix(in srgb, var(--bg) 96%, transparent) 0%,
+      var(--paper) 55%
+    ),
+    var(--paper);
+  justify-items: center;
+  align-content: center;
+  text-align: center;
+  overflow: hidden;
+  isolation: isolate;
+  width: 100%;
+
+  &.is-locked {
+    border-style: solid;
+    border-color: var(--line);
+    background:
+      radial-gradient(
+        circle at top,
+        color-mix(in srgb, var(--bg) 95%, transparent) 0%,
+        color-mix(in srgb, var(--paper) 98%, transparent) 65%
+      ),
+      var(--paper);
+  }
+
+  &:hover {
+    border-color: var(--ink);
+    transform: translateY(-1px);
+    box-shadow: 0 16px 32px color-mix(in srgb, var(--shadow-color) 5%, transparent);
+  }
+
+  & input[type='file'] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  &.is-locked input[type='file'] {
+    pointer-events: none;
+  }
+
+  & > *:not(.upload-fill):not(input[type='file']) {
+    position: relative;
+    z-index: 1;
+  }
+
+  & strong,
+  & #file-label {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 1.18rem;
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    /* grid 子项默认 min-content，不截断会把卡片撑高 */
+    justify-self: stretch;
+    text-align: center;
+  }
+
+  & em {
+    @apply max-w-[300px] text-[12px] not-italic;
+    color: var(--muted);
+  }
+
+  & .upload-status {
+    max-width: 340px;
+    justify-self: center;
+    border: none;
+    background: transparent;
+    padding: 0;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+}
+
+@utility upload-primary-copy {
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+}
+
+@utility upload-glyph {
+  .translation-workflow-card & {
+    width: 76px;
+    height: 76px;
+  }
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  background: var(--bg);
+  position: relative;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+@utility upload-ready-file-icon {
+  width: 24px;
+  height: 24px;
+  color: var(--ink);
+}
+
+@utility upload-idle-file-icon {
+  width: 34px;
+  height: 34px;
+  color: var(--ink);
+  stroke-width: 1.6;
+}
+
+@utility upload-meta {
+  .translation-workflow-card & {
+    display: flex;
+  }
+  @apply flex flex-wrap justify-center gap-2 pt-0 text-[12px];
+  color: var(--muted);
+
+  & span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 20px;
+    min-height: 20px;
+    padding: 0 8px;
+    border-radius: 7px;
+    font-size: 10.5px;
+    line-height: 20px;
+    white-space: nowrap;
+    background: var(--bg);
+  }
+}
+
+@utility is-locked {
+  &.upload-tile {
+    border-style: solid;
+    border-color: var(--line);
+    background:
+      radial-gradient(
+        circle at top,
+        color-mix(in srgb, var(--bg) 95%, transparent) 0%,
+        color-mix(in srgb, var(--paper) 98%, transparent) 65%
+      ),
+      var(--paper);
+  }
+
+  &.upload-tile input[type='file'] {
+    pointer-events: none;
+  }
+}
+
+@utility upload-fill {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 4px;
+  width: 0%;
+  border-radius: inherit;
+  background: var(--ink);
+  transition: width 0.2s ease;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+@utility upload-glyph-h {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: var(--muted);
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  display: block;
+  width: 18px;
+  height: 2px;
+}
+
+@utility upload-glyph-v {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: var(--muted);
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  display: block;
+  width: 2px;
+  height: 18px;
+}
+
+@utility upload-meta-inline {
+  max-width: 320px;
+
+  .upload-tile.is-ready & {
+    opacity: 0.28;
+    transform: scale(0.98);
+    transition:
+      opacity 0.18s ease,
+      transform 0.18s ease;
+  }
+}
+
+@utility upload-progress-panel {
+  @apply rounded-[20px];
+  @apply mt-2 grid w-full max-w-[340px] gap-2;
+  background: transparent;
+
+  & span {
+    @apply text-[12px];
+    color: var(--ink);
+    font-weight: 600;
+  }
+}
+
+@utility upload-status {
+  @apply rounded-[20px];
+  @apply border px-4 py-2.5 text-sm leading-6;
+  border-color: var(--line);
+  background: var(--paper);
+
+  &.hidden {
+    display: none !important;
+  }
+
+  .upload-tile & {
+    max-width: 340px;
+    justify-self: center;
+    border: none;
+    background: transparent;
+    padding: 0;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+}
+
+@utility hidden {
+  &.upload-status {
+    display: none !important;
+  }
+
+  &.translation-budget-note {
+    display: none !important;
+  }
+}
+
+@utility progress-track {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+@utility progress-bar {
+  width: 0%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent) 100%);
+  transition: width 0.2s ease;
+}

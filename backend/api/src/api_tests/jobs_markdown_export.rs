@@ -135,7 +135,7 @@ async fn markdown_export_route_returns_obsidian_note_bundle() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         disposition.as_deref(),
-        Some(format!("attachment; filename=\"{JOB_ID}.zip\"").as_str())
+        Some(format!("attachment; filename=\"{JOB_ID}.zip\"; filename*=UTF-8''{JOB_ID}.zip").as_str())
     );
 
     let entries = zip_entries(body);
@@ -269,11 +269,11 @@ async fn obsidian_integration_routes_discover_export_and_remember() {
     fs::create_dir_all(vault.join(".obsidian")).expect("vault");
     // 不读本机真实的 Obsidian 配置。
     std::env::set_var(
-        crate::services::integrations::obsidian::OBSIDIAN_CONFIG_ENV,
+        crate::services::integrations::OBSIDIAN_CONFIG_ENV,
         state.config.data_root.join("no-obsidian.json"),
     );
     std::env::set_var(
-        crate::services::integrations::obsidian::OBSIDIAN_VAULTS_DIR_ENV,
+        crate::services::integrations::OBSIDIAN_VAULTS_DIR_ENV,
         &vaults_dir,
     );
 
@@ -348,11 +348,11 @@ async fn obsidian_batch_export_resolves_documents_and_returns_per_item_results()
     let vault = vaults_dir.join("Research");
     fs::create_dir_all(vault.join(".obsidian")).expect("vault");
     std::env::set_var(
-        crate::services::integrations::obsidian::OBSIDIAN_CONFIG_ENV,
+        crate::services::integrations::OBSIDIAN_CONFIG_ENV,
         state.config.data_root.join("no-obsidian.json"),
     );
     std::env::set_var(
-        crate::services::integrations::obsidian::OBSIDIAN_VAULTS_DIR_ENV,
+        crate::services::integrations::OBSIDIAN_VAULTS_DIR_ENV,
         &vaults_dir,
     );
 
@@ -509,7 +509,7 @@ async fn zotero_routes_browse_import_dedupe_and_feed_note_metadata() {
     let pdf_path = state.config.data_root.join("zotero-storage/Chai 2026.pdf");
     fs::create_dir_all(pdf_path.parent().unwrap()).expect("storage");
     fs::write(&pdf_path, crate::test_support::pdf::build_test_pdf_bytes()).expect("pdf");
-    let env_name = crate::services::integrations::zotero::ZOTERO_API_ENV;
+    let env_name = crate::services::integrations::ZOTERO_API_ENV;
     let previous = std::env::var_os(env_name);
     std::env::set_var(env_name, spawn_fake_zotero(&pdf_path).await);
 

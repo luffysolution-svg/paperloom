@@ -20,12 +20,20 @@ function pageRangeCount(pageRanges = "", uploadedPageCount = 0) {
   return Math.max(0, end - start + 1);
 }
 
-function money(value) {
+function money(value: unknown) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
     return "-";
   }
   return number.toFixed(2);
+}
+
+export interface TranslationBudgetStateOptions {
+  pageRanges?: string;
+  uploadedPageCount?: number;
+  balanceCny?: number | null;
+  balanceChecked?: boolean;
+  needsTranslation?: boolean;
 }
 
 export function resolveTranslationBudgetState({
@@ -34,7 +42,7 @@ export function resolveTranslationBudgetState({
   balanceCny = null,
   balanceChecked = false,
   needsTranslation = true,
-}: any = {}) {
+}: TranslationBudgetStateOptions = {}) {
   const pageCount = pageRangeCount(pageRanges, uploadedPageCount);
   if (!needsTranslation || pageCount <= 0) {
     return {

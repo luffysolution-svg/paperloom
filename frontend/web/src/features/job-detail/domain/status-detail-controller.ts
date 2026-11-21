@@ -66,7 +66,7 @@ export function createStatusDetailController({
   fetchTranslationItem,
   replayTranslationItem,
   resolveOcrAmbiguity,
-  rerunJob,
+  resumeJob,
   retryJobStage,
   copyText,
   renderJob,
@@ -82,7 +82,12 @@ export function createStatusDetailController({
     runtimePort,
     store,
     dialogStore,
-    rerunJob,
+    resumeJob: (jobId: string) => resumeJob(jobId, apiPrefix),
+    retryTranslationWithRisk: retryJobStage
+      ? (jobId: string) => retryJobStage(jobId, apiPrefix, "translation", {
+        ambiguous_request_policy: "accept_duplicate_risk",
+      })
+      : undefined,
     setText,
     startPolling,
     resolveActions: jobActionResolver,

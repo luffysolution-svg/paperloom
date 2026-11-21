@@ -13,18 +13,13 @@ import {
   resolveReaderGridPresentation,
   resolveReaderPageWidthBasis,
 } from "../../../../frontend/packages/reader/src/components/react-pdf/ReaderCompareGrid.tsx";
-import {
-  resolveReaderAiLayout,
-  resolveInitialAssistantPanel,
-  resolveVisiblePdfMode,
-} from "../../../../frontend/packages/reader/src/ReaderAppReactPdf.tsx";
-import { ReaderAssistantDock } from "../../../../frontend/packages/reader/src/components/react-pdf/ReaderAssistantDock.tsx";
+import { resolveInitialAssistantPanel } from "../../../../frontend/packages/reader/src/hooks/use-reader-assistant-panel.ts";
+import { ReaderAssistantDock, ReaderPanelToggles } from "../../../../frontend/packages/reader/src/components/react-pdf/ReaderAssistantDock.tsx";
 import {
   isReaderWorkspaceDisabled,
   liveTranslationStatusCopy,
   ReaderWorkspaceTabs,
 } from "../../../../frontend/packages/reader/src/components/react-pdf/ReaderWorkspaceTabs.tsx";
-import { ReaderStructureSelectionLayer } from "../../../../frontend/packages/reader/src/pdf/ReaderStructureSelectionLayer.tsx";
 import {
   hitTestReaderTextHoverTarget,
   projectReaderTextHoverTargets,
@@ -39,37 +34,6 @@ test("page hover hit testing observes pointer movement in capture phase", () => 
   );
   assert.match(source, /onPointerMoveCapture=\{handlePointerMove\}/);
   assert.doesNotMatch(source, /\sonPointerMove=\{handlePointerMove\}/);
-});
-
-test("OCR structure selection layer exposes formula regions without covering text blocks", () => {
-  const makeHighlight = (itemId, regionType, bbox) => ({
-    itemId,
-    region: {
-      itemId,
-      source: { page: 1, bbox, unit: "pdf_point", origin: "top_left", text: "$$x^2$$" },
-      translated: { page: 1, bbox, unit: "pdf_point", origin: "top_left", text: "" },
-      markdown: "$$x^2$$",
-      regionType,
-      status: "source_only",
-      assetIds: [],
-      assetUrls: [],
-    },
-    box: { page: 1, bbox, unit: "pdf_point", origin: "top_left", text: "$$x^2$$" },
-    pageSize: { page: 1, width: 100, height: 200 },
-  });
-  const markup = renderToStaticMarkup(createElement(ReaderStructureSelectionLayer, {
-    pane: "source",
-    width: 200,
-    height: 400,
-    regions: [
-      makeHighlight("formula-1", "display_formula", [10, 20, 60, 50]),
-      makeHighlight("text-1", "text", [10, 60, 90, 90]),
-    ],
-  }));
-  assert.match(markup, /aria-label="PDF 结构选择层"/);
-  assert.match(markup, /data-reader-region-id="formula-1"/);
-  assert.match(markup, /data-reader-region-kind="formula"/);
-  assert.doesNotMatch(markup, /data-reader-region-id="text-1"/);
 });
 
 test("text hover uses passive projected hit testing without turning text into buttons", () => {
@@ -144,19 +108,6 @@ test("failed live translation remains a readable paused workspace", () => {
   assert.equal(liveTranslationPendingCopy(failedWithPages), "翻译已暂停，已保留 2 页译文");
 });
 
-test("Reader AI is a full workspace in every PDF display mode", () => {
-  assert.equal(resolveReaderAiLayout("source"), "workspace");
-  assert.equal(resolveReaderAiLayout("translated"), "workspace");
-  assert.equal(resolveReaderAiLayout("compare"), "workspace");
-});
-
-test("split workspaces show one PDF pane without losing the saved compare mode", () => {
-  assert.equal(resolveVisiblePdfMode("compare", "ai"), "source");
-  assert.equal(resolveVisiblePdfMode("compare", "markdown"), "source");
-  assert.equal(resolveVisiblePdfMode("compare", null), "compare");
-  assert.equal(resolveVisiblePdfMode("translated", "ai"), "translated");
-});
-
 test("reader workspace bar keeps only three icon-only reading modes", () => {
   const markup = renderToStaticMarkup(createElement(ReaderWorkspaceTabs, {
     mode: "compare",
@@ -164,9 +115,9 @@ test("reader workspace bar keeps only three icon-only reading modes", () => {
     onModeChange() {},
   }));
   assert.match(markup, /aria-label="阅读工作区"/);
-  assert.match(markup, />源文件</);
+  assert.match(markup, />原文</);
   assert.match(markup, />对照</);
-  assert.match(markup, />翻译文件</);
+  assert.match(markup, />译文</);
   assert.doesNotMatch(markup, />Markdown</);
   assert.doesNotMatch(markup, />AI</);
   assert.match(markup, /reader-workspace-tab-label/);
@@ -194,15 +145,15 @@ test("compare mode requires a translated artifact unless live translation suppli
   }), true);
 });
 
-test("assistant tools use a visible right rail and a unified dock header", () => {
-  const rail = renderToStaticMarkup(createElement(ReaderAssistantDock, {
-    active: null,
-    onSelect() {},
-    onClose() {},
-  }));
-  assert.match(rail, /reader-assistant-rail/);
-  assert.match(rail, /aria-label="打开Markdown"/);
-  assert.doesNotMatch(rail, /aria-label="打开AI 问答"/);
+test("assistant tools: a pressed-state button in the top tray and a unified dock header", () => {
+  assert.equal(renderToStaticMarkup(createElement(ReaderAssistantDock, { active: null, onSelect() {}, onClose() {} })), "", "关着时不再画右侧竖条");
+  const closed = renderToStaticMarkup(createElement(ReaderPanelToggles, { active: null, onSelect() {}, onClose() {} }));
+  assert.match(closed, /class="reader-panel-toggle"/);
+  assert.match(closed, /aria-label="打开Markdown"/);
+  assert.match(closed, /aria-pressed="false"/);
+  const open = renderToStaticMarkup(createElement(ReaderPanelToggles, { active: "markdown", onSelect() {}, onClose() {} }));
+  assert.match(open, /aria-label="收起Markdown"/);
+  assert.match(open, /aria-pressed="true"/);
 
   const dock = renderToStaticMarkup(createElement(ReaderAssistantDock, {
     active: "markdown",
@@ -214,33 +165,25 @@ test("assistant tools use a visible right rail and a unified dock header", () =>
   assert.match(dock, /aria-label="关闭阅读辅助面板"/);
 });
 
-test("assistant state restores directly and drops retired ai preference", () => {
-  assert.equal(resolveInitialAssistantPanel("source", {
+test("assistant state restores directly and migrates the former split preference", () => {
+  assert.equal(resolveInitialAssistantPanel({
     schema: "retainpdf_reader_view_v1",
     assistantPanel: "markdown",
     updatedAt: 1,
   }), "markdown");
-  assert.equal(resolveInitialAssistantPanel("translated", {
-    schema: "retainpdf_reader_view_v1",
-    splitLayout: { left: "source", right: "markdown" },
-    updatedAt: 1,
-  }), "markdown");
-  assert.equal(resolveInitialAssistantPanel("translated", {
+  // 存着旧两栏布局、右栏是 AI 的人：那个面板已经不存在了，所以不开任何面板。
+  // 迁到终端更糟 —— 恢复出一个用户没要过的 agent 会话。
+  assert.equal(resolveInitialAssistantPanel({
     schema: "retainpdf_reader_view_v1",
     splitLayout: { left: "source", right: "ai" },
     updatedAt: 1,
   }), null);
-  assert.equal(resolveInitialAssistantPanel("source", {
+  assert.equal(resolveInitialAssistantPanel({
     schema: "retainpdf_reader_view_v1",
     splitLayout: { left: "source", right: "translated" },
     updatedAt: 1,
   }), null);
-  assert.equal(resolveInitialAssistantPanel("source", null), null);
-  assert.equal(resolveInitialAssistantPanel("compare", {
-    schema: "retainpdf_reader_view_v1",
-    assistantPanel: "markdown",
-    updatedAt: 1,
-  }), null);
+  assert.equal(resolveInitialAssistantPanel(null), null);
 });
 
 test("assistant dock does not expose arbitrary left and right pane composition", () => {
@@ -300,11 +243,30 @@ test("reader view state rejects malformed layouts and clamps recoverable values"
   });
 });
 
-test("AI split keeps 50% zoom filling the document half", () => {
-  assert.equal(resolveReaderPageWidthBasis(600, true), 1200);
-  assert.equal(resolveReaderPageWidthBasis(1200, true, 1200), 1200);
-  assert.equal(resolveReaderPageWidthBasis(600, true, 1200), 1200);
+test("开着侧栏时，50% 缩放在**整个拖拽区间**都铺满 PDF 栏", () => {
+  // 原来这条只钉了三个数字，其中正好只覆盖分栏 50% 那一个点。而分栏是可拖的
+  // （reader-assistant-split-constraints：30%–65%），basis 里那个
+  // `Math.min(shellWidth * 2, viewportWidth)` 在 30%–50% 区间把基准钳成常量：
+  //
+  //   面板 30%  shell 1344  基准封顶 1920  50%页宽 936  栏宽 1344  ← 差 400px
+  //
+  // 用户看到的是「把分隔条往右拖给 PDF 更多地方，页面一点都不变大」。
+  // 挑点测抓不到，所以这里扫整个区间。
+  const V = 1920;
+  for (const assistantPercent of [30, 35, 40, 45, 50, 55, 60, 65]) {
+    const shell = (V * (100 - assistantPercent)) / 100;
+    const basis = resolveReaderPageWidthBasis(shell, true, V);
+    const pageWidth = pageWidthFromShell(basis, 0.5);
+    // fitContentWidth 恒扣 24px 的 padding，所以留一点余量。
+    assert.ok(
+      Math.abs(pageWidth - shell) <= 30,
+      `面板 ${assistantPercent}% 时页宽 ${Math.round(pageWidth)} 没铺满栏宽 ${Math.round(shell)}`,
+    );
+  }
+  // 没有侧栏时基准就是 shell 宽（50% = 半栏，这是默认阅读的样子）。
   assert.equal(resolveReaderPageWidthBasis(600, false), 600);
+  // shell 还没量出来时才用 viewport 兜底，别算成 0。
+  assert.equal(resolveReaderPageWidthBasis(0, true, 1200), 1200);
 });
 
 test("assistant dock keeps the PDF mounted and owns Markdown or AI independently", () => {
@@ -314,14 +276,13 @@ test("assistant dock keeps the PDF mounted and owns Markdown or AI independently
   );
   assert.match(source, /is-workspace-\$\{workspaceView\}/);
   assert.match(source, /<ReaderCompareGrid/);
-  assert.match(source, /<ReaderAssistantDock active=\{assistantPanel\}/);
-  assert.match(source, /assistantOpen \? <ReaderAiSplitResizeHandle \/>/);
-  assert.match(source, /markdownSplit=\{assistantPanel === "markdown"\}/);
+  assert.match(source, /<ReaderAssistantDock\s+active=\{assistantPanel\}/);
+  assert.match(source, /assistantOpen \? <ReaderAssistantSplitResizeHandle \/>/);
+  assert.match(source, /markdownSplit=\{markdownSlot\.open\}/);
   assert.match(source, /assistantSplit=\{assistantOpen\}/);
   assert.match(source, /modeControls=\{null\}/);
   assert.doesNotMatch(source, /<ReaderPaneSelector/);
   assert.doesNotMatch(source, /setAssistantPanel\(next\)[\s\S]{0,120}setModeKeepingPage/);
-  assert.doesNotMatch(source, /tools\.close\("ai"\)/);
 });
 
 test("Markdown split turns PDF compare into source PDF + Markdown", () => {
@@ -502,6 +463,25 @@ test("loadProtectedPdfFile throws on non-ok response", async () => {
   await assert.rejects(
     () => loadProtectedPdfFile("http://x/pdf", async () => ({ ok: false, status: 404 })),
     /404/,
+  );
+});
+
+test("loadProtectedPdfFile 把 404 的 error.details.reason 挂到错误上（not_ready = 译文 PDF 还没产出）", async () => {
+  await assert.rejects(
+    () => loadProtectedPdfFile("http://x/not-ready.pdf", async () => ({
+      ok: false,
+      status: 404,
+      json: async () => ({ code: 404, message: "translated.pdf not ready", error: { code: "NOT_FOUND", details: { reason: "not_ready" } } }),
+    })),
+    (error) => error.status === 404 && error.reason === "not_ready",
+  );
+  await assert.rejects(
+    () => loadProtectedPdfFile("http://x/not-json.pdf", async () => ({
+      ok: false,
+      status: 404,
+      json: async () => { throw new SyntaxError("not json"); },
+    })),
+    (error) => error.status === 404 && error.reason === undefined,
   );
 });
 

@@ -1,0 +1,131 @@
+/* 上传提示区：凭据配置门、预算提示与校验状态。（UploadWorkflowNotices）
+ *
+ * @owns upload, translation-workflow-card, translation-budget-note, result-panel, form, math-mode-inline, page-range, credential-gate, progress-track, progress-bar
+ * @uses hidden */
+
+@utility credential-gate {
+  position: relative;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg) 58%, var(--paper));
+}
+
+@utility credential-gate-panel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  text-align: left;
+
+  & strong {
+    @apply block text-[1.02rem] font-semibold;
+    grid-column: 2;
+    align-self: end;
+    letter-spacing: -0.03em;
+  }
+
+  & em {
+    @apply text-[12px] not-italic;
+    grid-column: 2;
+    align-self: start;
+    color: var(--muted);
+    line-height: 1.45;
+  }
+
+  & .credential-gate-action {
+    grid-column: 3;
+    grid-row: 1 / 3;
+  }
+}
+
+@utility credential-gate-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  grid-column: 1;
+  grid-row: 1 / 3;
+  width: 42px;
+  height: 42px;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--shadow-color) 6%, transparent);
+
+  & svg {
+    width: 20px;
+    height: 20px;
+  }
+}
+
+@utility credential-gate-action {
+  justify-self: center;
+  min-height: 36px;
+  padding: 0 15px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+@utility upload-budget-slot {
+  display: grid;
+  place-items: center;
+  width: 100%;
+}
+
+@utility translation-budget-note {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  max-width: min(100%, 460px);
+  min-height: 22px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: center;
+
+  &.hidden {
+    display: none !important;
+  }
+
+  &.is-valid {
+    color: var(--ink);
+  }
+
+  &.is-error {
+    border-color: var(--danger);
+    color: var(--danger);
+  }
+
+  & a {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+}
+
+@utility is-valid {
+  &.translation-budget-note {
+    color: var(--ink);
+  }
+}
+
+@utility is-error {
+  &.translation-budget-note {
+    border-color: var(--danger);
+    color: var(--danger);
+  }
+}

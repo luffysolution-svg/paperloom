@@ -122,6 +122,12 @@ def build_block_record(
         "raw_angle": block.get("angle"),
         "raw_sub_type": raw_sub_type,
         "parent_block_id": "",
+        # MinerU marks title depth (1 = top level) only on title blocks.
+        **(
+            {"raw_title_level": block["level"]}
+            if isinstance(block.get("level"), int) and not isinstance(block.get("level"), bool)
+            else {}
+        ),
         **provider_payload_metadata(block),
         **block.get("_retainpdf_cross_page_recovery", {}),
     }

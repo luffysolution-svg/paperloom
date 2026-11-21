@@ -65,8 +65,8 @@ const REVIEWED_DUPLICATES = {
       + "overview-renderer 直接 setText，没有 `||` 兜底，而 DetailApp 的 setText 是 "
       + "`value ?? \"-\"`，空串不是 nullish，会让那一行变空白；它的兜底文案跟 "
       + "DetailHeader.tsx 同一个 span 的静态默认逐字一致。web 那份只进 syncRerunAction，"
-      + "那里的 `||` 需要空串当「我没话可说」：plan 为空但 actions.rerunEnabled && "
-      + "actions.rerun 时按钮可点，换成非空句子就成了「按钮可点 + 文案说不可恢复」；"
+      + "那里的 `||` 需要空串当「我没话可说」：plan 为空但 actions.resumeEnabled "
+      + "时按钮可点，换成非空句子就成了「按钮可点 + 文案说不可恢复」；"
       + "空串还让它的两条兜底跟 snapshot.ts 的 buildStatusDetailSnapshot 逐字对齐"
       + "（同一个 rerun.status 字段的第二个生产者）。下面有用例把这条分叉钉死。",
   },
@@ -220,16 +220,16 @@ test("summarizeResumePlan：可恢复路径必须一致，空计划路径的分�
   assert.equal(fromPackage({ can_resume: false }), "当前任务暂不可恢复。");
   assert.equal(fromWeb({ can_resume: false }), "当前任务暂不可从断点恢复。");
 
-  // 3) web 那份为什么必须返回空串：plan 为空但后端给了 rerun 入口时按钮是可点的，
+  // 3) web 那份为什么必须返回空串：plan 为空但后端说能续跑时按钮是可点的，
   //    空串让 `||` 落到「后端支持…」。换成包里那份就成了「按钮可点 + 文案说不可恢复」。
   const written = [];
-  const actionUrl = syncRerunAction({
+  const resumeJobId = syncRerunAction({
     job: { job_id: "job-1" },
     resumePlan: null,
     viewPort: { setRerunAction: (options) => written.push(options) },
-    resolveActions: () => ({ rerunEnabled: true, rerun: "/api/v1/jobs/job-1/rerun" }),
+    resolveActions: () => ({ resumeEnabled: true }),
   });
-  assert.equal(actionUrl, "/api/v1/jobs/job-1/rerun");
+  assert.equal(resumeJobId, "job-1");
   assert.deepEqual(written.at(-1), {
     enabled: true,
     status: "后端支持从当前任务产物创建恢复任务。",
@@ -255,7 +255,7 @@ test("summarizeResumePlan：可恢复路径必须一致，空计划路径的分�
     job: { job_id: "job-2" },
     resumePlan: null,
     viewPort: { setRerunAction: (options) => written.push(options) },
-    resolveActions: () => ({ rerunEnabled: false, rerun: "" }),
+    resolveActions: () => ({ resumeEnabled: false }),
   });
   assert.deepEqual(
     written.at(-1),

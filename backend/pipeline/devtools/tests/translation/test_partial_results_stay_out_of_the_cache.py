@@ -16,19 +16,14 @@ sentence_level 那条降级路径一直是在顶层写的,长文切分漏了。�
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-from retainpdf_pipeline.translate.core.payload.parts.final_status import (  # noqa: E402
+from retainpdf_translation.core.payload.parts.final_status import (  # noqa: E402
     PARTIALLY_TRANSLATED_STATUS,
 )
-from retainpdf_pipeline.translate.llm.shared.orchestration.direct_typst_long_text import (  # noqa: E402
+from retainpdf_translation.llm.shared.orchestration.direct_typst_long_text import (  # noqa: E402
     translate_direct_typst_long_text_chunks,
 )
-from retainpdf_pipeline.translate.llm.shared.orchestration.metadata import (  # noqa: E402
+from retainpdf_translation.llm.shared.orchestration.metadata import (  # noqa: E402
     should_store_translation_result,
 )
 

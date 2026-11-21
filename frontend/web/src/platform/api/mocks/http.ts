@@ -20,8 +20,5 @@ export function submitUploadRequest(
 ): Promise<any> {
   void form;
   onProgress?.(1, 1);
-  if (/\/ocr\/jobs(?:$|\?)/.test(url)) {
-    return Promise.resolve(submitMockJob());
-  }
   return Promise.resolve(submitMockUpload());
 }

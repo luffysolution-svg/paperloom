@@ -13,12 +13,26 @@ import {
   createRecentJobsStatePort,
 } from "./state.js";
 import { createNoopRecentJobsHomeStatePort } from "./loading-state-contract.js";
+import type { CreateRecentJobsRuntimeOptions } from "./runtime.js";
+import type { RecentJobsReactViewPort } from "../types.js";
+
+/** 运行时的选项照搬，外加本层自己装配的几样（事件端口、命令端口、视图端口）。 */
+export type MountRecentJobsFeatureOptions = Omit<
+  CreateRecentJobsRuntimeOptions,
+  "refreshSchedulerRef" | "viewPort" | "libraryBooksResource"
+> & {
+  startPolling?: (jobId: string) => void;
+  openReader?: (jobId: string, anchor: unknown, documentId: string, options: { pinJob?: boolean }) => void;
+  viewPort: RecentJobsReactViewPort;
+  libraryRefreshPort?: ReturnType<typeof createRecentJobsLibraryRefreshPort>;
+  commandPort?: ReturnType<typeof createRecentJobsCommandPort>;
+  libraryBooksResource?: ReturnType<typeof createLibraryBooksResource>;
+};
 
 export function mountRecentJobsFeature({
   fetchJobList,
   fetchJobPayload,
-  fetchLibraryBookList,
-  deleteLibraryBook,
+  deleteJobById,
   apiPrefix,
   startPolling,
   openReader,
@@ -40,16 +54,15 @@ export function mountRecentJobsFeature({
   commandPort = createRecentJobsCommandPort(),
   libraryBooksResource = createLibraryBooksResource({
     fetchJobList,
-    fetchLibraryBookList,
     apiPrefix,
   }),
-}: any) {
-  let refreshScheduler = null;
+}: MountRecentJobsFeatureOptions) {
+  // 调度器依赖 runtime.loadRecentJobs，runtime 又经 refreshSchedulerRef 回读它：先占位，下面赋值。
+  let refreshScheduler: ReturnType<typeof createRecentJobsRefreshScheduler> | null = null;
   const runtime = createRecentJobsRuntime({
     fetchJobList,
     fetchJobPayload,
-    fetchLibraryBookList,
-    deleteLibraryBook,
+    deleteJobById,
     apiPrefix,
     currentJobId,
     activeJobRecoveryPort,
@@ -67,7 +80,6 @@ export function mountRecentJobsFeature({
   refreshScheduler = createRecentJobsRefreshScheduler({
     loadRecentJobs: runtime.loadRecentJobs,
     scheduleAutoLoadCheck: viewPort.scheduleAutoLoadCheck,
-    setDialogOpen: viewPort.setDialogOpen,
   });
 
   const featureEvents = bindRecentJobsFeatureEvents({
@@ -84,8 +96,6 @@ export function mountRecentJobsFeature({
   refreshScheduler.initialize();
 
   return {
-    openRecentJobsDialog: refreshScheduler.openDialog,
-    closeRecentJobsDialog: refreshScheduler.closeDialog,
     loadRecentJobs: runtime.loadRecentJobs,
     initializeLibraryView: refreshScheduler.initialize,
     disposeFeatureEvents: () => featureEvents?.dispose?.(),

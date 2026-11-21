@@ -79,6 +79,10 @@ export interface TranslationInput {
     glossary_overridden_entry_count?: number;
     glossary_entries?: GlossaryEntryInput[];
     /**
+     * 服务器写：建任务时用户真正内联的条目（规范化、去重后），客户端发了也会被覆盖。glossary_entries 是和术语表合并后的快照；重跑、阶段重试先换回这一份再按现在的表解析。空的时候不出现。2026-10-22 加。
+     */
+    glossary_inline_entries?: GlossaryEntryInput[];
+    /**
      * TRANSLATION_CONTEXT_MODES
      */
     context_mode?: "needed" | "all" | "off";
@@ -90,12 +94,62 @@ export interface TranslationInput {
      * TRANSLATION_MEMORY_MODES
      */
     memory_mode?: "matched" | "broad" | "off";
+    /**
+     * TRANSLATION_PREPARATION_MODES。译前准备（全书术语预扫 + 风格指南）。off：不生成产物，prompt 与缓存 key 与不带该字段时完全一致；artifacts_only：只生成并冻结 translated/term-base.v1.json、translated/style-guide.v1.json，不注入；terms：按块命中注入术语库（用户术语优先）；terms+style：再把风格指南放进 system 前缀；editorial：terms+style 之上由术语专员审定术语表（专业术语锁定、文献与期刊保留原文、人名机构不强制、通用词剔除，首现括注只标需要的专业术语）。
+     */
+    preparation?: "off" | "artifacts_only" | "terms" | "terms+style" | "editorial";
+    /**
+     * TRANSLATION_REFINE_MODES。精修（挑错 + 定点修改），在渲染阶段、真正渲染之前运行，只在翻译之后紧接着的那次渲染里自动跑（普通的重新渲染不会再跑）。off：不挑错不修改，渲染行为与不带该字段时完全一致；review_only：只挑错，写 artifacts/refine_report.v1.json，不改译文；review_and_fix：再对 critical/major 问题做定点修改，经确定性检查通过才写回（走修订历史，可回退）。挑错模型用 reviewer_*，留空回退到翻译模型。editorial：编辑部模式——规则修正、审校挑错与质检出问题后，主编（模型）逐块在规则允许的动作里分流（局部改 / 整块重写 / 不改 / 交给人），修订执行并经同一套确定性检查验收，最多两轮，剩下的列入待人看；全程写 artifacts/editorial/ledger.jsonl。
+     */
+    refine?: "off" | "review_only" | "review_and_fix" | "editorial";
+    /**
+     * 精修最多挑错多少块；0 = 不限（默认，审全书）。超出就停，报告里写明停在哪一页（review.next_page），可以从那一页接着精修。
+     */
+    refine_max_items?: number;
+    /**
+     * 精修（挑错 + 修改）的总 token 上限；0 = 不限（默认）。给了上限、超出就停，报告里写明停在哪一页（review.next_page）。
+     */
+    refine_max_tokens?: number;
     api_key?: string;
     credential_ref?: string;
     model?: string;
-    api_protocol?: "openai" | "openai_responses" | "anthropic";
-    thinking?: "auto" | "off" | "low" | "medium" | "high" | "max";
     base_url?: string;
+    /**
+     * 审校（挑错）模型。本期只留配置位；留空回退到 model。
+     */
+    reviewer_model?: string;
+    /**
+     * 审校模型的 endpoint；留空回退到 base_url。
+     */
+    reviewer_base_url?: string;
+    /**
+     * 审校模型的内联 key，与 api_key 同样处理：创建任务时导入凭据库换成 reviewer_credential_ref 并清空，不明文落库。与 reviewer_credential_ref 互斥。
+     */
+    reviewer_api_key?: string;
+    /**
+     * 审校模型 key 的凭据引用（kind=translation_api_key）。reviewer_api_key 与它都为空时：reviewer_base_url 为空或与 base_url 相同则回退翻译 key，否则不带 key。
+     */
+    reviewer_credential_ref?: string;
+    /**
+     * TRANSLATION_API_PROTOCOLS。翻译模型接口的协议。openai：POST {base_url}/chat/completions + Bearer；openai_responses：POST {base_url}/responses + Bearer（OpenAI Responses API，服务商明确支持才用）；anthropic：POST {base_url}/messages + x-api-key（Anthropic Messages API）。带 execution_connection 时只能是 openai。
+     */
+    api_protocol?: "openai" | "openai_responses" | "anthropic";
+    /**
+     * TRANSLATION_THINKING_LEVELS。翻译模型的思考深度。auto：只对实测过的模型关掉或压低思考，其余由服务商默认；其余档位按协议与服务商换成对应字段，服务商不认时逐级退回，最后不带思考字段。
+     */
+    thinking?: "auto" | "off" | "low" | "medium" | "high" | "max";
+    /**
+     * 审校模型接口的协议；留空沿用 api_protocol。
+     */
+    reviewer_api_protocol?: "" | "openai" | "openai_responses" | "anthropic";
+    /**
+     * 审校模型的思考深度；留空沿用 thinking。
+     */
+    reviewer_thinking?: "" | "auto" | "off" | "low" | "medium" | "high" | "max";
+    /**
+     * TRANSLATION_ENGINES。翻译引擎。legacy：现有流程；agent：翻译 agent（先通读全文，再逐页翻译并审校），要求 api_protocol=anthropic，公式按 direct_typst 处理。
+     */
+    engine?: "legacy" | "agent";
     start_page?: number;
     end_page?: number;
     /**
@@ -113,7 +167,6 @@ export interface ModelConnection {
     id: string;
     revision: number;
     provider: "qwen" | "deepseek" | "openai_compatible";
-    api_protocol?: "openai" | "openai_responses" | "anthropic";
     base_url: string;
     model: string;
     credential_ref: string;
@@ -159,11 +212,18 @@ export interface RenderInput {
      * SOURCE_CLEANUP_STRATEGIES
      */
     source_cleanup_strategy?: "pikepdf_text_strip" | "bbox_text_strip" | "legacy" | "redact_restore_formulas";
+    /**
+     * RENDER_ENGINES：rpr_fit = 自研排版引擎，字号由引擎按测量决定、直接写 PDF（默认）；typst = 原 Typst 路线；rpr = 旧取值，照旧接受、按 rpr_fit 渲染（2026-11-02 起）。引擎不可用或失败时回退 typst
+     */
+    engine?: "typst" | "rpr" | "rpr_fit";
 }
 /**
  * models/input/runtime.rs :: RuntimeInput
  */
 export interface RuntimeInput {
+    /**
+     * 任务编号由服务器分配。公开入口（POST /jobs、书库的翻译和 OCR）收到非空的 runtime.job_id 会返回 400，请留空或不要发。
+     */
     job_id?: string;
     timeout_seconds?: number;
     /**

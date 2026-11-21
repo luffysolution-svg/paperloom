@@ -5,37 +5,34 @@ import json
 import multiprocessing
 import os
 import shutil
-import sys
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
-from retainpdf_pipeline.translate.core.payload import (
+from retainpdf_translation.core.payload import (
     load_translations,
     pending_translation_items,
     save_translations,
     write_translation_manifest,
 )
-from retainpdf_pipeline.translate.workflow.checkpoint import (
+from retainpdf_translation.workflow.checkpoint import (
     TRANSLATION_CHECKPOINT_FILE_NAME,
     ResumeCandidateFingerprintMismatch,
     TranslationCheckpointSession,
     discard_copied_resume_candidate,
 )
-from retainpdf_pipeline.translate.workflow.checkpoint.identity import (
+from retainpdf_translation.workflow.checkpoint.identity import (
     build_translation_identity,
 )
-from retainpdf_pipeline.translate.workflow.checkpoint.store import (
+from retainpdf_translation.workflow.checkpoint.store import (
     CheckpointStore,
 )
-from retainpdf_pipeline.translate.workflow.execution import (
+from retainpdf_translation.workflow.execution import (
     TranslationExecutionRequest,
 )
-from retainpdf_pipeline.translate.llm.shared.model_wire import ConnectionProfile
 
 
 def _request(source_json: Path, output_dir: Path, *, model: str = "test-model") -> TranslationExecutionRequest:
@@ -50,7 +47,6 @@ def _request(source_json: Path, output_dir: Path, *, model: str = "test-model") 
 
 def _plan():
     return SimpleNamespace(
-        connection_profile=ConnectionProfile(),
         start=0,
         stop=0,
         glossary_entries=[],
@@ -316,6 +312,112 @@ def test_checkpoint_with_no_translation_change_has_no_page_commit(
     assert records[-1]["payload"]["committed_pages"] == []
 
 
+def _checkpoint_events(capsys) -> list[dict]:
+    return [
+        json.loads(line)["payload"]
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith("{")
+    ]
+
+
+def test_diagnostics_only_rewrite_of_published_page_is_committed(
+    tmp_path: Path, capsys
+) -> None:
+    # agent repair 跳过块时只写 translation_diagnostics 再整本重存，块指纹不变。
+    # 页字节变了却不上报，数据库就停在旧 page_hash，旧快照又被 prune 掉了。
+    source_json = tmp_path / "document.v1.json"
+    source_json.write_text("{}", encoding="utf-8")
+    output_dir = tmp_path / "job-diagnostics-only" / "translated"
+    page = output_dir / "page-001-deepseek.json"
+    payload = [_item("p001-b0003", "已完成")]
+
+    with TranslationCheckpointSession.acquire(
+        _request(source_json, output_dir), _plan()
+    ) as checkpoint:
+        save_translations(page, payload)
+        checkpoint.update("translating", {0: payload}, {0: page}, {0: {"p001-b0003"}})
+        payload[0]["translation_diagnostics"] = {"agent_repair_skipped": True}
+        save_translations(page, payload)
+        rewritten_hash = hashlib.sha256(page.read_bytes()).hexdigest()
+        checkpoint.update("repairing", {0: payload}, {0: page}, detect_item_changes=True)
+        checkpoint.update("validating", {0: payload}, {0: page}, detect_item_changes=True)
+
+    events = _checkpoint_events(capsys)
+    assert events[-2]["committed_pages"] == [
+        {
+            "unit_key": "page:0",
+            "unit_order": 0,
+            "page_index": 0,
+            "page_hash": rewritten_hash,
+            "changed_item_ids": [],
+        }
+    ]
+    # 报过一次就记下来，下一次字节没变就不再重复报。
+    assert events[-1]["committed_pages"] == []
+    saved = json.loads(
+        (output_dir / TRANSLATION_CHECKPOINT_FILE_NAME).read_text(encoding="utf-8")
+    )
+    assert saved["pages"][0]["published_page_hash"] == rewritten_hash
+
+
+def test_unpublished_page_rewrite_is_not_committed(tmp_path: Path, capsys) -> None:
+    # 译前阶段（preparing/policy_ready）也会整本重存，但这些页还没进数据库，不该提前报。
+    source_json = tmp_path / "document.v1.json"
+    source_json.write_text("{}", encoding="utf-8")
+    output_dir = tmp_path / "job-unpublished" / "translated"
+    page = output_dir / "page-001-deepseek.json"
+    payload = [_item("p001-b0003")]
+
+    with TranslationCheckpointSession.acquire(
+        _request(source_json, output_dir), _plan()
+    ) as checkpoint:
+        save_translations(page, payload)
+        checkpoint.update("preparing", {0: payload}, {0: page})
+        payload[0]["continuation_group"] = "g1"
+        save_translations(page, payload)
+        checkpoint.update("preparing", {0: payload}, {0: page})
+
+    events = _checkpoint_events(capsys)
+    assert all(event["committed_pages"] == [] for event in events)
+    saved = json.loads(
+        (output_dir / TRANSLATION_CHECKPOINT_FILE_NAME).read_text(encoding="utf-8")
+    )
+    assert saved["pages"][0]["published_page_hash"] is None
+
+
+def test_legacy_checkpoint_without_published_hash_reports_byte_changes(
+    tmp_path: Path, capsys
+) -> None:
+    source_json = tmp_path / "document.v1.json"
+    source_json.write_text("{}", encoding="utf-8")
+    output_dir = tmp_path / "job-legacy-published" / "translated"
+    page = output_dir / "page-001-deepseek.json"
+    payload = [_item("p001-b0003", "已完成")]
+    with TranslationCheckpointSession.acquire(
+        _request(source_json, output_dir), _plan()
+    ) as checkpoint:
+        save_translations(page, payload)
+        checkpoint.update("translating", {0: payload}, {0: page}, {0: {"p001-b0003"}})
+
+    checkpoint_path = output_dir / TRANSLATION_CHECKPOINT_FILE_NAME
+    legacy = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    for page_record in legacy["pages"]:
+        page_record.pop("published_page_hash", None)
+    checkpoint_path.write_text(json.dumps(legacy), encoding="utf-8")
+
+    capsys.readouterr()
+    with TranslationCheckpointSession.acquire(
+        _request(source_json, output_dir), _plan()
+    ) as checkpoint:
+        payload[0]["translation_diagnostics"] = {"agent_repair_skipped": True}
+        save_translations(page, payload)
+        checkpoint.update("repairing", {0: payload}, {0: page}, detect_item_changes=True)
+
+    events = _checkpoint_events(capsys)
+    assert [page["page_index"] for page in events[-1]["committed_pages"]] == [0]
+    assert events[-1]["committed_pages"][0]["changed_item_ids"] == []
+
+
 def test_saved_checkpoint_is_replayed_after_stdout_failure(
     tmp_path: Path, capsys, monkeypatch
 ) -> None:
@@ -448,16 +550,6 @@ def test_read_after_validating_checkpoint_cannot_change_page_hash(tmp_path: Path
     assert committed["status"] == "complete"
 
 
-@pytest.mark.parametrize("profile", [ConnectionProfile("openai_responses", "auto"), ConnectionProfile("anthropic", "auto"), ConnectionProfile("openai", "high")])
-def test_checkpoint_identity_uses_the_plans_frozen_connection(tmp_path: Path, profile) -> None:
-    source_json = tmp_path / "document.v1.json"
-    source_json.write_text("{}", encoding="utf-8")
-    request = _request(source_json, tmp_path / "translated")
-    first_plan, second_plan = _plan(), _plan()
-    second_plan.connection_profile = profile
-    assert build_translation_identity(request, first_plan)["fingerprint"] != build_translation_identity(request, second_plan)["fingerprint"]
-
-
 def test_fingerprint_mismatch_releases_checkpoint_lease(tmp_path: Path) -> None:
     source_json = tmp_path / "document.v1.json"
     source_json.write_text("{}", encoding="utf-8")
@@ -483,7 +575,7 @@ def test_checkpoint_identity_tracks_translation_engine_version(tmp_path: Path, m
 
     first = build_translation_identity(request, _plan())
     monkeypatch.setattr(
-        "retainpdf_pipeline.translate.workflow.checkpoint.identity.translation_engine_identity",
+        "retainpdf_translation.workflow.checkpoint.identity.translation_engine_identity",
         lambda **_kwargs: {
             "prompt_hash": "changed-prompt",
             "translation_protocol_version": "changed-protocol",
@@ -615,3 +707,63 @@ def test_mismatched_copied_checkpoint_is_explicitly_discarded(tmp_path: Path) ->
         assert fresh.payload is not None
         assert fresh.payload["attempt_id"] == "job-new"
         assert "resumed_from_attempt_id" not in fresh.payload
+
+
+def _copy_attempt(old_output: Path, new_output: Path, page_name: str) -> Path:
+    new_output.mkdir(parents=True)
+    new_page = new_output / page_name
+    shutil.copy2(old_output / page_name, new_page)
+    shutil.copy2(old_output / TRANSLATION_CHECKPOINT_FILE_NAME, new_output / TRANSLATION_CHECKPOINT_FILE_NAME)
+    return new_page
+
+
+def _streamed_attempt(tmp_path: Path, source_pdf: Path) -> tuple[Path, Path, str]:
+    """跟着 OCR 翻的一次：指纹按原文 PDF 算。"""
+    source_json = tmp_path / "document.v1.json"
+    source_json.write_text('{"schema":"document.v1"}', encoding="utf-8")
+    old_output = tmp_path / "job-old" / "translated"
+    old_page = old_output / "page-001-deepseek.json"
+    payload = [_item("done", "已完成"), _item("pending")]
+    request = replace(_request(source_json, old_output), ocr_stream_dir=tmp_path / "job-old" / "ocr", source_pdf_path=source_pdf)
+    with TranslationCheckpointSession.acquire(request, _plan()) as checkpoint:
+        save_translations(old_page, payload)
+        checkpoint.update("translating", {0: payload}, {0: old_page})
+    stored = json.loads((old_output / TRANSLATION_CHECKPOINT_FILE_NAME).read_text(encoding="utf-8"))
+    assert stored.get("ocr_stream_source_pdf_sha256")
+    return source_json, old_output, old_page.name
+
+
+def test_a_streamed_attempt_resumes_after_ocr_finished(tmp_path: Path) -> None:
+    # 跟着 OCR 翻了一部分失败了，OCR 做完以后重试翻译（指纹按规范化文档算）：参数一样、原文 PDF 是同一份就接着翻，
+    # 以前两种指纹对不上，6.86 万条从头翻（2026-11-03，任务 20261103044311-4bdc13）。
+    source_pdf = tmp_path / "book.pdf"
+    source_pdf.write_bytes(b"%PDF-1.4 the same book")
+    source_json, old_output, page_name = _streamed_attempt(tmp_path, source_pdf)
+    new_output = tmp_path / "job-new" / "translated"
+    new_page = _copy_attempt(old_output, new_output, page_name)
+
+    retry = replace(_request(source_json, new_output), source_pdf_path=source_pdf)
+    with TranslationCheckpointSession.acquire(retry, _plan()) as checkpoint:
+        pending = pending_translation_items(load_translations(new_page))
+        assert [item["item_id"] for item in pending] == ["pending"]
+        assert checkpoint.payload is not None
+        assert checkpoint.payload["resumed_from_attempt_id"] == "job-old"
+
+
+@pytest.mark.parametrize("change", ["other_pdf", "other_model", "no_pdf"])
+def test_a_streamed_attempt_is_not_resumed_when_the_book_or_the_parameters_changed(tmp_path: Path, change: str) -> None:
+    source_pdf = tmp_path / "book.pdf"
+    source_pdf.write_bytes(b"%PDF-1.4 the same book")
+    source_json, old_output, page_name = _streamed_attempt(tmp_path, source_pdf)
+    new_output = tmp_path / "job-new" / "translated"
+    _copy_attempt(old_output, new_output, page_name)
+
+    retry = _request(source_json, new_output, model="new-model" if change == "other_model" else "test-model")
+    if change == "other_pdf":
+        other = tmp_path / "other.pdf"
+        other.write_bytes(b"%PDF-1.4 another book")
+        retry = replace(retry, source_pdf_path=other)
+    elif change == "other_model":
+        retry = replace(retry, source_pdf_path=source_pdf)
+    with pytest.raises(ResumeCandidateFingerprintMismatch):
+        TranslationCheckpointSession.acquire(retry, _plan())

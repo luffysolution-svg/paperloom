@@ -1,0 +1,226 @@
+/* 合集：视图壳、文件夹头、文件夹卡片与封面堆叠。（CollectionsView / CollectionsGridView / FolderCoverStack）
+ *
+ * @owns categories, category
+ * @uses library-view */
+
+/* library-view 已有 order:1(见文件靠前的 app-shell-header 附近定义)——
+   categories-view / favorites-view 用同样的 order,三者互斥渲染(tab 切换),
+   不会同时出现,不需要再手动错开。 */
+@utility categories-view {
+  width: min(1120px, 100%);
+  flex: 1 1 auto;
+  min-height: 0;
+  order: 1;
+  overflow-y: auto;
+  scrollbar-width: none;
+  padding-bottom: 116px;
+
+  &::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+
+  /* 合集/文件夹视图与图书馆共用 .library-view 壳(宽度/flex),但 Tailwind v4
+     的 @utility 生成顺序不跟随源码序(实测产物里 .library-view 排在
+     .categories-view 之后),同元素上 library-view 的 overflow:hidden 会
+     覆盖这里的 overflow-y:auto,导致合集内容无法滚动——用双类组合把
+     specificity 提到 (0,2,0),与生成顺序脱钩。 */
+  &.library-view {
+    overflow-y: auto;
+  }
+}
+
+@utility categories-head {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 0 18px;
+}
+
+@utility categories-folder-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 4px 0 18px;
+
+  & h2 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--ink);
+    margin: 0;
+  }
+}
+
+@utility categories-back-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+/* 文件夹卡片(阶段 D 追加:参考 PDF_MD_lib 的 FolderCard.tsx 改造成竖版
+   封面堆叠卡片,不再是纯文字的横向列表行——用户明确认可这个"多本书叠在
+   一起"的视觉,直接照这个结构复刻)。 */
+@utility categories-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 20px 16px;
+}
+
+@utility category-card {
+  position: relative;
+  isolation: isolate;
+}
+
+@utility category-card-open {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  text-align: center;
+}
+
+@utility category-card-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--ink);
+}
+
+@utility category-card-count {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+@utility category-card-manage {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--paper) 94%, transparent);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--ink) 14%, transparent);
+  color: var(--ink);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+
+  & svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  .category-card:hover &,
+  &:focus-visible {
+    opacity: 1;
+  }
+
+  &:hover {
+    background: var(--paper);
+    border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
+    color: var(--accent);
+  }
+}
+
+@utility category-card-stack {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--paper) 55%, transparent),
+      transparent
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg) 70%, var(--paper)),
+      color-mix(in srgb, var(--line) 55%, var(--bg))
+    );
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--ink) 8%, transparent);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.15s ease;
+
+  .category-card-open:hover & {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--accent) 22%, var(--line));
+    box-shadow: 0 14px 30px color-mix(in srgb, var(--ink) 12%, transparent);
+  }
+}
+
+@utility category-card-stack-item {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--paper);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--ink) 12%, transparent);
+  transform-origin: center bottom;
+  display: grid;
+  place-items: center;
+
+  & img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: var(--paper);
+    pointer-events: none;
+  }
+}
+
+@utility category-card-stack-fallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  color: color-mix(in srgb, var(--ink) 32%, transparent);
+
+  & svg {
+    width: 36%;
+    height: 36%;
+  }
+}
+
+@utility category-card-stack-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--muted);
+
+  & svg {
+    width: 30px;
+    height: 30px;
+    opacity: 0.45;
+  }
+
+  & span {
+    font-size: 10.5px;
+  }
+}

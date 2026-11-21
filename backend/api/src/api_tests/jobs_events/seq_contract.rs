@@ -84,7 +84,7 @@ async fn job_events_route_returns_global_monotonic_seq_after_source_merge() {
     let response = build_app(state)
         .oneshot(
             Request::builder()
-                .uri(format!("/api/v1/jobs/{job_id}/events"))
+                .uri(format!("/api/v1/jobs/{job_id}/progress/events"))
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("events request"),

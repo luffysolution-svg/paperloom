@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "retainpdf/contracts/jobs-control/v1",
   "title": "retain-shell ↔ retain-jobsd 内部控制契约（ADR-002）",
-  "description": "壳把任务运行时操作交给 jobsd 进程执行。四个操作与拆分前 services/runtime_gateway.rs 的公开面一一对应，语义逐条保持不变——本契约是那 58 行接缝的进程间投影。仅监听 127.0.0.1，鉴权复用 RETAIN_API_KEYS。生产者 = jobsd（crates/retain-jobsd），消费者 = 壳（services/runtime_gateway.rs 的 Remote 实现），双端各配锁测试。",
+  "description": "壳把任务运行时操作交给 jobsd 进程执行。四个操作与拆分前 services/jobs/runtime_gateway.rs 的公开面一一对应，语义逐条保持不变——本契约是那 58 行接缝的进程间投影。仅监听 127.0.0.1，鉴权复用 RETAIN_API_KEYS。生产者 = jobsd（crates/retain-jobsd），消费者 = 壳（services/jobs/runtime_gateway.rs 的 Remote 实现），双端各配锁测试。",
   "base_path": "/internal/v1",
   "bind_host": "127.0.0.1",
   "auth": {
@@ -39,7 +39,7 @@
       "method": "POST",
       "path": "/internal/v1/processes/{pid}/terminate",
       "seam_origin": "terminate_runtime_process",
-      "semantics": "组杀该 pid 的进程树（kill(-pid)），宽限期与轮询间隔取 jobsd 侧 JobRunnerConfig",
+      "semantics": "组杀该 pid 的进程树（kill(-pid)），宽限期与轮询间隔取 jobsd 侧 JobRunnerConfig。只杀 jobsd 登记过的 worker：某个 running 任务记着这个 pid，且 spawn 时记下的进程身份（jobs.worker_identity，pid + 启动时间）和现在这个进程对得上。pid<=1 回 400（reason=invalid_pid），不是登记过的 worker 回 404（reason=not_a_registered_worker），都不发任何信号；壳把 404 当作「没有要杀的」，不算失败",
       "response": "AckResult"
     }
   ],
@@ -49,7 +49,11 @@
       "description": "统一受理应答。失败经 HTTP 状态码 + 壳侧既有 AppError 信封表达，不在 body 里另造错误结构。",
       "required": ["accepted"],
       "properties": {
-        "accepted": { "type": "boolean" }
+        "accepted": { "type": "boolean" },
+        "reason": {
+          "type": "string",
+          "description": "拒绝时的原因（目前只有 terminate 用：invalid_pid、not_a_registered_worker）"
+        }
       }
     }
   },

@@ -1,23 +1,31 @@
 import { defaultJobDetailDataPort } from "./data-port.js";
 
+/** 恢复端口依赖：断点续跑 POST /jobs/:id/actions/resume（按 job_id） */
+export interface JobDetailResumePortDeps {
+  apiPrefix?: string;
+  resumeJob: (jobId: string, apiPrefix: string) => Promise<unknown>;
+}
+
+export interface JobDetailResumeSubmitOptions {
+  jobId?: string;
+}
+
 export function createJobDetailResumePort({
   apiPrefix = "",
-  rerunJob,
   resumeJob,
-}: any = {}) {
+}: JobDetailResumePortDeps) {
   return {
-    async submit({ actionUrl = "", jobId = "" }: any = {}) {
+    async submit({ jobId = "" }: JobDetailResumeSubmitOptions = {}) {
       const resolvedJobId = `${jobId || ""}`.trim();
-      if (resolvedJobId) {
-        return resumeJob(resolvedJobId, apiPrefix);
+      if (!resolvedJobId) {
+        throw new Error("缺少 job_id，无法从断点恢复。");
       }
-      return rerunJob(`${actionUrl || ""}`.trim());
+      return resumeJob(resolvedJobId, apiPrefix);
     },
   };
 }
 
 export const defaultJobDetailResumePort = createJobDetailResumePort({
   apiPrefix: defaultJobDetailDataPort.apiPrefix,
-  rerunJob: defaultJobDetailDataPort.rerunJob,
   resumeJob: defaultJobDetailDataPort.resumeJob,
 });

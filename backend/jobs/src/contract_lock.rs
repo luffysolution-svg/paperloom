@@ -94,7 +94,7 @@ fn contract_binds_loopback_only() {
     );
     // 同时确保持续声明默认值为回环（双重保险，字面量仅允许在配置默认值处）
     assert_eq!(
-        retain_core::config::JobsServiceConfig::default().bind_host,
+        retainpdf_core::config::JobsServiceConfig::default().bind_host,
         "127.0.0.1",
         "JobsServiceConfig 默认 bind_host 必须为 127.0.0.1（仅回环）"
     );
@@ -150,7 +150,7 @@ fn jobsd_sets_an_explicit_worker_stack_size() {
         "jobsd 必须显式设定 worker 栈大小（JOB_WORKER_THREAD_STACK_BYTES）"
     );
     assert!(
-        retain_core::config::JOB_WORKER_THREAD_STACK_BYTES >= 4 * 1024 * 1024,
+        retainpdf_core::config::JOB_WORKER_THREAD_STACK_BYTES >= 4 * 1024 * 1024,
         "实测 book 工作流在 4 MiB 下才不溢出，这个下限不能再调低"
     );
 }

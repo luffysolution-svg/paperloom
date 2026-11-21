@@ -1,5 +1,7 @@
 // jobs-submit — pure
-import { buildJobsEndpoint, submitJson, submitUploadRequest } from "./http.js";
+import { buildUploadsEndpoint, submitUploadRequest, summarizeJobRequestContext } from "./http.js";
+import * as generated from "./generated/create-job.js";
+import { submitFailure } from "./request.js";
 function isObject(value) {
     return !!value && typeof value === "object" && !Array.isArray(value);
 }
@@ -23,72 +25,37 @@ function assertGroupedJobPayload(payload) {
 function isOcrWorkflowPayload(payload) {
     return isObject(payload) && `${payload.workflow || ""}`.trim() === "ocr";
 }
-function appendFormField(form, key, value) {
-    if (value === undefined || value === null)
-        return;
-    if (typeof value === "string") {
-        if (!value.trim() && key !== "page_ranges")
-            return;
-        form.append(key, value);
-        return;
-    }
-    if (typeof value === "number" || typeof value === "boolean") {
-        form.append(key, String(value));
-        return;
-    }
-    if (typeof value === "object") {
-        form.append(key, JSON.stringify(value));
-    }
+/** 只做 OCR 的任务和别的任务一样走 POST /jobs（JSON，带已上传文件的 upload_id）；旧入口 /ocr/jobs（multipart）不再用。
+ * 去掉只在浏览器里有意义的文件对象字段，后端拒收未知字段。 */
+function ocrJobJson(payload, uploadId) {
+    const { file: _file, __file: _rawFile, ...rest } = payload;
+    const { file: _sourceFile, ...source } = (isObject(rest.source) ? rest.source : {});
+    return { ...rest, workflow: "ocr", source: { ...source, upload_id: uploadId } };
 }
-function buildOcrFormData(payload) {
-    const p = payload;
-    const source = (isObject(p.source) ? p.source : {});
-    const ocr = (isObject(p.ocr) ? p.ocr : {});
-    const runtime = (isObject(p.runtime) ? p.runtime : {});
-    const form = new FormData();
-    const directFile = p.file || p.__file || source.file;
-    if (directFile instanceof File || directFile instanceof Blob) {
-        const filename = directFile.name || source.filename || "upload.pdf";
-        form.append("file", directFile, filename);
-    }
-    appendFormField(form, "workflow", p.workflow);
-    appendFormField(form, "upload_id", source.upload_id);
-    appendFormField(form, "source_url", source.source_url);
-    appendFormField(form, "provider", ocr.provider);
-    appendFormField(form, "ocr_credential_ref", ocr.credential_ref);
-    appendFormField(form, "mineru_token", ocr.mineru_token);
-    appendFormField(form, "paddle_token", ocr.paddle_token);
-    appendFormField(form, "paddle_api_url", ocr.paddle_api_url);
-    appendFormField(form, "paddle_model", ocr.paddle_model);
-    appendFormField(form, "model_version", ocr.model_version);
-    appendFormField(form, "language", ocr.language);
-    appendFormField(form, "page_ranges", ocr.page_ranges);
-    appendFormField(form, "is_ocr", ocr.is_ocr);
-    appendFormField(form, "disable_formula", ocr.disable_formula);
-    appendFormField(form, "disable_table", ocr.disable_table);
-    appendFormField(form, "data_id", ocr.data_id);
-    appendFormField(form, "no_cache", ocr.no_cache);
-    appendFormField(form, "cache_tolerance", ocr.cache_tolerance);
-    appendFormField(form, "extra_formats", ocr.extra_formats);
-    appendFormField(form, "poll_interval", ocr.poll_interval);
-    appendFormField(form, "poll_timeout", ocr.poll_timeout);
-    const ocrOptions = ocr.ocr_options ?? ocr.options;
-    if (ocrOptions !== undefined) {
-        appendFormField(form, "ocr_options", typeof ocrOptions === "string" ? ocrOptions : JSON.stringify(ocrOptions));
-    }
-    appendFormField(form, "timeout_seconds", runtime.timeout_seconds);
-    appendFormField(form, "no_output_timeout_seconds", runtime.no_output_timeout_seconds);
-    appendFormField(form, "job_id", runtime.job_id);
-    return form;
+/** 调用方直接给了文件、还没上传：先 POST /uploads 拿 upload_id。界面上的提交都是先上传的，走不到这里。 */
+async function uploadDirectFile(apiPrefix, payload) {
+    const source = (isObject(payload.source) ? payload.source : {});
+    const file = payload.file || payload.__file || source.file;
+    if (!(file instanceof Blob))
+        return "";
+    const uploaded = await submitUploadRequest(buildUploadsEndpoint(apiPrefix), collectUploadFormData(file));
+    return `${uploaded?.upload_id || ""}`.trim();
 }
 export async function submitJobRequest(apiPrefix, payload) {
     if (isOcrWorkflowPayload(payload)) {
-        if (!isObject(payload) || !isObject(payload.source)) {
-            throw new Error("提交失败: /api/v1/ocr/jobs 需要 grouped JSON，至少包含 workflow=ocr 和 source。");
-        }
-        const form = buildOcrFormData(payload);
-        return submitUploadRequest(buildJobsEndpoint(apiPrefix, "ocr"), form);
+        const p = payload;
+        const source = (isObject(p.source) ? p.source : {});
+        const uploadId = `${source.upload_id || ""}`.trim() || await uploadDirectFile(apiPrefix, p);
+        if (!uploadId)
+            throw new Error("提交失败: 请先上传文件再开始 OCR。");
+        return createJob(apiPrefix, ocrJobJson(p, uploadId));
     }
     assertGroupedJobPayload(payload);
-    return submitJson(buildJobsEndpoint(apiPrefix, "jobs"), payload);
+    return createJob(apiPrefix, payload);
+}
+// 报错和以前 submitJson 一样：页数额度不够给 PageQuotaError，其余带上 workflow、OCR 服务商、上传编号。
+function createJob(apiPrefix, body) {
+    return generated.createJob(apiPrefix, { body: body }, {
+        onError: submitFailure(summarizeJobRequestContext(body)),
+    });
 }

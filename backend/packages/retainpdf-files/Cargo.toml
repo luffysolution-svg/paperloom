@@ -1,0 +1,18 @@
+[package]
+name = "retainpdf-files"
+version = "0.1.0"
+edition = "2021"
+description = "文件（出口）：产物清单和打包、派生产物生成、下载文件名"
+
+[dependencies]
+retainpdf-api-base = { path = "../retainpdf-api-base" }
+retainpdf-core = { path = "../retainpdf-core" }
+retainpdf-data = { path = "../retainpdf-data" }
+retainpdf-proc = { path = "../retainpdf-proc" }
+fastrand = "2"
+libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+walkdir = "2"
+zip = { version = "0.6", default-features = false, features = ["deflate"] }

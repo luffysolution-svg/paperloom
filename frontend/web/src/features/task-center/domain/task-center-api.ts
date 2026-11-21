@@ -3,9 +3,10 @@ import { API_PREFIX } from "@/platform/config/api-constants.js";
 import {
   cancelJob,
   cancelOcrJob,
+  describeActionError,
   fetchJobList,
   fetchJobPayload,
-  rerunJob,
+  resumeJob,
 } from "@/platform/api/index.js";
 import { resolveJobActions } from "@retainpdf/domain/job";
 
@@ -24,7 +25,7 @@ export type TaskCenterApiDependencies = {
   fetchDetail: typeof fetchJobPayload;
   cancelTranslation: typeof cancelJob;
   cancelOcr: typeof cancelOcrJob;
-  rerun: typeof rerunJob;
+  resume: typeof resumeJob;
   resolveActions: typeof resolveJobActions;
 };
 
@@ -33,7 +34,7 @@ const DEFAULT_DEPENDENCIES: TaskCenterApiDependencies = {
   fetchDetail: fetchJobPayload,
   cancelTranslation: cancelJob,
   cancelOcr: cancelOcrJob,
-  rerun: rerunJob,
+  resume: resumeJob,
   resolveActions: resolveJobActions,
 };
 
@@ -133,22 +134,31 @@ export async function cancelTaskCenterJob(
 ): Promise<unknown> {
   const jobId = `${job?.job_id || ""}`.trim();
   if (!jobId) throw new Error("任务缺少 job_id，无法取消。");
-  return `${job.workflow || ""}`.trim().toLowerCase() === "ocr"
-    ? dependencies.cancelOcr(jobId, API_PREFIX)
-    : dependencies.cancelTranslation(jobId, API_PREFIX);
+  try {
+    return await (`${job.workflow || ""}`.trim().toLowerCase() === "ocr"
+      ? dependencies.cancelOcr(jobId, API_PREFIX)
+      : dependencies.cancelTranslation(jobId, API_PREFIX));
+  } catch (error) {
+    // 409 带 reason（job_not_active…）时换成能照着做的中文。
+    throw new Error(describeActionError(error, "取消失败，请稍后重试。"));
+  }
 }
 
 export async function retryTaskCenterJob(
   jobId: string,
-  dependencies: Pick<TaskCenterApiDependencies, "fetchDetail" | "rerun" | "resolveActions"> = DEFAULT_DEPENDENCIES,
+  dependencies: Pick<TaskCenterApiDependencies, "fetchDetail" | "resume" | "resolveActions"> = DEFAULT_DEPENDENCIES,
 ): Promise<unknown> {
   const normalizedJobId = `${jobId || ""}`.trim();
   if (!normalizedJobId) throw new Error("任务缺少 job_id，无法重试。");
   const detail = await dependencies.fetchDetail(normalizedJobId, { apiPrefix: API_PREFIX });
   const actions = dependencies.resolveActions(detail || {});
-  const actionUrl = `${actions?.rerun || ""}`.trim();
-  if (!actions?.rerunEnabled || !actionUrl) {
+  if (!actions?.resumeEnabled) {
     throw new Error("后端未提供可用的重试操作，请打开详情查看恢复建议。");
   }
-  return dependencies.rerun(actionUrl);
+  try {
+    return await dependencies.resume(normalizedJobId, API_PREFIX);
+  } catch (error) {
+    // 409 带 reason（job_active、artifacts_missing…）时换成能照着做的中文。
+    throw new Error(describeActionError(error, "重试失败，请稍后重试。"));
+  }
 }

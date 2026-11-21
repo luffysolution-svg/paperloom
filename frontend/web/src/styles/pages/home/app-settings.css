@@ -2,8 +2,8 @@
  *
  * DOM 契约（ids / data-attrs / hidden 语义）由 SettingsDialog.tsx 保证，
  * 测试锁定；本文件只管观感。颜色一律语义 token（棘轮门禁）。
- * 旧版曾注册全局短名 @utility is-active（status-card.css 头注释明令禁止的
- * 模式，会波及全站同名 class）——v2 改回嵌套写法，短名不再外泄。 */
+ * 旧版曾注册全局短名 @utility is-active（全局短名工具类的模式，
+ * 会波及全站同名 class）——v2 改回嵌套写法，短名不再外泄。 */
 
 @utility app-settings-dialog {
   width: min(1040px, calc(100vw - 24px));
@@ -41,7 +41,7 @@
   & h2 {
     margin: 0 10px 6px;
     color: var(--ink);
-    font-size: 14px;
+    font-size: var(--ui-text-base);
     font-weight: 700;
     letter-spacing: 0.01em;
   }
@@ -59,10 +59,10 @@
     min-height: 32px;
     padding: 0 10px;
     border: 0;
-    border-radius: 9px;
+    border-radius: var(--ui-radius-md);
     background: transparent;
     color: var(--muted);
-    font-size: 12px;
+    font-size: var(--ui-text-sm);
     font-weight: 600;
     line-height: 1;
     text-align: left;
@@ -136,14 +136,14 @@
   & h3 {
     margin: 0;
     color: var(--ink);
-    font-size: 16px;
+    font-size: var(--ui-text-lg);
     font-weight: 700;
   }
 
   & p {
     margin: 4px 0 0;
     color: var(--muted);
-    font-size: 10.5px;
+    font-size: var(--ui-text-2xs);
     line-height: 1.45;
   }
 }
@@ -187,52 +187,6 @@
 }
 
 /* 接口 / 术语表：启动区（真实表单在独立子对话框，本区是干净的入口说明） */
-@utility app-settings-backup {
-  display: grid;
-  gap: 12px;
-  color: var(--ink);
-  font-size: 13px;
-  line-height: 1.6;
-
-  & section { display: grid; gap: 12px; padding: 16px 0 24px; border-bottom: 1px solid var(--line); }
-  & section:last-child { border-bottom: 0; }
-  & h4 { margin: 0; font-size: 14px; font-weight: 650; }
-  & p { margin: 0; color: var(--muted); }
-  & form { display: grid; gap: 12px; }
-  & label { display: grid; gap: 6px; }
-  & input:not([type="checkbox"]) { width: 100%; min-width: 0; min-height: 38px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); font: inherit; }
-  & input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--ink); flex: none; margin-top: 3px; }
-  & input::placeholder { color: var(--muted); }
-  & button { justify-self: start; min-height: 36px; padding: 6px 12px; border: 1px solid var(--line); border-radius: var(--btn-radius); background: var(--paper); color: var(--ink); font: inherit; cursor: pointer; }
-  & button.app-settings-action { background: var(--btn-primary-bg); color: var(--btn-primary-fg); border-color: transparent; }
-  & button:hover:enabled { filter: brightness(0.96); }
-  & button:disabled { opacity: 0.5; cursor: not-allowed; }
-  & button:focus-visible, & input:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-  & .app-backup-check { display: flex; align-items: start; gap: 8px; }
-  & .app-backup-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  & .app-backup-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-  & .app-backup-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-  & .app-backup-status:empty { display: none; }
-  & .app-backup-progress { width: 100%; height: 8px; accent-color: var(--ink); }
-  & .app-backup-feedback { position: sticky; top: 0; z-index: 1; display: grid; gap: 8px; padding-block: 8px; background: var(--paper); }
-  & .app-backup-status, & .app-backup-error { color: var(--ink); overflow-wrap: anywhere; }
-  & .app-backup-error, & .app-backup-notice { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
-  & .app-backup-notice button { margin-top: 8px; }
-  & .app-backup-file-list { margin: 0; padding: 0; list-style: none; }
-  & .app-backup-file-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
-  & .app-backup-file-list li > div:first-child { min-width: 0; }
-  & small { display: block; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-  & .app-backup-path { overflow-wrap: anywhere; }
-  & .app-backup-location-path { display: block; margin-top: 4px; user-select: text; }
-  & .app-backup-location { display: grid; gap: 8px; min-width: 0; }
-  & .app-backup-delete { display: grid; gap: 6px; max-width: 240px; }
-
-  @media (max-width: 520px) {
-    & .app-backup-fields { grid-template-columns: minmax(0, 1fr); }
-    & .app-backup-file-list li { flex-wrap: wrap; }
-  }
-}
-
 @utility app-settings-launcher {
   display: grid;
   justify-items: start;
@@ -240,42 +194,13 @@
   max-width: 460px;
   padding: 18px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--ui-radius-lg);
 
   & p {
     margin: 0;
     color: var(--muted);
-    font-size: 13px;
+    font-size: var(--ui-text-md);
     line-height: 1.7;
-  }
-}
-
-@utility app-settings-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 34px;
-  padding: 0 16px;
-  border: 1px solid transparent;
-  border-radius: var(--btn-radius);
-  background: var(--btn-primary-bg);
-  color: var(--btn-primary-fg);
-  font-size: 13px;
-  font-weight: 650;
-  line-height: 1;
-  box-shadow: none;
-  cursor: pointer;
-  transition:
-    filter 150ms var(--ease-out),
-    transform 160ms var(--ease-out);
-
-  &:hover {
-    filter: brightness(1.06);
-    color: var(--btn-primary-fg);
-  }
-
-  &:active {
-    transform: scale(0.97);
   }
 }
 
@@ -294,7 +219,7 @@
 @utility theme-appearance-group-title {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--ui-text-xs);
   font-weight: 650;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -312,7 +237,7 @@
   gap: 8px;
   padding: 8px 8px 10px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--ui-radius-lg);
   background: var(--paper);
   text-align: left;
   cursor: pointer;
@@ -347,7 +272,7 @@
   aspect-ratio: 16 / 9;
   padding: 9px 10px 0;
   border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent);
-  border-radius: 9px;
+  border-radius: var(--ui-radius-md);
   overflow: hidden;
 }
 
@@ -359,7 +284,7 @@
   height: 100%;
   margin-inline: auto;
   padding: 7px 8px;
-  border-radius: 6px 6px 0 0;
+  border-radius: var(--ui-radius-sm) var(--ui-radius-sm) 0 0;
   box-shadow: 0 2px 8px color-mix(in srgb, var(--shadow-color) 7%, transparent);
 }
 
@@ -367,14 +292,14 @@
   display: block;
   width: 42%;
   height: 5px;
-  border-radius: 999px;
+  border-radius: var(--ui-radius-pill);
 }
 
 @utility theme-option-swatch-line {
   display: block;
   width: 88%;
   height: 3px;
-  border-radius: 999px;
+  border-radius: var(--ui-radius-pill);
   opacity: 0.5;
 }
 
@@ -382,7 +307,7 @@
   display: block;
   width: 62%;
   height: 3px;
-  border-radius: 999px;
+  border-radius: var(--ui-radius-pill);
   opacity: 0.3;
 }
 
@@ -392,7 +317,7 @@
   top: 14px;
   width: 6px;
   height: 6px;
-  border-radius: 999px;
+  border-radius: var(--ui-radius-pill);
 }
 
 @utility theme-option-copy {
@@ -402,13 +327,13 @@
 
   & strong {
     color: var(--ink);
-    font-size: 12.5px;
+    font-size: var(--ui-text-sm);
     font-weight: 650;
   }
 
   & span {
     color: var(--muted);
-    font-size: 11px;
+    font-size: var(--ui-text-xs);
     line-height: 1.45;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -424,10 +349,33 @@
   place-items: center;
   width: 20px;
   height: 20px;
-  border-radius: 999px;
+  border-radius: var(--ui-radius-pill);
   background: var(--accent);
   color: var(--paper);
-  font-size: 12px;
+  font-size: var(--ui-text-sm);
   font-weight: 700;
   box-shadow: 0 2px 6px color-mix(in srgb, var(--shadow-color) 18%, transparent);
+}
+
+/* —— 外观：渲染字体（下拉用 @retainpdf/ui 的 Select）—— */
+
+@utility app-settings-font {
+  display: grid;
+  gap: 6px;
+}
+
+@utility app-settings-font-select {
+  display: flex;
+  width: 100%;
+}
+
+@utility app-settings-font-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--ui-text-sm);
+  line-height: 1.6;
+
+  &.is-warn {
+    color: var(--warn);
+  }
 }

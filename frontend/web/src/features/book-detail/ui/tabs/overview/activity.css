@@ -1,0 +1,77 @@
+/* 书籍详情 · 概览页签（BookDetailOverviewTab）：最近活动时间线与空状态（卡片底在 layout.css）。
+ *
+ * @owns book-detail */
+
+.book-detail-overview-activity ol {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.book-detail-overview-activity li {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 44px;
+}
+
+.book-detail-overview-activity li + li {
+  margin-top: 5px;
+}
+
+.book-detail-overview-activity-icon {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 11px;
+  color: var(--muted);
+  background: var(--paper);
+}
+
+.book-detail-overview-activity-icon svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.6;
+}
+
+.book-detail-overview-activity-icon.is-done,
+.book-detail-overview-activity-icon.is-active {
+  color: var(--ink);
+}
+
+.book-detail-overview-activity-icon.is-failed {
+  color: var(--danger);
+}
+
+.book-detail-overview-activity li > div {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.book-detail-overview-activity li strong {
+  color: var(--ink);
+  font-size: var(--ui-text-sm);
+  font-weight: 600;
+}
+
+.book-detail-overview-activity li span,
+.book-detail-overview-activity time,
+.book-detail-overview-empty-activity {
+  color: var(--muted);
+  font-size: var(--ui-text-xs);
+}
+
+.book-detail-overview-activity time {
+  white-space: nowrap;
+}
+
+.book-detail-overview-empty-activity {
+  margin: 0;
+}

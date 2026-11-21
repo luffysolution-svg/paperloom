@@ -10,6 +10,19 @@ import {
   isMarkdownReady,
 } from "@retainpdf/domain/job";
 import { escapeHtml } from "@/platform/utils/html-formatting.js";
+import type {
+  JobAction,
+  JobArtifactResource,
+  JobLike,
+  JobPayload,
+  ManifestPayload,
+} from "@retainpdf/domain/job";
+import type {
+  DetailFetchProtected,
+  DetailSetActionLink,
+  DetailSetText,
+  MarkdownPayloadLike,
+} from "./page-ports.js";
 
 export {
   formatSizeBytes,
@@ -20,7 +33,7 @@ export {
 };
 
 
-export function revokeMarkdownImageUrls(markdownImageUrls) {
+export function revokeMarkdownImageUrls(markdownImageUrls: string[]) {
   for (const url of markdownImageUrls) {
     try {
       URL.revokeObjectURL(url);
@@ -31,7 +44,7 @@ export function revokeMarkdownImageUrls(markdownImageUrls) {
   markdownImageUrls.length = 0;
 }
 
-export function renderArtifactsManifest(manifestPayload) {
+export function renderArtifactsManifest(manifestPayload: ManifestPayload | null | undefined) {
   const summary = document.getElementById("detail-artifacts-summary");
   const container = document.getElementById("detail-artifacts-list");
   if (!summary || !container) {
@@ -46,6 +59,9 @@ export function renderArtifactsManifest(manifestPayload) {
   const preferredOrder = [
     "source_pdf",
     "translated_pdf",
+    "side_by_side_pdf",
+    "layout_docx",
+    "artifact_bundle_zip",
     "pdf",
     "typst_render_pdf",
     "markdown_raw",
@@ -64,8 +80,8 @@ export function renderArtifactsManifest(manifestPayload) {
   ];
   const orderMap = new Map(preferredOrder.map((key, index) => [key, index]));
   items.sort((left, right) => {
-    const leftOrder = orderMap.has(left?.artifact_key) ? orderMap.get(left.artifact_key) : 999;
-    const rightOrder = orderMap.has(right?.artifact_key) ? orderMap.get(right.artifact_key) : 999;
+    const leftOrder = orderMap.get(left?.artifact_key ?? "") ?? 999;
+    const rightOrder = orderMap.get(right?.artifact_key ?? "") ?? 999;
     if (leftOrder !== rightOrder) {
       return leftOrder - rightOrder;
     }
@@ -73,7 +89,8 @@ export function renderArtifactsManifest(manifestPayload) {
   });
   container.innerHTML = items.map((item) => {
     const resource = firstNonEmptyText(item?.resource_url, item?.resource_path, item?.relative_path) || "-";
-    const readyLabel = item?.ready ? "ready" : "pending";
+    // 对照 PDF、Word、打包这类第一次下载时才生成，没有大小和时间，标成 on demand 而不是 ready。
+    const readyLabel = item?.ready ? (item?.on_demand ? "on demand" : "ready") : "pending";
     const readyClass = item?.ready ? "is-ready" : "is-pending";
     const topLabel = summarizeArtifactLabel(item?.artifact_key);
     const metaBits = [
@@ -106,16 +123,25 @@ export function renderMarkdownContract({
   markdownImageUrls,
   setText,
   setActionLink,
+}: {
+  job: JobLike | JobPayload | null | undefined;
+  markdownPayload?: MarkdownPayloadLike | null;
+  markdownImageUrls: string[];
+  setText: DetailSetText;
+  setActionLink: DetailSetActionLink;
 }) {
   const contract = resolveJobMarkdownContract(job);
-  const markdownArtifact = job?.artifacts?.markdown || {};
+  // 产物表的值类型在 domain 里是 unknown（JobArtifacts | Record<string, unknown>），这里按 JobArtifactResource 形状读取。
+  const markdownArtifact = (job?.artifacts?.markdown || {}) as JobArtifactResource;
+  // 任务动作表的值类型是 unknown，这里按 JobAction 形状读取 url/path（与 resolveJobActions 的输出一致）。
+  const actions = (job?.actions ?? {}) as Record<string, JobAction | undefined>;
   const rawUrl = firstNonEmptyText(
     markdownPayload?.raw_url,
     markdownPayload?.raw_path,
     markdownArtifact.raw_url,
     markdownArtifact.raw_path,
-    job?.actions?.open_markdown_raw?.url,
-    job?.actions?.open_markdown_raw?.path,
+    actions.open_markdown_raw?.url,
+    actions.open_markdown_raw?.path,
     contract.rawUrl,
   );
   const jsonUrl = firstNonEmptyText(
@@ -123,8 +149,8 @@ export function renderMarkdownContract({
     markdownPayload?.json_path,
     markdownArtifact.json_url,
     markdownArtifact.json_path,
-    job?.actions?.open_markdown?.url,
-    job?.actions?.open_markdown?.path,
+    actions.open_markdown?.url,
+    actions.open_markdown?.path,
     contract.jsonUrl,
   );
   const imagesBaseUrl = firstNonEmptyText(
@@ -183,6 +209,11 @@ export async function renderMarkdownImagePreview({
   imagesBaseUrl,
   markdownImageUrls,
   fetchProtected,
+}: {
+  markdownPayload: MarkdownPayloadLike | null | undefined;
+  imagesBaseUrl: string | undefined;
+  markdownImageUrls: string[];
+  fetchProtected: DetailFetchProtected;
 }) {
   const grid = document.getElementById("detail-markdown-image-grid");
   const empty = document.getElementById("detail-markdown-image-empty");
@@ -215,7 +246,7 @@ export async function renderMarkdownImagePreview({
       markdownImageUrls.push(objectUrl);
       return { ref, absoluteUrl, objectUrl, error: "" };
     } catch (error) {
-      return { ref, absoluteUrl, objectUrl: "", error: error.message || "图片读取失败" };
+      return { ref, absoluteUrl, objectUrl: "", error: (error as { message?: string } | null)?.message || "图片读取失败" };
     }
   }));
   grid.innerHTML = previews.map((item) => `

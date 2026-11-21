@@ -5,7 +5,7 @@ import {
   fetchJobMarkdown as fetchApiJobMarkdown,
 } from "@retainpdf/api/jobs-artifacts";
 import { fetchJobPayload as fetchApiJobPayload } from "@retainpdf/api/jobs";
-import { buildJobDetailEndpoint, fetchDocumentByJobId } from "@/platform/api/index.js";
+import { fetchDocument, fetchDocumentByJobId, fetchJobData } from "@/platform/api/index.js";
 import {
   fetchReaderMetadata as fetchApiReaderMetadata,
   fetchReaderRegions as fetchApiReaderRegions,
@@ -16,6 +16,7 @@ import {
   streamLiveTranslationEvents,
 } from "@retainpdf/api/live-translation";
 import {
+  documentSourcePdfPath,
   findReadyManifestArtifact,
   resolveJobActions,
   resolveJobMarkdownContract,
@@ -42,7 +43,7 @@ import { isMockMode } from "@/platform/config/runtime.js";
 import { resolvePdfjsVendorUrl } from "@/platform/runtime/vendor-url.js";
 import { defaultReaderPdfDocumentConfigPort } from "./config.js";
 
-async function fetchJobPayload(jobId: string, apiPrefix?: string): Promise<any> {
+async function fetchJobPayload(jobId: string, apiPrefix?: string) {
   if (isMockMode()) {
     void apiPrefix;
     return getMockJobPayload(jobId);
@@ -50,7 +51,7 @@ async function fetchJobPayload(jobId: string, apiPrefix?: string): Promise<any> 
   return fetchApiJobPayload(jobId, apiPrefix ? { apiPrefix } : undefined);
 }
 
-async function fetchJobArtifactsManifest(jobId: string, apiPrefix?: string): Promise<any> {
+async function fetchJobArtifactsManifest(jobId: string, apiPrefix?: string) {
   if (isMockMode()) {
     void jobId;
     void apiPrefix;
@@ -59,7 +60,7 @@ async function fetchJobArtifactsManifest(jobId: string, apiPrefix?: string): Pro
   return fetchApiJobArtifactsManifest(jobId, apiPrefix);
 }
 
-async function fetchJobMarkdown(jobId: string, apiPrefix?: string): Promise<any> {
+async function fetchJobMarkdown(jobId: string, apiPrefix?: string) {
   if (isMockMode()) {
     void jobId;
     void apiPrefix;
@@ -92,15 +93,10 @@ async function fetchJobMarkdownSource(
   // JobLike 子集读取 markdown artifacts，故收窄而非 any。
   const contract = resolveJobMarkdownContract(job as unknown as JobLike);
   if (!contract?.rawUrl) return null;
-  // OCR details can advertise /ocr/jobs/... links, while downloads are served
-  // by the same /jobs/... routes used by the artifact center.
-  const ocrJobUrl = snapshotWorkflow(job) === "ocr"
-    ? buildJobDetailEndpoint(jobId, apiPrefix || API_PREFIX)
-    : "";
   return {
-    rawUrl: ocrJobUrl ? `${ocrJobUrl}/markdown?raw=true` : contract.rawUrl,
+    rawUrl: contract.rawUrl,
     totalBytes: contract.sizeBytes ?? null,
-    imagesBaseUrl: ocrJobUrl ? `${ocrJobUrl}/markdown/images/` : contract.imagesBaseUrl || "",
+    imagesBaseUrl: contract.imagesBaseUrl || "",
   };
 }
 
@@ -141,7 +137,8 @@ async function fetchJobMarkdownRange(
   };
 }
 
-async function fetchReaderRegions(jobId: string, apiPrefix?: string): Promise<any> {
+
+async function fetchReaderRegions(jobId: string, apiPrefix?: string) {
   if (isMockMode()) {
     void jobId;
     void apiPrefix;
@@ -150,7 +147,7 @@ async function fetchReaderRegions(jobId: string, apiPrefix?: string): Promise<an
   return fetchApiReaderRegions(jobId, apiPrefix);
 }
 
-async function fetchReaderMetadata(jobId: string, apiPrefix?: string): Promise<any> {
+async function fetchReaderMetadata(jobId: string, apiPrefix?: string) {
   if (isMockMode()) {
     void jobId;
     void apiPrefix;
@@ -161,17 +158,25 @@ async function fetchReaderMetadata(jobId: string, apiPrefix?: string): Promise<a
 
 
 export const pdfPort: ReaderPdfPort = {
-  fetchProtected: (input, init) => fetchProtected(input, init),
+  // 包端口的入参是 typeof fetch（RequestInfo | URL），宿主 fetchProtected 只接收字符串 URL；
+  // 包内调用方也只传字符串，与 app/reader/adapters/retainpdf.ts 的既有断言口径一致。
+  fetchProtected: (input, init) => fetchProtected(input as string, init),
   resolvePdfjsVendorUrl,
 };
 
-function asRecord(value: unknown): Record<string, any> {
-  return value && typeof value === "object" ? value as Record<string, any> : {};
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? value as Record<string, unknown> : {};
 }
 function normalizedString(value: unknown): string { return `${value ?? ""}`.trim(); }
 function resolveSnapshotDocumentId(payload: unknown): string {
   const record = asRecord(payload);
-  for (const value of [record.document_id, record.documentId, record.document?.document_id, record.book_summary?.document_id, record.request_payload?.source?.document_id]) {
+  for (const value of [
+    record.document_id,
+    record.documentId,
+    asRecord(record.document).document_id,
+    asRecord(record.book_summary).document_id,
+    asRecord(asRecord(record.request_payload).source).document_id,
+  ]) {
     const id = normalizedString(value);
     if (id) return id;
   }
@@ -179,7 +184,7 @@ function resolveSnapshotDocumentId(payload: unknown): string {
 }
 function snapshotTitle(payload: unknown, jobId: string): string {
   const record = asRecord(payload);
-  for (const value of [record.title, record.display_name, record.source_file_name, record.book_summary?.source_file_name]) {
+  for (const value of [record.title, record.display_name, record.source_file_name, asRecord(record.book_summary).source_file_name]) {
     const text = normalizedString(value);
     if (text && text !== jobId && text !== `${jobId}.pdf`) return text.replace(/\.pdf$/i, "");
   }
@@ -190,13 +195,17 @@ function snapshotWorkflow(payload: unknown): string { return normalizedString(as
 
 export const sessionDataPort: ReaderSessionDataPort = {
   loadSessionSnapshot: async (input): Promise<ReaderSessionSnapshot> => {
-    const payload = await defaultReaderDataPort.loadReaderPayload(input.jobId, {
-      includeOptionalArtifacts: input.includeOptionalArtifacts !== false,
-    });
-    const jobRecord = asRecord(payload.jobPayload);
-    const linked = input.jobId && !input.routeDocumentId
-      ? await fetchDocumentByJobId(API_PREFIX, input.jobId).catch(() => null)
-      : null;
+    // documents 查询只依赖 jobId，和 job / manifest（/ regions）并行发出。原来排在
+    // loadReaderPayload 之后串行等，而 session 又会再查一遍 —— 见 linkedDocument。
+    const linkedPromise = input.jobId && !input.routeDocumentId
+      ? fetchDocumentByJobId(API_PREFIX, input.jobId).catch(() => null)
+      : Promise.resolve(null);
+    const [payload, linked] = await Promise.all([
+      defaultReaderDataPort.loadReaderPayload(input.jobId, {
+        includeOptionalArtifacts: input.includeOptionalArtifacts !== false,
+      }),
+      linkedPromise,
+    ]);
     const payloadDocumentId = resolveSnapshotDocumentId(payload.jobPayload);
     const documentId = input.documentId || input.routeDocumentId || payloadDocumentId || normalizedString(linked?.document_id);
     const activeJobId = normalizedString(linked?.active_job_id);
@@ -209,8 +218,8 @@ export const sessionDataPort: ReaderSessionDataPort = {
     const sourceArtifact = typeof sourceItem === "string" ? sourceItem : resolveReaderArtifactUrl(sourceItem);
     const translated = resolveReaderTranslatedPdfUrl(payload.jobPayload, payload.manifestPayload);
     const sourceUrl = committed?.documentId
-      ? resolveResourceUrl(`/api/v1/documents/${encodeURIComponent(committed.documentId)}/source.pdf?version=${encodeURIComponent(committed.revision)}`)
-      : sourceArtifact || (documentId ? resolveResourceUrl(`/api/v1/documents/${encodeURIComponent(documentId)}/source.pdf`) : "");
+      ? resolveResourceUrl(documentSourcePdfPath(committed.documentId, committed.revision))
+      : sourceArtifact || (documentId ? resolveResourceUrl(documentSourcePdfPath(documentId)) : "");
     const translatedUrl = committed || restoreCommitted ? "" : translated || "";
     return {
       loadPlan: restoreCommitted
@@ -229,16 +238,26 @@ export const sessionDataPort: ReaderSessionDataPort = {
       regions: normalizeReaderRegions(payload.regionsPayload),
       readerMetadata: normalizeReaderMetadata(payload.readerMetadata),
       readerErrors: payload.readerErrors,
+      // 只有真查过（job 链路、没有 route document）才带回；否则 undefined，
+      // 让 session 按自己的条件决定要不要查。
+      ...(input.jobId && !input.routeDocumentId ? { linkedDocument: linked ?? null } : {}),
     };
   },
   loadReaderPayload: (jobId, options) => defaultReaderDataPort.loadReaderPayload(jobId, options),
+  loadReaderOptionalArtifacts: (jobId) => defaultReaderDataPort.loadReaderOptionalArtifacts(jobId),
   loadJobPayload: (jobId) => defaultReaderDataPort.loadJobPayload(jobId),
   fetchDocumentByJobId: async (apiPrefix, jobId) => fetchDocumentByJobId(apiPrefix, jobId),
-  fetchProtected: (input, init) => fetchProtected(input, init),
+  fetchDocument: (documentId) => fetchDocument(API_PREFIX, documentId),
+  fetchRevisionGroups: (jobId) =>
+    fetchJobData(jobId, API_PREFIX, "revisions", { groupBy: "reader_item_id", limit: 1000 }),
+  // 包端口的入参是 typeof fetch（RequestInfo | URL），宿主 fetchProtected 只接收字符串 URL；
+  // 包内调用方也只传字符串，与 app/reader/adapters/retainpdf.ts 的既有断言口径一致。
+  fetchProtected: (input, init) => fetchProtected(input as string, init),
   resolveResourceUrl,
   resolveReaderSourcePdf: (manifestPayload) => resolveReaderSourcePdf(manifestPayload),
   resolveReaderTranslatedPdfUrl: (jobPayload, manifestPayload) => resolveReaderTranslatedPdfUrl(jobPayload, manifestPayload),
-  resolveReaderArtifactUrl: (item) => resolveReaderArtifactUrl(item),
+  // 包端口契约入参为 unknown，宿主实现按 manifest 条目类型处理，这里按实现入参断言。
+  resolveReaderArtifactUrl: (item) => resolveReaderArtifactUrl(item as Parameters<typeof readerData.resolveReaderArtifactUrl>[0]),
 };
 
 export const liveTranslationPort: ReaderLiveTranslationPort = {
@@ -298,7 +317,7 @@ export const createReaderDataPort = (options: ReaderDataPortOptions = {}) =>
     fetchMarkdownRange: fetchJobMarkdownRange,
     loadRegions: fetchReaderRegions,
     loadMetadata: fetchReaderMetadata,
-    fetchProtectedResource: fetchProtected,
+    fetchProtectedResource: fetchProtected as typeof fetch,
     liveTranslation: liveTranslationPort,
     ...options,
   });

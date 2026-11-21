@@ -8,7 +8,7 @@ import pytest
 
 @pytest.fixture
 def execution(monkeypatch):
-    ctx = importlib.import_module("retainpdf_pipeline.translate.llm.shared.executor_context")
+    ctx = importlib.import_module("retainpdf_translation.llm.shared.executor_context")
     monkeypatch.setenv("RETAIN_TRANSLATION_TRANSPORT", "rust")
     client = mock.Mock()
     client.request.return_value = SimpleNamespace(content="译文")
@@ -92,7 +92,7 @@ def test_missing_scope_fails_before_any_dispatch(execution):
 @pytest.mark.parametrize("succeeds", [True, False])
 @pytest.mark.parametrize("keyword", [True, False])
 def test_partial_batch_repair_keeps_budget_and_only_requests_pending(execution, succeeds, keyword):
-    from retainpdf_pipeline.translate.llm.validation.errors import PartialBatchTranslationError
+    from retainpdf_translation.llm.validation.errors import PartialBatchTranslationError
     ctx, rt, client = execution
     submitted = []
 
@@ -126,7 +126,7 @@ def test_partial_batch_repair_keeps_budget_and_only_requests_pending(execution, 
 
 def test_production_transport_does_not_read_a_key_or_open_upstream_http(execution):
     ctx, rt, client = execution
-    transport = importlib.import_module("retainpdf_pipeline.translate.llm.providers.deepseek.client")
+    transport = importlib.import_module("retainpdf_translation.llm.providers.deepseek.client")
     with mock.patch.object(transport, "get_secret", side_effect=AssertionError("secret lookup")), mock.patch.object(transport, "get_session", side_effect=AssertionError("direct HTTP")):
         assert transport.get_api_key(required=True) == ""
         with ctx.unit_scope("domain", ["document-preview"]):
@@ -136,7 +136,7 @@ def test_production_transport_does_not_read_a_key_or_open_upstream_http(executio
 
 def test_legacy_fallback_cannot_turn_executor_error_into_success(execution):
     ctx, rt, client = execution
-    module = importlib.import_module("retainpdf_pipeline.translate.workflow.batching.executor")
+    module = importlib.import_module("retainpdf_translation.workflow.batching.executor")
     client.request.side_effect = ctx.ExecutorError("unknown upstream result")
 
     @ctx.translation_unit
@@ -155,7 +155,7 @@ def test_legacy_fallback_cannot_turn_executor_error_into_success(execution):
 
 def test_parallel_runner_drains_successes_and_flushes_before_failure(execution, monkeypatch):
     ctx, rt, client = execution
-    runner = importlib.import_module("retainpdf_pipeline.translate.workflow.batch_runner")
+    runner = importlib.import_module("retainpdf_translation.workflow.batch_runner")
     bad = [{"item_id": "a"}]
     good = [{"item_id": "b"}]
     both_started = threading.Barrier(2, timeout=5)

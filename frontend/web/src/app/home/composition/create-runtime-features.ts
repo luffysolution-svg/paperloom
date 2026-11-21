@@ -1,6 +1,9 @@
 // job-runtime / recent-jobs / artifact-downloads —— 在 composition 阶段一次挂齐，
 // 不放进 initialize 的 if 懒挂载。
 
+import { mountedFeature } from "./feature-registry.js";
+import type { RecentJobsPageFetcher } from "@/features/library/index.js";
+import type { createLibraryDomain } from "./create-library-domain.js";
 import { API_PREFIX } from "@/platform/config/api-constants.js";
 import {
   cancelJob,
@@ -11,8 +14,7 @@ import {
   fetchJobStageActions,
   retryJobStage,
   fetchJobList,
-  fetchLibraryBookList,
-  deleteLibraryBook,
+  deleteJob,
   fetchProtected,
   fetchDocumentByJobId,
   fetchDocumentMetadataSuggestions,
@@ -40,9 +42,6 @@ import {
   createArtifactDownloadsRuntimePort,
   mountArtifactDownloadsFeature,
 } from "@/features/artifacts/index.js";
-import {
-  resetStatusDetailRuntimeView,
-} from "@/features/job-detail/index.js";
 import { isMockMode } from "@/platform/config/runtime.js";
 import type {
   HomeBridge,
@@ -59,8 +58,8 @@ import type { RecentJobsReactViewPort } from "@/features/library/index.js";
 type JobRuntimeShellViewPort = {
   closeDialogs: () => void;
   isReaderOpen: () => boolean;
-  resetEvents: () => void;
   setCancelDisabled: (disabled: boolean) => void;
+  setCancelError: (message: string) => void;
 };
 
 /** artifact-downloads viewPort 局部 adapter */
@@ -75,31 +74,10 @@ type StatusCardPresenterPort = {
   renderPatch: () => void;
 };
 
-type LibraryEventPort = {
-  requestRefresh?: (opts?: unknown) => void;
-};
-
-type RecentJobsStatePort = {
-  store: unknown;
-  getSnapshot?: () => unknown;
-  removeJobFamily?: (jobId: string) => unknown;
-};
-
-type RecentJobsRuntimePort = {
-  openJob: (jobId: string) => unknown;
-  currentJobId: () => string;
-};
-
-type RecentJobsReaderPort = {
-  openReader: (jobId: string, anchor?: unknown, documentId?: string) => unknown;
-};
-
-type RecentJobsNavigationPort = {
-  openJob: (jobId: string) => unknown;
-  openReader: (jobId: string, documentId?: string) => unknown;
-  recoverJob: (jobId: string) => unknown;
-  currentJobId: () => string;
-};
+// 书架那几个端口都由 createLibraryDomain 造出来，类型直接取它的返回值。
+// 以前这里给每个端口手抄一份结构类型，抄得又不准（导航端口少了返回值、
+// 状态端口只抄了三个字段、列表资源写成 unknown），一调紧就对不上。
+type LibraryDomain = ReturnType<typeof createLibraryDomain>;
 
 type CreateRuntimeFeaturesArgs = {
   features: HomeFeatures;
@@ -107,15 +85,15 @@ type CreateRuntimeFeaturesArgs = {
   jobRuntimeState: Record<string, unknown>;
   statusCardPresenter: StatusCardPresenterPort;
   uploadStatePort: UploadStatePort;
-  libraryEventPort: LibraryEventPort;
+  libraryEventPort: LibraryDomain["libraryEventPort"];
   jobRuntimeShellViewPort: JobRuntimeShellViewPort;
   artifactDownloadsViewPort: ArtifactDownloadsViewPort;
-  recentJobsStatePort: RecentJobsStatePort;
+  recentJobsStatePort: LibraryDomain["recentJobsStatePort"];
   recentJobsViewPort: RecentJobsReactViewPort;
-  recentJobsJobRuntimePort: RecentJobsRuntimePort;
-  recentJobsReaderPort: RecentJobsReaderPort;
-  recentJobsNavigationPort: RecentJobsNavigationPort;
-  documentLibraryResource: unknown;
+  recentJobsJobRuntimePort: LibraryDomain["recentJobsJobRuntimePort"];
+  recentJobsReaderPort: LibraryDomain["recentJobsReaderPort"];
+  recentJobsNavigationPort: LibraryDomain["recentJobsNavigationPort"];
+  documentLibraryResource: LibraryDomain["documentLibraryResource"];
   homeStatePort: HomeStatePort;
   /** 详情弹窗是否正持有当前 job 的展示权（书架单卡轮询据此决定是否排除它）。 */
   detailOwnsCurrentJob?: () => boolean;
@@ -174,12 +152,9 @@ export function createRuntimeFeatures({
     resetUploadProgress: bridge.resetUploadProgress,
     resetUploadedFile: bridge.resetUploadedFile,
     applyWorkflowMode: bridge.applyWorkflowMode,
-    clearPageRanges: () => features.uploadFeature.clearPageRanges(),
+    clearPageRanges: () => mountedFeature(features, "uploadFeature").clearPageRanges(),
     updateJobWarning: bridge.updateJobWarning,
     activateDetailTab: bridge.activateDetailTab,
-    // job-detail 的 idle 视图清场经组合层注入，断开 jobs → job-detail 的
-    // index.js 值依赖。
-    resetStatusDetailRuntimeView,
     // 主页不再嵌入阅读 iframe；sync/close 保留给 job-runtime 契约，实现为空。
     onReaderDialogSync: () => {},
     onReaderDialogClose: () => {},
@@ -212,10 +187,12 @@ export function createRuntimeFeatures({
 
   // startPolling/openReader 已由 jobRuntimePort/readerPort/navigationPort 注入；签名仍标必填。
   const recentJobsFeature = mountRecentJobsFeature({
-    fetchJobList,
+    // 接口封装返回的是后端生成的 JobListView，书架分页按前端卡片形状读（items / has_more /
+    // invocation_summary 字段同名）。后端视图与前端卡片之间还没有转换层（前端的任务 / 卡片
+    // 类型与后端契约是两套独立定义，要先对齐，单独做），这里先显式收窄。
+    fetchJobList: fetchJobList as unknown as RecentJobsPageFetcher,
     fetchJobPayload,
-    fetchLibraryBookList,
-    deleteLibraryBook,
+    deleteJobById: deleteJob,
     apiPrefix: API_PREFIX,
     currentJobId: () => jobRuntimeFeature.currentJobId() || "",
     detailOwnsCurrentJob,

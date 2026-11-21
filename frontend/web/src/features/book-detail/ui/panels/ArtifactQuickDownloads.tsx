@@ -12,7 +12,7 @@ import {
   Upload,
 } from "lucide-react";
 
-import { Button } from "@/ui/components/button.js";
+import { Button, IconButton } from "@retainpdf/ui";
 import {
   Dialog,
   DialogBody,
@@ -24,13 +24,13 @@ import {
   DialogHeader,
   DialogShell,
   DialogTitle,
-} from "@/ui/components/dialog.js";
+} from "@retainpdf/ui";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/ui/components/tooltip.js";
+} from "@retainpdf/ui";
 import {
   selectArtifactQuickDownloads,
   type ArtifactCenterItem,
@@ -47,14 +47,16 @@ import { ObsidianExportDialog } from "./ObsidianExportDialog.js";
 import { ZoteroWritebackDialog } from "./ZoteroWritebackDialog.js";
 
 const DOWNLOADS = [
-  { id: "source", label: "原始 PDF", Icon: FileDown },
-  { id: "markdown", label: "Markdown", Icon: SquareM },
-  { id: "translated", label: "翻译 PDF", Icon: Languages },
-  { id: "comparison", label: "对照 PDF", Icon: Columns2 },
-  { id: "word", label: "Word 排版稿", Icon: FileType2 },
+  { id: "source", label: "原始 PDF", short: "原文", Icon: FileDown },
+  { id: "markdown", label: "Markdown", short: "MD", Icon: SquareM },
+  { id: "translated", label: "翻译 PDF", short: "译文", Icon: Languages },
+  { id: "comparison", label: "对照 PDF", short: "对照", Icon: Columns2 },
+  { id: "word", label: "Word 排版稿", short: "Word", Icon: FileType2 },
 ] satisfies Array<{
   id: ArtifactQuickDownloadId;
   label: string;
+  /** 图标下面的两三个字：光有图标看不出哪个是哪个。 */
+  short: string;
   Icon: typeof FileDown;
 }>;
 
@@ -63,17 +65,19 @@ export function ArtifactQuickDownloads({
   loading,
   downloadingId,
   onDownload,
+  onDownloadMarkdown,
 }: {
   sections: ArtifactCenterSection[];
   loading: boolean;
   downloadingId: string;
   onDownload: (item: ArtifactCenterItem) => void;
+  /** Markdown 那一颗：打 zip（原文、译文、双语 + 图片）；第二个参数是拿哪个任务的块来拼。不给就照旧下产物。 */
+  onDownloadMarkdown?: (item: ArtifactCenterItem, readingJobId: string) => void;
 }) {
   const items = selectArtifactQuickDownloads(sections);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [obsidianOpen, setObsidianOpen] = useState(false);
   const [zoteroOpen, setZoteroOpen] = useState(false);
-  // 外部写入需要译文；以译文 PDF 所属任务为准。
   const translatedJobId = items.translated?.jobId || "";
   // 记住上次选的清晰度。读不到（隐私模式、禁用站点数据）时 readWordExportDpi 自己
   // 退回默认值，这里不需要再兜一层。
@@ -85,10 +89,16 @@ export function ArtifactQuickDownloads({
   }, []);
 
   const download = useCallback((id: ArtifactQuickDownloadId, item: ArtifactCenterItem) => {
-    // Word 排版稿是**按请求现生成**的，清晰度得跟着这一次的地址走；其余四个是
-    // 已经躺在磁盘上的产物，原样下载。
+    // Word 排版稿是**按请求现生成**的，清晰度得跟着这一次的地址走；Markdown 在浏览器里打包；
+    // 其余三个是已经躺在磁盘上的产物，原样下载。
+    if (id === "markdown" && onDownloadMarkdown) {
+      // Markdown 产物（ocr.zip）挂在 OCR 子任务（<任务>-ocr）上，那里的块没有译文：拿译文 PDF 那个任务
+      // （阅读页打开的同一个）的块来拼；没翻译过才用 Markdown 自己的任务。
+      onDownloadMarkdown(item, items.translated?.jobId || item.jobId);
+      return;
+    }
     onDownload(id === "word" ? { ...item, url: withWordExportDpi(item.url, dpi) } : item);
-  }, [dpi, onDownload]);
+  }, [dpi, onDownload, onDownloadMarkdown, items.translated?.jobId]);
 
   return (
     <section className="book-detail-quick-downloads" aria-label="常用文件下载">
@@ -96,27 +106,26 @@ export function ArtifactQuickDownloads({
         <PackageOpen aria-hidden="true" />
         <span>文件下载</span>
         {loading ? <LoaderCircle className="book-detail-quick-downloads-loader" aria-label="正在读取产物" /> : null}
-        <button
+        <IconButton
           id="book-detail-download-settings-btn"
-          type="button"
+          size="sm"
+          label="导出设置"
           className="book-detail-quick-downloads-settings"
-          aria-label="导出设置"
           onClick={() => setSettingsOpen(true)}
         >
           <Settings2 aria-hidden="true" />
-        </button>
+        </IconButton>
       </header>
-      <TooltipProvider delayDuration={220} disableHoverableContent>
+      <TooltipProvider delayDuration={220}>
         <div className="book-detail-quick-download-grid">
-          {DOWNLOADS.map(({ id, label, Icon }) => {
+          {DOWNLOADS.map(({ id, label, short, Icon }) => {
             const item = items[id];
             const downloading = Boolean(item && downloadingId === item.id);
             const unavailableLabel = loading ? `正在读取${label}` : `${label}尚未生成`;
             return (
               <Tooltip key={id}>
                 <TooltipTrigger asChild>
-                  <span className="book-detail-quick-download-trigger" tabIndex={!item || downloadingId ? 0 : undefined}
-                    aria-label={item ? `下载${label}` : unavailableLabel}>
+                  <span className="book-detail-quick-download-trigger">
                     <button
                       id={`book-detail-download-${id}-btn`}
                       type="button"
@@ -130,10 +139,11 @@ export function ArtifactQuickDownloads({
                       {downloading
                         ? <LoaderCircle className="is-spinning" aria-hidden="true" />
                         : <Icon aria-hidden="true" />}
+                      <span className="book-detail-quick-download-label" aria-hidden="true">{short}</span>
                     </button>
                   </span>
                 </TooltipTrigger>
-                <TooltipContent className="book-detail-quick-download-tooltip" side="top" sideOffset={7}>
+                <TooltipContent side="top" sideOffset={7}>
                   {item ? `下载${label}` : unavailableLabel}
                 </TooltipContent>
               </Tooltip>
@@ -141,28 +151,32 @@ export function ArtifactQuickDownloads({
           })}
         </div>
       </TooltipProvider>
-      <button
-        id="book-detail-obsidian-btn"
+      <Button
+        id="book-detail-obsidian-trigger"
         type="button"
-        className="book-detail-obsidian-btn"
+        variant="secondary"
+        size="sm"
+        className="book-detail-obsidian-action"
         disabled={!translatedJobId}
         title={translatedJobId ? "把译文与原文笔记写进 Obsidian 库" : "译文生成后可用"}
         onClick={() => setObsidianOpen(true)}
       >
         <Gem aria-hidden="true" />
         <span>保存到 Obsidian</span>
-      </button>
-      <button
-        id="book-detail-zotero-writeback-btn"
+      </Button>
+      <Button
+        id="book-detail-zotero-writeback-trigger"
         type="button"
-        className="book-detail-obsidian-btn"
+        variant="secondary"
+        size="sm"
+        className="book-detail-obsidian-action"
         disabled={!translatedJobId}
         title={translatedJobId ? "把译文 PDF 写回原 Zotero 文献" : "译文生成后可用"}
         onClick={() => setZoteroOpen(true)}
       >
         <Upload aria-hidden="true" />
         <span>写回 Zotero</span>
-      </button>
+      </Button>
       {translatedJobId ? (
         <>
           <ObsidianExportDialog open={obsidianOpen} onOpenChange={setObsidianOpen} jobId={translatedJobId} />
@@ -211,7 +225,7 @@ export function ArtifactQuickDownloads({
             </DialogBody>
             <DialogFooter>
               <DialogClose asChild>
-                <Button type="button">完成</Button>
+                <Button variant="primary">完成</Button>
               </DialogClose>
             </DialogFooter>
           </DialogShell>

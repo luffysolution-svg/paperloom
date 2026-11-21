@@ -5,7 +5,7 @@ import { join, relative } from "node:path";
 
 // 消费者契约测试: 任务状态 / 阶段进度 Rust 真值 ↔ TS 消费
 // 真值: contracts/job-status.v1.schema.json
-// 生产侧: backend/packages/retain-core/src/models/view/{job_types.rs, common.rs}
+// 生产侧: backend/packages/retainpdf-jobs/src/views/{job_types.rs, common.rs}
 // 消费侧: frontend/packages/domain/src/job/{types,normalize}.ts
 //         & frontend/packages/domain/src/job-status/types.ts
 //         frontend/web-react src/features/status/types.ts & library/api/library-api-adapter.ts
@@ -41,12 +41,6 @@ function tsInterfaceFields(source, interfaceName) {
   const pattern = new RegExp(`(?:export\\s+(?:interface|type)\\s+${interfaceName}[\\s\\S]*?\\{)([\\s\\S]*?)\\n\\}`, "m");
   const block = source.match(pattern)?.[1];
   assert.ok(block, `未找到 ${interfaceName}`);
-  return new Set([...block.matchAll(/^\s*([a-zA-Z_][a-zA-Z0-9_]*)\??:/gm)].map((m) => m[1]));
-}
-
-function tsTypeFieldsLoose(source, typeName) {
-  const block = source.match(new RegExp(`export type ${typeName}\\s*=\\s*\\{([\\s\\S]*?)\\n\\};`))?.[1];
-  if (!block) return null;
   return new Set([...block.matchAll(/^\s*([a-zA-Z_][a-zA-Z0-9_]*)\??:/gm)].map((m) => m[1]));
 }
 

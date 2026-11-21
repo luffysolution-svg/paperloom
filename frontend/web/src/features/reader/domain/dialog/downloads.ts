@@ -3,14 +3,14 @@ import {
   formatTransferSize,
   prepareDownloadTarget,
 } from "@/platform/utils/downloads.js";
+import type { DownloadProgressPayload } from "@/platform/utils/downloads.js";
 import {
-  cancelDownloadToast,
   completeDownloadToast,
   showDownloadPreparing,
   updateDownloadProgress,
 } from "@/platform/utils/download-feedback.js";
 
-export function summarizeDownloadProgress(receivedBytes, totalBytes, percent) {
+export function summarizeDownloadProgress(receivedBytes: number, totalBytes: number, percent: number) {
   const receivedText = formatTransferSize(receivedBytes);
   if (Number.isFinite(totalBytes) && totalBytes > 0) {
     const totalText = formatTransferSize(totalBytes);
@@ -21,23 +21,23 @@ export function summarizeDownloadProgress(receivedBytes, totalBytes, percent) {
 }
 
 export async function downloadProtectedResource(
-  fetchProtected,
-  url,
-  fallbackName,
+  fetchProtected: typeof fetch,
+  url: string,
+  fallbackName: string,
   preferredName = "",
-  onStatus = null,
-  onBusy = null,
+  onStatus: ((status: DownloadProgressPayload) => void) | null = null,
+  onBusy: ((busy: boolean, status?: string) => void) | null = null,
 ) {
   const trimmedName = `${preferredName || ""}`.trim();
   const suggestedName = trimmedName || fallbackName;
   // 惰性:响应确认成功之后才问保存位置（见 downloads.ts）。
-  const downloadTarget = () => prepareDownloadTarget(suggestedName);
+  const downloadTarget = (filename?: string) => prepareDownloadTarget(filename || suggestedName);
   if (typeof onBusy === "function") {
     onBusy(true, "下载中...");
   }
   try {
     showDownloadPreparing(suggestedName);
-    const filename = await downloadProtectedResponse({
+    return await downloadProtectedResponse({
       fetchResponse: () => fetchProtected(url),
       url,
       fallbackName,
@@ -64,8 +64,6 @@ export async function downloadProtectedResource(
         updateDownloadProgress({ filename, receivedBytes, totalBytes, percent });
       },
     });
-    if (!filename) cancelDownloadToast();
-    return filename;
   } finally {
     if (typeof onBusy === "function") {
       window.setTimeout(() => onBusy(false), 240);

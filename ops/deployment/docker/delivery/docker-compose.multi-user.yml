@@ -1,0 +1,20 @@
+# 多用户模式（商业版）的叠加配置，必须和 docker-compose.yml 一起用：
+#
+#   docker compose -f docker-compose.yml -f docker-compose.multi-user.yml up -d
+#
+# 说明见 README.md 的「多用户模式」一节。
+
+services:
+  app:
+    env_file:
+      - ./docker/app.env
+      - ./docker/multi-user.env
+
+  web:
+    environment:
+      # 必须为空：多用户模式下浏览器靠登录会话访问后端。web 容器的 NGINX 一旦替请求补上
+      # 后端 key，后端会把每个请求都当成「内部服务」——不用登录就能看到所有人的数据，
+      # 已登录的用户也会越过数据隔离。这里写在 environment 里，优先于 docker/web.env。
+      RETAINPDF_PROXY_API_KEY: ""
+      # 浏览器永远拿不到后端 key。
+      FRONT_X_API_KEY: ""

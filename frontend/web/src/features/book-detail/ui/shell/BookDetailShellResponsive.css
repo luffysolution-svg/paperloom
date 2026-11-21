@@ -1,0 +1,135 @@
+/* 书籍详情外壳的滚动条、窄屏（≤ 899px / ≤ 719px）与减少动效适配，跨左右两栏。
+ *
+ * @owns book-detail */
+
+.book-detail-right-panel::-webkit-scrollbar,
+.book-detail-shell-left::-webkit-scrollbar {
+  width: 8px;
+}
+
+.book-detail-right-panel::-webkit-scrollbar-thumb,
+.book-detail-shell-left::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: var(--ui-radius-pill);
+  background: color-mix(in srgb, var(--ink) 18%, transparent);
+  background-clip: padding-box;
+}
+
+@media (max-width: 899px) and (min-width: 720px) {
+  .book-detail-shell-grid {
+    grid-template-columns: 230px minmax(0, 1fr);
+  }
+
+  .book-detail-shell-left {
+    padding: 18px 15px 18px 18px;
+  }
+
+  .book-detail-shell-right {
+    padding: 14px 16px 18px;
+  }
+}
+@media (max-width: 719px) {
+  #book-detail-dialog.book-detail-dialog {
+    width: calc(100dvw - 20px);
+    height: calc(100dvh - 20px);
+  }
+
+  /* 左栏这一行按内容定高：原来固定 112px + overflow:hidden，按钮组被挤到第二行后整个
+   * 被裁掉，手机上没有任何阅读入口。上限 45dvh，超出时左栏自己滚，右栏 tabs 始终露出。 */
+  .book-detail-shell-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .book-detail-shell-left {
+    max-height: 45dvh;
+    padding: 12px 50px 12px 12px;
+    overflow-y: auto;
+    border-right: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  }
+
+  .book-detail-cover-actions {
+    position: static;
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
+  }
+
+  .book-detail-cover-preview {
+    width: 64px;
+    height: 86px;
+    aspect-ratio: auto;
+    border-radius: var(--ui-radius-md);
+  }
+
+  /* 封面 | 书名身份占第一行，按钮组横跨两列单独一行（否则落进 64px 的封面列）。 */
+  .book-detail-cover-buttons {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 7px;
+    padding: 0;
+  }
+
+  .book-detail-cover-buttons > button {
+    width: auto;
+    min-height: 38px;
+    flex: 1 1 130px;
+  }
+
+  .book-detail-quick-downloads,
+  .book-detail-left-reading-card {
+    display: none;
+  }
+
+  .book-detail-shell-right {
+    padding: 10px 12px 12px;
+  }
+
+  .book-detail-right-tabs {
+    gap: 8px;
+  }
+
+  .book-detail-right-tabs-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+    max-width: none;
+  }
+
+  .book-detail-right-tab {
+    min-height: 40px;
+    padding-inline: 8px;
+  }
+}
+
+/* 前庭敏感：去掉位移与无限旋转，保留颜色/透明度反馈。 */
+@media (prefers-reduced-motion: reduce) {
+  .book-detail-quick-download-btn {
+    transition:
+      border-color 150ms var(--ease-out),
+      background-color 150ms var(--ease-out);
+  }
+
+  .book-detail-quick-download-btn:hover:not(:disabled) {
+    transform: none;
+  }
+
+  .book-detail-quick-downloads-loader,
+  .book-detail-quick-download-btn > svg.is-spinning {
+    animation: none;
+  }
+
+  .book-detail-right-tab {
+    transition:
+      background-color 150ms var(--ease-out),
+      color 150ms var(--ease-out);
+  }
+
+  .book-detail-right-tab:active {
+    transform: none;
+  }
+}

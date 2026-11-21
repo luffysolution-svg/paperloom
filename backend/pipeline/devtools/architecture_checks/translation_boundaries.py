@@ -16,6 +16,9 @@ from devtools.architecture_checks.translation_rules import TRANSLATION_LAYER_FRO
 from devtools.architecture_checks.translation_rules import TRANSLATION_LAYER_IMPORT_RULES
 from devtools.architecture_checks.translation_rules import TRANSLATION_REMOVED_COMPAT_IMPORTS
 from devtools.architecture_checks.translation_rules import TRANSLATION_ROOT
+from devtools.architecture_checks.translation_rules import TRANSLATION_SHELL_ALLOWED_DIRS
+from devtools.architecture_checks.translation_rules import TRANSLATION_SHELL_ALLOWED_FILES
+from devtools.architecture_checks.translation_rules import TRANSLATION_SHELL_ROOT
 from devtools.architecture_checks.translation_rules import TRANSLATION_SHARED_COMPAT_IMPORTS
 from devtools.architecture_checks.translation_rules import TRANSLATION_WORKFLOW_ALLOWED_DIRS
 from devtools.architecture_checks.translation_rules import TRANSLATION_WORKFLOW_ALLOWED_FILES
@@ -24,17 +27,42 @@ from devtools.architecture_checks.translation_rules import TRANSLATION_WORKFLOW_
 from devtools.architecture_checks.translation_rules import translation_layer_for
 
 
+def check_translation_library_self_contained(errors: list[str]) -> None:
+    """翻译包 retainpdf-translation 不依赖流水线（流水线依赖它，反过来就成环）。
+
+    包括流水线里的翻译 worker 外壳 retainpdf_pipeline.translate；共享的东西放 retainpdf_base / retainpdf_math。
+    """
+    for path in scan_py_files(TRANSLATION_ROOT):
+        for module in imported_modules(path):
+            if module_allowed(module, ("retainpdf_pipeline",)):
+                errors.append(
+                    f"{rel(path)}: translation package must not import '{module}'; "
+                    "shared helpers belong in retainpdf_base / retainpdf_math"
+                )
+
+
 def check_translation_internal_boundaries(errors: list[str]) -> None:
     for path in TRANSLATION_ROOT.iterdir():
         if path.name == "__pycache__":
             continue
         if path.is_dir() and path.name not in TRANSLATION_ALLOWED_ROOT_DIRS:
             errors.append(
-                f"translate/{path.name}: unexpected translation root directory; update architecture rules or move it into a named layer"
+                f"{rel(path)}: unexpected translation root directory; update architecture rules or move it into a named layer"
             )
         if path.is_file() and path.name not in TRANSLATION_ALLOWED_ROOT_FILES:
             errors.append(
-                f"translate/{path.name}: unexpected translation root file; place new code inside entrypoints/workflow/core/services/llm/artifacts."
+                f"{rel(path)}: unexpected translation root file; place new code inside workflow/core/services/llm/artifacts."
+            )
+    for path in TRANSLATION_SHELL_ROOT.iterdir():
+        if path.name == "__pycache__":
+            continue
+        if path.is_dir() and path.name not in TRANSLATION_SHELL_ALLOWED_DIRS:
+            errors.append(
+                f"{rel(path)}: the translation worker shell only holds entrypoints/; translation logic belongs in retainpdf_translation"
+            )
+        if path.is_file() and path.name not in TRANSLATION_SHELL_ALLOWED_FILES:
+            errors.append(
+                f"{rel(path)}: unexpected file in the translation worker shell; translation logic belongs in retainpdf_translation"
             )
 
     workflow_root = TRANSLATION_ROOT / "workflow"
@@ -45,7 +73,7 @@ def check_translation_internal_boundaries(errors: list[str]) -> None:
             )
         if path.is_file() and path.name not in TRANSLATION_WORKFLOW_ALLOWED_FILES:
             errors.append(
-                f"{rel(path)}: unexpected workflow root file; place implementation in phases/scheduling/batching/legacy"
+                f"{rel(path)}: unexpected workflow root file; place implementation in phases/scheduling/batching"
             )
 
     for path in scan_py_files(workflow_root):
@@ -60,7 +88,7 @@ def check_translation_internal_boundaries(errors: list[str]) -> None:
         if allowed_prefixes is None:
             continue
         for module in imported_modules(path):
-            if not module.startswith(("retainpdf_pipeline.translate.", "retainpdf_pipeline.services.pipeline_shared.")):
+            if not module.startswith(("retainpdf_translation.", "retainpdf_base.")):
                 continue
             if module_allowed(module, allowed_prefixes):
                 continue
@@ -68,7 +96,7 @@ def check_translation_internal_boundaries(errors: list[str]) -> None:
                 f"{rel(path)}: workflow/{subpackage} must not import '{module}' directly"
             )
 
-    private_import_prefix = "retainpdf_pipeline.translate.workflow."
+    private_import_prefix = "retainpdf_translation.workflow."
     for path in scan_py_files(workflow_root):
         rel_to_translation = path.relative_to(TRANSLATION_ROOT)
         exception_prefixes = TRANSLATION_WORKFLOW_PRIVATE_IMPORT_EXCEPTIONS.get(rel_to_translation, ())
@@ -87,8 +115,8 @@ def check_translation_internal_boundaries(errors: list[str]) -> None:
     public_init = TRANSLATION_ROOT / "public" / "__init__.py"
     public_text = read_text(public_init)
     forbidden_public_eager_imports = (
-        "from retainpdf_pipeline.translate.",
-        "import retainpdf_pipeline.translate.",
+        "from retainpdf_translation.",
+        "import retainpdf_translation.",
         "from retainpdf_pipeline.render",
         "import retainpdf_pipeline.render",
     )
@@ -103,7 +131,7 @@ def check_translation_internal_boundaries(errors: list[str]) -> None:
         "from retainpdf_pipeline.runtime.pipeline",
         "import retainpdf_pipeline.runtime.pipeline",
     )
-    for path in scan_py_files(SCRIPTS_ROOT):
+    for path in [*scan_py_files(SCRIPTS_ROOT), *scan_py_files(TRANSLATION_ROOT)]:
         for module in imported_modules(path):
             if module_allowed(module, TRANSLATION_REMOVED_COMPAT_IMPORTS):
                 errors.append(
@@ -129,18 +157,18 @@ def check_translation_internal_boundaries(errors: list[str]) -> None:
         text = read_text(path)
         rel_path = rel(path)
         forbidden = (
-            "from retainpdf_pipeline.translate.workflow",
-            "import retainpdf_pipeline.translate.workflow",
-            "from retainpdf_pipeline.translate.services.policy",
-            "import retainpdf_pipeline.translate.services.policy",
+            "from retainpdf_translation.workflow",
+            "import retainpdf_translation.workflow",
+            "from retainpdf_translation.services.policy",
+            "import retainpdf_translation.services.policy",
             # provider 是 transport 层,只该知道"怎么跟这家说 HTTP"。编排层
             # (重试次数、分批、降级路由)反过来依赖 provider,不能倒过来。
             # 这条原本不在列表里,于是 deepseek/client.py 里一个没人调用的三行
             # 转发壳靠函数内 import 反向依赖 orchestration,把 llm/ 下 38 个模块
             # 拧成了一个强连通分量 —— 而且因为 import 在函数体内,加载时不报错,
             # 靠读代码根本看不出来。
-            "from retainpdf_pipeline.translate.llm.shared.orchestration",
-            "import retainpdf_pipeline.translate.llm.shared.orchestration",
+            "from retainpdf_translation.llm.shared.orchestration",
+            "import retainpdf_translation.llm.shared.orchestration",
             "from retainpdf_pipeline.render",
             "import retainpdf_pipeline.render",
             "from retainpdf_pipeline.runtime.pipeline",
@@ -159,18 +187,18 @@ def check_translation_internal_boundaries(errors: list[str]) -> None:
         text = read_text(path)
         rel_path = rel(path)
         forbidden = (
-            "from retainpdf_pipeline.translate.llm",
-            "import retainpdf_pipeline.translate.llm",
-            "from retainpdf_pipeline.translate.workflow",
-            "import retainpdf_pipeline.translate.workflow",
-            "from retainpdf_pipeline.translate.workflow.batching",
-            "import retainpdf_pipeline.translate.workflow.batching",
-            "from retainpdf_pipeline.translate.services.fast_path",
-            "import retainpdf_pipeline.translate.services.fast_path",
-            "from retainpdf_pipeline.translate.services.results",
-            "import retainpdf_pipeline.translate.services.results",
-            "from retainpdf_pipeline.translate.services.memory",
-            "import retainpdf_pipeline.translate.services.memory",
+            "from retainpdf_translation.llm",
+            "import retainpdf_translation.llm",
+            "from retainpdf_translation.workflow",
+            "import retainpdf_translation.workflow",
+            "from retainpdf_translation.workflow.batching",
+            "import retainpdf_translation.workflow.batching",
+            "from retainpdf_translation.services.fast_path",
+            "import retainpdf_translation.services.fast_path",
+            "from retainpdf_translation.services.results",
+            "import retainpdf_translation.services.results",
+            "from retainpdf_translation.services.memory",
+            "import retainpdf_translation.services.memory",
             "from retainpdf_pipeline.runtime.pipeline",
             "import retainpdf_pipeline.runtime.pipeline",
         )
@@ -181,15 +209,16 @@ def check_translation_internal_boundaries(errors: list[str]) -> None:
                 )
                 break
 
-    for path in scan_py_files(TRANSLATION_ROOT):
+    for path in [*scan_py_files(TRANSLATION_ROOT), *scan_py_files(TRANSLATION_SHELL_ROOT / "entrypoints")]:
         layer = translation_layer_for(path)
         if layer is None:
             continue
         allowed_prefixes = TRANSLATION_LAYER_IMPORT_RULES[layer]
-        exception_prefixes = TRANSLATION_LAYER_IMPORT_EXCEPTIONS.get(path.relative_to(TRANSLATION_ROOT), ())
-        frozen_imports = TRANSLATION_LAYER_FROZEN_IMPORTS.get(path.relative_to(TRANSLATION_ROOT), ())
+        layer_key = path.relative_to(TRANSLATION_ROOT) if path.is_relative_to(TRANSLATION_ROOT) else None
+        exception_prefixes = TRANSLATION_LAYER_IMPORT_EXCEPTIONS.get(layer_key, ())
+        frozen_imports = TRANSLATION_LAYER_FROZEN_IMPORTS.get(layer_key, ())
         for module in imported_modules(path):
-            if not module.startswith("retainpdf_pipeline.translate."):
+            if not module.startswith(("retainpdf_translation.", "retainpdf_pipeline.translate.")):
                 continue
             if module_allowed(module, TRANSLATION_SHARED_COMPAT_IMPORTS):
                 continue

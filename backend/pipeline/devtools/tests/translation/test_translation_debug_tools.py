@@ -5,11 +5,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-
-from retainpdf_pipeline.translate.artifacts.debug_index import build_translation_debug_index
+from retainpdf_translation.artifacts.debug_index import build_translation_debug_index
 from devtools.replay_translation_item import replay_translation_case_artifact
 from devtools.replay_translation_item import replay_translation_item
 
@@ -522,7 +518,7 @@ def test_replay_translation_case_artifact_uses_frozen_page_payload(monkeypatch) 
 def test_replay_translation_item_registers_the_jobs_protocol_before_calling_the_model(monkeypatch) -> None:
     # 2026-11-06：不登记就按 OpenAI 协议发，Anthropic 的任务重翻一条走成 /chat/completions，400
     import devtools.replay_translation_item as replay_module
-    from retainpdf_pipeline.translate.llm.shared import model_wire
+    from retainpdf_translation.llm.shared import model_wire
 
     monkeypatch.setenv("RETAIN_TRANSLATION_API_KEY", "test-key")
     model_wire.clear_registered_connections()

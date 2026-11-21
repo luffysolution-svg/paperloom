@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
+import { wait } from "../helpers/async.mjs";
 
 // React 组件级测试:经 tests/helpers/jsx-loader.mjs 的 esbuild 钩子直接加载 .jsx
 
@@ -23,10 +24,6 @@ globalThis.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
 globalThis.IS_REACT_ACT_ENVIRONMENT = false;
 
 const { mountLibrarySearchApp } = await import("../../src/features/library/ui/island/library-search-app.jsx");
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 test("库检索面板:渲染命中高亮与文档行,状态切换调用 PATCH", async () => {
   const host = dom.window.document.createElement("div");
@@ -57,7 +54,6 @@ test("库检索面板:渲染命中高亮与文档行,状态切换调用 PATCH", 
         page_count: 8,
         active_job_id: "job-a",
         reading_status: "unread",
-        tags: ["测试"],
       }],
     }),
     patchDocument: async (documentId, payload) => {

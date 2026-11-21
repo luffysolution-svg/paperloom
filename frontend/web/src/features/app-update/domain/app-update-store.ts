@@ -27,19 +27,26 @@ export type AppUpdatePanel = {
   htmlUrl: string;
 };
 
+export type DesktopUpdateSnapshot = {
+  status: string;
+  mode?: string;
+  percent?: number;
+  canDownload?: boolean;
+  error?: string;
+  title?: string;
+  body?: string;
+  currentVersion?: string;
+  latestVersion?: string;
+  htmlUrl?: string;
+};
+
 export type AppUpdateViewState = {
   buttonState: string;
   hasUpdate: boolean;
   buttonTitle: string;
   statusText: string;
   panel: AppUpdatePanel;
-  desktop?: {
-    status: string;
-    mode?: string;
-    percent?: number;
-    canDownload?: boolean;
-    error?: string;
-  };
+  desktop?: DesktopUpdateSnapshot;
 };
 
 export type AppUpdateViewActions = {
@@ -96,15 +103,16 @@ export function createAppUpdateViewFeature() {
   const handlersRef: { current: HandlersBag | null } = { current: null };
 
   const viewPort = {
-    setDesktopState: (snapshot) => {
+    setDesktopState: (snapshot: DesktopUpdateSnapshot) => {
       const current = store.getSnapshot();
-      const statusText = {
+      const statusTextMap: Record<string, string> = {
         idle: "点击“重新检查”获取最新版本。", checking: "正在检查更新…",
         available: "发现新版本，可以直接下载更新。", latest: "已是最新版本",
         downloading: `正在下载更新 ${snapshot.percent || 0}%`,
         downloaded: "下载完成，已通过校验。请先保存工作再安装。",
         installing: "正在退出软件并安装更新…", error: "更新失败，可重试。",
-      }[snapshot.status] || "";
+      };
+      const statusText = statusTextMap[snapshot.status] || "";
       store.actions.apply({
         ...current, desktop: snapshot,
         buttonState: snapshot.status,

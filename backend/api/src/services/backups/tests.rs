@@ -32,7 +32,7 @@ fn library(state: &crate::AppState) {
     rusqlite::Connection::open(&state.config.jobs_db_path)
         .unwrap()
         .execute(
-            "INSERT INTO collections VALUES ('c1','课题文献',NULL,0,'now')",
+            "INSERT INTO collections(collection_id, name, parent_id, sort_order, created_at) VALUES ('c1','课题文献',NULL,0,'now')",
             [],
         )
         .unwrap();

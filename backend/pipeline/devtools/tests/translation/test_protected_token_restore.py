@@ -27,22 +27,17 @@ test_equivalent_rewrites_are_not_counted_as_dropped_commands。
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-from retainpdf_pipeline.translate.llm.placeholder_transform import (  # noqa: E402
+from retainpdf_translation.llm.placeholder_transform import (  # noqa: E402
     item_with_runtime_hard_glossary,
 )
-from retainpdf_pipeline.translate.llm.shared.cache import (  # noqa: E402
+from retainpdf_translation.llm.shared.cache import (  # noqa: E402
     has_unrestored_protected_tokens,
 )
-from retainpdf_pipeline.translate.llm.shared.orchestration.metadata import (  # noqa: E402
+from retainpdf_translation.llm.shared.orchestration.metadata import (  # noqa: E402
     restore_runtime_term_tokens,
 )
-from retainpdf_pipeline.translate.llm.validation.math_safety import (  # noqa: E402
+from retainpdf_math.checks import (  # noqa: E402
     dropped_latex_commands,
 )
 

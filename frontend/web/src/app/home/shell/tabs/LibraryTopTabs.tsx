@@ -1,10 +1,11 @@
-// 主页顶部"图书馆 / 合集 / 收藏"分栏(裸 Tabs 原语,不经 src/components/ui/tabs.jsx
+// 主页顶部"图书馆 / 合集"分栏(裸 Tabs 原语,不经 src/components/ui/tabs.jsx
 // 默认皮肤——同 StatusDetailDialog/SettingsDialog 的既有选择,用项目自有
 // class,不接 shadcn 默认视觉)。
 //
 // 图标化:每个 tab 前置语义图标 + 短文字(纯图标伤 wayfinding)。
 // 激活 tab 是纯页面级 UI 态(HomeApp useState),不持久化——刷新回到图书馆。
 
+import { useHomeTabVisible } from "@/features/auth/index.js";
 import { Tabs as TabsPrimitive } from "radix-ui";
 
 // 图书馆:书脊排列在书架上
@@ -36,7 +37,6 @@ function IconBookmark() {
     </svg>
   );
 }
-
 // 命名统一：UI tab key "categories" == Domain "collections" == 视图 "CategoriesView/CollectionsView" 三名一物。
 // 契约：DOM id `library-top-tab-categories` 与 activeTab === "categories" 为历史契约（tests/home-app-component.test.mjs
 // 断言该 id），不可改为 "collections" —— 功能等同于 collections。详见 `features/collections` 与
@@ -47,10 +47,10 @@ export const COLLECTIONS_TAB_KEY = "categories"; // 领域名 collections，UI �
 const TABS = [
   { key: "library", label: "图书馆", Icon: IconLibrary },
   { key: COLLECTIONS_TAB_KEY, label: "合集", Icon: IconLayers },
-  { key: "favorites", label: "收藏", Icon: IconBookmark },
 ];
 
-export function LibraryTopTabs({ active, onChange }) {
+export function LibraryTopTabs({ active, onChange }: { active: string; onChange: (key: string) => void }) {
+  const visible = useHomeTabVisible();
   return (
     <TabsPrimitive.Root
       className="library-top-tabs-root"
@@ -58,7 +58,7 @@ export function LibraryTopTabs({ active, onChange }) {
       onValueChange={onChange}
     >
       <TabsPrimitive.List className="library-top-tabs" aria-label="图书馆视图">
-        {TABS.map((tab) => (
+        {TABS.filter((tab) => visible(tab.key)).map((tab) => (
           <TabsPrimitive.Trigger
             key={tab.key}
             value={tab.key}

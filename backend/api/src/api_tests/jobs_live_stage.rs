@@ -116,7 +116,7 @@ async fn job_detail_list_and_events_share_pipeline_event_priority() {
     let events_response = app
         .oneshot(
             Request::builder()
-                .uri(format!("/api/v1/jobs/{}/events", job.job_id))
+                .uri(format!("/api/v1/jobs/{}/progress/events", job.job_id))
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("events request"),
@@ -345,6 +345,76 @@ async fn running_job_detail_prefers_latest_retry_stage_over_old_higher_rank_stag
         detail_json["data"]["stage_snapshot"]["progress"]["current"],
         1
     );
+}
+
+/// 翻译进度按「本轮待翻译块」计,progress_unit=block。live_stage、详情的
+/// stage_snapshot/stages 视图都必须原样透传 block,不能退回按 stage 推断的 batch。
+#[tokio::test]
+async fn running_job_detail_passes_block_progress_unit_through() {
+    let state = test_state("running-live-stage-block-unit");
+    let mut job = JobSnapshot::new(
+        "job-route-running-block-unit".to_string(),
+        CreateJobInput::default(),
+        vec!["python".to_string()],
+    );
+    job.status = crate::models::JobStatusKind::Running;
+    job.stage = Some("translating".to_string());
+    let job_root: PathBuf = state.config.data_root.join("jobs").join(&job.job_id);
+    fs::create_dir_all(job_root.join("logs")).expect("create logs dir");
+    job.artifacts
+        .get_or_insert_with(crate::models::JobArtifacts::default)
+        .job_root = Some(job_root.to_string_lossy().to_string());
+    state.db.save_job(&job).expect("save job");
+    fs::write(
+        job_root.join("logs").join("pipeline_events.jsonl"),
+        concat!(
+            r#"{"job_id":"job-route-running-block-unit","seq":1,"ts":"2026-04-24T01:00:00Z","level":"info","stage":"translating","substage":"translation_batches","stage_detail":"已翻译 96/408 块 · 已完成 9/48 页","event":"stage_progress","message":"已翻译 96/408 块 · 已完成 9/48 页","progress_current":96,"progress_total":408,"progress_unit":"block","payload":{"progress_unit":"block","batch_current":40,"batch_total":167,"completed_page_count":9,"page_count":48}}"#,
+            "\n"
+        ),
+    )
+    .expect("write pipeline events");
+
+    let app = build_app(state);
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/jobs/{}", job.job_id))
+                .header("X-API-Key", "test-key")
+                .body(Body::empty())
+                .expect("detail request"),
+        )
+        .await
+        .expect("detail response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let detail_json = read_json(response).await;
+    let snapshot = &detail_json["data"]["stage_snapshot"];
+    assert_eq!(snapshot["substage"], "translation_batches");
+    assert_eq!(snapshot["stage_detail"], "已翻译 96/408 块 · 已完成 9/48 页");
+    assert_eq!(snapshot["progress"]["unit"], "block");
+    assert_eq!(snapshot["progress"]["current"], 96);
+    assert_eq!(snapshot["progress"]["total"], 408);
+
+    let events_response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/jobs/{}/progress/events", job.job_id))
+                .header("X-API-Key", "test-key")
+                .body(Body::empty())
+                .expect("events request"),
+        )
+        .await
+        .expect("events response");
+    assert_eq!(events_response.status(), StatusCode::OK);
+    let events_json = read_json(events_response).await;
+    let progress = events_json["data"]["items"]
+        .as_array()
+        .expect("events items")
+        .iter()
+        .find(|item| item["raw_event_type"] == "stage_progress")
+        .expect("stage_progress event");
+    assert_eq!(progress["progress"]["unit"], "block");
+    assert_eq!(progress["progress"]["current"], 96);
 }
 
 #[tokio::test]

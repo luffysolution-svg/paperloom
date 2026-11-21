@@ -1,7 +1,8 @@
+import { apiFetch } from "./internal/runtime.js";
 import { buildApiHeaders, unwrapEnvelope } from "./internal/runtime.js";
 import { buildApiEndpoint } from "./http.js";
 async function credentialRequest(url, options = {}) {
-    const response = await fetch(url, {
+    const response = await apiFetch(url, {
         ...options,
         headers: {
             ...buildApiHeaders(),
@@ -18,8 +19,9 @@ async function credentialRequest(url, options = {}) {
     }
     return unwrapEnvelope(envelope);
 }
-export function listCredentials(apiPrefix, { includeValues = false } = {}) {
-    return credentialRequest(`${buildApiEndpoint(apiPrefix, "credentials")}${includeValues ? "?include_values=true" : ""}`, { cache: "no-store" });
+// 后端不返回明文，带任何查询参数都回 400（以前的 include_values 已删）。
+export function listCredentials(apiPrefix) {
+    return credentialRequest(buildApiEndpoint(apiPrefix, "credentials"), { cache: "no-store" });
 }
 export function createCredential(apiPrefix, input) {
     return credentialRequest(buildApiEndpoint(apiPrefix, "credentials"), {
@@ -29,10 +31,4 @@ export function createCredential(apiPrefix, input) {
 }
 export function updateCredential(apiPrefix, credentialRef, input) {
     return credentialRequest(buildApiEndpoint(apiPrefix, `credentials/${encodeURIComponent(credentialRef)}`), { method: "PUT", body: JSON.stringify(input) });
-}
-export function deleteCredential(apiPrefix, credentialRef, expectedRevision) {
-    const query = Number.isFinite(expectedRevision)
-        ? `?expected_revision=${encodeURIComponent(String(expectedRevision))}`
-        : "";
-    return credentialRequest(`${buildApiEndpoint(apiPrefix, `credentials/${encodeURIComponent(credentialRef)}`)}${query}`, { method: "DELETE" });
 }

@@ -1,16 +1,9 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 
-
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-
-from retainpdf_pipeline.translate.core.payload.parts.apply import apply_reconstructed_unit_text
-from retainpdf_pipeline.translate.services.postprocess import garbled_reconstruction
-from retainpdf_pipeline.translate.services.postprocess.garbled_reconstruction import (
+from retainpdf_translation.core.payload.parts.apply import apply_reconstructed_unit_text
+from retainpdf_translation.services.postprocess import garbled_reconstruction
+from retainpdf_translation.services.postprocess.garbled_reconstruction import (
     _apply_reconstruction,
     _clean_reconstructed_text,
 )

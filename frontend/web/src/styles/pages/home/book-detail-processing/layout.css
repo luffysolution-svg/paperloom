@@ -1,0 +1,52 @@
+/* 书籍详情「进度」分区：根布局，以及各卡片共用的变量和小节标题。
+ *
+ * 这一目录按组件一个文件，组件只改自己的文件。卡片之间共享的东西只放在这里，用 CSS 变量
+ * 传下去 —— 不要在别的文件里复制数值（以前覆盖条和任务记录直接抄了处理卡的底色和圆角，
+ * 还互相借用类名）。
+ */
+
+.book-detail-tab-processing {
+  /* 卡片表面：处理卡、任务记录同一套底色与圆角。 */
+  --book-detail-processing-surface: color-mix(in srgb, var(--bg) 58%, var(--paper));
+  --book-detail-processing-radius: 24px;
+  /* 墨色深浅：不同次翻译用深浅区分（1 最深、4 最浅），0 是未翻译的浅底。单色设计，不引入新颜色。 */
+  --book-detail-shade-0: color-mix(in srgb, var(--ink) 7%, var(--paper));
+  --book-detail-shade-1: color-mix(in srgb, var(--ink) 82%, var(--paper));
+  --book-detail-shade-2: color-mix(in srgb, var(--ink) 58%, var(--paper));
+  --book-detail-shade-3: color-mix(in srgb, var(--ink) 38%, var(--paper));
+  --book-detail-shade-4: color-mix(in srgb, var(--ink) 22%, var(--paper));
+
+  display: grid;
+  gap: 12px;
+}
+
+/* 卡内小节标题：「任务记录 · 共 6 次」。 */
+.book-detail-processing-section-head {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.book-detail-processing-section-title {
+  flex: 0 0 auto;
+  color: var(--ink);
+  font-size: var(--ui-text-sm);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.book-detail-processing-section-summary {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--ui-text-2xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 719px) {
+  .book-detail-tab-processing {
+    gap: 9px;
+  }
+}

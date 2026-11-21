@@ -40,6 +40,10 @@ export function progressTextForStageProgress({
   if (stageInfo.key === "render" && subtype === "render_prewarm") {
     return `预热 ${current}/${total}`;
   }
+  if (stageInfo.key === "render" && subtype === "refining") {
+    // 这里拿不到 refine_phase（挑错/修改），细分文案由状态卡的 compositeRenderRefineProgress 给。
+    return total > 1 ? `精修 ${current}/${total}` : "精修译文";
+  }
   if (stageInfo.key === "render" && subtype === "render_prepare") {
     return `准备 ${current}/${total}`;
   }
@@ -57,6 +61,9 @@ export function progressTextForStageProgress({
   }
   if (progressUnit === "batch") {
     return `第 ${current}/${total} 批`;
+  }
+  if (progressUnit === "block") {
+    return `已翻译 ${current}/${total} 块`;
   }
   if (progressUnit === "step") {
     if (stageInfo.key === "render") {

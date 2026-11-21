@@ -1,21 +1,13 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 
-
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-
-from retainpdf_pipeline.translate.artifacts.status import blocking_review_error_items
-from retainpdf_pipeline.translate.artifacts.status import blocking_untranslated_items
-from retainpdf_pipeline.translate.core.payload.parts.apply import apply_single_translated_entry
-from retainpdf_pipeline.translate.llm.result_payload import result_entry
-from retainpdf_pipeline.translate.llm.shared.control_context import build_translation_control_context
-from retainpdf_pipeline.translate.services.agents.review_artifact import build_translation_review
-from retainpdf_pipeline.translate.services.finalization.untranslated import recover_blocking_untranslated_items
-from retainpdf_pipeline.translate.workflow.batching.plan import _build_translation_batches
+from retainpdf_translation.artifacts.status import blocking_review_error_items
+from retainpdf_translation.artifacts.status import blocking_untranslated_items
+from retainpdf_translation.core.payload.parts.apply import apply_single_translated_entry
+from retainpdf_translation.llm.shared.control_context import build_translation_control_context
+from retainpdf_translation.services.agents.review_artifact import build_translation_review
+from retainpdf_translation.services.finalization.untranslated import recover_blocking_untranslated_items
+from retainpdf_translation.workflow.batching.plan import _build_translation_batches
 
 
 def _item(item_id: str, source_text: str, **overrides) -> dict:

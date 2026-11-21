@@ -27,8 +27,11 @@ ARCHIVE_PATHS = (
 REQUIRED_FILES = (
     "Cargo.toml", "Cargo.lock", ".dockerignore",
     "backend/pyproject.toml", "backend/uv.lock",
-    "backend/api/Cargo.toml",
-    "backend/pipeline/pyproject.toml", "backend/config/ocr_providers.json",
+    "backend/api/Cargo.toml", "backend/base/pyproject.toml",
+    "backend/math/pyproject.toml",
+    "backend/pipeline/pyproject.toml", "backend/translation/pyproject.toml",
+    "backend/translation-agent/pyproject.toml",
+    "backend/config/ocr_providers.json",
     "ops/deployment/docker/backend/Dockerfile.app",
     "ops/release/download_github_asset.py",
     "ops/release/github-assets.json",

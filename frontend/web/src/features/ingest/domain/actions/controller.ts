@@ -6,10 +6,12 @@ import {
   type OcrCredentialCheckResult,
   type SetTextFn,
 } from "./submit-flow.js";
+import { fetchProtected } from "@/platform/api/index.js";
 import { defaultAppActionsConfigPort } from "./config-port.js";
 import { createAppActionsRuntimeEnvPort } from "./runtime-env-port.js";
 import { createAppActionsJobSnapshotPort } from "./job-snapshot-port.js";
 import { createAppActionsUploadStatePort } from "./upload-state-port.js";
+import { runBatchSubmit, type BatchSubmitItemResult } from "./submit/batch.js";
 
 export interface AppActionsUploadStatePort {
   getSnapshot?: () => {
@@ -20,12 +22,12 @@ export interface AppActionsUploadStatePort {
 }
 
 export interface AppActionsRuntimeEnvPort {
-  isDesktopMode?: () => boolean;
-  isDesktopConfigured?: () => boolean;
+  isDesktopMode: () => boolean;
+  isDesktopConfigured: () => boolean;
 }
 
 export interface AppActionsJobSnapshotPort {
-  syncCurrentJobSnapshot?: (
+  syncCurrentJobSnapshot: (
     payload?: unknown,
     jobId?: unknown,
     meta?: { startedAt?: string; finishedAt?: string },
@@ -33,8 +35,8 @@ export interface AppActionsJobSnapshotPort {
 }
 
 export interface AppActionsViewPort {
-  setSubmitBusyState?: (busy?: boolean) => void;
-  resetMissingUpload?: (options?: {
+  setSubmitBusyState: (busy: boolean) => void;
+  resetMissingUpload: (options?: {
     state?: unknown;
     uploadStatePort?: AppActionsUploadStatePort;
     resetUploadedFile?: () => void;
@@ -45,26 +47,27 @@ export interface AppActionsViewPort {
 export interface SubmitFlowDeps {
   openSetupDialog?: () => void;
   renderJob?: (payload?: unknown) => void;
-  submitJobRequest?: (apiPrefix?: unknown, payload?: unknown) => Promise<unknown> | unknown;
-  currentWorkflow?: () => string;
+  submitJobRequest: (apiPrefix: string, payload: unknown) => Promise<unknown> | unknown;
+  currentWorkflow: () => string;
   workflowNeedsCredentials?: (workflow?: string) => boolean | unknown;
   workflowNeedsUpload?: (workflow?: string) => boolean | unknown;
   currentRenderSourceJobId?: () => string | unknown;
   currentBudgetState?: (workflow?: string) => BudgetStateSnapshot | null | undefined | unknown;
-  collectRunPayload?: () => unknown;
+  /** overrides 给一次上传多本用：指定上传编号、整本处理。 */
+  collectRunPayload?: (overrides?: { uploadId?: string; pageRanges?: string }) => unknown;
   validateBeforeSubmit?: () => boolean | unknown;
   ensureOcrCredentialsReady?: (options?: {
     onMissingToken?: () => void;
-    onInvalidToken?: (result?: OcrCredentialCheckResult) => void;
-  } | unknown) => Promise<boolean | unknown> | boolean | unknown;
+    onInvalidToken?: (result?: OcrCredentialCheckResult | null) => void;
+  }) => Promise<boolean | unknown> | boolean | unknown;
   hasBrowserCredentials?: () => boolean | unknown;
   openBrowserCredentialsDialog?: (options?: unknown) => void;
   refreshDeepSeekBalance?: (options?: {
     silent?: boolean;
-  } | unknown) => Promise<unknown> | unknown;
+  }) => Promise<unknown> | unknown;
   /** provider 预检失败的告知口（预检已改为后台并行，不再挡提交）。 */
   notifyPreflightWarning?: (message: string) => void;
-  startJobPolling?: (jobId?: string) => void;
+  startJobPolling?: (jobId: string) => void;
   libraryEventPort?: LibraryEventPortLike;
   jobSnapshotPort?: AppActionsJobSnapshotPort;
 }
@@ -76,28 +79,29 @@ export interface MountAppActionsFeatureOptions {
   jobSnapshotPort?: AppActionsJobSnapshotPort;
   viewPort: AppActionsViewPort;
   apiBase?: string | (() => string);
-  apiPrefix?: string;
-  buildApiEndpoint?: (prefix?: string, path?: string) => string;
-  setText?: SetTextFn;
-  openDesktopOutputDirectory?: () => Promise<unknown> | unknown;
+  apiPrefix: string;
+  buildApiEndpoint: (prefix?: string, path?: string) => string;
+  setText: SetTextFn;
+  openDesktopOutputDirectory: () => Promise<unknown> | unknown;
   resetUploadedFile?: () => void;
-  submitFlow?: SubmitFlowDeps;
+  /** 提交流程依赖；组装层（create-app-actions）总是整包传入。下面同名的单项可覆盖。 */
+  submitFlow: SubmitFlowDeps;
   openSetupDialog?: () => void;
   renderJob?: (payload?: unknown) => void;
-  submitJobRequest?: (apiPrefix?: unknown, payload?: unknown) => Promise<unknown> | unknown;
+  submitJobRequest?: (apiPrefix: string, payload: unknown) => Promise<unknown> | unknown;
   currentWorkflow?: () => string;
   workflowNeedsCredentials?: (workflow?: string) => boolean | unknown;
   workflowNeedsUpload?: (workflow?: string) => boolean | unknown;
   currentRenderSourceJobId?: () => string | unknown;
   currentBudgetState?: (workflow?: string) => BudgetStateSnapshot | null | undefined | unknown;
-  collectRunPayload?: () => unknown;
+  collectRunPayload?: SubmitFlowDeps["collectRunPayload"];
   validateBeforeSubmit?: () => boolean | unknown;
   ensureOcrCredentialsReady?: SubmitFlowDeps["ensureOcrCredentialsReady"];
   hasBrowserCredentials?: () => boolean | unknown;
   openBrowserCredentialsDialog?: (options?: unknown) => void;
   refreshDeepSeekBalance?: SubmitFlowDeps["refreshDeepSeekBalance"];
   notifyPreflightWarning?: SubmitFlowDeps["notifyPreflightWarning"];
-  startJobPolling?: (jobId?: string) => void;
+  startJobPolling?: (jobId: string) => void;
   libraryEventPort?: LibraryEventPortLike;
   configPort?: AppActionsConfigPort;
 }
@@ -117,8 +121,8 @@ export function mountAppActionsFeature({
   submitFlow,
   openSetupDialog = submitFlow?.openSetupDialog,
   renderJob = submitFlow?.renderJob,
-  submitJobRequest = submitFlow?.submitJobRequest,
-  currentWorkflow = submitFlow?.currentWorkflow,
+  submitJobRequest = submitFlow.submitJobRequest,
+  currentWorkflow = submitFlow.currentWorkflow,
   workflowNeedsCredentials = submitFlow?.workflowNeedsCredentials,
   workflowNeedsUpload = submitFlow?.workflowNeedsUpload,
   currentRenderSourceJobId = submitFlow?.currentRenderSourceJobId,
@@ -148,13 +152,13 @@ export function mountAppActionsFeature({
     return uploadState.getSnapshot?.() || {};
   }
 
-  function setSubmitBusyState(busy) {
+  function setSubmitBusyState(busy: boolean) {
     uploadState.setSubmitBusy?.(busy);
     viewPort.setSubmitBusyState(busy);
   }
 
-  function isMissingUploadError(error) {
-    const message = `${error?.message || error || ""}`;
+  function isMissingUploadError(error: unknown) {
+    const message = `${(error as { message?: string } | null | undefined)?.message || error || ""}`;
     return message.includes("upload not found");
   }
 
@@ -162,7 +166,7 @@ export function mountAppActionsFeature({
     viewPort.resetMissingUpload({ state, uploadStatePort: uploadState, resetUploadedFile, setText });
   }
 
-  async function submitForm(event) {
+  async function submitForm(event: Pick<Event, "preventDefault">) {
     event.preventDefault();
     const workflow = currentWorkflow();
     const desktopMode = runtimeEnv.isDesktopMode();
@@ -205,9 +209,45 @@ export function mountAppActionsFeature({
     }
   }
 
+  // 一次上传多本：每本一个任务，选项同一套（见 submit/batch.ts）。
+  async function submitBatch(
+    uploadIds: string[],
+    onItem?: (uploadId: string, result: BatchSubmitItemResult) => void,
+  ) {
+    setSubmitBusyState(true);
+    try {
+      return await runBatchSubmit({
+        uploadIds,
+        collectRunPayload: (overrides) => collectRunPayload?.(overrides),
+        onItem,
+        workflow: currentWorkflow(),
+        desktopMode: runtimeEnv.isDesktopMode(),
+        configPort,
+        apiPrefix,
+        desktopConfigured: runtimeEnv.isDesktopConfigured(),
+        openSetupDialog,
+        openBrowserCredentialsDialog,
+        setText,
+        submitJobRequest,
+        workflowNeedsUpload,
+        workflowNeedsCredentials,
+        currentRenderSourceJobId,
+        currentBudgetState,
+        ensureOcrCredentialsReady,
+        hasBrowserCredentials,
+        refreshDeepSeekBalance,
+        libraryEventPort,
+        notifyPreflightWarning,
+      });
+    } finally {
+      setSubmitBusyState(false);
+    }
+  }
+
   async function checkApiConnectivity() {
     try {
-      const resp = await fetch(buildApiEndpoint("", "health"));
+      // 走 apiFetch：多用户模式下带上登录 Cookie，401 进统一处理。
+      const resp = await fetchProtected(buildApiEndpoint("", "health"));
       if (!resp.ok) {
         throw new Error(`health ${resp.status}`);
       }
@@ -233,6 +273,7 @@ export function mountAppActionsFeature({
   return {
     checkApiConnectivity,
     handleOpenOutputDir,
+    submitBatch,
     submitForm,
   };
 }

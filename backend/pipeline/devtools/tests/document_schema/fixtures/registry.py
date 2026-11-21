@@ -11,7 +11,12 @@ from retainpdf_pipeline.ocr.document_schema.providers import (
 
 REPO_ROOT = Path(__file__).resolve().parents[6]
 DOCUMENT_SCHEMA_FIXTURES_ROOT = REPO_ROOT / "backend" / "pipeline" / "devtools" / "tests" / "document_schema" / "fixtures"
-PADDLE_FIXTURES_ROOT = REPO_ROOT / "backend" / "packages" / "retain-data" / "src" / "ocr_provider" / "paddle"
+PADDLE_FIXTURES_ROOT = REPO_ROOT / "backend" / "packages" / "retainpdf-data" / "src" / "ocr_provider" / "paddle"
+# Paddle 适配器那一族测试共用的三份样本。以前每个 test_paddle_*.py 顶上各抄一遍，
+# 有一份还停在改名前的 rust_api/ 路径上没人发现（它只被当作标签传进去，不读文件）。
+PADDLE_FIXTURE_JSON = PADDLE_FIXTURES_ROOT / "json_full.json"
+PADDLE_SCI_FIXTURE_JSON = PADDLE_FIXTURES_ROOT / "json_sci.json"
+PADDLE_FIXTURE_PDF = PADDLE_FIXTURES_ROOT / "paddle_ocr_json_split.pdf"
 
 
 # Single source of truth for provider fixtures consumed by regression_check.py.

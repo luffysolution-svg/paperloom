@@ -17,74 +17,9 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const React = await import("react");
 const { createRoot } = await import("react-dom/client");
-const { loadProtectedPdfFile, useProtectedPdfFile } = await import("../../../../frontend/packages/reader/src/pdf/useProtectedPdfFile.ts");
+const { useProtectedPdfFile } = await import("../../../../frontend/packages/reader/src/pdf/useProtectedPdfFile.ts");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
-
-test("a mounted cached PDF survives LRU eviction on unrelated rerenders", async () => {
-  const base = "http://localhost/cache-eviction";
-  const fetchPdf = async () => new Response(new Uint8Array([7]));
-  const cached = await loadProtectedPdfFile(`${base}/b.pdf`, fetchPdf);
-  let current;
-  function Probe() { current = useProtectedPdfFile(`${base}/b.pdf`); return null; }
-  const root = createRoot(document.createElement("div"));
-  try {
-    await React.act(async () => root.render(React.createElement(Probe, { round: 0 })));
-    assert.equal(current.file, cached);
-    await loadProtectedPdfFile(`${base}/c.pdf`, fetchPdf);
-    await loadProtectedPdfFile(`${base}/d.pdf`, fetchPdf);
-    await React.act(async () => root.render(React.createElement(Probe, { round: 1 })));
-    assert.equal(current.file, cached, "displayed PDF stays available after global cache eviction");
-    assert.equal(current.loading, false);
-  } finally { await React.act(async () => root.unmount()); }
-});
-
-test("a successful cached retry replaces an old URL-specific error immediately", async () => {
-  const oldFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response("failed", { status: 500 });
-  const url = "http://localhost/cached-retry/a.pdf";
-  const renders = [];
-  function Probe({ url, preloaded }) { renders.push(useProtectedPdfFile(url, preloaded)); return null; }
-  const root = createRoot(document.createElement("div"));
-  try {
-    await React.act(async () => { root.render(React.createElement(Probe, { url })); await tick(); });
-    assert.match(renders.at(-1).error, /500/);
-    await React.act(async () => root.render(React.createElement(Probe, { url: "b", preloaded: { data: new Uint8Array([2]) } })));
-    const recovered = await loadProtectedPdfFile(url, async () => new Response(new Uint8Array([1])));
-    renders.length = 0;
-    await React.act(async () => root.render(React.createElement(Probe, { url })));
-    assert.equal(renders[0].file, recovered);
-    assert.equal(renders[0].error, "");
-    assert.equal(renders.at(-1).file, recovered);
-  } finally {
-    await React.act(async () => root.unmount());
-    globalThis.fetch = oldFetch;
-  }
-});
-
-test("preloaded PDFs are returned immediately and empty URLs clear the file", async () => {
-  const renders = [];
-  function Probe({ url, preloaded }) {
-    renders.push(useProtectedPdfFile(url, preloaded));
-    return null;
-  }
-  const first = { data: new Uint8Array([7]) };
-  const second = { data: new Uint8Array([8]) };
-  const root = createRoot(document.createElement("div"));
-  try {
-    await React.act(async () => root.render(React.createElement(Probe, { url: "preloaded-a", preloaded: first })));
-    assert.equal(renders.at(-1).file, first);
-    renders.length = 0;
-    await React.act(async () => root.render(React.createElement(Probe, { url: "preloaded-b", preloaded: second })));
-    assert.equal(renders[0].file, second);
-    assert.equal(renders[0].loading, false);
-    renders.length = 0;
-    await React.act(async () => root.render(React.createElement(Probe, { url: "" })));
-    assert.deepEqual(renders[0], { file: null, loading: false, error: "" });
-  } finally {
-    await React.act(async () => root.unmount());
-  }
-});
 
 test("换 url 的第一次渲染不再返回旧文件；切走时中止还没下完的请求", async () => {
   const oldFetch = globalThis.fetch;

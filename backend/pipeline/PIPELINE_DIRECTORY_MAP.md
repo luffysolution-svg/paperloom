@@ -26,8 +26,8 @@
   [`retainpdf_pipeline/ocr/ocr_provider/`](./retainpdf_pipeline/ocr/ocr_provider)
 - 改统一 OCR 契约：
   [`retainpdf_pipeline/ocr/document_schema/`](./retainpdf_pipeline/ocr/document_schema)
-- 改翻译主链（含翻译阶段门面）：
-  [`retainpdf_pipeline/translate/`](./retainpdf_pipeline/translate)
+- 改翻译主链：独立包 [`backend/translation/`](../translation/README.md)（`retainpdf_translation`）；
+  流水线里的 [`retainpdf_pipeline/translate/`](./retainpdf_pipeline/translate) 只剩 worker 外壳
 - 改渲染主链（含渲染阶段门面）：
   [`retainpdf_pipeline/render/`](./retainpdf_pipeline/render)
 
@@ -144,6 +144,14 @@ console 别名：`retainpdf-pipeline render-only --spec <job_root>/specs/render.
 - 关键文件：
   - [`normalize_pipeline.py`](./retainpdf_pipeline/ocr/document_schema/normalize_pipeline.py)
     normalize worker 入口（`python -m retainpdf_pipeline.ocr normalize-ocr`）。
+  - [`pdf_geometry.py`](./retainpdf_pipeline/ocr/document_schema/pdf_geometry.py)
+    各家通用的几何：缩放到原文 PDF、没有真实行的块补行（2026-10-29 从 `ocr_provider/paddle_normalize.py` 挪来）。
+  - [`estimated_lines.py`](./retainpdf_pipeline/ocr/document_schema/estimated_lines.py)
+    估行、拆行内公式片段（2026-10-29 从 Paddle 适配器挪来）。
+  - [`finalize.py`](./retainpdf_pipeline/ocr/document_schema/finalize.py)
+    归一化的最后几步（缩放 → 补行 → 刷新报告），所有归一化路径都调。
+  - [`page_bounds.py`](./retainpdf_pipeline/ocr/document_schema/page_bounds.py)
+    略微超出页边的块夹回页内。
   - [`adapters.py`](./retainpdf_pipeline/ocr/document_schema/adapters.py)
     raw provider -> normalized document 总适配口。
   - [`reporting.py`](./retainpdf_pipeline/ocr/document_schema/reporting.py)
@@ -164,7 +172,7 @@ console 别名：`retainpdf-pipeline render-only --spec <job_root>/specs/render.
   - [`paddle_markdown.py`](./retainpdf_pipeline/ocr/ocr_provider/paddle_markdown.py)
     Paddle Markdown 与图片产物落盘。
   - [`paddle_normalize.py`](./retainpdf_pipeline/ocr/ocr_provider/paddle_normalize.py)
-    Paddle normalized document 几何修正等纯实现。
+    Paddle 的 normalized document 落盘；几何（缩放、补行）在 `document_schema/pdf_geometry.py`。
 
 ### `retainpdf_pipeline/ocr/mineru_provider/`
 
@@ -175,12 +183,14 @@ console 别名：`retainpdf-pipeline render-only --spec <job_root>/specs/render.
 - 注意：
   这里是 provider 实现，不是 OCR 总线，也不是翻译/渲染主链。
 
-### `retainpdf_pipeline/translate/`
+### `retainpdf_pipeline/translate/`（翻译 worker 外壳）
 
 - 作用：
-  把 `document.v1.json` 变成稳定翻译产物；翻译阶段门面也在这里。
+  Rust 用 `python -m retainpdf_pipeline.translate` 启动的翻译 worker 外壳：读 stage spec、建任务目录、写事件和 stdout 标签。
+  把 `document.v1.json` 变成翻译产物的逻辑在独立包 [`backend/translation/`](../translation/README.md)（`retainpdf_translation`）。
 - 进入条件：
-  改翻译策略、LLM 调度、continuation、payload 落盘、diagnostics 时进这里。
+  改 worker 的 spec 读取、stdout 协议、任务目录时进这里；改翻译策略、LLM 调度、continuation、payload 落盘、
+  diagnostics 去翻译包。
 - 关键文件：
   - [`__main__.py`](./retainpdf_pipeline/translate/__main__.py)
     `python -m retainpdf_pipeline.translate` 进程入口。
@@ -190,10 +200,8 @@ console 别名：`retainpdf-pipeline render-only --spec <job_root>/specs/render.
     normalized OCR -> translate -> render 的 worker 包装入口。
   - [`entrypoints/translate_only_pipeline.py`](./retainpdf_pipeline/translate/entrypoints/translate_only_pipeline.py)
     translate-only worker 包装入口。
-  - [`workflow/translation_workflow.py`](./retainpdf_pipeline/translate/workflow/translation_workflow.py)
-    单页翻译流程。
-  - [`llm/README.md`](./retainpdf_pipeline/translate/llm/README.md)
-    LLM 目录边界说明。
+  - 翻译包里的入口：[`workflow/translation_workflow.py`](../translation/retainpdf_translation/workflow/translation_workflow.py)
+    单页翻译流程；[`llm/README.md`](../translation/retainpdf_translation/llm/README.md) LLM 目录边界说明。
 
 ### `retainpdf_pipeline/render/`
 
@@ -220,7 +228,8 @@ console 别名：`retainpdf-pipeline render-only --spec <job_root>/specs/render.
 ### `retainpdf_pipeline/services/pipeline_shared/`
 
 - 作用：
-  provider / translate / render 共享的 stdout contract、summary、events、JSON IO。
+  只剩依赖 OCR 规范化报告的 pipeline summary（`summary.py`）。stdout contract、events、JSON IO
+  已经下放到底座包 [`backend/base`](../base/README.md)（`retainpdf_base`），流水线和翻译都从那里拿。
 - 不该做的事：
   不放 provider 私有逻辑，也不放翻译/渲染算法细节。
 - 注意：
@@ -255,7 +264,7 @@ console 别名：`retainpdf-pipeline render-only --spec <job_root>/specs/render.
 - “这是 provider 接入问题吗？”
   先看 `retainpdf_pipeline/ocr/ocr_provider/` 或 `retainpdf_pipeline/ocr/mineru_provider/`
 - “这是翻译结果不对吗？”
-  先看 `retainpdf_pipeline/translate/`（含 `translation_stage.py`）
+  先看翻译包 `backend/translation/retainpdf_translation/`；worker 外壳在 `retainpdf_pipeline/translate/`
 - “这是 PDF 渲染不对吗？”
   先看 `retainpdf_pipeline/render/`（含 `render_stage.py`）
 
@@ -277,6 +286,6 @@ console 别名：`retainpdf-pipeline render-only --spec <job_root>/specs/render.
 3. [`retainpdf_pipeline/runtime/pipeline/README.md`](./retainpdf_pipeline/runtime/pipeline/README.md)
    看阶段边界（注意 book 生产编排在 Rust，包内仅本地串联）。
 4. [`retainpdf_pipeline/services/README.md`](./retainpdf_pipeline/services/README.md)
-   看 services 总分工（实体只剩 `pipeline_shared`）。
+   看 services 总分工（实体只剩 `pipeline_shared` 的 summary；共享协议在底座包 `backend/base`）。
 5. 再按模块进入 `translate/`、`render/`、`ocr/ocr_provider/`、`ocr/document_schema/`、
    `ocr/mineru_provider/` 的 README。

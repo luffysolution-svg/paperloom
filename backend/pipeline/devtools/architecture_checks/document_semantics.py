@@ -9,9 +9,10 @@ from devtools.architecture_checks.common import module_allowed
 from devtools.architecture_checks.common import parse_python_file
 from devtools.architecture_checks.common import display_path
 from devtools.architecture_checks.common import scan_py_files
+from devtools.architecture_checks.common import TRANSLATION_PACKAGE_ROOT
 
 
-TRANSLATION_ROOT = PACKAGE_ROOT / "translate"
+TRANSLATION_ROOT = TRANSLATION_PACKAGE_ROOT
 RENDERING_ROOT = PACKAGE_ROOT / "render"
 
 LEGACY_SEMANTICS_FACADE = "retainpdf_pipeline.ocr.document_schema.semantics"
@@ -107,7 +108,7 @@ def check_document_semantic_boundaries(errors: list[str]) -> None:
                         f"{display_path(path)}: direct legacy document field reads are restricted to compatibility, persistence, provenance, and fingerprint boundaries: {', '.join(fields)}"
                     )
 
-    for path in scan_py_files(PACKAGE_ROOT):
+    for path in [*scan_py_files(PACKAGE_ROOT), *scan_py_files(TRANSLATION_ROOT)]:
         if any(
             module_allowed(module, (DECISION_DIFF_MODULE,))
             for module in imported_modules(path)

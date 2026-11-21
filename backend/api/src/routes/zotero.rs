@@ -6,12 +6,12 @@ use axum::Json;
 use crate::error::AppError;
 use crate::models::api::ApiResponse;
 use crate::routes::common::{build_integration_route_deps, ok_json, ApiJson, ApiPath, ApiQuery};
-use crate::services::integrations::api::{
-    import_zotero_attachments_view, write_documents_to_zotero_view, write_translated_pdf_to_zotero_view, zotero_collections_view,
-    zotero_items_view, zotero_status_view, ItemsQuery, LibraryQuery, ZoteroCollection,
-    ZoteroImportRequest, ZoteroImportResult, ZoteroItemPage, ZoteroStatus,
-    ZoteroBatchWritebackRequest, ZoteroBatchWritebackView,
-    ZoteroWritebackResult,
+use crate::services::integrations::{
+    import_zotero_attachments_view, write_documents_to_zotero_view,
+    write_translated_pdf_to_zotero_view, zotero_collections_view, zotero_items_view,
+    zotero_status_view, ItemsQuery, LibraryQuery, ZoteroBatchWritebackRequest,
+    ZoteroBatchWritebackView, ZoteroCollection, ZoteroImportRequest, ZoteroImportResult,
+    ZoteroItemPage, ZoteroStatus, ZoteroWritebackResult,
 };
 use crate::AppState;
 

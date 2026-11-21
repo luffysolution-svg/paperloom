@@ -3,15 +3,17 @@ from pathlib import Path
 from types import SimpleNamespace
 import json
 
+from retainpdf_translation.public import register_stage_connections
+from retainpdf_pipeline.foundation.shared.stage_specs import DEFAULT_RENDER_ENGINE
 from retainpdf_pipeline.foundation.config import layout
 from retainpdf_pipeline.foundation.shared.job_dirs import job_dirs_from_explicit_args
 from retainpdf_pipeline.foundation.shared.stage_specs import build_stage_invocation_metadata
 from retainpdf_pipeline.foundation.shared.stage_specs import ProviderStageSpec
-from retainpdf_pipeline.foundation.shared.stage_specs import resolve_credential_ref
+from retainpdf_base.credentials import resolve_credential_ref
 from retainpdf_pipeline.foundation.shared.tee_output import enable_job_log_capture
 from retainpdf_pipeline.ocr.document_schema import DOCUMENT_SCHEMA_REPORT_FILE_NAME
 from retainpdf_pipeline.ocr.mineru_provider.job_flow import run_mineru_to_job_dir
-from retainpdf_pipeline.services.pipeline_shared.contracts import PIPELINE_SUMMARY_FILE_NAME
+from retainpdf_base.contracts import PIPELINE_SUMMARY_FILE_NAME
 from retainpdf_pipeline.services.pipeline_shared.summary import print_pipeline_summary
 from retainpdf_pipeline.services.pipeline_shared.summary import write_pipeline_summary
 from retainpdf_pipeline.ocr.source_json import resolve_translation_source_json_path
@@ -35,6 +37,16 @@ def _serialize_glossary_entries(entries: list[dict]) -> str:
 
 
 def _args_from_spec(spec: ProviderStageSpec) -> SimpleNamespace:
+    register_stage_connections(
+        model=spec.translation.model,
+        base_url=spec.translation.base_url,
+        api_protocol=spec.translation.api_protocol,
+        thinking=spec.translation.thinking,
+        reviewer_model=spec.translation.reviewer_model,
+        reviewer_base_url=spec.translation.reviewer_base_url,
+        reviewer_api_protocol=spec.translation.reviewer_api_protocol,
+        reviewer_thinking=spec.translation.reviewer_thinking,
+    )
     job_dirs = spec.job_dirs
     return SimpleNamespace(
         file_url=spec.source.file_url,
@@ -77,6 +89,11 @@ def _args_from_spec(spec: ProviderStageSpec) -> SimpleNamespace:
         api_key=resolve_credential_ref(spec.translation.credential_ref),
         model=spec.translation.model,
         base_url=spec.translation.base_url,
+        preparation=spec.translation.preparation,
+        reviewer_model=spec.translation.reviewer_model,
+        reviewer_base_url=spec.translation.reviewer_base_url,
+        reviewer_api_key=resolve_credential_ref(spec.translation.reviewer_credential_ref),
+        engine=spec.translation.engine,
         render_mode=spec.render.render_mode,
         compile_workers=spec.render.compile_workers,
         typst_font_family=spec.render.typst_font_family,
@@ -90,6 +107,7 @@ def _args_from_spec(spec: ProviderStageSpec) -> SimpleNamespace:
         inner_bbox_dense_shrink_y=spec.render.inner_bbox_dense_shrink_y,
         font_unify_mode=spec.render.font_unify_mode,
         source_cleanup_strategy=spec.render.source_cleanup_strategy,
+        render_engine=spec.render.engine,
     )
 
 
@@ -153,10 +171,16 @@ def main() -> None:
         glossary_inline_entry_count=args.glossary_inline_entry_count,
         glossary_overridden_entry_count=args.glossary_overridden_entry_count,
         glossary_entries=parse_glossary_json(args.glossary_json),
+        preparation=args.preparation,
+        reviewer_model=args.reviewer_model,
+        reviewer_base_url=args.reviewer_base_url,
+        reviewer_api_key=args.reviewer_api_key,
+        engine=getattr(args, "engine", "legacy"),
         compile_workers=args.compile_workers or None,
         typst_font_family=args.typst_font_family,
         pdf_compress_dpi=args.pdf_compress_dpi,
         source_cleanup_strategy=args.source_cleanup_strategy,
+        render_engine=getattr(args, "render_engine", DEFAULT_RENDER_ENGINE),
         invocation=build_stage_invocation_metadata(
             stage="provider",
             stage_spec_schema_version=stage_spec_schema_version,

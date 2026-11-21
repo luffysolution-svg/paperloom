@@ -1,16 +1,16 @@
-import { buildErrorDiagnostic } from "@/platform/utils/error-diagnostics.js";
 import { isRefusedSubmission } from "@/platform/api/index.js";
+import { buildErrorDiagnostic } from "@/platform/utils/error-diagnostics.js";
 import type { RunSubmitFlowOptions, SetTextFn } from "./contracts.js";
 
 // 提交失败的归一口径：missing_upload 由调用方判定并复位上传态；其余错误统一
-// 落 error-box 诊断（operation/url/details 与原 submit-flow.ts 一致）。
+// 落 error-box 诊断（operation/url/details 与原 submit-flow.ts 一致）。页数额度不够、磁盘空间不够
+// 不是故障，直接显示那句中文，不给诊断。
 export function reportSubmitError({
   err,
   workflow,
   apiPrefix,
   uploadId,
   currentRenderSourceJobId,
-  collectRunPayload,
   setText,
 }: {
   err: unknown;
@@ -18,14 +18,15 @@ export function reportSubmitError({
   apiPrefix?: string;
   uploadId?: string;
   currentRenderSourceJobId?: RunSubmitFlowOptions["currentRenderSourceJobId"];
-  collectRunPayload?: RunSubmitFlowOptions["collectRunPayload"];
-  setText?: SetTextFn;
+  setText: SetTextFn;
 }) {
-  if (isRefusedSubmission(err)) { setText("error-box", err.message); return; }
-  const isOcr = `${workflow || (collectRunPayload?.() as any)?.workflow || ""}`.trim() === "ocr";
+  if (isRefusedSubmission(err)) {
+    setText("error-box", (err as Error).message);
+    return;
+  }
   setText("error-box", buildErrorDiagnostic(err, {
     operation: "提交 PDF 任务",
-    url: `${apiPrefix || ""}${isOcr ? "/ocr/jobs" : "/jobs"}`,
+    url: `${apiPrefix || ""}/jobs`,
     details: {
       workflow,
       upload_id: uploadId,

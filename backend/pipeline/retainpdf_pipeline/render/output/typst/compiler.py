@@ -9,7 +9,7 @@ from typing import Any
 from retainpdf_pipeline.foundation.config import fonts
 from retainpdf_pipeline.foundation.config.external_tools import ExternalToolNotFound
 from retainpdf_pipeline.foundation.config.external_tools import resolve_typst_bin
-from retainpdf_pipeline.foundation.config import paths
+from retainpdf_base import paths
 from retainpdf_pipeline.render.layout.model.models import RenderPageSpec
 from retainpdf_pipeline.render.output.typst.emitter import build_typst_source_from_page_specs
 from retainpdf_pipeline.render.output.typst.shared import typst_overlay_dir

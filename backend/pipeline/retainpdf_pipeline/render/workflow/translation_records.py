@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """Render-local translation-record builder (file-contract duplicate).
 
-Duplicated from retainpdf_pipeline.translate.core.payload.template_records
+Duplicated from retainpdf_translation.core.payload.template_records
 (stage-decouple: render must not import translate; duplicate wins over cross-package).
 """
 

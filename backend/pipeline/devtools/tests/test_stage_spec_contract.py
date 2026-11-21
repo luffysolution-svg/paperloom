@@ -30,15 +30,12 @@ import dataclasses
 import json
 import re
 import shutil
-import sys
 from pathlib import Path
 
 import pytest
 
 DEVTOOLS_ROOT = Path(__file__).resolve().parents[1]
 PIPELINE_ROOT = DEVTOOLS_ROOT.parent
-if str(PIPELINE_ROOT) not in sys.path:
-    sys.path.insert(0, str(PIPELINE_ROOT))
 
 from devtools import check_stage_specs_contract  # noqa: E402
 from retainpdf_pipeline.foundation.shared.stage_specs import (  # noqa: E402
@@ -51,7 +48,7 @@ BACKEND_ROOT = PIPELINE_ROOT.parent
 REPO_ROOT = BACKEND_ROOT.parent if BACKEND_ROOT.name == "backend" else BACKEND_ROOT
 FIXTURE = REPO_ROOT / "tests" / "fixtures" / "golden-jobs" / "chem-6ada81-10p"
 RUST_DEFAULTS_RS = (
-    REPO_ROOT / "backend" / "packages" / "retain-core" / "src" / "models" / "defaults.rs"
+    REPO_ROOT / "backend" / "packages" / "retainpdf-core" / "src" / "models" / "defaults.rs"
 )
 
 # checker 支持的 stage（SPEC_LOADERS）里，fixture 实际带了这几份 spec。
@@ -150,7 +147,7 @@ def test_stage_spec_contract_checker_rejects_a_drifted_spec(tmp_path, capsys) ->
 def test_translate_params_keys_match_the_python_loader_exactly() -> None:
     """Rust 写出的 key 集合 == Python loader 解析的字段集合。
 
-    Rust 侧的对照断言在 retain-data 的 `stage_specs_keep_python_loader_contract_keys`
+    Rust 侧的对照断言在 retainpdf-data 的 `stage_specs_keep_python_loader_contract_keys`
     里，读的是同一份 fixture。两条断言串成一条链：Rust 改 params → Rust 用例红 →
     更新 fixture → 这条用例红 → loader 跟上。少了任何一环，一边加了字段另一边
     不解析（或反过来，解析了一个谁都不写的字段）就没人拦得住——`render_prewarm_*`

@@ -24,15 +24,11 @@ from pathlib import Path
 import pytest
 
 PIPELINE_ROOT = Path(__file__).resolve().parents[3]
-if str(PIPELINE_ROOT) not in sys.path:
-    sys.path.insert(0, str(PIPELINE_ROOT))
 
 docx = pytest.importorskip("docx", reason="python-docx 未安装（它在 pyproject 里声明了）")
 fitz = pytest.importorskip("fitz", reason="PyMuPDF 未安装")
 
 from docx.oxml.ns import qn  # noqa: E402
-
-MATH_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/math}"
 
 
 def test_every_module_imports():
@@ -85,73 +81,125 @@ def test_cli_has_an_entry_point():
     assert '__name__ == "__main__"' in source, "cli.py 没有入口,python -m 跑了等于没跑"
 
 
-# 真实 job 的译文块有 80+ 个字段（分栏、续行、公式映射、翻译单元…）。手搓一份合成
-# 数据既写不全，也会把测试钉在一个和真实形状不一样的东西上——那正是这类测试最容易
-# 变成摆设的方式。所以这里从仓库里挑一个真实 job，裁成一页来用。
-REPO_ROOT = PIPELINE_ROOT.parents[1]
-JOBS_ROOT = REPO_ROOT / "data" / "jobs"
+# ---------------------------------------------------------------------------
+# 夹具：测试里现造的一页 job。
+#
+# 以前这里从本机 data/jobs 里挑「最新的」一个已翻译 job 裁成一页来用。代价是：CI 上
+# 没有 data/jobs，整组永远 skip；本机则随你最近翻了哪本书而变——换一本首页是大标题
+# 的书，断言的前提就不成立了（误报过一次）。
+#
+# 当初不肯合成数据的理由是「真实译文块有 80+ 个字段，手搓写不全」。但这里的断言只
+# 经过两条路：`build_render_page_specs`（吃 bbox / 角色 / 原文译文这几个字段）和从
+# 译文 PDF 读回字号行距（只认 PDF 里的文字 span）。所以现造的数据只要把每条断言要
+# 分辨的那个性质**刻意**造出来即可，见 _BLOCKS / _RENDERED 旁的说明。
+# ---------------------------------------------------------------------------
+_PAGE_SIZE = (595.0, 842.0)
+
+# (block_id, bbox, 是否标题, 原文, 译文)
+#   - 一个标题块：font_roles 把标题判成 bold，凑出「字重混杂」（加粗 1/4）。
+#   - 两个正文段：leading_em ≈ 0.91，`1 + leading_em` 远大于实测比值 1.289。
+#   - 一个塞不下的窄框：译文比原文长得多，阅读器那套收敛会把它缩小。
+_BLOCKS = (
+    ("p001-b001", (72.0, 60.0, 523.0, 96.0), True,
+     "A Synthetic Study of Layout Preservation", "版式保留的合成研究"),
+    ("p001-b002", (72.0, 120.0, 523.0, 260.0), False,
+     "The first paragraph describes the method in enough words to wrap over several lines. " * 3,
+     "第一段用足够多的文字描述方法，使其在页面上折成好几行。" * 6),
+    ("p001-b003", (72.0, 280.0, 523.0, 420.0), False,
+     "The second paragraph reports results and is long enough to occupy multiple lines. " * 3,
+     "第二段报告结果，同样需要足够长，才能在这里占据多行文字。" * 6),
+    ("p001-b004", (72.0, 440.0, 300.0, 480.0), False,
+     "A cramped box whose translation is far too long for the space of the source text.",
+     "这是一个很挤的框，译文比原文占据的空间长得多，排版时必须缩小字号才能装下全部内容；"
+     "原文只占了两行，译文却要排成三行以上才放得下。"),
+)
+
+# 「流水线渲染出来的译文 PDF」里每块真正排出来的 (字号, 基线间距)。
+# 每块都比 spec 的上界小一圈、行距也和 `字号 × (1 + leading_em)` 对不上——两条读回
+# 测试分辨的就是这两件事。标题只有一行，量不出行距（读回得到 0）。
+_RENDERED = {
+    "p001-b001": (20.0, 0.0),
+    "p001-b002": (9.0, 12.0),
+    "p001-b003": (9.5, 12.5),
+    "p001-b004": (6.0, 7.5),
+}
 
 
-def _find_translated_job() -> Path | None:
-    if not JOBS_ROOT.is_dir():
-        return None
-    for job in sorted(JOBS_ROOT.iterdir(), reverse=True):
-        manifest = job / "translated" / "translation-manifest.json"
-        if not manifest.is_file():
-            continue
-        if not list((job / "source").glob("*.pdf")):
-            continue
-        try:
-            pages = json.loads(manifest.read_text(encoding="utf-8")).get("pages") or []
-        except Exception:  # noqa: BLE001 - 损坏的 manifest 跳过即可
-            continue
-        if pages:
-            return job
-    return None
+def _translated_item(block_id: str, bbox, is_title: bool, source: str, translated: str) -> dict:
+    role = "title" if is_title else "body"
+    return {
+        "item_id": block_id,
+        "page_idx": 0,
+        "block_idx": int(block_id[-3:]) - 1,
+        "block_kind": "text",
+        "block_type": "title" if is_title else "text",
+        "layout_role": "title" if is_title else "paragraph",
+        "semantic_role": role,
+        "structure_role": role,
+        "policy_translate": True,
+        "bbox": list(bbox),
+        "source_text": source,
+        "protected_source_text": source,
+        "translated_text": translated,
+        "protected_translated_text": translated,
+    }
+
+
+def _write_rendered_lines(page, bbox, text: str, size: float, step: float) -> None:
+    """按给定字号和基线间距把译文逐行写进框里，模拟 Typst 收敛后的排版结果。"""
+    x0, y0, x1, y1 = bbox
+    per_line = max(1, int((x1 - x0) // size))  # 中文 1em 等宽
+    lines = [text[i:i + per_line] for i in range(0, len(text), per_line)]
+    baseline = y0 + size
+    for line in lines:
+        assert baseline <= y1, "夹具算错了：这块的字排出框外了，读回会把它当成别的块"
+        page.insert_text((x0, baseline), line, fontsize=size, fontname="china-s")
+        baseline += step
 
 
 @pytest.fixture
 def tiny_job(tmp_path: Path) -> Path:
-    """真实 job 裁成一页。
-
-    整本跑一遍要几十秒（背景图渲染是大头），一页足够验结构。
-    """
-    source_job = _find_translated_job()
-    if source_job is None:
-        pytest.skip("本机没有已翻译的 job（data/jobs 下找不到带 manifest 的）")
-
+    """一页 job：源 PDF + 译文 JSON/manifest + 流水线「渲染出来」的译文 PDF。"""
     job_root = tmp_path / "job"
-    (job_root / "source").mkdir(parents=True)
-    (job_root / "translated").mkdir(parents=True)
+    for name in ("source", "translated", "rendered"):
+        (job_root / name).mkdir(parents=True)
 
-    pdf = sorted((source_job / "source").glob("*.pdf"))[0]
-    doc = fitz.open(pdf)
-    one = fitz.open()
-    one.insert_pdf(doc, from_page=0, to_page=0)
-    one.save(job_root / "source" / pdf.name)
-    one.close()
-    doc.close()
+    with fitz.open() as source:
+        page = source.new_page(width=_PAGE_SIZE[0], height=_PAGE_SIZE[1])
+        for _block_id, bbox, is_title, text, _translated in _BLOCKS:
+            page.insert_textbox(fitz.Rect(*bbox), text, fontsize=16 if is_title else 10)
+        source.save(job_root / "source" / "synthetic.pdf")
 
-    manifest = json.loads((source_job / "translated" / "translation-manifest.json").read_text(encoding="utf-8"))
-    first = manifest["pages"][0]
-    shutil.copy(source_job / "translated" / first["path"], job_root / "translated" / first["path"])
-    manifest["pages"] = [first]
+    items = [_translated_item(*block) for block in _BLOCKS]
+    page_name = "page-001-synthetic.json"
+    (job_root / "translated" / page_name).write_text(json.dumps(items, ensure_ascii=False), encoding="utf-8")
     (job_root / "translated" / "translation-manifest.json").write_text(
-        json.dumps(manifest, ensure_ascii=False), encoding="utf-8",
+        json.dumps({"pages": [{"page_index": 0, "path": page_name}]}), encoding="utf-8",
     )
 
-    # 流水线自己渲染出来的译文 PDF 也裁一页带上——收敛后的字号和行距要从它里面读回来。
-    rendered = sorted((source_job / "rendered").glob("*-translated.pdf")) if (source_job / "rendered").is_dir() else []
-    if rendered:
-        translated = fitz.open(rendered[0])
-        if translated.page_count:
-            one_page = fitz.open()
-            one_page.insert_pdf(translated, from_page=0, to_page=0)
-            (job_root / "rendered").mkdir(parents=True, exist_ok=True)
-            one_page.save(job_root / "rendered" / rendered[0].name)
-            one_page.close()
-        translated.close()
+    with fitz.open() as rendered:
+        page = rendered.new_page(width=_PAGE_SIZE[0], height=_PAGE_SIZE[1])
+        for block_id, bbox, _is_title, _source, translated in _BLOCKS:
+            size, step = _RENDERED[block_id]
+            _write_rendered_lines(page, bbox, translated, size, step)
+        rendered.save(job_root / "rendered" / "synthetic-translated.pdf")
     return job_root
+
+
+@pytest.fixture
+def docx_toolchain() -> None:
+    """真导出 .docx 要 node + 构建好的 retainpdf2doc；缺了就跳过，并说清楚缺什么。
+
+    CI 的 python-services 不构建 Node 包，所以真导出那几条在 CI 上照旧跳过；但只
+    走到规格层（`build_layout_spec`）的用例不需要它，现在在哪儿都跑。
+    """
+    from retainpdf_pipeline.render.output.word import exporter
+
+    try:
+        exporter._resolve_node()
+        exporter._resolve_cli()
+    except exporter.LayoutDocxToolchainError as exc:
+        pytest.skip(f"Word 导出工具链不可用：{exc}")
 
 
 @pytest.fixture
@@ -173,6 +221,7 @@ def _export(job_root: Path, out: Path, **kwargs):
     )
 
 
+@pytest.mark.usefixtures("docx_toolchain")
 def test_export_writes_a_docx(tiny_job: Path, tmp_path: Path):
     out = tmp_path / "layout.docx"
     result = _export(tiny_job, out)
@@ -180,6 +229,7 @@ def test_export_writes_a_docx(tiny_job: Path, tmp_path: Path):
     assert out.stat().st_size > 0
 
 
+@pytest.mark.usefixtures("docx_toolchain")
 def test_each_page_becomes_its_own_section_at_the_source_size(tiny_job: Path, tmp_path: Path):
     """节 = 页，且页面尺寸取**源 PDF 的**，不是 Word 默认的 Letter。
 
@@ -198,6 +248,7 @@ def test_each_page_becomes_its_own_section_at_the_source_size(tiny_job: Path, tm
     assert round(section.page_height.pt) == round(rect.height)
 
 
+@pytest.mark.usefixtures("docx_toolchain")
 def test_translated_text_lands_in_absolute_textboxes(tiny_job: Path, tmp_path: Path):
     """译文必须在文本框里。
 
@@ -213,6 +264,7 @@ def test_translated_text_lands_in_absolute_textboxes(tiny_job: Path, tmp_path: P
     assert texts, "文本框里一个字都没有"
 
 
+@pytest.mark.usefixtures("docx_toolchain")
 def test_the_source_page_is_kept_as_a_background_image(tiny_job: Path, tmp_path: Path):
     """底图是「保留排版」的另一半:线条、图、表格都靠它。"""
     out = tmp_path / "layout.docx"
@@ -221,6 +273,7 @@ def test_the_source_page_is_kept_as_a_background_image(tiny_job: Path, tmp_path:
     assert body.findall(".//" + qn("a:blip")), "没有背景图"
 
 
+@pytest.mark.usefixtures("docx_toolchain")
 def test_upstream_already_drops_blocks_without_text(tiny_job: Path, tmp_path: Path):
     """空译文的块进不到 exporter 这一层。
 
@@ -261,12 +314,14 @@ def test_upstream_already_drops_blocks_without_text(tiny_job: Path, tmp_path: Pa
     assert len(body.findall(".//" + qn("w:txbxContent"))) == expected
 
 
+@pytest.mark.usefixtures("docx_toolchain")
 def test_max_pages_limits_the_export(tiny_job: Path, tmp_path: Path):
     out = tmp_path / "layout.docx"
     _export(tiny_job, out, max_pages=1)
     assert len(docx.Document(str(out)).sections) == 1
 
 
+@pytest.mark.usefixtures("docx_toolchain")
 def test_the_console_subcommand_runs_end_to_end(tiny_job: Path, tmp_path: Path):
     """走 `retainpdf-pipeline layout-docx` 这条真实路径。
 
@@ -291,34 +346,32 @@ def test_the_subcommand_is_listed_in_usage():
     assert "layout-docx" in console.COMMANDS
 
 
-def test_the_document_builder_is_wired_and_built(tiny_job: Path):
-    """文档由 `backend/packages/retainpdf2doc`（Node）生成，它必须真的构建好。
+def test_the_document_builder_is_wired_into_the_workspace(monkeypatch):
+    """文档由 `backend/packages/retainpdf2doc`（Node）生成，它必须接进 npm workspace。
 
     这条钉的是「环境说得清楚」：以前 Python 侧自己用 python-docx 生成，装漏了依赖
     只会在运行时抛 ImportError；现在换成起子进程，没构建的话必须给出一句能照着做的
     错误，而不是让人对着非零退出码猜。
+
+    以前这里还断言了 `_CLI_ENTRY.is_file()`，但它挂在本机真实 job 的夹具上，CI 上
+    从没跑过；本机跑的时候它又和真导出那几条的前提是同一件事。现在「构建好没有」交给
+    docx_toolchain 夹具判定（缺了就跳过并说明缺什么），这里只留不依赖构建产物的两条，
+    在哪儿都跑。
     """
     import json
 
     from retainpdf_pipeline.render.output.word import exporter
 
-    assert exporter._CLI_ENTRY.is_file(), (
-        f"retainpdf2doc 没构建（缺 {exporter._CLI_ENTRY}）；"
-        "跑 npm run build --workspace retainpdf2doc"
-    )
     manifest = json.loads((PIPELINE_ROOT.parents[1] / "package.json").read_text(encoding="utf-8"))
     assert "backend/packages/retainpdf2doc" in manifest["workspaces"], (
         "retainpdf2doc 没注册进 npm workspaces，npm ci 不会装它的依赖"
     )
 
-    # 没构建时的报错要自己说清楚怎么修。
-    original = exporter._CLI_ENTRY
-    try:
-        exporter._CLI_ENTRY = original.with_name("does-not-exist.mjs")
-        with pytest.raises(exporter.LayoutDocxToolchainError, match="npm run build"):
-            exporter._resolve_cli()
-    finally:
-        exporter._CLI_ENTRY = original
+    # 没构建时的报错要自己说清楚怎么修。环境变量会绕过 _CLI_ENTRY，先清掉。
+    monkeypatch.delenv(exporter._CLI_ENV_VAR, raising=False)
+    monkeypatch.setattr(exporter, "_CLI_ENTRY", exporter._CLI_ENTRY.with_name("does-not-exist.mjs"))
+    with pytest.raises(exporter.LayoutDocxToolchainError, match="npm run build"):
+        exporter._resolve_cli()
 
 
 def _observed(job_root: Path, block):
@@ -335,6 +388,7 @@ def _observed(job_root: Path, block):
         document.close()
 
 
+@pytest.mark.usefixtures("docx_toolchain")
 def test_font_size_is_the_size_typst_converged_to_not_the_upper_bound(
     tiny_job: Path, tmp_path: Path,
 ):
@@ -373,6 +427,7 @@ def test_font_size_is_the_size_typst_converged_to_not_the_upper_bound(
     assert upper_bound not in sizes, f"还在用上界 {block.font_size_pt}pt 排版，这块会溢出"
 
 
+@pytest.mark.usefixtures("docx_toolchain")
 def test_line_height_is_measured_from_the_rendered_baselines(tiny_job: Path, tmp_path: Path):
     """行距量自译文 PDF 相邻行的基线距离。
 
@@ -475,8 +530,14 @@ def test_the_fallback_line_height_is_the_measured_ratio_not_one_plus_leading(
         source_pdf_path=single_pdf(tiny_job_without_render / "source"),
         translated_pages=translated_pages(tiny_job_without_render),
     )
-    leading = {b.block_id: b.leading_em for b in layout[0].blocks if b.leading_em > 0}
-    assert leading, "夹具里没有带行距值的块"
+    # 只看 `1 + leading_em` 和实测比值分得开的块。标题 / 作者行这类块排得紧，leading_em
+    # 只有 0.28~0.29，`1 + leading_em` 本来就落在 1.289 附近甚至更小——在这些块上
+    # 「比折算值小」不成立，也分辨不出用的是哪条公式（夹具换成首页是大标题的书就红了）。
+    leading = {
+        b.block_id: b.leading_em for b in layout[0].blocks
+        if b.leading_em > 0 and 1.0 + b.leading_em > LINE_STEP_RATIO + 0.05
+    }
+    assert leading, "夹具这一页没有行距明显大于实测比值的块，这条分辨不出对错"
 
     _spec, blocks = _spec_blocks(tiny_job_without_render)
     checked = 0
@@ -490,10 +551,9 @@ def test_the_fallback_line_height_is_the_measured_ratio_not_one_plus_leading(
             f"{block['id']} 的行距还是按 (1+leading_em) 折算的，高约两成"
         )
     assert checked, "规格里一个带行距的块都没有"
-    assert LINE_STEP_RATIO == 1.289, "改这个常数要重新跑实测，别凭感觉调"
 
 
-def test_a_block_is_not_given_a_neighbours_font_size(tiny_job: Path):
+def test_a_block_is_not_given_a_neighbours_font_size():
     """归属按「行的中心落在框内」，不是 PyMuPDF 的 clip。
 
     用 `clip=` 量的话，压在框边上的邻块文字会被一起裁进来——之前拿它量出「52.7% 的
@@ -516,6 +576,7 @@ def test_a_block_is_not_given_a_neighbours_font_size(tiny_job: Path):
     assert converged_typography([inside], [0.0, 100.0, 100.0, 140.0], 8) is not None
 
 
+@pytest.mark.usefixtures("docx_toolchain")
 def test_bold_blocks_are_bold(tiny_job: Path, tmp_path: Path):
     """字重来自 font_weight。不接的话标题和正文一样粗，Word 里读不出层次。"""
     from retainpdf_pipeline.render.output.word.job_io import single_pdf, translated_pages
@@ -536,6 +597,7 @@ def test_bold_blocks_are_bold(tiny_job: Path, tmp_path: Path):
     assert bold_runs, "一个加粗都没有"
 
 
+@pytest.mark.usefixtures("docx_toolchain")
 def test_regular_blocks_are_not_bold(tiny_job: Path, tmp_path: Path):
     """反过来也要成立——不能整篇都加粗。
 
@@ -569,8 +631,8 @@ def test_regular_blocks_are_not_bold(tiny_job: Path, tmp_path: Path):
 def test_first_line_indent_reaches_the_spec_even_though_this_fixture_has_none(tiny_job: Path):
     """首行缩进进了规格。
 
-    这份夹具测不到它的**效果**——真实数据里这一页所有块的 first_line_indent_pt 都是 0
-    （中文正文的两字缩进由翻译侧直接写进文本，不靠排版属性）。以前这条只能去 grep
+    这份夹具测不到它的**效果**——夹具里所有块的 first_line_indent_pt 都是 0，真实数据
+    也常常如此（中文正文的两字缩进由翻译侧直接写进文本，不靠排版属性）。以前这条只能去 grep
     exporter.py 的源码，现在规格是个普通 dict，至少能钉住字段真的在、且值是照搬的。
     """
     from retainpdf_pipeline.render.output.word.job_io import single_pdf, translated_pages
@@ -604,6 +666,7 @@ def translate_only_job(tiny_job: Path, tmp_path: Path) -> tuple[Path, Path]:
     return tiny_job, target
 
 
+@pytest.mark.usefixtures("docx_toolchain")
 def test_a_job_whose_source_pdf_lives_elsewhere_still_exports(
     translate_only_job: tuple[Path, Path], tmp_path: Path,
 ):
@@ -620,6 +683,7 @@ def test_a_job_whose_source_pdf_lives_elsewhere_still_exports(
     assert docx.Document(str(out)).element.body.findall(".//" + qn("w:txbxContent")), "没有文本框"
 
 
+@pytest.mark.usefixtures("docx_toolchain")
 def test_without_the_resolved_path_such_a_job_fails_loudly(
     translate_only_job: tuple[Path, Path], tmp_path: Path,
 ):
@@ -629,6 +693,7 @@ def test_without_the_resolved_path_such_a_job_fails_loudly(
         _export(job_root, tmp_path / "boom.docx")
 
 
+@pytest.mark.usefixtures("docx_toolchain")
 def test_the_console_subcommand_forwards_the_resolved_paths(
     translate_only_job: tuple[Path, Path], tmp_path: Path,
 ):

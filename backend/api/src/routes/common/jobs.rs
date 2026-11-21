@@ -1,9 +1,9 @@
 use std::num::NonZeroU64;
 
-use retain_core::config::effective_upload_max_bytes;
+use retainpdf_core::config::effective_upload_max_bytes;
 
 use crate::app::{build_jobs_facade_from_state, AppState};
-use crate::services::jobs::{JobDownloads, JobQueries, JobsFacade};
+use crate::services::jobs::{JobDeletion, JobDownloads, JobQueries, JobsFacade};
 
 pub struct JobsDownloadRouteDeps<'a> {
     pub downloads: JobDownloads<'a>,
@@ -20,11 +20,20 @@ pub fn build_jobs_download_route_deps(state: &AppState) -> JobsDownloadRouteDeps
             &state.download_generation,
             &state.config.python_bin,
             &state.config.pipeline_command,
-            state.config.public_base_url.as_deref(),
         ),
         default_port: state.config.port,
         bind_host: state.config.bind_host.clone(),
     }
+}
+
+/// 删任务（`DELETE /api/v1/jobs/:job_id`）要的库和目录；强删前的取消另走任务门面。
+pub fn build_job_deletion(state: &AppState) -> JobDeletion<'_> {
+    JobDeletion::new(
+        state.db.as_ref(),
+        &state.config.data_root,
+        &state.config.output_root,
+        &state.config.downloads_dir,
+    )
 }
 
 /// Transfer only read capabilities into the bounded blocking worker.

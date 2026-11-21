@@ -1,0 +1,90 @@
+/* 处理流水线各站的徽标：OCR / 翻译 / 渲染 / 完成。（ProcessingPipelineRail）挂在画面上的位置见 assembly-line-labels.css。 */
+
+.book-detail-pipeline {
+  min-width: 0;
+}
+
+.book-detail-pipeline-track {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 竖直卡片：每站一行，左侧圆点 + 连接线。 */
+.book-detail-pipeline-stage {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  min-width: 0;
+}
+
+.book-detail-pipeline-rail {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-self: stretch;
+}
+
+.book-detail-pipeline-rail::after {
+  content: "";
+  position: absolute;
+  top: 28px;
+  bottom: 0;
+  width: 2px;
+  background: color-mix(in srgb, var(--line) 78%, transparent);
+}
+
+.book-detail-pipeline-stage:last-child .book-detail-pipeline-rail::after {
+  display: none;
+}
+
+.book-detail-pipeline-dot {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: var(--ui-radius-pill);
+  color: var(--muted);
+  background: var(--bg);
+}
+
+.book-detail-pipeline-dot svg {
+  width: 14px;
+  height: 14px;
+}
+
+.book-detail-pipeline-mark-idle {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--ui-radius-pill);
+  background: currentColor;
+  opacity: 0.4;
+}
+
+/* 完成：墨色描边 + 对勾（不用绿色）。 */
+.book-detail-pipeline-stage.is-done .book-detail-pipeline-dot {
+  border-color: var(--ink);
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.book-detail-pipeline-stage.is-active .book-detail-pipeline-dot {
+  border-color: var(--ink);
+  color: var(--paper);
+  background: var(--ink);
+}
+
+.book-detail-pipeline-stage.is-failed .book-detail-pipeline-dot {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, var(--paper));
+}
+
+/* 徽标旁边那组（百分比、↻、提醒）的排布在 assembly-line-labels.css；站名、状态、用时、说明都是 sr-only，画面上不画。 */

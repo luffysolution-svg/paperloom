@@ -25,6 +25,13 @@ const MODE_RESTORE_SAFETY_MS = 700;
 const GOTO_ALIGN_DELAYS_MS = [80, 200, 400];
 const GOTO_SAFETY_MS = 500;
 const UNFREEZE_DELAY_MS = 50;
+
+/** 「我要自己翻」的那些键。和 hooks/reader-keyboard-map.ts 的翻页键一致，外加
+ *  空格和 PageUp/PageDown —— 浏览器默认就用它们滚动。 */
+const NAV_KEYS = new Set([
+  "ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " ", "Spacebar",
+  "j", "k",
+]);
 const PERSIST_DELAY_MS = 180;
 const INITIAL_RESTORE_DELAYS_MS = [0, 48, 140, 320, 700, 1200];
 
@@ -68,7 +75,7 @@ export function useReadingAnchor(
   /** 本次恢复锁定的锚点（不被中间 scroll 事件污染） */
   const pendingRestoreRef = useRef<PageScrollProgress | null>(null);
   /** 恢复中：禁止 scroll 写回 anchor */
-  const restoringRef = useRef(Boolean(persistenceKey));
+  const restoringRef = useRef(false);
   const prevModeRef = useRef(mode);
   const cancelRestoreRef = useRef<(() => void) | null>(null);
   const safetyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -88,6 +95,32 @@ export function useReadingAnchor(
       safetyTimerRef.current = null;
     }
   }, []);
+
+  /** 用户自己动了 —— 把恢复链整条掐掉，立刻解冻。
+   *
+   * # 为什么需要它
+   *
+   * 初始恢复链是 `INITIAL_RESTORE_DELAYS_MS = [0, 48, 140, 320, 700, 1200]`，
+   * 也就是开书后 **1.2 秒内**反复把滚动位置钉回存档锚点。重钉是有意的：PDF 页高
+   * 要等页面真渲染出来才稳，钉一次会落在旧的布局上。
+   *
+   * 但原来**没有任何用户手势能取消它**（`cancelRestoreRef` 只在换文档、切模式或
+   * 卸载时被调）。于是开书后立刻滚动的人会被拽回去好几次，而且这期间
+   * `restoringRef` 为 true，scroll 处理器直接 return —— 他滚到哪里**连记都不记**。
+   *
+   * 这里不调 `finishRestore(locked)`：那会把锚点钉回存档值，等于又把人拽回去一次。
+   * 只解冻，让紧随其后的 scroll 事件把用户真正所在的位置记下来。
+   */
+  const abandonRestore = useCallback(() => {
+    if (!restoringRef.current && pendingRestoreRef.current == null) return;
+    clearRestoreTimers();
+    if (unfreezeTimerRef.current != null) {
+      clearTimeout(unfreezeTimerRef.current);
+      unfreezeTimerRef.current = null;
+    }
+    pendingRestoreRef.current = null;
+    restoringRef.current = false;
+  }, [clearRestoreTimers]);
 
   const persistAnchor = useCallback((immediate = false) => {
     if (persistTimerRef.current != null) {
@@ -128,23 +161,6 @@ export function useReadingAnchor(
     let root: HTMLElement | null = null;
     let onScroll: (() => void) | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
-    const onUserScroll = () => {
-      // 首次对齐成功后仍有布局重试；用户接手时必须连剩余重试一起取消。
-      clearRestoreTimers();
-      if (unfreezeTimerRef.current != null) {
-        clearTimeout(unfreezeTimerRef.current);
-        unfreezeTimerRef.current = null;
-      }
-      restoringRef.current = false;
-      pendingRestoreRef.current = null;
-      restoredPersistenceKeyRef.current = persistenceKeyRef.current;
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.ctrlKey || event.metaKey || event.altKey) return;
-      const target = event.target as HTMLElement | null;
-      if (target?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName || "")) return;
-      if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)) onUserScroll();
-    };
 
     const attach = () => {
       if (cancelled) return;
@@ -165,9 +181,6 @@ export function useReadingAnchor(
         }
       };
       root.addEventListener("scroll", onScroll, { passive: true });
-      root.addEventListener("wheel", onUserScroll, { passive: true });
-      root.addEventListener("touchmove", onUserScroll, { passive: true });
-      window.addEventListener("keydown", onKeyDown);
       if (!restoringRef.current) {
         onScroll();
       }
@@ -181,12 +194,33 @@ export function useReadingAnchor(
       }
       if (root && onScroll) {
         root.removeEventListener("scroll", onScroll);
-        root.removeEventListener("wheel", onUserScroll);
-        root.removeEventListener("touchmove", onUserScroll);
       }
-      window.removeEventListener("keydown", onKeyDown);
     };
-  }, [enabled, mode, primaryPane, shellRef, persistAnchor, clearRestoreTimers]);
+  }, [enabled, mode, primaryPane, shellRef, persistAnchor]);
+
+  // 真实用户手势 = 交出控制权。
+  //
+  // 用 wheel / touchmove / 导航键，**不用 scroll**：恢复链自己产生的就是 scroll
+  // 事件，拿它当信号等于让恢复取消自己。也不用 touchstart —— 点一下选个词不是
+  // 「我要翻页」。
+  useEffect(() => {
+    if (!enabled) return;
+    const el = shellRef.current;
+    if (!el) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (NAV_KEYS.has(event.key)) abandonRestore();
+    };
+    el.addEventListener("wheel", abandonRestore, { passive: true });
+    el.addEventListener("touchmove", abandonRestore, { passive: true });
+    // 键盘焦点通常在 body 上，不在壳里 —— 所以挂 window。
+    window.addEventListener("keydown", onKey);
+    return () => {
+      el.removeEventListener("wheel", abandonRestore);
+      el.removeEventListener("touchmove", abandonRestore);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [enabled, shellRef, abandonRestore]);
 
   // 文档切换后装载该文档自己的阅读锚点；避免沿用上一份 PDF 的页码。
   useLayoutEffect(() => {

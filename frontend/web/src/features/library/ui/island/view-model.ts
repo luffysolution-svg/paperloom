@@ -1,5 +1,7 @@
 // 库检索岛的纯逻辑层:不碰 DOM/React,便于 node 单测
 
+import type { DocumentReadingStatus } from "@/platform/api/index.js";
+
 // 后端 snippet 用 [ ] 包裹命中词,拆成分段供展示层渲染 <mark>
 export function highlightSegments(snippet = "") {
   const text = `${snippet || ""}`;
@@ -21,20 +23,30 @@ export function highlightSegments(snippet = "") {
   return segments;
 }
 
-export const READING_STATUS_META = Object.freeze({
+export const READING_STATUS_META: Readonly<Record<string, { label: string; order: number }>> = Object.freeze({
   unread: { label: "未读", order: 0 },
   reading: { label: "在读", order: 1 },
   done: { label: "读完", order: 2 },
 });
 
-const READING_STATUS_CYCLE = ["unread", "reading", "done"];
+const READING_STATUS_CYCLE: readonly DocumentReadingStatus[] = ["unread", "reading", "done"];
 
-export function nextReadingStatus(status) {
-  const index = READING_STATUS_CYCLE.indexOf(`${status || ""}`.trim());
+export function nextReadingStatus(status: string | null | undefined): DocumentReadingStatus {
+  const index = READING_STATUS_CYCLE.indexOf(`${status || ""}`.trim() as DocumentReadingStatus);
   return READING_STATUS_CYCLE[(index + 1) % READING_STATUS_CYCLE.length];
 }
 
-export function filterDocuments(documents = [], { query = "", readingStatus = "" } = {}) {
+/** 过滤只看这几个字段；泛型让调用方拿回自己的行类型。 */
+export type FilterableDocument = {
+  title?: string;
+  source_filename?: string;
+  reading_status?: string;
+};
+
+export function filterDocuments<T extends FilterableDocument>(
+  documents: T[] = [],
+  { query = "", readingStatus = "" }: { query?: string; readingStatus?: string } = {},
+): T[] {
   const normalizedQuery = `${query || ""}`.trim().toLowerCase();
   const normalizedStatus = `${readingStatus || ""}`.trim();
   return (Array.isArray(documents) ? documents : []).filter((doc) => {
@@ -44,11 +56,7 @@ export function filterDocuments(documents = [], { query = "", readingStatus = ""
     if (!normalizedQuery) {
       return true;
     }
-    const haystack = [
-      doc.title,
-      doc.source_filename,
-      ...(Array.isArray(doc.tags) ? doc.tags : []),
-    ].join("\n").toLowerCase();
+    const haystack = [doc.title, doc.source_filename].join("\n").toLowerCase();
     return haystack.includes(normalizedQuery);
   });
 }

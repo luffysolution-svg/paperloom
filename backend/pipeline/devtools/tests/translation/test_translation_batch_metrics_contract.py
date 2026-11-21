@@ -1,19 +1,16 @@
 """Timing is application-only; exceptions still publish partial diagnostics."""
 from __future__ import annotations
 
-from pathlib import Path
-import sys
 from types import SimpleNamespace
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from retainpdf_pipeline.translate.artifacts import TranslationRunDiagnostics
-from retainpdf_pipeline.translate.llm.shared import executor_context
-from retainpdf_pipeline.translate.services.results.applier import TranslationResultApplier
-from retainpdf_pipeline.translate.workflow import batch_runner
-from retainpdf_pipeline.translate.workflow.phases import batch_translation
+from retainpdf_translation.artifacts import TranslationRunDiagnostics
+from retainpdf_translation.llm.shared import executor_context
+from retainpdf_translation.services.results.applier import TranslationResultApplier
+from retainpdf_translation.workflow import batch_runner
+from retainpdf_translation.workflow.phases import batch_translation
 
 
 def _stage_args(tmp_path, *, workers, diagnostics, count=1):
@@ -111,3 +108,122 @@ def test_preparation_failure_still_closes_phase_without_inventing_result_stats(m
     report = diagnostics.build_summary()
     assert report["result_apply"] == {}
     assert diagnostics._stage_stats["translation_batches"].started_at is None
+
+
+def test_batch_progress_counts_this_rounds_blocks_and_completed_pages(monkeypatch, tmp_path):
+    """翻译进度按「本轮待翻译块」计,unit=block,批次号只进 payload。
+
+    分母取进入批量翻译时 checkpoint 的 pending_item_count(样本 408),不是全文
+    块数(642):续跑时前几轮已完成的 234 块不该让进度一开始就显示 37%。
+    页数只报「已整页完成」的,不写「约第 x 页」——批次乱序完成。
+    """
+    snapshots = iter([
+        {"item_count": 642, "completed_item_count": 234, "pending_item_count": 408, "completed_page_count": 5},
+        {"item_count": 642, "completed_item_count": 330, "pending_item_count": 312, "completed_page_count": 9},
+        {"item_count": 642, "completed_item_count": 642, "pending_item_count": 0, "completed_page_count": 48},
+    ])
+    state = {"latest": None}
+
+    def snapshot():
+        state["latest"] = next(snapshots, state["latest"])
+        return state["latest"]
+
+    def fake_pending(**kwargs):
+        kwargs["progress_callback"](40, 167, {3, 4}, "translation_batches")
+        kwargs["progress_callback"](167, 167, {47}, "translation_batches")
+        kwargs["progress_callback"](3, 5, {2}, "translation_tail_retry")
+        return {"total_batches": 167, "pending_items": 408, "effective_batch_size": 4}
+
+    events = []
+    monkeypatch.setattr(batch_translation, "translate_pending_units", fake_pending)
+    monkeypatch.setattr(batch_translation, "emit_stage_progress", lambda **event: events.append(event))
+    args = _stage_args(tmp_path, workers=1, diagnostics=None)
+    args["page_payloads"] = {index: [] for index in range(48)}
+    batch_translation.run_translation_batch_stage(**args, checkpoint_progress=snapshot)
+
+    first, second, tail, finished = events
+    assert first["substage"] == "translation_batches"
+    assert (first["progress_current"], first["progress_total"]) == (96, 408)
+    assert first["message"] == first["stage_detail"] == "已翻译 96/408 块 · 已完成 9/48 页"
+    assert first["payload"]["progress_unit"] == "block"
+    assert (first["payload"]["batch_current"], first["payload"]["batch_total"]) == (40, 167)
+    assert (first["payload"]["completed_page_count"], first["payload"]["page_count"]) == (9, 48)
+    assert "约第" not in first["message"]
+    assert (second["progress_current"], second["progress_total"]) == (408, 408)
+    assert second["stage_detail"] == "已翻译 408/408 块 · 已完成 48/48 页"
+    # 尾部重试队列是另一个 substage,沿用原口径。
+    assert tail["substage"] == "translation_tail_retry"
+    assert "progress_unit" not in tail["payload"]
+    assert finished["message"] == "翻译批次完成"
+    assert finished["stage_detail"] == "已翻译 408/408 块 · 已完成 48/48 页"
+    assert finished["payload"]["progress_unit"] == "block"
+    assert finished["payload"]["pending_items"] == 408
+
+
+def test_streaming_rounds_count_from_the_first_round_so_progress_never_exceeds_its_total(monkeypatch, tmp_path):
+    """跟着 OCR 流式翻译分几轮进批量翻译：第二轮从第一轮开翻时的已完成块数算起。
+
+    第一轮开翻时已完成 10 块；第二轮进来时已完成 18 块、待翻 40 块，分母是 8 + 40 = 48，
+    不是 40——以前分子钉在上一轮的最大值上，会出现「49/40 块」。
+    """
+    snapshots = iter([
+        {"completed_item_count": 18, "pending_item_count": 40, "completed_page_count": 9},
+        {"completed_item_count": 38, "pending_item_count": 20, "completed_page_count": 15},
+        {"completed_item_count": 58, "pending_item_count": 0, "completed_page_count": 24},
+    ])
+    state = {"latest": None}
+
+    def snapshot():
+        state["latest"] = next(snapshots, state["latest"])
+        return state["latest"]
+
+    def fake_pending(**kwargs):
+        kwargs["progress_callback"](5, 10, {12}, "translation_batches")
+        return {"total_batches": 10, "pending_items": 40, "effective_batch_size": 4}
+
+    events = []
+    monkeypatch.setattr(batch_translation, "translate_pending_units", fake_pending)
+    monkeypatch.setattr(batch_translation, "emit_stage_progress", lambda **event: events.append(event))
+    args = _stage_args(tmp_path, workers=1, diagnostics=None)
+    args["page_payloads"] = {index: [] for index in range(24)}
+    batch_translation.run_translation_batch_stage(**args, checkpoint_progress=snapshot, progress_baseline_completed=10)
+
+    middle, finished = events
+    assert (middle["progress_current"], middle["progress_total"]) == (28, 48)
+    assert middle["stage_detail"] == "已翻译 28/48 块 · 已完成 15/24 页"
+    assert (finished["progress_current"], finished["progress_total"]) == (48, 48)
+
+
+def test_batch_progress_without_checkpoint_keeps_batch_wording(monkeypatch, tmp_path):
+    def fake_pending(**kwargs):
+        kwargs["progress_callback"](2, 5, {0}, "translation_batches")
+        return {"total_batches": 5, "pending_items": 9, "effective_batch_size": 2}
+
+    events = []
+    monkeypatch.setattr(batch_translation, "translate_pending_units", fake_pending)
+    monkeypatch.setattr(batch_translation, "emit_stage_progress", lambda **event: events.append(event))
+    batch_translation.run_translation_batch_stage(**_stage_args(tmp_path, workers=1, diagnostics=None))
+    assert events[0]["message"].startswith("已完成第 2/5 批翻译")
+    assert "progress_unit" not in events[0]["payload"]
+
+
+def test_token_usage_counts_cache_hits_from_deepseek_and_dashscope():
+    diagnostics = _diagnostics(1)
+    # DeepSeek：顶层报命中与未命中。
+    diagnostics.record_token_usage({
+        "prompt_tokens": 1000, "completion_tokens": 100, "total_tokens": 1100,
+        "prompt_cache_hit_tokens": 640, "prompt_cache_miss_tokens": 360,
+    })
+    # DashScope（Qwen）：只在 prompt_tokens_details 里报命中数，未命中按差值补。
+    diagnostics.record_token_usage({
+        "prompt_tokens": 2000, "completion_tokens": 200, "total_tokens": 2200,
+        "prompt_tokens_details": {"cached_tokens": 1536},
+    })
+    # 没有任何缓存字段的接口：缓存两项不动。
+    diagnostics.record_token_usage({"prompt_tokens": 10, "completion_tokens": 1, "total_tokens": 11})
+
+    usage = diagnostics._token_usage
+    assert usage["requests_with_usage"] == 3
+    assert usage["prompt_tokens"] == 3010
+    assert usage["prompt_cache_hit_tokens"] == 640 + 1536
+    assert usage["prompt_cache_miss_tokens"] == 360 + 464

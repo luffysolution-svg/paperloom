@@ -10,10 +10,10 @@ def test_translation_public_import_is_lazy() -> None:
 
 
 def _probe_public_import_is_lazy() -> None:
-    public = importlib.import_module("retainpdf_pipeline.translate.public")
+    public = importlib.import_module("retainpdf_translation.public")
 
     assert public.__all__
-    assert "retainpdf_pipeline.translate.workflow" not in sys.modules
+    assert "retainpdf_translation.workflow" not in sys.modules
     assert not any(module_name.startswith("retainpdf_pipeline.render") for module_name in sys.modules)
 
 
@@ -22,7 +22,7 @@ def test_translation_public_resolves_exports_on_demand() -> None:
 
 
 def _probe_public_resolves_exports_on_demand() -> None:
-    public = importlib.import_module("retainpdf_pipeline.translate.public")
+    public = importlib.import_module("retainpdf_translation.public")
 
     assert public.item_block_kind({"block_kind": "text"}) == "text"
     assert public.DEFAULT_MODEL

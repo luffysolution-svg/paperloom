@@ -1,0 +1,123 @@
+/* 书籍详情 · 概览页签（BookDetailOverviewTab）：信息区 —— 页数 / 大小 / 入库 / 翻译一行，合集一行，阅读状态一行。
+ * 合集切换（CollectionsPanel）和阅读状态（ReadingStatusPanel）嵌在行里，也在这里定样子。
+ *
+ * @owns book-detail */
+
+.book-detail-overview-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  border-radius: var(--ui-radius-lg);
+  background: var(--paper);
+}
+
+.book-detail-overview-facts > div {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 3px;
+  padding: 10px 12px;
+}
+
+.book-detail-overview-facts > div + div {
+  border-left: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.book-detail-overview-facts dt {
+  color: var(--muted);
+  font-size: var(--ui-text-xs);
+}
+
+.book-detail-overview-facts dd {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--ui-text-base);
+  font-weight: 620;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.book-detail-overview-facts dd small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--ui-text-xs);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+}
+
+/* 「翻译」一格：状态文字本身就是去「进度」页的入口。 */
+.book-detail-overview-status-link {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  justify-self: start;
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  color: var(--ink);
+  background: transparent;
+  font: inherit;
+  letter-spacing: inherit;
+}
+
+.book-detail-overview-status-link > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.book-detail-overview-status-link svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: var(--muted);
+  transition: transform 160ms var(--ease-out);
+}
+
+.book-detail-overview-status-link:hover svg {
+  transform: translateX(2px);
+}
+
+.book-detail-overview-status-link.is-muted {
+  color: var(--muted);
+}
+
+.book-detail-overview-status-link.is-failed {
+  color: var(--danger);
+}
+
+.book-detail-overview-row {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-height: 32px;
+}
+
+.book-detail-overview-row + .book-detail-overview-row {
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+
+.book-detail-overview-row-label {
+  color: var(--muted);
+  font-size: var(--ui-text-sm);
+}
+
+.book-detail-overview-row-value {
+  min-width: 0;
+}
+
+.book-detail-collections-empty {
+  color: var(--muted);
+  font-size: var(--ui-text-sm);
+}
+
+.book-detail-reading-btn {
+  min-width: 48px;
+}

@@ -1,0 +1,40 @@
+/* 左栏阅读进度块（book-detail-left-reading-*）。代码里已搜不到这些类，留待确认删除。
+ *
+ * @owns book-detail */
+
+.book-detail-left-reading-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.book-detail-left-reading-head span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: var(--ui-text-xs);
+}
+
+.book-detail-left-reading-head strong {
+  color: var(--ink);
+  font-size: var(--ui-text-xs);
+  font-weight: 650;
+}
+
+.book-detail-left-reading-track {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.book-detail-left-reading-track span {
+  height: 3px;
+  border-radius: var(--ui-radius-pill);
+  background: var(--line);
+}
+
+.book-detail-left-reading-track span.is-filled {
+  background: var(--ink);
+}

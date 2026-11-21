@@ -39,7 +39,7 @@ def load_config(db: Path, job_id: str | None) -> tuple[str, dict]:
     raise ValueError("No saved Qwen job config found; specify --config-job with a Qwen job ID.")
 
 
-def build_payload(config: dict, upload_id: str, job_id: str, args) -> dict:
+def build_payload(config: dict, upload_id: str, args) -> dict:
     translation = copy.deepcopy(config["translation"])
     # Test the whole fixture, not an old task's page selection or resume policy.
     translation.update(start_page=0, end_page=-1, page_ranges=[], accepted_ambiguous_request_risk=False)
@@ -58,7 +58,8 @@ def build_payload(config: dict, upload_id: str, job_id: str, args) -> dict:
         "source": {"artifact_job_id": source_job} if source_job else {"upload_id": upload_id},
         "ocr": ocr, "translation": translation,
         "render": copy.deepcopy(config.get("render", {})),
-        "runtime": {"job_id": job_id, "timeout_seconds": args.timeout, "render_after_translation": False},
+        # 任务编号由服务器分配（runtime.job_id 非空会被 400 拒绝），提交后从返回里取。
+        "runtime": {"timeout_seconds": args.timeout, "render_after_translation": False},
     }
 
 
@@ -115,7 +116,7 @@ def main() -> int:
         artifact = source_root / ("translated/translation-manifest.json" if args.stage == "render" else "ocr/normalized/document.v1.json")
         if not artifact.is_file():
             raise ValueError("Source job lacks required normalized OCR or translation manifest")
-    payload = build_payload(config, "", "", args)
+    payload = build_payload(config, "", args)
     translation = payload["translation"]
     if not (translation.get("api_key") or translation.get("credential_ref")):
         raise ValueError("Saved Qwen config has no credential; submit a configured translation in the app first")
@@ -136,8 +137,9 @@ def main() -> int:
     if not args.run:
         print("Preflight only; no upload or paid request. Add --run to execute.")
         return 0
-    job_id = "bench-" + time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:8]
-    output = ROOT / "tmp/pipeline-benchmarks" / job_id
+    run_id = "bench-" + time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:8]
+    job_id = None  # 提交后由服务器返回
+    output = ROOT / "tmp/pipeline-benchmarks" / run_id
     output.mkdir(parents=True, mode=0o700)
     report_path = output / "report.json"
 
@@ -148,7 +150,7 @@ def main() -> int:
     session.trust_env = False
     session.headers["X-API-Key"] = os.environ.get("RETAIN_BENCH_API_KEY", "dev-local-key")
     started = time.monotonic()
-    report.update(job_id=job_id, status="preparing")
+    report.update(run_id=run_id, status="preparing")
     save()
     submitted = False
     try:
@@ -156,12 +158,14 @@ def main() -> int:
         if not args.source_job:
             with pdf.open("rb") as handle:
                 upload = api(session, args.api, "POST", "/api/v1/uploads", files={"file": (pdf.name, handle, "application/pdf")})
-        payload = build_payload(config, upload["upload_id"], job_id, args)
+        payload = build_payload(config, upload["upload_id"], args)
         # No automatic retry of POST: an ambiguous response must not create duplicate paid work.
         report["status"] = "submitting"
         save()
         submitted = True
-        api(session, args.api, "POST", "/api/v1/jobs", json=payload)
+        job_id = api(session, args.api, "POST", "/api/v1/jobs", json=payload)["job_id"]
+        report["job_id"] = job_id
+        save()
         last = None
         while True:
             state = api(session, args.api, "GET", f"/api/v1/jobs/{job_id}")
@@ -190,9 +194,9 @@ def main() -> int:
         return 0 if report["status"] == "succeeded" else 1
     except (Exception, KeyboardInterrupt) as exc:
         report.update(status="interrupted" if isinstance(exc, KeyboardInterrupt) else "error", error_type=type(exc).__name__)
-        if submitted:
+        if submitted and job_id:
             try:
-                api(session, args.api, "POST", f"/api/v1/jobs/{job_id}/cancel")
+                api(session, args.api, "POST", f"/api/v1/jobs/{job_id}/actions/cancel")
                 report["cancel_requested"] = True
             except Exception:
                 report["cancel_requested"] = False

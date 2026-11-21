@@ -1,0 +1,196 @@
+/* 任务记录：每次 OCR / 翻译 / 重新排版一行。（JobHistoryPanel）
+ * 卡片表面和深浅色阶来自 layout.css 的变量；左侧色块和覆盖条同一档深浅。 */
+
+.book-detail-job-history {
+  display: grid;
+  gap: 10px;
+  padding: 14px 15px;
+  border-radius: var(--book-detail-processing-radius);
+  background: var(--book-detail-processing-surface);
+}
+
+/* 默认收起：标题行就是开关，右侧一个小三角。 */
+.book-detail-job-history:not([open]) {
+  gap: 0;
+}
+
+.book-detail-job-history > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.book-detail-job-history > summary::-webkit-details-marker {
+  display: none;
+}
+
+.book-detail-job-history > summary::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  margin-left: auto;
+  align-self: center;
+  border-right: 1.5px solid var(--muted);
+  border-bottom: 1.5px solid var(--muted);
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform 160ms ease;
+}
+
+.book-detail-job-history[open] > summary::after {
+  transform: rotate(-135deg) translateY(-1px);
+}
+
+.book-detail-job-history-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.book-detail-job-history-row {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  padding: 9px 0;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+.book-detail-job-history-row:first-child {
+  border-top: 0;
+  padding-top: 2px;
+}
+
+.book-detail-job-history-swatch {
+  display: block;
+  width: 10px;
+  min-height: 10px;
+  margin-top: 3px;
+  border-radius: 3px;
+  background: var(--book-detail-shade-0);
+}
+
+.book-detail-job-history-swatch[data-shade="1"] { background: var(--book-detail-shade-1); }
+.book-detail-job-history-swatch[data-shade="2"] { background: var(--book-detail-shade-2); }
+.book-detail-job-history-swatch[data-shade="3"] { background: var(--book-detail-shade-3); }
+.book-detail-job-history-swatch[data-shade="4"] { background: var(--book-detail-shade-4); }
+
+.book-detail-job-history-swatch[data-shade="0"] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 16%, transparent);
+}
+
+.book-detail-job-history-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.book-detail-job-history-line {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.book-detail-job-history-kind {
+  flex: 0 0 auto;
+  color: var(--ink);
+  font-size: var(--ui-text-sm);
+  font-weight: 600;
+}
+
+.book-detail-job-history-pages {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--ui-text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.book-detail-job-history-meta,
+.book-detail-job-history-supplied {
+  color: var(--muted);
+  font-size: var(--ui-text-2xs);
+  line-height: 1.45;
+}
+
+/* 成功但没翻全：「16 个内容块保留原文」。 */
+.book-detail-job-history-warning {
+  width: fit-content;
+  padding: 1px 7px;
+  border-radius: var(--ui-radius-pill);
+  color: var(--ink);
+  background: var(--warn-weak);
+  font-size: var(--ui-text-2xs);
+  line-height: 1.5;
+}
+
+/* 失败原因一句话；原始错误收在展开里，等宽、可折行，不撑破卡片。 */
+.book-detail-job-history-failure {
+  display: grid;
+  gap: 3px;
+  color: var(--ink);
+  font-size: var(--ui-text-2xs);
+  line-height: 1.45;
+}
+
+.book-detail-job-history-error summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.book-detail-job-history-error code {
+  display: block;
+  margin-top: 4px;
+  padding: 6px 8px;
+  overflow-wrap: anywhere;
+  border-radius: 8px;
+  color: var(--muted);
+  background: var(--book-detail-shade-0);
+  font-size: var(--ui-text-2xs);
+  white-space: pre-wrap;
+}
+
+/* 各项之间用间距分隔，不用圆点：折行后圆点会挂在下一行行首，CSS 隐藏不了行首那一个。 */
+.book-detail-job-history-meta {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 10px;
+}
+
+.book-detail-job-history-meta-part {
+  white-space: nowrap;
+}
+
+.book-detail-job-history-row[data-status-tone="failed"] .book-detail-job-history-kind,
+.book-detail-job-history-row[data-status-tone="idle"] .book-detail-job-history-kind {
+  color: var(--muted);
+}
+
+.book-detail-job-history-status {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: var(--ui-radius-pill);
+  color: var(--muted);
+  font-size: var(--ui-text-2xs);
+  line-height: 1.5;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  white-space: nowrap;
+}
+
+.book-detail-job-history-status[data-status-tone="done"] {
+  color: var(--ink);
+}
+
+.book-detail-job-history-status[data-status-tone="active"] {
+  color: var(--paper);
+  background: var(--ink);
+}
+
+.book-detail-job-history-status[data-status-tone="failed"] {
+  color: var(--danger);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 40%, transparent);
+}

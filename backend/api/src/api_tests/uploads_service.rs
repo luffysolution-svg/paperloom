@@ -1,6 +1,6 @@
 use crate::db::Db;
 use crate::error::AppError;
-use crate::services::uploads::{UploadService, UploadServiceConfig, UploadedPdfInput};
+use crate::services::ingest::{UploadedPdfInput, UploadService, UploadServiceConfig};
 use crate::test_support::pdf::build_test_pdf_bytes;
 use lopdf::{Document, Object};
 use std::path::PathBuf;

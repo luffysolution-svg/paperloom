@@ -1,14 +1,11 @@
-import sys
 from pathlib import Path
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
-from retainpdf_pipeline.translate.llm.shared.control_context import build_translation_control_context
-from retainpdf_pipeline.translate.services.memory import JobMemorySnapshot
-from retainpdf_pipeline.translate.services.results.applier import expand_duplicate_results as _expand_duplicate_results
-from retainpdf_pipeline.translate.workflow.batching import pending_units
-from retainpdf_pipeline.translate.workflow.batching.plan import _dedupe_pending_items
+from retainpdf_translation.llm.shared.control_context import build_translation_control_context
+from retainpdf_translation.services.memory import JobMemorySnapshot
+from retainpdf_translation.services.results.applier import expand_duplicate_results as _expand_duplicate_results
+from retainpdf_translation.workflow.batching import pending_units
+from retainpdf_translation.workflow.batching.plan import _dedupe_pending_items
 
 
 def _item(item_id: str, text: str, **overrides):

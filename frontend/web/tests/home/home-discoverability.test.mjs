@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
+import { waitFor } from "../helpers/async.mjs";
+import { byId, clickWithMouseDown } from "../helpers/dom.mjs";
+import { bootHomeApp } from "../helpers/home-app.mjs";
 
 // 主页发现性 P0 回归：任务中心可达入口、sonner 宿主、空态 CTA、Ask 解锁。
 // Ask 输入条解锁的组件级断言见 home-ask-composer-split.test.mjs；
@@ -24,33 +27,9 @@ globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
 globalThis.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
 globalThis.IS_REACT_ACT_ENVIRONMENT = false;
 
-const { createRoot } = await import("react-dom/client");
-const React = await import("react");
 const { createHomeComposition } = await import("../../src/app/home/create-home-composition.js");
 const { HomeApp } = await import("../../src/app/home/HomeApp.jsx");
 const { deriveLibraryEmptyAction } = await import("../../src/features/library/domain/library-page-state.js");
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitFor(predicate, description) {
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    if (predicate()) return;
-    await wait(20);
-  }
-  assert.fail(`等待超时：${description}`);
-}
-
-function byId(id) {
-  return dom.window.document.getElementById(id);
-}
-
-function click(element) {
-  element.dispatchEvent(new dom.window.MouseEvent("mousedown", { bubbles: true, button: 0 }));
-  element.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-}
 
 function createServices() {
   return createHomeComposition({
@@ -60,18 +39,7 @@ function createServices() {
   });
 }
 
-async function mountHome(id) {
-  const host = dom.window.document.createElement("div");
-  host.id = id;
-  dom.window.document.body.appendChild(host);
-  const services = createServices();
-  services.initialize();
-  const root = createRoot(host);
-  root.render(React.createElement(HomeApp, { services }));
-  await waitFor(() => byId("app-shell"), "HomeApp 首帧渲染");
-  await wait(0);
-  return { host, root, services };
-}
+const mountHome = (hostId) => bootHomeApp(dom, { services: createServices(), hostId });
 
 function unmountHome({ host, root, services }) {
   root.unmount();
@@ -89,18 +57,18 @@ test("空态 CTA 推导：新库去上传，有搜索词清搜索", () => {
 test("主页：底部任务入口可达，打开/返回挂载切换", async () => {
   const mounted = await mountHome("home-discover-tasks");
   try {
-    assert.equal(byId("task-center-view"), null, "默认不挂载任务中心");
-    const entry = byId("home-task-center-btn");
+    assert.equal(byId(dom, "task-center-view"), null, "默认不挂载任务中心");
+    const entry = byId(dom, "home-task-center-btn");
     assert.ok(entry, "主页底部应有任务中心入口 #home-task-center-btn");
     assert.equal(entry.getAttribute("aria-label"), "任务中心");
 
-    click(entry);
-    await waitFor(() => byId("task-center-view") !== null, "点击入口后任务中心挂载");
-    assert.ok(byId("task-center-back-btn"), "任务浮层应有返回按钮");
+    clickWithMouseDown(dom, entry);
+    await waitFor(() => byId(dom, "task-center-view") !== null, "点击入口后任务中心挂载");
+    assert.ok(byId(dom, "task-center-back-btn"), "任务浮层应有返回按钮");
 
-    click(byId("task-center-back-btn"));
-    await waitFor(() => byId("task-center-view") === null, "返回后任务中心卸载");
-    assert.ok(byId("library-view"), "返回后图书馆视图恢复");
+    clickWithMouseDown(dom, byId(dom, "task-center-back-btn"));
+    await waitFor(() => byId(dom, "task-center-view") === null, "返回后任务中心卸载");
+    assert.ok(byId(dom, "library-view"), "返回后图书馆视图恢复");
   } finally {
     unmountHome(mounted);
   }
@@ -128,16 +96,16 @@ test("主页：sonner 宿主常驻（任务中心取消/重试 toast 经它渲�
 test("主页：搜索有词时底部出现清搜索，点后回到全量", async () => {
   const mounted = await mountHome("home-discover-clear");
   try {
-    await waitFor(() => byId("library-search-input") !== null, "图书馆搜索框挂载");
-    assert.equal(byId("library-search-clear-btn"), null, "无搜索词时不清搜索按钮");
+    await waitFor(() => byId(dom, "library-search-input") !== null, "图书馆搜索框挂载");
+    assert.equal(byId(dom, "library-search-clear-btn"), null, "无搜索词时不清搜索按钮");
 
     mounted.services.library.viewPort.store.actions.setQuery("quantum");
-    await waitFor(() => byId("library-search-clear-btn") !== null, "有搜索词时清搜索按钮出现");
-    assert.equal(byId("library-search-input").value, "quantum");
+    await waitFor(() => byId(dom, "library-search-clear-btn") !== null, "有搜索词时清搜索按钮出现");
+    assert.equal(byId(dom, "library-search-input").value, "quantum");
 
-    click(byId("library-search-clear-btn"));
-    await waitFor(() => byId("library-search-input").value === "", "点击后搜索框清空");
-    await waitFor(() => byId("library-search-clear-btn") === null, "清空后按钮消失");
+    clickWithMouseDown(dom, byId(dom, "library-search-clear-btn"));
+    await waitFor(() => byId(dom, "library-search-input").value === "", "点击后搜索框清空");
+    await waitFor(() => byId(dom, "library-search-clear-btn") === null, "清空后按钮消失");
   } finally {
     unmountHome(mounted);
   }

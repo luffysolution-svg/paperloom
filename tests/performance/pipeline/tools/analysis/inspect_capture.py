@@ -8,7 +8,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from support.paths import PIPELINE
 sys.path.insert(0, str(PIPELINE))
-from retainpdf_pipeline.translate.llm.shared.request_capture import digest, plan_input_digest
+from retainpdf_translation.llm.shared.request_capture import digest, plan_input_digest
 
 
 def load_capture(root):

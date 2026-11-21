@@ -27,14 +27,14 @@ test("nextReadingStatus 按 未读→在读→读完 循环", () => {
   assert.deepEqual(Object.keys(READING_STATUS_META), ["unread", "reading", "done"]);
 });
 
-test("filterDocuments 按标题/文件名/标签匹配并叠加状态过滤", () => {
+test("filterDocuments 按标题/文件名匹配并叠加状态过滤", () => {
   const documents = [
-    { document_id: "a", title: "光谱分析", source_filename: "spec.pdf", tags: [], reading_status: "reading" },
-    { document_id: "b", title: "Attention", source_filename: "attn.pdf", tags: ["机器学习"], reading_status: "done" },
-    { document_id: "c", title: "Scaling", source_filename: "scaling.pdf", tags: [], reading_status: "unread" },
+    { document_id: "a", title: "光谱分析", source_filename: "spec.pdf", reading_status: "reading" },
+    { document_id: "b", title: "Attention", source_filename: "attn.pdf", reading_status: "done" },
+    { document_id: "c", title: "Scaling", source_filename: "scaling.pdf", reading_status: "unread" },
   ];
   assert.deepEqual(filterDocuments(documents, { query: "光谱" }).map((d) => d.document_id), ["a"]);
-  assert.deepEqual(filterDocuments(documents, { query: "机器学习" }).map((d) => d.document_id), ["b"]);
+  assert.deepEqual(filterDocuments(documents, { query: "attention" }).map((d) => d.document_id), ["b"], "不分大小写");
   assert.deepEqual(filterDocuments(documents, { query: "pdf" }).map((d) => d.document_id), ["a", "b", "c"]);
   assert.deepEqual(filterDocuments(documents, { query: "pdf", readingStatus: "done" }).map((d) => d.document_id), ["b"]);
   assert.deepEqual(filterDocuments(documents, {}).length, 3);

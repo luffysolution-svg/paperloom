@@ -82,8 +82,6 @@ const PAGES = [
     prefix: "home",
     htmlFile: "index.html",
     jsxDir: "src/app/home",
-    // 首页底栏的「从 Zotero 导入」按钮指向这里渲染的弹窗。
-    extraJsxDirs: ["src/features/zotero/ui"],
     optional: true,
   },
 ];

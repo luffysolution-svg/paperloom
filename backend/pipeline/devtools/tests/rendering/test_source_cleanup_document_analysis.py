@@ -1,12 +1,7 @@
 from __future__ import annotations
 
-import sys
 import tempfile
 from pathlib import Path
-
-
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
 
 from devtools.tests.rendering_support.prewarm_fixtures import translated_page_payload

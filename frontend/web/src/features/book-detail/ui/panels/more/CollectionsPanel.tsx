@@ -1,42 +1,36 @@
-// 右栏：合集成员切换。
+// 概览信息区「合集」一行：合集成员切换。
+// 标签文字由概览的行标题提供，这里只放切换按钮 —— 按钮本身就带「已加入 / 未加入」状态，
+// 所以概览不再另写一份「合集：未加入」。按钮是 @retainpdf/ui 的 Button，已加入的是按下状态（aria-pressed）。
 
-import { cn } from "@/ui/lib/utils";
-import { Layers3 } from "lucide-react";
+import { Button } from "@retainpdf/ui";
 
-/**
- * @param {object} props
- * @param {Array<{ collection_id: string, name: string, member: boolean }>} props.collections
- * @param {string} props.collectionsBusy 当前 busy 的 collection_id
- * @param {(collectionId: string, nextMember: boolean) => void} props.onToggle
- */
-export function CollectionsPanel({ collections, collectionsBusy, onToggle }) {
-  if (!collections?.length) return null;
+type CollectionsPanelProps = {
+  collections: Array<{ collection_id: string; name: string; member: boolean }>;
+  /** 当前 busy 的 collection_id */
+  collectionsBusy: string;
+  onToggle: (collectionId: string, nextMember: boolean) => void;
+};
+
+export function CollectionsPanel({ collections, collectionsBusy, onToggle }: CollectionsPanelProps) {
+  if (!collections?.length) {
+    return <span className="book-detail-collections-empty">还没有合集</span>;
+  }
 
   return (
-    <div className="book-detail-collections-panel space-y-1.5 border-t border-border/30 pt-3">
-      <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        <Layers3 className="h-3.5 w-3.5" aria-hidden="true" />合集
-      </p>
-      <div className="flex flex-wrap gap-2">
-        {collections.map((c) => (
-          <button
-            key={c.collection_id}
-            type="button"
-            aria-pressed={c.member}
-            disabled={collectionsBusy === c.collection_id}
-            onClick={() => onToggle(c.collection_id, !c.member)}
-            className={cn(
-              "rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-55",
-              c.member
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-border bg-paper text-muted-foreground hover:bg-accent",
-            )}
-          >
-            {c.member ? "✓ " : "+ "}
-            {c.name}
-          </button>
-        ))}
-      </div>
+    <div className="book-detail-collections-panel flex flex-wrap gap-1.5">
+      {collections.map((c) => (
+        <Button
+          key={c.collection_id}
+          variant="secondary"
+          size="sm"
+          aria-pressed={c.member}
+          disabled={collectionsBusy === c.collection_id}
+          onClick={() => onToggle(c.collection_id, !c.member)}
+        >
+          {c.member ? "✓ " : "+ "}
+          {c.name}
+        </Button>
+      ))}
     </div>
   );
 }

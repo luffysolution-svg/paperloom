@@ -1,5 +1,22 @@
 // services：Bridge/Core/Domains/Views/Stores 装配面（对外 HomeServices bag）。
+import type {
+  createCredential,
+  createGlossaryApi,
+  deleteGlossaryApi,
+  exportGlossaryCsvApi,
+  fetchGlossariesApi,
+  fetchGlossaryApi,
+  parseGlossaryCsvApi,
+  queryDeepSeekBalance,
+  submitUploadRequestHttp,
+  updateCredential,
+  updateGlossaryApi,
+  validateDeepSeekToken,
+} from "@/platform/api/index.js";
+import type { mountBrowserCredentialsFeature } from "@/features/credentials/index.js";
+import type { fetchLatestGithubRelease } from "@/features/app-update/index.js";
 import type { DialogStore } from "@/platform/store/dialog-store.js";
+import type { SettingsHubDialogPayload } from "./credentials.js";
 import type { HomeStatePort } from "@/platform/contracts/home-view-contract.js";
 import type { CredentialsStatePort } from "@/features/credentials/index.js";
 import type { UploadStatePort } from "@/features/ingest/domain.js";
@@ -15,7 +32,6 @@ import type {
 } from "@/features/library/index.js";
 import type {
   AppStore,
-  AsyncFn,
   ReadOnlyStore,
 } from "./common.js";
 import type {
@@ -53,13 +69,11 @@ import type {
 import type { HomeReader } from "./reader.js";
 import type {
   DialogStatePort,
-  TextPort,
   UploadDomRefs,
-  UploadPort,
   WorkflowDialogRuntime,
-  WorkflowPort,
-  WorkflowViewActions,
 } from "./workflow.js";
+import type { IngestWorkflowView, UploadViewStore } from "@/features/ingest/index.js";
+import type { RecentJobsStatePort } from "@/features/library/index.js";
 
 export type { CredentialsStatePort, HomeStatePort, UploadStatePort };
 
@@ -76,7 +90,7 @@ export type HomeStores = {
   homeState: ReadOnlyStore;
   statusArea: ReadOnlyStore;
   text: ReadOnlyStore;
-  uploadView: ReadOnlyStore;
+  uploadView: UploadViewStore;
   workflowView: ReadOnlyStore;
   credentialsView: ReadOnlyStore;
 };
@@ -88,7 +102,8 @@ export type LibraryPort = HomeLibrary;
 
 /** @deprecated god-object 兼容别名，请改用按域的 Port 类型 */
 export type HomeBridge = {
-  setText: (id: string, value?: string) => void;
+  /** 值多数是文案；error-box 还可能收到错误诊断对象（见 state/text-store.ts）。 */
+  setText: (id: string, value?: unknown) => void;
   setWorkflowSections: (job?: unknown) => void;
   updateJobWarning: (status: unknown) => void;
   resetUploadProgress: () => void;
@@ -96,9 +111,6 @@ export type HomeBridge = {
   applyWorkflowMode: () => void;
   renderPageRangeSummary: () => void;
   setSubmitBusy: (busy: boolean) => void;
-  setLinearProgress: () => void;
-  updateActionButtons: () => void;
-  resetEventsList: () => void;
   activateDetailTab: (name?: string) => void;
   submitForm: (event?: { preventDefault?: () => void } | null) => unknown;
 };
@@ -130,15 +142,6 @@ export type HomeDomainServices = {
   reader: HomeReader;
 };
 
-/** 窄端口别名（显式暴露，供消费者按需取用，避免直达 stores/feature） */
-export type HomeNarrowPorts = {
-  statusCardPort: StatusCardPort;
-  libraryPort: LibraryPort;
-  uploadPort: UploadPort;
-  textPort: TextPort;
-  workflowPort: WorkflowPort;
-};
-
 // 别名清理：statusCardPort/libraryPort 与 statusCard/library 同对象，
 // uploadPort/textPort/workflowPort 与下方扁平视图别名同对象，均无消费方，已移除。
 /** HomeServices = Core + Domains + 视图帮助（24 字段） */
@@ -146,7 +149,7 @@ export type HomeServices = HomeCoreServices &
   HomeDomainServices & {
     /** text-store 的 selector 帮助函数（配合 useStoreSnapshot） */
     uploadDomRefs: UploadDomRefs;
-    workflowViewActions: WorkflowViewActions;
+    workflowView: IngestWorkflowView;
     workflowDialog: WorkflowDialogRuntime;
   };
 
@@ -157,16 +160,11 @@ export type HomeServicesViews = {
     setText?: (id: string, value?: string) => void;
   };
   uploadView: {
-    store: AppStore;
+    store: UploadViewStore;
     domRefs: UploadDomRefs;
     patch: (payload: Record<string, unknown>) => unknown;
   };
-  workflowView: {
-    store: AppStore;
-    setSelectedGlossaryId: (id: string) => unknown;
-    setOcrOnly: (value: boolean) => unknown;
-    isOcrOnly: () => boolean;
-  };
+  workflowView: IngestWorkflowView;
   statusArea: StatusAreaBag;
   workflowDialog: WorkflowDialogRuntime;
 };
@@ -176,7 +174,7 @@ export type HomeServicesDomains = {
   credentials: {
     browserCredentialsFeature: BrowserCredentialsFeature;
     credentialsView: CredentialsViewBag;
-    settingsHubDialogStore: DialogStore;
+    settingsHubDialogStore: DialogStore<SettingsHubDialogPayload>;
   };
   glossaries: {
     glossariesFeature: GlossariesFeature;
@@ -201,7 +199,7 @@ export type HomeServicesDomains = {
   };
   library: {
     recentJobsViewPort: RecentJobsReactViewPort;
-    recentJobsStatePort: any;
+    recentJobsStatePort: RecentJobsStatePort;
     recentJobActions: RecentJobActions;
     libraryController: LibraryController;
     bookDetailStore: DialogStore<LibraryCardItem | null>;
@@ -212,27 +210,30 @@ export type HomeServicesDomains = {
   };
 };
 
+/** 平台接口函数可被测试替换；类型直接取真实实现，替身按同一签名写。 */
+type CredentialsMountOptions = Parameters<typeof mountBrowserCredentialsFeature>[0];
+
 export type CreateHomeCompositionOptions = {
   documentRef?: Document;
-  fetchGlossaries?: AsyncFn;
-  submitUploadRequest?: AsyncFn;
+  fetchGlossaries?: typeof fetchGlossariesApi;
+  submitUploadRequest?: typeof submitUploadRequestHttp;
   loadPersistedDeveloperConfig?: () => Record<string, unknown>;
   loadPersistedBrowserConfig?: () => Partial<ReturnType<CredentialsStatePort["getCredentials"]>>;
-  validateOcrToken?: AsyncFn | null;
-  validateDeepSeekToken?: AsyncFn;
-  queryDeepSeekBalance?: AsyncFn;
-  createCredential?: AsyncFn;
-  updateCredential?: AsyncFn;
-  checkApiConnectivity?: AsyncFn | null;
-  saveDesktopConfig?: AsyncFn | null;
+  validateOcrToken?: CredentialsMountOptions["validateOcrToken"] | null;
+  validateDeepSeekToken?: typeof validateDeepSeekToken;
+  queryDeepSeekBalance?: typeof queryDeepSeekBalance;
+  createCredential?: typeof createCredential;
+  updateCredential?: typeof updateCredential;
+  checkApiConnectivity?: (() => Promise<unknown>) | null;
+  saveDesktopConfig?: CredentialsMountOptions["saveDesktopConfig"] | null;
   initialDesktopMode?: boolean;
-  fetchGlossary?: AsyncFn;
-  createGlossary?: AsyncFn;
-  updateGlossary?: AsyncFn;
-  deleteGlossary?: AsyncFn;
-  exportGlossaryCsv?: AsyncFn;
-  parseGlossaryCsv?: AsyncFn;
-  fetchLatestRelease?: AsyncFn;
+  fetchGlossary?: typeof fetchGlossaryApi;
+  createGlossary?: typeof createGlossaryApi;
+  updateGlossary?: typeof updateGlossaryApi;
+  deleteGlossary?: typeof deleteGlossaryApi;
+  exportGlossaryCsv?: typeof exportGlossaryCsvApi;
+  parseGlossaryCsv?: typeof parseGlossaryCsvApi;
+  fetchLatestRelease?: typeof fetchLatestGithubRelease;
   appUpdateCachePort?: {
     read: () => { info?: unknown; fresh?: boolean };
     write?: (info: unknown) => void;

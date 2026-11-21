@@ -1,4 +1,4 @@
-import { h as R, l as i, n as v } from "./markdown-payload-kK3ewW_I.js";
+import { h as c, l as i, n as f } from "./markdown-payload-kK3ewW_I.js";
 const a = [
   "isMockMode",
   "resolveResourceUrl",
@@ -21,26 +21,20 @@ const a = [
   "downloadProtectedResource",
   "failDownloadToast",
   "apiPrefix",
-  "fetchDocumentByJobId",
-  "createFavorite",
-  "fetchFavorites",
-  "deleteFavorite"
-], t = [
+  "fetchDocumentByJobId"
+], d = [
   "resolveMarkdownAssetUrl",
   "resolveReaderDownloadUrls",
   "resolveReaderDownloadName",
   "downloadProtectedResource",
   "failDownloadToast",
-  "fetchDocumentByJobId",
-  "createFavorite",
-  "fetchFavorites",
-  "deleteFavorite"
+  "fetchDocumentByJobId"
 ];
 let e = null;
-function d(r) {
+function l(r) {
   e = r;
 }
-function l() {
+function t() {
   return e;
 }
 function s(r) {
@@ -50,12 +44,12 @@ function s(r) {
 }
 export {
   a as READER_ADAPTER_KEYS,
-  t as READER_REQUIRED_ADAPTER_KEYS,
-  l as getReaderAdapters,
-  R as hasMarkdownContent,
+  d as READER_REQUIRED_ADAPTER_KEYS,
+  t as getReaderAdapters,
+  c as hasMarkdownContent,
   i as loadMarkdownPayloadWithFallback,
-  v as normalizeMarkdownPayload,
+  f as normalizeMarkdownPayload,
   s as requireAdapter,
-  d as setReaderAdapters
+  l as setReaderAdapters
 };
 //# sourceMappingURL=adapters.js.map

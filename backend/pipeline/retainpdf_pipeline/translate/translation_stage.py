@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from retainpdf_pipeline.translate.public import GlossaryEntry
-from retainpdf_pipeline.translate.public import DEFAULT_BASE_URL
-from retainpdf_pipeline.translate.public import DEFAULT_MODEL
-from retainpdf_pipeline.translate.public import TranslationExecutionRequest
-from retainpdf_pipeline.translate.public import execute_translation_request
+from retainpdf_translation.public import GlossaryEntry
+from retainpdf_translation.public import DEFAULT_BASE_URL
+from retainpdf_translation.public import DEFAULT_MODEL
+from retainpdf_translation.public import TranslationExecutionRequest
+from retainpdf_translation.public import execute_translation_request
 
 
 def translate_book_pipeline(
@@ -37,6 +37,12 @@ def translate_book_pipeline(
     glossary_mode: str = "matched",
     memory_mode: str = "matched",
     invocation: dict | None = None,
+    preparation: str = "off",
+    reviewer_model: str = "",
+    reviewer_base_url: str = "",
+    reviewer_api_key: str = "",
+    engine: str = "legacy",
+    ocr_stream_dir: Path | None = None,
 ) -> dict:
     return execute_translation_request(
         TranslationExecutionRequest(
@@ -66,5 +72,11 @@ def translate_book_pipeline(
             glossary_mode=glossary_mode,
             memory_mode=memory_mode,
             invocation=invocation,
+            preparation=preparation,
+            reviewer_model=reviewer_model,
+            reviewer_base_url=reviewer_base_url,
+            reviewer_api_key=reviewer_api_key,
+            engine=engine,
+            ocr_stream_dir=ocr_stream_dir,
         )
     )

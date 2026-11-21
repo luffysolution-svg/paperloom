@@ -1,13 +1,11 @@
-// Composes full react-pdf reader logic (session → shell → panes → tools → HUD).
+// Composes full react-pdf reader logic (session → shell → panes → HUD).
 
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useReaderSession } from "./use-reader-session.js";
 import { useReaderShell } from "./use-reader-shell.js";
 import { useReaderPaneModel } from "./use-reader-pane-model.js";
 import { useReaderZoom } from "./use-reader-zoom.js";
-import { useReaderTextSelection } from "./use-reader-text-selection.js";
 import { useReaderModeNavigation } from "./use-reader-mode-navigation.js";
-import { useReaderTools, type ReaderToolsApi } from "./use-reader-tools.js";
 import { useCurrentPage } from "../pdf/useCurrentPage.js";
 import { usePageRowSync } from "../pdf/usePageRowSync.js";
 import { useReadingAnchor } from "../pdf/useReadingAnchor.js";
@@ -22,14 +20,15 @@ import {
   findReaderRegionByCitation,
   regionBoxForPane,
   type ReaderRegion,
-  type ReaderSelection,
-  type ReaderRegionSelection,
 } from "../shared/data/reader-regions.js";
 import { readerViewStateScope } from "../shared/state/reader-view-state.js";
 import { useLiveTranslation } from "./use-live-translation.js";
+import { useReaderRevisedBlocks, type RevisedBlocks } from "./use-reader-revised-blocks.js";
 import type { LiveTranslationState } from "../shared/data/live-translation-state.js";
+import { isFinishedJobStatus } from "@retainpdf/domain/job";
 
-export const CITATION_HIGHLIGHT_MS = 2000;
+/** 跳到某一段后那一段亮多久：页还在画的那一两秒也算在里面，太短就看不到（读书走查 9）；最后一秒淡出（react-pdf.css）。 */
+export const CITATION_HIGHLIGHT_MS = 4500;
 
 /**
  * 无 region 命中时的页码回退：区分 0 基与 1 基来源再换算。
@@ -95,15 +94,13 @@ export type ReaderReactController = {
   jumpToAnchor: (target: ReaderAnchorTarget, pane?: "source" | "translated") => void;
   setModeKeepingPage: (next: ReaderMode) => void;
   showHud: boolean;
-  tools: ReaderToolsApi;
-  selection: ReaderSelection | null;
-  clearSelection: () => void;
-  selectRegion: (selection: ReaderRegionSelection) => void;
   download: ReaderSessionState["download"];
   /** stable local persistence scope for reading position/layout */
   viewStateKey: string;
   liveTranslation: LiveTranslationState;
   liveTranslationAvailable: boolean;
+  /** 改过的块（阅读页块编号 → 改过几次），译文栏画标记用。 */
+  revisedBlocks: RevisedBlocks;
 };
 
 const LIVE_TRANSLATION_WORKFLOWS = new Set(["book", "translate"]);
@@ -151,13 +148,26 @@ export function useReaderReactController(): ReaderReactController {
     jobStatus: session.jobStatus,
     workflow: session.workflow,
   });
+  // 打开时就已经成功、且有最终译文 PDF 的任务，不跟实时译文：用不上，而且它会从头
+  // 重放全部事件、逐页取快照，追不上的页每页重试一串 409（48 页的书开着一直在打）。
+  // 本次会话里见过任务在跑的照旧跟到底 —— 运行中 → 成功切到最终 PDF 的那一下，
+  // 已经出来的实时页不能丢（见 shouldEnableLiveTranslation 的注释）。
+  const sawRunningRef = useRef({ jobId: "", running: false });
+  if (sawRunningRef.current.jobId !== session.jobId) {
+    sawRunningRef.current = { jobId: session.jobId, running: false };
+  }
+  const normalizedStatus = `${session.jobStatus || ""}`.trim().toLowerCase();
+  if (normalizedStatus && !isFinishedJobStatus(normalizedStatus)) {
+    sawRunningRef.current.running = true;
+  }
   const liveTranslation = useLiveTranslation({
     jobId: session.jobId,
     jobStatus: session.jobStatus,
-    enabled: liveTranslationTracked,
+    enabled: liveTranslationTracked && (liveTranslationAvailable || sawRunningRef.current.running),
   });
-  const tools = useReaderTools();
   const { shellRef, shellEl, shellWidth, bindShell } = useReaderShell();
+  // 只在有译文时读：原文直开（没有任务）没有修订记录。
+  const revisedBlocks = useReaderRevisedBlocks(session.jobId, !session.sourceOnly);
   const viewStateKey = readerViewStateScope({
     documentId: session.documentId,
     jobId: session.jobId,
@@ -279,6 +289,7 @@ export function useReaderReactController(): ReaderReactController {
     resolveBlockPage,
     jobId: session.jobId,
     documentId: session.documentId,
+    regionsSettled: session.regionsSettled,
     onAnchorApplied: (anchor) => {
       activateRegion(findReaderRegion(session.regions, anchor.blockId));
     },
@@ -290,47 +301,15 @@ export function useReaderReactController(): ReaderReactController {
     beginModeSwitch,
   });
 
-  const [regionSelection, setRegionSelection] = useState<ReaderRegionSelection | null>(null);
-  const {
-    selection: textSelection,
-    clearSelection: clearTextSelection,
-  } = useReaderTextSelection(shellRef, !session.boot.loading && !session.boot.failed);
-
-  const clearSelection = useCallback(() => {
-    setRegionSelection(null);
-    clearTextSelection();
-  }, [clearTextSelection]);
-
-  const selectRegion = useCallback((next: ReaderRegionSelection) => {
-    clearTextSelection();
-    setRegionSelection(next);
-  }, [clearTextSelection]);
-
+  // 点块 / 拖选文字后的浮条（复制 / 问 AI）整个删了：复制交给悬停框，
+  // 拖选文字照旧是浏览器原生选区（Ctrl+C）。
   useEffect(() => {
-    if (textSelection) setRegionSelection(null);
-  }, [textSelection]);
-
-  useEffect(() => {
-    const shellNode = shellRef.current;
-    if (!shellNode) return;
-    const clearRegionSelection = () => setRegionSelection(null);
-    shellNode.addEventListener("scroll", clearRegionSelection, { passive: true });
-    return () => shellNode.removeEventListener("scroll", clearRegionSelection);
-  }, [shellEl, shellRef]);
-
-  const selection: ReaderSelection | null = textSelection || regionSelection;
-
-  useEffect(() => {
-    // Selection rectangles and citation highlights carry page/pane coordinates;
-    // they are invalid as soon as the displayed Reader content changes.
+    // Citation highlights carry page/pane coordinates; they are invalid as soon
+    // as the displayed Reader content changes.
     activateRegion(null);
-    clearSelection();
-  }, [readerContentKey, activateRegion, clearSelection]);
+  }, [readerContentKey, activateRegion]);
 
   const showHud = !session.boot.loading && !session.boot.failed;
-
-  // tools 对象引用稳定到 active 变化时
-  const toolsApi = useMemo(() => tools, [tools.active, tools.open, tools.close, tools.toggle, tools.isOpen]);
 
   const shellMemo = useMemo(() => ({ bindShell, shellEl, shellWidth, shellRef }), [bindShell, shellEl, shellWidth, shellRef]);
   const sessionFilesMemo = useMemo(() => ({
@@ -340,7 +319,7 @@ export function useReaderReactController(): ReaderReactController {
     translatedFile: session.translatedFile,
   }), [session.sourceUrl, session.translatedUrl, session.sourceFile, session.translatedFile]);
 
-  // 将频繁变化的 currentPage 隔离：主体 shell/panes/tools 等保持稳定，避免滚动时全量重渲染
+  // 将频繁变化的 currentPage 隔离：主体 shell/panes 等保持稳定，避免滚动时全量重渲染
   const stablePart = useMemo(() => ({
     session,
     boot: session.boot,
@@ -358,14 +337,11 @@ export function useReaderReactController(): ReaderReactController {
     setModeKeepingPage,
     download: session.download,
     showHud,
-    tools: toolsApi,
-    selection,
-    clearSelection,
-    selectRegion,
     viewStateKey,
     liveTranslation,
     liveTranslationAvailable,
-  }), [session, shellMemo, panes, sessionFilesMemo, rowHeights, goToPage, activeRegion, jumpToAnchor, setModeKeepingPage, showHud, toolsApi, selection, clearSelection, selectRegion, userZoom, onZoomChange, viewStateKey, liveTranslation, liveTranslationAvailable]);
+    revisedBlocks,
+  }), [session, shellMemo, panes, sessionFilesMemo, rowHeights, goToPage, activeRegion, jumpToAnchor, setModeKeepingPage, showHud, userZoom, onZoomChange, viewStateKey, liveTranslation, liveTranslationAvailable, revisedBlocks]);
 
   return useMemo(() => ({
     ...stablePart,

@@ -6,11 +6,13 @@ import shutil
 from pathlib import Path
 from types import SimpleNamespace
 
+from retainpdf_translation.public import register_stage_connections
+from retainpdf_pipeline.foundation.shared.stage_specs import DEFAULT_RENDER_ENGINE
 from retainpdf_pipeline.foundation.config import layout
 from retainpdf_pipeline.foundation.shared.job_dirs import job_dirs_from_explicit_args
 from retainpdf_pipeline.foundation.shared.stage_specs import ProviderStageSpec
 from retainpdf_pipeline.foundation.shared.stage_specs import build_stage_invocation_metadata
-from retainpdf_pipeline.foundation.shared.stage_specs import resolve_credential_ref
+from retainpdf_base.credentials import resolve_credential_ref
 from retainpdf_pipeline.foundation.shared.tee_output import enable_job_log_capture
 from retainpdf_pipeline.runtime.pipeline.book_pipeline import run_book_pipeline
 from retainpdf_pipeline.ocr.document_schema import adapt_path_to_document_v1_with_report
@@ -26,6 +28,7 @@ from retainpdf_pipeline.ocr.retry import direct_session
 from retainpdf_pipeline.ocr.retry import request_with_retry
 from retainpdf_pipeline.ocr.ocr_provider.drivers import normalize_provider_name
 from retainpdf_pipeline.ocr.ocr_provider.drivers import run_registered_ocr_provider
+from retainpdf_pipeline.ocr.ocr_provider.provider_config import client_ocr_options
 from retainpdf_pipeline.ocr.ocr_provider.paddle_api import PADDLE_BASE_URL
 from retainpdf_pipeline.ocr.ocr_provider.paddle_api import build_optional_payload as build_paddle_optional_payload
 from retainpdf_pipeline.ocr.ocr_provider.paddle_api import download_jsonl_result
@@ -33,27 +36,30 @@ from retainpdf_pipeline.ocr.ocr_provider.paddle_api import get_paddle_token
 from retainpdf_pipeline.ocr.ocr_provider.paddle_api import normalize_model_name as normalize_paddle_model_name
 from retainpdf_pipeline.ocr.ocr_provider.paddle_markdown import materialize_paddle_markdown_artifacts
 from retainpdf_pipeline.ocr.ocr_provider.paddle_normalize import save_normalized_document_for_paddle as _save_normalized_document_for_paddle
-from retainpdf_pipeline.ocr.ocr_provider.paddle_normalize import rescale_document_geometry_to_pdf
+from retainpdf_pipeline.ocr.document_schema.pdf_geometry import rescale_document_geometry_to_pdf
 from retainpdf_pipeline.ocr.ocr_provider.paddle_runner import run_paddle_to_job_dir as _run_paddle_to_job_dir
+from retainpdf_pipeline.ocr.ocr_provider.paddle_runner import PADDLE_TRANSPORT_OFFICIAL_HTTP
+from retainpdf_pipeline.ocr.ocr_provider.paddle_runner import resolve_paddle_transport
+from retainpdf_pipeline.ocr.ocr_provider.paddle_chunked import run_paddle_chunked_to_job_dir
 from retainpdf_pipeline.ocr.ocr_provider.types import OcrProviderResult
 from retainpdf_pipeline.ocr.ocr_provider.paddle_api import poll_until_done as poll_paddle_until_done
 from retainpdf_pipeline.ocr.ocr_provider.paddle_api import submit_local_file as submit_local_paddle_file
 from retainpdf_pipeline.ocr.ocr_provider.paddle_api import submit_remote_url as submit_remote_paddle_url
-from retainpdf_pipeline.services.pipeline_shared.contracts import PIPELINE_SUMMARY_FILE_NAME
-from retainpdf_pipeline.services.pipeline_shared.contracts import STDOUT_LABEL_EVENTS_JSONL
-from retainpdf_pipeline.services.pipeline_shared.contracts import STDOUT_LABEL_JOB_ROOT
-from retainpdf_pipeline.services.pipeline_shared.contracts import STDOUT_LABEL_LAYOUT_JSON
-from retainpdf_pipeline.services.pipeline_shared.contracts import STDOUT_LABEL_NORMALIZATION_REPORT_JSON
-from retainpdf_pipeline.services.pipeline_shared.contracts import STDOUT_LABEL_NORMALIZED_DOCUMENT_JSON
-from retainpdf_pipeline.services.pipeline_shared.contracts import STDOUT_LABEL_SOURCE_PDF
-from retainpdf_pipeline.services.pipeline_shared.contracts import STDOUT_LABEL_SUMMARY
-from retainpdf_pipeline.services.pipeline_shared.contracts import format_stdout_kv
-from retainpdf_pipeline.services.pipeline_shared.events import emit_artifact_published
-from retainpdf_pipeline.services.pipeline_shared.events import emit_stage_progress
-from retainpdf_pipeline.services.pipeline_shared.events import emit_stage_transition
-from retainpdf_pipeline.services.pipeline_shared.events import PipelineEventWriter
-from retainpdf_pipeline.services.pipeline_shared.events import pipeline_event_writer_scope
-from retainpdf_pipeline.services.pipeline_shared.io import save_json
+from retainpdf_base.contracts import PIPELINE_SUMMARY_FILE_NAME
+from retainpdf_base.contracts import STDOUT_LABEL_EVENTS_JSONL
+from retainpdf_base.contracts import STDOUT_LABEL_JOB_ROOT
+from retainpdf_base.contracts import STDOUT_LABEL_LAYOUT_JSON
+from retainpdf_base.contracts import STDOUT_LABEL_NORMALIZATION_REPORT_JSON
+from retainpdf_base.contracts import STDOUT_LABEL_NORMALIZED_DOCUMENT_JSON
+from retainpdf_base.contracts import STDOUT_LABEL_SOURCE_PDF
+from retainpdf_base.contracts import STDOUT_LABEL_SUMMARY
+from retainpdf_base.contracts import format_stdout_kv
+from retainpdf_base.events import emit_artifact_published
+from retainpdf_base.events import emit_stage_progress
+from retainpdf_base.events import emit_stage_transition
+from retainpdf_base.events import PipelineEventWriter
+from retainpdf_base.events import pipeline_event_writer_scope
+from retainpdf_base.io import save_json
 from retainpdf_pipeline.services.pipeline_shared.summary import print_pipeline_summary
 from retainpdf_pipeline.services.pipeline_shared.summary import write_pipeline_summary
 from retainpdf_pipeline.ocr.glossary import parse_glossary_json
@@ -77,10 +83,22 @@ def _serialize_glossary_entries(entries: list[dict]) -> str:
 
 
 def _args_from_spec(spec: ProviderStageSpec) -> SimpleNamespace:
+    register_stage_connections(
+        model=spec.translation.model,
+        base_url=spec.translation.base_url,
+        api_protocol=spec.translation.api_protocol,
+        thinking=spec.translation.thinking,
+        reviewer_model=spec.translation.reviewer_model,
+        reviewer_base_url=spec.translation.reviewer_base_url,
+        reviewer_api_protocol=spec.translation.reviewer_api_protocol,
+        reviewer_thinking=spec.translation.reviewer_thinking,
+    )
     job_dirs = spec.job_dirs
     provider = str(spec.ocr.provider or "mineru").strip().lower()
     provider_token = resolve_credential_ref(spec.ocr.credential_ref)
-    ocr_options = dict(spec.ocr.options or {})
+    # 只能服务器定的选项（command、raw_provider、配置里带 env 的）不认 stage spec 里的：本地 OCR 的命令
+    # 由 drivers 从 ocr_providers.json 的默认值和环境变量取（审计 A2，2026-10-22）。
+    ocr_options = client_ocr_options(provider, spec.ocr.options)
     return SimpleNamespace(
         workflow=spec.job.workflow,
         provider=provider,
@@ -97,14 +115,13 @@ def _args_from_spec(spec: ProviderStageSpec) -> SimpleNamespace:
         disable_table=spec.ocr.disable_table,
         language=spec.ocr.language,
         page_ranges=spec.ocr.page_ranges,
+        stream_pages=spec.ocr.stream_pages,
         data_id=spec.ocr.data_id,
         no_cache=spec.ocr.no_cache,
         cache_tolerance=spec.ocr.cache_tolerance,
         extra_formats=spec.ocr.extra_formats,
         poll_interval=spec.ocr.poll_interval,
         poll_timeout=spec.ocr.poll_timeout,
-        local_ocr_command=str(ocr_options.get("command", "") or ""),
-        local_ocr_raw_provider=str(ocr_options.get("raw_provider", "") or ""),
         ocr_provider_options=ocr_options,
         job_root=str(job_dirs.root),
         source_dir=str(job_dirs.source_dir),
@@ -132,8 +149,11 @@ def _args_from_spec(spec: ProviderStageSpec) -> SimpleNamespace:
         api_key=resolve_credential_ref(spec.translation.credential_ref),
         model=spec.translation.model,
         base_url=spec.translation.base_url,
-        api_protocol=spec.translation.api_protocol,
-        thinking=spec.translation.thinking,
+        preparation=spec.translation.preparation,
+        reviewer_model=spec.translation.reviewer_model,
+        reviewer_base_url=spec.translation.reviewer_base_url,
+        reviewer_api_key=resolve_credential_ref(spec.translation.reviewer_credential_ref),
+        engine=spec.translation.engine,
         render_mode=spec.render.render_mode,
         compile_workers=spec.render.compile_workers,
         typst_font_family=spec.render.typst_font_family,
@@ -147,6 +167,7 @@ def _args_from_spec(spec: ProviderStageSpec) -> SimpleNamespace:
         inner_bbox_dense_shrink_y=spec.render.inner_bbox_dense_shrink_y,
         font_unify_mode=spec.render.font_unify_mode,
         source_cleanup_strategy=spec.render.source_cleanup_strategy,
+        render_engine=spec.render.engine,
     )
 
 
@@ -214,6 +235,14 @@ def save_normalized_document_for_paddle(
 
 
 def run_paddle_to_job_dir(args: SimpleNamespace) -> tuple[Path, Path, Path, Path]:
+    # OCR 和翻译并行（spec 的 ocr.stream_pages）、官方 HTTP、上传的本地文件：按片并行提交、做完一片公布一片
+    # （paddle_chunked.py，2026-11-01）。RETAIN_PADDLE_CHUNK_PAGES=0 是整份一个任务（照样公布，跟着 OCR 的翻译要等到它）。
+    if (
+        getattr(args, "stream_pages", False)
+        and resolve_paddle_transport(args) == PADDLE_TRANSPORT_OFFICIAL_HTTP
+        and not str(getattr(args, "file_url", "") or "").strip()
+    ):
+        return run_paddle_chunked_to_job_dir(args)
     return _run_paddle_to_job_dir(
         args,
         download_source_pdf=_download_source_pdf,
@@ -458,8 +487,6 @@ def main() -> None:
             workers=args.workers,
             model=args.model,
             base_url=args.base_url,
-            api_protocol=args.api_protocol,
-            thinking=args.thinking,
             mode=args.mode,
             math_mode=args.math_mode,
             classify_batch_size=args.classify_batch_size,
@@ -473,10 +500,16 @@ def main() -> None:
             glossary_inline_entry_count=args.glossary_inline_entry_count,
             glossary_overridden_entry_count=args.glossary_overridden_entry_count,
             glossary_entries=parse_glossary_json(args.glossary_json),
+            preparation=args.preparation,
+            reviewer_model=args.reviewer_model,
+            reviewer_base_url=args.reviewer_base_url,
+            reviewer_api_key=args.reviewer_api_key,
+            engine=getattr(args, "engine", "legacy"),
             compile_workers=args.compile_workers or None,
             typst_font_family=args.typst_font_family,
             pdf_compress_dpi=args.pdf_compress_dpi,
             source_cleanup_strategy=args.source_cleanup_strategy,
+            render_engine=getattr(args, "render_engine", DEFAULT_RENDER_ENGINE),
             invocation=build_stage_invocation_metadata(
                 stage="provider",
                 stage_spec_schema_version=stage_spec_schema_version,

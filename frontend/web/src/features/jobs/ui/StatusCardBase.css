@@ -1,0 +1,122 @@
+/* 状态卡根类 .status-card 的基础部分（定位 + 居中）。布局与外观在 StatusCard.css；
+ * 这里的冲突声明早已去掉，见下方危险区注释。
+ *
+ * @owns status
+ * @uses button-link, info-value, label, muted, progress-bar, progress-track, secondary, stage-pill */
+
+/*
+  危险区修复(Tailwind v4 迁移):`.status-card` 在 components.utilities.css
+  (旧版固定 448px 高的 grid 布局)和 features/jobs/ui/StatusCard.css(现役的
+  `block h-full w-full ...` 弹性布局,StatusCard.jsx 唯一实际渲染的版本)
+  里各定义一份、display/height/width/max-width/overflow/background/color/
+  box-shadow/padding 等大量属性同名冲突——v3 靠源码序 tie-break,
+  StatusCard.css 后写胜出(display:block,依赖 h-full 撑满父容器);
+  旧版 448px 定高 grid 版本一直是死代码。v4 顺序不保真源码序,实测迁移后
+  旧版反而胜出,`.status-card-shell` 塌陷。这里去掉冲突的布局/外观声明,
+  只保留不冲突的 `position: relative` 与 `@apply mx-auto`。
+*/
+@utility status-card {
+  @apply mx-auto;
+  position: relative;
+
+  & h2 {
+    color: var(--ink);
+  }
+
+  & .info-value {
+    color: var(--ink);
+  }
+
+  & .stage-pill {
+    color: var(--ink);
+  }
+
+  & .status-note {
+    color: var(--ink);
+  }
+
+  & .status-kicker {
+    color: var(--ink);
+  }
+
+  & > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  & .muted {
+    color: var(--muted);
+  }
+
+  & .label {
+    color: var(--muted);
+  }
+
+  & .status-note {
+    color: var(--muted);
+  }
+
+  & button.secondary {
+    background: var(--paper);
+    color: var(--ink);
+    border-color: var(--line);
+  }
+
+  & .button-link.secondary {
+    background: var(--paper);
+    color: var(--ink);
+    border-color: var(--line);
+  }
+
+  &[data-status='queued'] .status-orbit {
+    animation: orbitPulse 1.8s ease-out infinite;
+  }
+
+  &[data-status='running'] .status-orbit {
+    animation: orbitPulse 1.8s ease-out infinite;
+  }
+
+  &[data-status='queued'] .status-orbit-delayed {
+    animation-delay: 0.9s;
+  }
+
+  &[data-status='running'] .status-orbit-delayed {
+    animation-delay: 0.9s;
+  }
+
+  &[data-status='queued'] .status-core {
+    animation: coreBreath 1.8s ease-in-out infinite;
+  }
+
+  &[data-status='running'] .status-core {
+    animation: coreBreath 1.8s ease-in-out infinite;
+  }
+
+  &[data-status='succeeded'] .status-core {
+    background: var(--ink);
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--ok) 12%, transparent);
+  }
+
+  &[data-status='failed'] .status-core {
+    background: var(--ink);
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--danger) 12%, transparent);
+  }
+
+  & .progress-track {
+    height: 12px;
+    background: var(--line);
+  }
+
+  & .progress-bar {
+    background: linear-gradient(
+      90deg,
+      var(--accent) 0%,
+      color-mix(in srgb, var(--accent) 70%, var(--ink)) 100%
+    );
+    box-shadow: none;
+  }
+
+  & .info-value {
+    color: var(--ink);
+  }
+}

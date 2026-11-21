@@ -65,8 +65,8 @@ def check_translation_worker_protocol(errors: list[str]) -> None:
 def check_translation_pipeline_facade_boundary(errors: list[str]) -> None:
     text = read_text(TRANSLATION_STAGE_PIPELINE)
     required = (
-        "from retainpdf_pipeline.translate.public import TranslationExecutionRequest",
-        "from retainpdf_pipeline.translate.public import execute_translation_request",
+        "from retainpdf_translation.public import TranslationExecutionRequest",
+        "from retainpdf_translation.public import execute_translation_request",
     )
     for item in required:
         if item not in text:
@@ -74,12 +74,12 @@ def check_translation_pipeline_facade_boundary(errors: list[str]) -> None:
                 f"translate/translation_stage.py: must call translation public facade via '{item}'"
             )
     forbidden = (
-        "from retainpdf_pipeline.translate.workflow import",
-        "from retainpdf_pipeline.translate.services.policy import",
-        "from retainpdf_pipeline.translate.services.context.session_context import",
-        "from retainpdf_pipeline.translate.artifacts import",
-        "from retainpdf_pipeline.translate.core import",
-        "from retainpdf_pipeline.translate.llm import",
+        "from retainpdf_translation.workflow import",
+        "from retainpdf_translation.services.policy import",
+        "from retainpdf_translation.services.context.session_context import",
+        "from retainpdf_translation.artifacts import",
+        "from retainpdf_translation.core import",
+        "from retainpdf_translation.llm import",
         "from retainpdf_pipeline.runtime.pipeline.book_translation_flow import",
     )
     for item in forbidden:
@@ -98,15 +98,15 @@ def check_translation_public_surface_usage(errors: list[str]) -> None:
         RENDERING_ROOT,
     )
     allowed_prefixes = (
-        "retainpdf_pipeline.translate.public",
+        "retainpdf_translation.public",
         "retainpdf_pipeline.translate.entrypoints",
     )
     forbidden_prefixes = (
-        "retainpdf_pipeline.translate.artifacts",
-        "retainpdf_pipeline.translate.core",
-        "retainpdf_pipeline.translate.llm",
-        "retainpdf_pipeline.translate.services",
-        "retainpdf_pipeline.translate.workflow",
+        "retainpdf_translation.artifacts",
+        "retainpdf_translation.core",
+        "retainpdf_translation.llm",
+        "retainpdf_translation.services",
+        "retainpdf_translation.workflow",
     )
     for root in guarded_roots:
         for path in scan_py_files(root):
@@ -122,11 +122,11 @@ def check_translation_public_surface_usage(errors: list[str]) -> None:
 
 def check_devtools_translation_internal_usage(errors: list[str]) -> None:
     forbidden_prefixes = (
-        "retainpdf_pipeline.translate.artifacts",
-        "retainpdf_pipeline.translate.core",
-        "retainpdf_pipeline.translate.llm",
-        "retainpdf_pipeline.translate.services",
-        "retainpdf_pipeline.translate.workflow",
+        "retainpdf_translation.artifacts",
+        "retainpdf_translation.core",
+        "retainpdf_translation.llm",
+        "retainpdf_translation.services",
+        "retainpdf_translation.workflow",
     )
     for path in scan_py_files(DEVTOOLS_ROOT):
         rel_path = path.relative_to(DEVTOOLS_ROOT)
@@ -154,10 +154,10 @@ def check_translation_recovery_boundary(errors: list[str]) -> None:
         for node in ast.walk(parse_python_file(script)):
             if isinstance(node, ast.Import):
                 modules = [alias.name for alias in node.names]
-                invalid = any(module_allowed(module, ("retainpdf_pipeline.translate",)) for module in modules)
+                invalid = any(module_allowed(module, ("retainpdf_translation", "retainpdf_pipeline.translate")) for module in modules)
             elif isinstance(node, ast.ImportFrom) and node.module:
-                invalid = module_allowed(node.module, ("retainpdf_pipeline.translate",)) and (
-                    node.module != "retainpdf_pipeline.translate.public"
+                invalid = module_allowed(node.module, ("retainpdf_translation", "retainpdf_pipeline.translate")) and (
+                    node.module != "retainpdf_translation.public"
                     or any(alias.name != "prepare_relocated_translation_copy" for alias in node.names)
                 )
             else:

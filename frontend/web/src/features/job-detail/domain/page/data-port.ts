@@ -6,7 +6,6 @@ import {
 import {
   fetchJobDiagnostics,
   fetchResumePlan,
-  rerunJob,
   resumeJob,
 } from "@/platform/api/index.js";
 import {
@@ -23,11 +22,10 @@ export function createJobDetailDataPort({
   loadResumePlan = fetchResumePlan,
   loadMarkdown = fetchJobMarkdown,
   loadEvents = fetchJobEvents,
-  rerun = rerunJob,
   resume = resumeJob,
   fetchProtectedResource = fetchProtected,
 } = {}) {
-  async function loadOverview(jobId) {
+  async function loadOverview(jobId: string) {
     const [payloadRaw, manifestPayload, diagnosticsPayload, resumePlan] = await Promise.all([
       loadJob(jobId, { apiPrefix }),
       loadManifest(jobId, apiPrefix),
@@ -44,7 +42,7 @@ export function createJobDetailDataPort({
 
   // 只走 /markdown JSON（content + raw_url + images_base_url）；不再用昂贵的
   // /markdown/document（整篇返回两份 + walkdir images）。这条端点因此可删。
-  async function loadMarkdownPayload(jobId) {
+  async function loadMarkdownPayload(jobId: string) {
     return await loadMarkdown(jobId, apiPrefix);
   }
 
@@ -54,7 +52,6 @@ export function createJobDetailDataPort({
     fetchProtected: fetchProtectedResource,
     loadMarkdownPayload,
     loadOverview,
-    rerunJob: rerun,
     resumeJob: resume,
   });
 }

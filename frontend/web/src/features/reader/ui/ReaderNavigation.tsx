@@ -13,8 +13,12 @@ import {
 } from "../domain/dialog/routing.js";
 import { navigateToReader } from "../domain/navigate-to-reader.js";
 import { handoffSoftReaderJob } from "@/platform/navigation/soft-reader.js";
+import { fetchDocumentReading } from "@/platform/api/index.js";
+import { API_PREFIX } from "@/platform/config/api-constants.js";
+import { resolveReadingJobId, type FetchReading } from "../domain/resolve-reading-target.js";
 
-function anchorFromEventDetail(detail: any = {}) {
+/** openReaderRequested 事件 detail 中本组件读取的字段（来源为事件派发方，未收窄前按 unknown 处理）。 */
+function anchorFromEventDetail(detail: { pageIdx?: unknown; blockId?: unknown } = {}) {
   const rawPageIdx = detail.pageIdx;
   const pageIdx = rawPageIdx === null || rawPageIdx === undefined ? NaN : Number(rawPageIdx);
   const blockId = `${detail.blockId || ""}`.trim();
@@ -31,12 +35,22 @@ function anchorFromEventDetail(detail: any = {}) {
  * 无 UI 的导航组件：只负责把「打开阅读」事件 / 深链 转成跳转 reader.html。
  * 注：domain/dialog 下的 ReaderDialog*Port 是阅读会话端口命名，保留不改。
  */
-export function ReaderNavigation() {
-  useAppEvent(APP_EVENTS.openReaderRequested, (event) => {
+const fetchReadingFromApi: FetchReading = (documentId) => fetchDocumentReading(API_PREFIX, documentId);
+
+export function ReaderNavigation({
+  fetchReading = fetchReadingFromApi,
+}: { fetchReading?: FetchReading } = {}) {
+  useAppEvent(APP_EVENTS.openReaderRequested, async (event) => {
     const detail = event?.detail || {};
-    const jobId = `${detail.jobId || ""}`.trim();
     const documentId = `${detail.documentId || ""}`.trim();
     const anchor = anchorFromEventDetail(detail);
+    // 一本书可能翻译过好几次、每次只翻几页：先问后端该打开哪个任务（整本的那个，或
+    // 合并结果），再进阅读器。带锚点的跳转、点名某个任务（pinJob）和接口失败都用
+    // 调用方给的 job_id。
+    const jobId = await resolveReadingJobId(
+      { jobId: `${detail.jobId || ""}`.trim(), documentId, anchor, pinJob: detail.pinJob === true },
+      fetchReading,
+    );
     // A real job is the canonical Reader session: live translation, Markdown,
     // AI context and immutable artifacts all key off job_id. document_id is
     // reserved for source-only library entries that have no job yet.

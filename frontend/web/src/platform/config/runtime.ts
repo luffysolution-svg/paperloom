@@ -1,5 +1,10 @@
+import { getApiAuthMode } from "@retainpdf/api/http";
 import { DEFAULT_BASE_URL, DEFAULT_MODEL } from "./model-constants.js";
 import { normalizeOcrProvider } from "./providers.js";
+import type { RuntimeConfig } from "./storage.js";
+
+/** 部署/桌面注入到 window 上的运行时配置（runtime-config.js 写入）。 */
+type FrontRuntimeWindow = Window & { __FRONT_RUNTIME_CONFIG__?: Partial<RuntimeConfig> | null };
 
 export const DEFAULT_FALLBACK_BASE = "http://127.0.0.1:41000";
 const DEFAULT_FALLBACK_PORT = 41000;
@@ -13,7 +18,7 @@ const ENV_X_API_KEY_NAMES = ["RETAIN_PDF_FRONTEND_X_API_KEY", "RETAIN_FRONTEND_X
 
 function readNodeEnv(name: string): string {
   try {
-    const value = (globalThis as any)?.process?.env?.[name];
+    const value = (globalThis as { process?: { env?: Record<string, unknown> } })?.process?.env?.[name];
     return typeof value === "string" ? value.trim() : "";
   } catch {
     return "";
@@ -22,7 +27,7 @@ function readNodeEnv(name: string): string {
 
 function readImportMetaEnv(name: string): string {
   try {
-    const value = (import.meta as any)?.env?.[name];
+    const value = (import.meta as unknown as { env?: Record<string, unknown> })?.env?.[name];
     return typeof value === "string" ? value.trim() : "";
   } catch {
     return "";
@@ -46,8 +51,8 @@ function normalizeApiBase(value: unknown): string {
   return value.trim().replace(/\/+$/, "").replace(new RegExp(`${API_V1_SUFFIX}$`), "");
 }
 
-export let runtimeConfig = {
-  ...((typeof window !== "undefined" ? (window as any).__FRONT_RUNTIME_CONFIG__ : null) || {}),
+export let runtimeConfig: RuntimeConfig = {
+  ...((typeof window !== "undefined" ? (window as FrontRuntimeWindow).__FRONT_RUNTIME_CONFIG__ : null) || {}),
 };
 
 const API_V1_SUFFIX = "/api/v1";
@@ -59,7 +64,7 @@ export function isFileProtocol() {
   return window.location.protocol === "file:";
 }
 
-export function buildFrontendPageUrl(relativePath, params = {}) {
+export function buildFrontendPageUrl(relativePath: string, params: Record<string, unknown> = {}) {
   const baseHref = typeof window !== "undefined" && window.location?.href
     ? window.location.href
     : "http://127.0.0.1/";
@@ -82,7 +87,7 @@ export function readerMessageTargetOrigin() {
   return isFileProtocol() ? "*" : window.location.origin;
 }
 
-export function isTrustedWindowMessage(event, expectedSource = null) {
+export function isTrustedWindowMessage(event: MessageEvent, expectedSource: MessageEventSource | null = null) {
   if (expectedSource && event.source !== expectedSource) {
     return false;
   }
@@ -97,7 +102,7 @@ export function apiBase() {
   if (fromEnv) {
     return fromEnv;
   }
-  const fromSnapshot = normalizeApiBase((runtimeConfig as any)?.apiBase);
+  const fromSnapshot = normalizeApiBase(runtimeConfig?.apiBase);
   if (fromSnapshot) {
     return fromSnapshot;
   }
@@ -115,16 +120,6 @@ export function apiBase() {
   const host = window.location.hostname || "127.0.0.1";
   const protocol = window.location.protocol === "https:" ? "https:" : "http:";
   return `${protocol}//${host}:${DEFAULT_FALLBACK_PORT}`;
-}
-
-export function buildApiUrl(apiPrefix = "", relativePath = "") {
-  const normalizedPrefix = `${apiPrefix || ""}`.trim().replace(/^\/+/, "").replace(/\/+$/, "");
-  const normalizedPath = `${relativePath || ""}`.trim().replace(/^\/+/, "");
-  const segments = [apiBase(), normalizedPrefix].filter(Boolean);
-  if (normalizedPath) {
-    segments.push(normalizedPath);
-  }
-  return segments.join("/");
 }
 
 export function mockScenario() {
@@ -160,7 +155,7 @@ function liveRuntimeString(key: string): string {
   if (typeof window === "undefined") {
     return "";
   }
-  const cfg = (window as any).__FRONT_RUNTIME_CONFIG__;
+  const cfg = (window as FrontRuntimeWindow).__FRONT_RUNTIME_CONFIG__;
   const value = cfg?.[key];
   return typeof value === "string" ? value.trim() : "";
 }
@@ -174,9 +169,10 @@ export function frontendApiKey() {
   return fromModule || liveRuntimeString("xApiKey");
 }
 
-export function buildApiHeaders(extraHeaders = {}) {
-  const headers = { ...extraHeaders };
-  const apiKey = frontendApiKey();
+export function buildApiHeaders(extraHeaders: Record<string, string> = {}) {
+  const headers: Record<string, string> = { ...extraHeaders };
+  // 多用户模式靠登录 Cookie 认证，不带部署密钥（和 @retainpdf/api 的同名函数一致）。
+  const apiKey = getApiAuthMode() === "multi" ? "" : frontendApiKey();
   if (apiKey) {
     headers["X-API-Key"] = apiKey;
   }

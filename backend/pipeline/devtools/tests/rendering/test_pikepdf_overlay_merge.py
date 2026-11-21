@@ -1,73 +1,16 @@
-import sys
 import tempfile
 from pathlib import Path
-from unittest import mock
-import re
 
 import fitz
-import pytest
-from PIL import Image
 
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-
-from retainpdf_pipeline.render.source.background.stage import build_clean_background_pdf
-from retainpdf_pipeline.foundation.config import fonts
-from retainpdf_pipeline.render.layout.payload.blocks import build_render_blocks
-from retainpdf_pipeline.render.layout.payload.body_pipeline import apply_body_payload_pipeline
-from retainpdf_pipeline.render.layout.payload.collision import mark_adjacent_collision_risk
-from retainpdf_pipeline.render.layout.payload.emit import payload_to_render_block
-from retainpdf_pipeline.render.layout.payload.first_line_indent import detect_first_line_indent_pt
-from retainpdf_pipeline.render.layout.payload.line_structure import maybe_preserve_structured_line_breaks
-from retainpdf_pipeline.render.layout.page_specs import build_render_page_specs
-from retainpdf_pipeline.render.layout.payload.continuation_split import split_protected_text_for_boxes
-from retainpdf_pipeline.render.layout.payload.prepare import prepare_render_payloads_by_page
-from retainpdf_pipeline.render.source.items import get_item_translated_text
-from retainpdf_pipeline.render.source.dev_overlay.text_draw import _build_direct_draw_tokens
-from retainpdf_pipeline.render.source.dev_overlay.text_draw import _fit_segment_layout
-from retainpdf_pipeline.render.layout.payload.suspicious_ocr import detect_and_drop_suspicious_ocr_glued_blocks
-from retainpdf_pipeline.render.output.typst.book_renderer import _compile_render_pages_pdf_resilient
-from retainpdf_pipeline.render.output.typst.block_renderer import build_typst_block
-from retainpdf_pipeline.render.output.typst.overlay_ops import overlay_translated_pages_on_doc
-from retainpdf_pipeline.render.output.typst.book_support import prepare_translated_pages_for_render
-from retainpdf_pipeline.render.output.typst.compiler import _resolved_font_paths
-from retainpdf_pipeline.render.output.typst.compiler import _resolved_common_root
-from retainpdf_pipeline.render.output.typst.compiler import TypstCompileError
-from retainpdf_pipeline.render.output.typst.compiler import compile_typst_book_background_pdf
-from retainpdf_pipeline.render.output.typst.compiler import compile_typst_overlay_pdf
-from retainpdf_pipeline.render.output.typst.compiler import compile_typst_render_pages_pdf
-from retainpdf_pipeline.render.output.typst.emitter import build_typst_source_from_page_specs
-from retainpdf_pipeline.render.output.typst.source_builder import build_typst_overlay_source
-from retainpdf_pipeline.render.policy import apply_render_page_policy_fields
-from retainpdf_pipeline.render.policy import build_render_page_policy
-from retainpdf_pipeline.render.policy import formula_neighbor_text_item_ids
-from retainpdf_pipeline.render.policy import item_render_policy
-from retainpdf_pipeline.render.policy import item_render_policy_reason
-from retainpdf_pipeline.render.policy import item_requires_visual_cover_only
-from retainpdf_pipeline.render.policy import item_uses_white_overlay_fill
-from retainpdf_pipeline.render.policy import protect_formula_regions_in_redaction_items
-from retainpdf_pipeline.render.output.typst.source_page_overlay import apply_source_page_overlay
-from retainpdf_pipeline.render.output.typst.overlay_diagnostics import apply_redaction_diagnostics
-from retainpdf_pipeline.render.output.typst.overlay_diagnostics import new_overlay_merge_diagnostics
-from retainpdf_pipeline.render.source.background.redaction_items import redaction_items_from_layout_blocks
-from retainpdf_pipeline.render.source.cleanup.item_rects import cover_rects_from_valid_items
 from retainpdf_pipeline.render.output.typst.source_page_overlay import overlay_pages_from_single_pdf
-from retainpdf_pipeline.render.output.typst.source_page_overlay import redaction_items_from_render_blocks
-from retainpdf_pipeline.render.output.typst.sanitize import sanitize_items_for_typst_compile
-from retainpdf_pipeline.render.output.typst.overlay_ops import _extract_failed_overlay_indices
-from retainpdf_pipeline.render.output.typst.overlay_ops import _can_use_pikepdf_book_overlay
-from retainpdf_pipeline.render.workflow.cover_fallback import cover_fallback_page_indices
-from retainpdf_pipeline.render.workflow.context import RenderExecutionContext
-from retainpdf_pipeline.render.workflow.modes import _compress_final_pdf_if_needed
 from retainpdf_pipeline.render.document.pikepdf_overlay import PikepdfOverlayChunk
 from retainpdf_pipeline.render.document.pikepdf_overlay import overlay_pdf_chunks_with_pikepdf
 from retainpdf_pipeline.render.document.pikepdf_overlay import overlay_pdf_pages_with_pikepdf
 from retainpdf_pipeline.render.document.pikepdf_overlay import overlay_page_pdfs_with_pikepdf
 from retainpdf_pipeline.render.document.pikepdf_pages import extract_pages_with_pikepdf
-from retainpdf_pipeline.render.layout.inline_content.core.markdown import build_direct_typst_passthrough_text
-from devtools.tests.rendering_support.page_specs import sample_page_spec as _page_spec
+from devtools.tests.pdf_fixtures import write_pdf
 
 def test_pikepdf_overlay_merges_overlay_page_without_pymupdf_write() -> None:
     with tempfile.TemporaryDirectory() as tmp:
@@ -76,17 +19,9 @@ def test_pikepdf_overlay_merges_overlay_page_without_pymupdf_write() -> None:
         overlay_pdf = root / "overlay.pdf"
         output_pdf = root / "merged.pdf"
 
-        doc = fitz.open()
-        page = doc.new_page(width=200, height=120)
-        page.insert_text((20, 40), "source text", fontsize=12)
-        doc.save(source_pdf)
-        doc.close()
+        write_pdf(source_pdf, width=200, height=120, text="source text", at=(20, 40), fontsize=12)
 
-        doc = fitz.open()
-        page = doc.new_page(width=200, height=120)
-        page.insert_text((20, 80), "overlay text", fontsize=12)
-        doc.save(overlay_pdf)
-        doc.close()
+        write_pdf(overlay_pdf, width=200, height=120, text="overlay text", at=(20, 80), fontsize=12)
 
         result = overlay_pdf_pages_with_pikepdf(
             source_pdf_path=source_pdf,
@@ -118,11 +53,7 @@ def test_pikepdf_overlay_merges_single_page_pdfs_by_source_page() -> None:
         doc.save(source_pdf)
         doc.close()
 
-        doc = fitz.open()
-        page = doc.new_page(width=200, height=120)
-        page.insert_text((20, 80), "page two overlay", fontsize=12)
-        doc.save(page_two_overlay)
-        doc.close()
+        write_pdf(page_two_overlay, width=200, height=120, text="page two overlay", at=(20, 80), fontsize=12)
 
         result = overlay_page_pdfs_with_pikepdf(
             source_pdf_path=source_pdf,
@@ -163,11 +94,7 @@ def test_pikepdf_overlay_merges_chunk_pdfs_by_source_pages() -> None:
         doc.save(chunk_one_pdf)
         doc.close()
 
-        doc = fitz.open()
-        page = doc.new_page(width=200, height=120)
-        page.insert_text((20, 80), "chunk two page one", fontsize=12)
-        doc.save(chunk_two_pdf)
-        doc.close()
+        write_pdf(chunk_two_pdf, width=200, height=120, text="chunk two page one", at=(20, 80), fontsize=12)
 
         result = overlay_pdf_chunks_with_pikepdf(
             source_pdf_path=source_pdf,

@@ -203,6 +203,23 @@
 - Rust 主工作流调用的 normalize worker 现在要求 `--spec <job_root/specs/normalize.spec.json>`
 - 如果只是本地手动验证 schema / adapter，应该走 `validate_document_schema.py`（script-mode，仅桌面兼容，无 console 等价物）
 
+适配器里的顺序（`adapters.py` 的 `adapt_payload_to_document_v1_with_report`）：各家 builder → 补默认值 → 补契约字段 → 把略微超出页边的块夹回页内
+（`page_bounds.py`，每条边超出不超过页面边长的 1%；块的行、片段跟着收进块里；夹过的块 `metadata.page_overflow_clamped` 记原来的框，文档
+`derived` 和报告记 `page_overflow_clamped_block_count`；超得多的不动，照样校验失败。2026-10-29 起，以前一个超出一两点的块就让整份文档校验失败）→ 校验。
+
+normalize worker 里的顺序（`normalize_pipeline.py` 的 `build_normalized_artifacts`）：adapter → 缩放到 PDF
+（`pdf_geometry.rescale_document_geometry_to_pdf`）→ 行重建（`pdf_geometry.rebuild_estimated_text_geometry`，估行在 `estimated_lines.py`）→ 重新校验；
+后三步收在 `finalize.finalize_normalized_document`，命令型 OCR、MinerU 的 Python 直跑也调它。缩放、补行、估行 2026-10-29 以前在
+`ocr_provider/paddle_normalize.py` 和 `provider_adapters/paddle/content_extract.py` 里（Paddle 专用的位置，却对所有服务商都跑），
+现在在核心包、只依赖文档模型和 `provider_adapters/common/normalize.py`（`devtools/architecture_checks/ocr_layers.py` 钉着：不许导入任何一家的
+适配器、不许导入调用服务的层）。
+
+- 缩放按位置配页：OCR 的第 n 页对原文的第 n 页（选了页的任务，原文已经截成所选的页）。OCR 比原文多页时报错；
+  比原文少照常缩放，记在 `derived.page_count_mismatch`；有块的页没有原始尺寸时报错（2026-10-29 起，以前都是静默往下走）。
+- 行重建只给没有真实行的块：块里有 `bbox_precision = provider_layout` 的行（MinerU 的 middle.json 每行都有框）就保留
+  原行、块边也不按文字高度收紧，只从原行生成目录条目。以前对所有服务商都重建，MinerU 的多行段落被压成一行、行内公式的
+  标记丢了（2026-10-29 修）。Paddle 只给块，照旧重建。
+
 ## Adapter 约定
 
 provider 原始 OCR 不应直接进入翻译/渲染主线。
@@ -225,7 +242,7 @@ provider 原始 OCR 不应直接进入翻译/渲染主线。
 - `ocr/document_schema/providers.py`
   稳定 OCR provider 标识常量，adapter、fixture registry、回归脚本优先共用这一层
 - `services/pipeline_shared/`
-  主线共享的 `pipeline_summary.json`、stdout 标签、JSON IO 和 source-json 选择规则
+  主线共享的 `pipeline_summary.json`；stdout 标签、JSON IO 在底座包 `retainpdf_base`
 - `ocr/mineru_provider/contracts.py`
   仅保留 MinerU provider 私有原始文件名、目录名约定
 
@@ -235,6 +252,7 @@ provider 原始 OCR 不应直接进入翻译/渲染主线。
 - `mineru_content_list_v2 -> document.v1`
 - `generic_flat_ocr -> document.v1`
 - `paddle -> document.v1`
+- `glm_ocr -> document.v1`（智谱 GLM-OCR，2026-10-31）
 
 ## Provider Adapter 分层
 
@@ -278,6 +296,10 @@ provider 装配层位于：
   采用目录化拆分，负责把 Paddle 原始 `layoutParsingResults` 解析成通用 spec
   当前又细分为 reader、relations、page trace、rich-content trace。
   现在 reader 层内部再通过 page/block context 收敛接口，不再散传 markdown/layout trace 参数。
+- `glm_ocr/`
+  智谱 GLM-OCR 的 `layout_details`。版面检测和 PaddleOCR-VL 是同一套（标签相同），所以只把每页改成 Paddle `parsing_res_list`
+  的样子、把 GLM 的 markdown 排版（标题的 `#`、`<div align="center">`、`<table border="1">`）洗成和我们请求 Paddle 时一样，
+  走 Paddle 的页、块解析，再把来源改回 GLM。没有分组号，不出服务商接续提示；图片块按框挂进图片表，文件由调用层从原文裁。
 - `mineru_content_list_v2_adapter.py`
   已经接入通用 builder，但还没有像 Paddle 一样完全目录化
 - `generic_flat_ocr_adapter.py`
@@ -676,6 +698,8 @@ adapter 产出的当前版 `document.v1.json` 在进入主线前，会统一补�
 - translation 主线当前优先消费 `source="provider"` 且 `scope="intra_page"` 的提示
 - `cross_page` 提示只在 translation 层满足相邻页、顺序明确、layout zone 边界安全、文本长度足够等受控条件时消费；schema 层只负责定义和保存契约
 - 新 OCR provider 如果也能稳定产出连续组信息，应优先写入这个字段，而不是把私有 raw 字段直接暴露给下游
+- 现在写这个字段的：Paddle（`paddle/continuation.py`，按 `block_order` / `group_id`）；MinerU 只写跨页段落（2026-10-29 起，
+  拆回各页的两半连成一组 `scope=cross_page`，见 `mineru/NORMALIZATION.md` 1.1）
 
 ## `type / sub_type` 约定
 
@@ -911,7 +935,8 @@ adapter 产出的当前版 `document.v1.json` 在进入主线前，会统一补�
 约定：
 
 - `segments` 是块内扁平序列，便于翻译和公式保护
-- `lines` 保留行级结构，便于排版与局部分析
+- `lines` 保留行级结构，便于排版与局部分析；`lines[*].bbox_precision = provider_layout` 表示行框是服务商给的，
+  缩放之后的行重建不动它（见上面「当前链路」）
 - 行内公式不作为 block 主类型，保留在文本 block 的 `segments/spans` 中，新产物写为 `type = "inline_formula"`
 - `content.kind = "formula"` 只表示行间公式 block；旧产物中 segment 的 `type = "formula"` 继续兼容读取
 

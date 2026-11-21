@@ -9,22 +9,22 @@ from retainpdf_pipeline.foundation.config import layout
 from retainpdf_pipeline.foundation.shared.job_dirs import job_dirs_from_explicit_args
 from retainpdf_pipeline.foundation.shared.stage_specs import build_stage_invocation_metadata
 from retainpdf_pipeline.foundation.shared.stage_specs import RenderStageSpec
-from retainpdf_pipeline.foundation.shared.stage_specs import resolve_credential_ref
+from retainpdf_base.credentials import resolve_credential_ref
 from retainpdf_pipeline.foundation.shared.tee_output import enable_job_log_capture
 from retainpdf_pipeline.render.render_stage import run_render_stage
-from retainpdf_pipeline.services.pipeline_shared.contracts import format_stdout_kv
-from retainpdf_pipeline.services.pipeline_shared.contracts import PIPELINE_SUMMARY_FILE_NAME
-from retainpdf_pipeline.services.pipeline_shared.contracts import STDOUT_LABEL_EVENTS_JSONL
-from retainpdf_pipeline.services.pipeline_shared.contracts import STDOUT_LABEL_JOB_ROOT
-from retainpdf_pipeline.services.pipeline_shared.contracts import STDOUT_LABEL_OUTPUT_PDF
-from retainpdf_pipeline.services.pipeline_shared.contracts import STDOUT_LABEL_SOURCE_PDF
-from retainpdf_pipeline.services.pipeline_shared.contracts import STDOUT_LABEL_SUMMARY
-from retainpdf_pipeline.services.pipeline_shared.contracts import STDOUT_LABEL_TRANSLATIONS_DIR
-from retainpdf_pipeline.services.pipeline_shared.events import emit_artifact_published
-from retainpdf_pipeline.services.pipeline_shared.events import emit_stage_transition
-from retainpdf_pipeline.services.pipeline_shared.events import PipelineEventWriter
-from retainpdf_pipeline.services.pipeline_shared.events import pipeline_event_writer_scope
-from retainpdf_pipeline.services.pipeline_shared.io import save_json
+from retainpdf_base.contracts import format_stdout_kv
+from retainpdf_base.contracts import PIPELINE_SUMMARY_FILE_NAME
+from retainpdf_base.contracts import STDOUT_LABEL_EVENTS_JSONL
+from retainpdf_base.contracts import STDOUT_LABEL_JOB_ROOT
+from retainpdf_base.contracts import STDOUT_LABEL_OUTPUT_PDF
+from retainpdf_base.contracts import STDOUT_LABEL_SOURCE_PDF
+from retainpdf_base.contracts import STDOUT_LABEL_SUMMARY
+from retainpdf_base.contracts import STDOUT_LABEL_TRANSLATIONS_DIR
+from retainpdf_base.events import emit_artifact_published
+from retainpdf_base.events import emit_stage_transition
+from retainpdf_base.events import PipelineEventWriter
+from retainpdf_base.events import pipeline_event_writer_scope
+from retainpdf_base.io import save_json
 from retainpdf_pipeline.render.source.prewarm import prewarm_manifest_path_from_artifacts_dir
 
 
@@ -49,6 +49,7 @@ def _args_from_spec(spec: RenderStageSpec) -> SimpleNamespace:
         source_pdf=str(spec.inputs.source_pdf),
         translations_dir=str(spec.inputs.translations_dir),
         translation_manifest=str(spec.inputs.translation_manifest or ""),
+        source_json=str(spec.inputs.source_json or ""),
         start_page=spec.params.start_page,
         end_page=spec.params.end_page,
         render_mode=spec.params.render_mode,
@@ -67,6 +68,7 @@ def _args_from_spec(spec: RenderStageSpec) -> SimpleNamespace:
         inner_bbox_dense_shrink_y=spec.params.inner_bbox_dense_shrink_y,
         font_unify_mode=spec.params.font_unify_mode,
         source_cleanup_strategy=spec.params.source_cleanup_strategy,
+        render_engine=spec.params.engine,
     )
 
 
@@ -134,6 +136,9 @@ def main() -> None:
             pdf_compress_dpi=args.pdf_compress_dpi,
             source_cleanup_strategy=args.source_cleanup_strategy,
             render_prewarm_manifest_path=prewarm_manifest_path_from_artifacts_dir(job_dirs.artifacts_dir),
+            artifacts_dir=job_dirs.artifacts_dir,
+            render_engine=args.render_engine,
+            document_path=Path(args.source_json).resolve() if args.source_json.strip() else None,
         )
         elapsed = time.perf_counter() - started
         save_json(
@@ -151,6 +156,8 @@ def main() -> None:
                 "effective_render_mode": result.get("effective_render_mode", args.render_mode),
                 "pdf_compress_dpi": args.pdf_compress_dpi,
                 "render_diagnostics": result.get("render_diagnostics", {}),
+                "fit_report": result.get("fit_report", {}),
+                "render_engine": result.get("render_engine", {}),
                 "events_jsonl": str(event_writer.path),
                 "invocation": build_stage_invocation_metadata(
                     stage="render",

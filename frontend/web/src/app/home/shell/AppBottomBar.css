@@ -1,0 +1,250 @@
+/* 底部三合一浮动栏：添加 / 搜索 / 设置。（AppBottomBar）
+ *
+ * @owns library-bottom
+ * @uses home-action-btn, primary */
+
+/* 底部三合一浮动栏(AppBottomBar.jsx)——添加(左)+ 搜索(中)+ 设置(右)收成
+   一条居中玻璃 pill,取代早期分离的"底部搜索条 + 右下角添加/设置胶囊"两个浮岛。
+   宽度交给中间的搜索槽(library-bottom-search)决定:有搜索时是一条宽 pill,
+   分类 tab 无搜索时自然收成"添加/设置"两颗按钮的小 pill(inline-flex 贴合内容)。 */
+@utility library-bottom-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  z-index: 20;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 24px);
+  max-width: calc(100dvw - 24px);
+  padding: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--paper) 82%, transparent);
+  border: 1px solid color-mix(in srgb, var(--line) 88%, transparent);
+  box-shadow: 0 18px 46px color-mix(in srgb, var(--ink) 12%, transparent);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  transition: opacity 0.18s var(--ease-out), transform 0.18s var(--ease-out);
+
+  /* 批量模式:隐藏但不卸载(visibility 保住 DOM 节点 + library-search-island
+     的 input 引用,退出批量后搜索照常工作),淡出下沉一点点。 */
+  &.is-hidden {
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(-50%) translateY(8px);
+  }
+
+  @media (max-width: 767px) {
+    gap: 6px;
+    padding: 7px;
+  }
+}
+
+@utility library-bottom-search {
+  /* 搜索框是栏里唯一能让步的东西：允许收缩（flex-shrink: 1），由栏的 max-width 兜底。
+     以前写死 flex: 0 0 auto + 「100vw - 148px」，只算了添加 / 设置两颗按钮；加了「任务中心」后
+     窄屏（420px）上整条栏比屏幕宽，最右边的设置按钮被裁掉一半。按钮数量再变也不用改这里。 */
+  flex: 0 1 auto;
+  width: min(440px, calc(100vw - 148px));
+  width: min(440px, calc(100dvw - 148px));
+  min-width: 0;
+  display: flex;
+
+  & input {
+    @apply w-full rounded-full border text-[13px] font-medium text-[var(--ink)] outline-hidden;
+    width: 100%;
+    height: 40px;
+    padding: 0 16px;
+    border: 0;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg) 86%, transparent);
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 500;
+    outline: none;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--line) 70%, transparent);
+    transition: background-color 0.16s ease, box-shadow 0.16s ease;
+  }
+
+  & input::placeholder {
+    color: var(--muted);
+  }
+
+  & input:focus {
+    background: color-mix(in srgb, var(--paper) 98%, transparent);
+    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 70%, transparent);
+  }
+
+  @media (max-width: 767px) {
+    & input {
+      height: 40px;
+      font-size: 12px;
+    }
+  }
+}
+
+/* 底部栏两侧的图标按钮(icon-only,"少文字多图标"):添加=accent 主按钮,
+   设置=纸面幽灵按钮。 */
+@utility library-bottom-icon-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--btn-radius);
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  transition: transform 0.12s var(--ease-out), background-color 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+
+  & svg {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+  }
+
+  &:hover {
+    background: var(--bg);
+    border-color: color-mix(in srgb, var(--accent) 22%, var(--line));
+  }
+
+  &:active {
+    transform: scale(0.94);
+  }
+
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    outline-offset: 2px;
+  }
+
+  &.primary {
+    border-color: var(--btn-primary-bg);
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-fg);
+  }
+
+  &.primary:hover {
+    background: var(--btn-primary-bg);
+    filter: brightness(1.06);
+  }
+
+  &.primary.is-active {
+    box-shadow: 0 0 0 3px var(--accent-weak);
+  }
+}
+
+@utility library-bottom-actions {
+  /* 从顶栏挪到底部:固定在右下角悬浮(和底部居中的搜索条错开,搜索条在
+     left:50% 居中、这里贴右;两个 tab 下都常驻)。 */
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 21;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--paper) 82%, transparent);
+  border: 1px solid var(--line);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--shadow-color) 10%, transparent);
+  backdrop-filter: blur(8px);
+
+  @media (max-width: 767px) {
+    gap: 5px;
+  }
+}
+
+@utility library-bottom-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 48px;
+  min-height: 36px;
+  padding: 0 13px;
+  border: 1px solid color-mix(in srgb, color-mix(in srgb, var(--line) 85%, var(--muted)) 84%, transparent);
+  border-radius: var(--btn-radius);
+  background: color-mix(in srgb, var(--paper) 74%, transparent);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  /* 按下要有反馈(emil-design-eng skill):scale(0.97) 让"添加/设置"这两个
+     常驻悬浮按钮感觉真的在响应点击,而不是死板的纯色块切换。只做
+     transform/背景/边框,不用 transition: all。 */
+  transition: transform 120ms var(--ease-out), background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+
+  &:active {
+    transform: scale(0.97);
+  }
+
+  & svg {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+  }
+
+  &.primary {
+    border-color: var(--ink);
+    background: var(--ink);
+    color: var(--paper);
+  }
+
+  &:hover {
+    border-color: var(--ink);
+    background: var(--bg);
+    color: var(--ink);
+  }
+
+  &.primary:hover {
+    background: var(--ink);
+    color: var(--paper);
+  }
+
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    outline-offset: 3px;
+  }
+
+  @media (max-width: 767px) {
+    min-width: 40px;
+    min-height: 38px;
+    padding-inline: 10px;
+    font-size: 12px;
+
+    & svg {
+      width: 15px;
+      height: 15px;
+    }
+  }
+}
+
+@utility primary {
+  &.library-bottom-action {
+    border-color: var(--ink);
+    background: var(--ink);
+    color: var(--paper);
+  }
+
+  &.library-bottom-action:hover {
+    background: var(--ink);
+    color: var(--paper);
+  }
+
+  &.home-action-btn {
+    border-color: var(--ink);
+    background: var(--ink);
+    color: var(--paper);
+  }
+
+  &.home-action-btn:hover {
+    background: var(--ink);
+    color: var(--paper);
+  }
+}

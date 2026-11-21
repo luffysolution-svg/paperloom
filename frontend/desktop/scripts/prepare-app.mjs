@@ -705,6 +705,36 @@ if (!frontendOnly) {
     });
   }
 
+  const rprEngineRoot = path.join(repoRoot, "backend", "rendering-engine");
+  if (!fs.existsSync(path.join(rprEngineRoot, "engine", "bin", "rpr-retain.js"))) {
+    throw new Error(`missing rpr engine at ${rprEngineRoot}/engine; run backend/rendering-engine/sync.sh`);
+  }
+  const rprEngineDeps = Object.keys(
+    JSON.parse(fs.readFileSync(path.join(rprEngineRoot, "package.json"), "utf8")).dependencies || {},
+  );
+  if (rprEngineDeps.some((dep) => !fs.existsSync(path.join(rprEngineRoot, "node_modules", dep, "package.json")))) {
+    const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+    const installed = spawnSync(npmCommand, ["ci", "--omit=dev", "--ignore-scripts"], {
+      cwd: rprEngineRoot,
+      stdio: "inherit",
+      shell: process.platform === "win32",
+    });
+    if (installed.status !== 0) {
+      throw new Error(`npm ci failed in ${rprEngineRoot} (exit ${installed.status})`);
+    }
+  }
+  const rprEngineDst = path.join(outputBackendRoot, "rendering-engine");
+  fs.rmSync(rprEngineDst, { recursive: true, force: true });
+  for (const entry of ["engine", "node_modules", "package.json", "UPSTREAM"]) {
+    fs.cpSync(path.join(rprEngineRoot, entry), path.join(rprEngineDst, entry), {
+      recursive: true,
+      force: true,
+    });
+  }
+  for (const unused of ["es5", "ts", "components"]) {
+    fs.rmSync(path.join(rprEngineDst, "node_modules", "mathjax-full", unused), { recursive: true, force: true });
+  }
+
   for (const notice of ["LICENSE", "LICENSE-MIT", "THIRD_PARTY_NOTICES.md", "CORRESPONDING_SOURCE.md"]) {
     fs.copyFileSync(path.join(repoRoot, notice), path.join(outputBackendRoot, notice));
   }
@@ -741,6 +771,21 @@ if (!frontendOnly) {
       return !sourcePath.endsWith(".pyc") && !sourcePath.endsWith(".pyo");
     },
   });
+  for (const [subpkg, modName] of [
+    ["base", "retainpdf_base"],
+    ["math", "retainpdf_math"],
+    ["translation", "retainpdf_translation"],
+    ["translation-agent", "retainpdf_translation_agent"],
+  ]) {
+    const srcMod = path.join(servicesRoot, subpkg, modName);
+    if (fs.existsSync(srcMod)) {
+      fs.cpSync(srcMod, path.join(outputBackendRoot, "pipeline", modName), {
+        recursive: true,
+        force: true,
+        filter: (sourcePath) => !sourcePath.includes("__pycache__") && !sourcePath.endsWith(".pyc"),
+      });
+    }
+  }
   if (!fs.existsSync(path.join(servicesConfigRoot, "ocr_providers.json"))) {
     throw new Error(`missing backend provider config at ${servicesConfigRoot}`);
   }

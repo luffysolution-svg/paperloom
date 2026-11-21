@@ -20,7 +20,11 @@ import {
   type ProtectedPdfFile,
 } from "./useProtectedPdfFile.js";
 import { setupReactPdf } from "./setup-react-pdf.js";
-import { pageWidthFromShell } from "./reader-zoom.js";
+import {
+  pageWidthFromShell,
+  READER_WIDTH_SETTLE_MS,
+  resolveReaderWidthCommit,
+} from "./reader-zoom.js";
 import { DEFAULT_ASPECT, PdfPageSlot } from "./PdfPageSlot.js";
 import { createPdfRangeTransport, READER_PDF_RANGE_CHUNK } from "./pdf-range-transport.js";
 import type { PageRowHeights } from "./usePageRowSync.js";
@@ -36,10 +40,10 @@ import {
 } from "./reader-dom-contract.js";
 import { readerPdfPort } from "../external.js";
 import {
+  findReaderRegion,
   resolveReaderRegionHighlight,
   type ReaderMetadata,
   type ReaderRegion,
-  type ReaderRegionSelection,
 } from "../shared/data/reader-regions.js";
 import type { LiveTranslationState } from "../shared/data/live-translation-state.js";
 
@@ -48,6 +52,13 @@ const OVERSCAN = 5;
 const ACTIVE_ROOT_MARGIN = "120% 0px";
 /** Leave grace period so edge scrolling does not rapidly unmount the canvas. */
 const ACTIVE_LEAVE_MS = 120;
+/**
+ * 文字层（pdf.js 的 textLayer，一页几百上千个绝对定位的 span）和实时译文框只给眼前的页（上下各多 1/4 屏）挂，
+ * 画布照旧按 ACTIVE_ROOT_MARGIN 预热。WebKit 里每个绝对定位的元素都是一个 RenderLayer，每次排版、滚动都要
+ * 把它们全走一遍（computeCompositingRequirements）：挂着 11 页的文字层时，作者的 app 里滑动、拖分隔线主线程
+ * 85–100% 忙，大头就在这。
+ */
+const TEXT_ROOT_MARGIN = "25% 0px";
 let nextPdfFileIdentity = 1;
 const pdfFileIdentities = new WeakMap<ProtectedPdfFile, number>();
 
@@ -93,7 +104,9 @@ type PdfDocumentPaneProps = {
   activeRegion?: ReaderRegion | null;
   regions?: ReaderRegion[];
   readerMetadata?: ReaderMetadata | null;
-  onSelectRegion?: (selection: ReaderRegionSelection) => void;
+  /** 对照阅读时两栏共享的悬停块（见 PdfPageSlot）。 */
+  hoveredRegionId?: string | null;
+  onHoverRegion?: (itemId: string | null) => void;
   liveTranslation?: LiveTranslationState;
   /** Render live translation blocks in this pane, independent of source/translated identity. */
   showLiveTranslation?: boolean;
@@ -122,7 +135,8 @@ const PdfDocumentPaneInner = forwardRef<HTMLElement, PdfDocumentPaneProps>(
       activeRegion = null,
       regions = [],
       readerMetadata = null,
-      onSelectRegion,
+      hoveredRegionId = null,
+      onHoverRegion,
       liveTranslation,
       showLiveTranslation = pane === "source",
       liveTranslationPendingLabel = "",
@@ -162,29 +176,46 @@ const PdfDocumentPaneInner = forwardRef<HTMLElement, PdfDocumentPaneProps>(
 
     useImperativeHandle(ref, () => paneEl as HTMLElement, [paneEl]);
 
-    // 单一 width 同步：初始 + ResizeObserver，避免双 effect 重复计算
+    // 单一 width 同步：初始 + ResizeObserver，避免双 effect 重复计算。
+    //
+    // **变化要等布局稳定再提交**，理由写在 resolveReaderWidthCommit 上：这个
+    // width 直接决定 react-pdf 重画 canvas，而 shell 宽度在开关面板（180ms 过渡）
+    // 和拖分栏（每帧）时是连续变化的。
+    //
+    // 这里原来两条分支的待遇不一样：ResizeObserver 那条有 80ms 防抖，而
+    // pageWidthOverride 那条是**立即提交、零防抖** —— 偏偏 override 恒有值
+    // （ReaderCompareGrid 总是传 pageWidthBasis），所以带防抖的那条从来不走，
+    // 而真正会连续变化的那条一点都没防。
     useEffect(() => {
-      const syncWidth = (w: number) => {
-        if (!Number.isFinite(w) || w < 80) return;
-        if (Math.abs(w - lastWidthRef.current) < 8) return;
+      const commit = (w: number) => {
         lastWidthRef.current = w;
         setPaneWidth(w);
       };
-      const initialW = pageWidthOverride && pageWidthOverride >= 80
-        ? pageWidthOverride
-        : (scrollRoot?.clientWidth || 0);
-      syncWidth(initialW);
-      if (!scrollRoot || typeof ResizeObserver === "undefined") return;
-      if (pageWidthOverride && pageWidthOverride >= 80) return;
-      const ro = new ResizeObserver((entries) => {
-        const w = entries[0]?.contentRect?.width ?? scrollRoot.clientWidth;
-        if (!Number.isFinite(w) || w < 80) return;
+      const syncWidth = (w: number) => {
+        const decision = resolveReaderWidthCommit(w, lastWidthRef.current);
+        if (decision === "ignore") return;
         if (widthTimerRef.current) clearTimeout(widthTimerRef.current);
-        widthTimerRef.current = setTimeout(() => syncWidth(w), 80);
-      });
-      ro.observe(scrollRoot);
+        if (decision === "immediate") {
+          commit(w);
+          return;
+        }
+        widthTimerRef.current = setTimeout(() => commit(w), READER_WIDTH_SETTLE_MS);
+      };
+      const hasOverride = Boolean(pageWidthOverride && pageWidthOverride >= 80);
+      syncWidth(hasOverride ? (pageWidthOverride as number) : (scrollRoot?.clientWidth || 0));
+
+      // **只有一个出口。** 原来这里有三条 return，每条都得自己记得清定时器，
+      // 而漏掉的那条的表现是「卸载之后 setState」—— 控制台一句警告，没有测试
+      // 会红。提前 return 换成条件挂载，清理只写一遍。
+      const observe = !hasOverride && scrollRoot && typeof ResizeObserver !== "undefined";
+      const ro = observe
+        ? new ResizeObserver((entries) => {
+            syncWidth(entries[0]?.contentRect?.width ?? scrollRoot.clientWidth);
+          })
+        : null;
+      if (ro && scrollRoot) ro.observe(scrollRoot);
       return () => {
-        ro.disconnect();
+        ro?.disconnect();
         if (widthTimerRef.current) clearTimeout(widthTimerRef.current);
       };
     }, [pageWidthOverride, scrollRoot, visible]);
@@ -202,6 +233,8 @@ const PdfDocumentPaneInner = forwardRef<HTMLElement, PdfDocumentPaneProps>(
     const [activePages, setActivePages] = useState<Set<number>>(() => new Set());
     const sentinelRefs = useRef<Map<number, HTMLDivElement>>(new Map());
     const windowingObserverRef = useRef<IntersectionObserver | null>(null);
+    const textObserverRef = useRef<IntersectionObserver | null>(null);
+    const [textPages, setTextPages] = useState<Set<number>>(() => new Set());
     const activeLeaveTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
     const handleAspectChange = useCallback((pn: number, aspect: number) => {
@@ -216,18 +249,21 @@ const PdfDocumentPaneInner = forwardRef<HTMLElement, PdfDocumentPaneProps>(
     const registerSentinel = useCallback((pn: number, el: HTMLDivElement | null) => {
       const map = sentinelRefs.current;
       const prev = map.get(pn);
-      if (prev && windowingObserverRef.current) {
-        try {
-          windowingObserverRef.current.unobserve(prev);
-        } catch {
-          // ignore
+      const observers = [windowingObserverRef.current, textObserverRef.current];
+      if (prev) {
+        for (const observer of observers) {
+          try {
+            observer?.unobserve(prev);
+          } catch {
+            // ignore
+          }
         }
       }
       if (el) {
         map.set(pn, el);
-        if (windowingObserverRef.current) {
+        for (const observer of observers) {
           try {
-            windowingObserverRef.current.observe(el);
+            observer?.observe(el);
           } catch {
             // ignore
           }
@@ -341,6 +377,40 @@ const PdfDocumentPaneInner = forwardRef<HTMLElement, PdfDocumentPaneProps>(
       };
     }, [scrollRoot]);
 
+    // 眼前的页（TEXT_ROOT_MARGIN）：只有它们挂文字层和实时译文框。
+    useEffect(() => {
+      if (typeof IntersectionObserver === "undefined") return;
+      const obs = new IntersectionObserver(
+        (entries) => {
+          setTextPages((prev) => {
+            let next: Set<number> | null = null;
+            for (const ent of entries) {
+              const pn = getPageAttr(ent.target as HTMLElement);
+              if (!Number.isFinite(pn) || ent.isIntersecting === prev.has(pn)) continue;
+              next = next || new Set(prev);
+              if (ent.isIntersecting) next.add(pn);
+              else next.delete(pn);
+            }
+            return next || prev;
+          });
+        },
+        { root: scrollRoot, rootMargin: TEXT_ROOT_MARGIN, threshold: 0 },
+      );
+      textObserverRef.current = obs;
+      for (const el of sentinelRefs.current.values()) {
+        try {
+          obs.observe(el);
+        } catch {
+          // ignore
+        }
+      }
+      return () => {
+        obs.disconnect();
+        if (textObserverRef.current === obs) textObserverRef.current = null;
+      };
+    }, [scrollRoot]);
+    const textWindowed = !!scrollRoot && typeof IntersectionObserver !== "undefined";
+
     // A pane survives Reader route changes. Clear every document-derived value
     // before paint so pages/errors from document A cannot flash inside document B.
     // Include the resolved file identity because an authoritative refresh may
@@ -409,10 +479,36 @@ const PdfDocumentPaneInner = forwardRef<HTMLElement, PdfDocumentPaneProps>(
       }
       return map;
     }, [pane, readerMetadata, regions]);
+    // 悬停块在本栏落在哪几页（跨页的块会有两页）。
+    const hoveredPages = useMemo(() => {
+      const pages = new Set<number>();
+      if (!hoveredRegionId) return pages;
+      for (const [page, list] of regionTargetsByPage) {
+        if (list.some((highlight) => highlight.itemId === hoveredRegionId)) pages.add(page);
+      }
+      return pages;
+    }, [hoveredRegionId, regionTargetsByPage]);
 
+    // 批注按 block_id 找到对应的 region，再按 pane 解析成 bbox —— 和 regions
+    // 完全同一条路。一条批注因此在原文栏和译文栏各自定位：锚点是语义的
+    // （block_id），不是某张 PDF 的坐标。
+    //
+    // 锚不到的批注（block_id 在这本书里不存在）直接不画。**不猜位置** —— 贴错
+    // 地方的批注比没有批注更糟，而且你看不出它贴错了。
     const windowedSet = useMemo(() => {
       if (numPages === 0) return new Set<number>();
-      const canWindow = !!scrollRoot && typeof IntersectionObserver !== "undefined" && visible;
+      // **不可见时收到最小集，而不是关掉虚拟化。**
+      //
+      // 原来 visible 参与 canWindow，于是「这一栏看不见」的效果是把窗口开到
+      // 全书：500 页的书切一次模式，另一栏立刻挂载几百个 PdfPageSlot，各自带
+      // ReaderTextHoverLayer 和一个 useMemo ——
+      // 而这一栏一个像素都不显示。canvas 确实没挂，但几百个组件的同步渲染是
+      // 实打实的卡顿。
+      //
+      // 顺带：第 1 条阅读锚点的 bug 能成立正是靠这个 —— 隐藏栏的页槽全在 DOM
+      // 里，measurePageScrollProgress 才过得了 `pages.length` 那道闸。
+      if (!visible) return new Set<number>();
+      const canWindow = !!scrollRoot && typeof IntersectionObserver !== "undefined";
       if (!canWindow) return new Set(pageNumbers);
       if (nearPages.size === 0) {
         const end = Math.min(numPages, OVERSCAN * 2 + 1);
@@ -486,6 +582,7 @@ const PdfDocumentPaneInner = forwardRef<HTMLElement, PdfDocumentPaneProps>(
                       width={pageWidth}
                       devicePixelRatio={dpr}
                       active={activePages.has(pageNumber)}
+                      textLayer={!textWindowed || textPages.has(pageNumber)}
                       syncedMinHeight={rowHeights?.get(pageNumber) || 0}
                       onMetrics={onMetrics}
                       cachedAspect={aspectCache.get(pageNumber)}
@@ -493,7 +590,9 @@ const PdfDocumentPaneInner = forwardRef<HTMLElement, PdfDocumentPaneProps>(
                       sentinelRef={getSentinelRef(pageNumber)}
                       regionHighlight={regionHighlight?.box.page === pageNumber ? regionHighlight : null}
                       regionTargets={regionTargetsByPage.get(pageNumber)}
-                      onSelectRegion={onSelectRegion}
+                      // 只交给含这一块的页：悬停一变，其它页的 props 不变，不重渲染。
+                      hoveredRegionId={hoveredRegionId && hoveredPages.has(pageNumber) ? hoveredRegionId : null}
+                      onHoverRegion={onHoverRegion}
                       liveTranslationLayout={liveTranslation?.layoutByPage.get(pageNumber - 1)}
                       liveTranslationPage={liveTranslation?.pagesByPage.get(pageNumber - 1)}
                       showLiveTranslation={showLiveTranslation}
@@ -514,7 +613,9 @@ const PdfDocumentPaneInner = forwardRef<HTMLElement, PdfDocumentPaneProps>(
                       [READER_PANE_ATTR]: pane,
                       [READER_NATURAL_HEIGHT_ATTR]: naturalHeight,
                     }}
-                    className={READER_PAGE_SLOT_CLASS}
+                    // is-placeholder：不定位（react-pdf.css）。WebKit 里定位的元素各占一个 RenderLayer，481 页的书
+                    // 光空页槽就 962 个，比文字层还多，每次排版、滚动都要走一遍。
+                    className={`${READER_PAGE_SLOT_CLASS} is-placeholder`}
                     style={{
                       width: pageWidth,
                       height: boxHeight,

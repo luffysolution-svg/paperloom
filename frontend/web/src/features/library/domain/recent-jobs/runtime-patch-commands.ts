@@ -32,15 +32,12 @@ import type { LibraryJobItem, StageAdapterPort } from "./runtime-item-types.js";
 import type { RecentJobsStatePort } from "./state.js";
 
 export interface RuntimePatchCommandsDeps {
-  renderCurrentRecentJobs: (options?: { reset?: boolean }) => void;
-  replaceRecentJobCard: (item: LibraryJobItem) => boolean;
   scheduleActiveRefresh?: (options?: { resetTimer?: boolean }) => void;
   stageAdapterPort?: StageAdapterPort;
   statePort: Pick<
     RecentJobsStatePort,
     "getSnapshot" | "replaceItem" | "prependItem" | "setHasMore"
   >;
-  storeDrivenRendering?: boolean;
 }
 
 export interface RuntimePatchCommands {
@@ -51,12 +48,9 @@ export interface RuntimePatchCommands {
 }
 
 export function createRuntimePatchCommands({
-  renderCurrentRecentJobs,
-  replaceRecentJobCard,
   scheduleActiveRefresh,
   stageAdapterPort,
   statePort,
-  storeDrivenRendering = false,
 }: RuntimePatchCommandsDeps): RuntimePatchCommands {
   const runtimeJobPatches = new Map<string, RuntimeJobPatch>();
   const runtimeCreatedJobIds = new Set<string>();
@@ -77,7 +71,7 @@ export function createRuntimePatchCommands({
         return hasStableLibraryIdentity(patch);
       })
       .map((createdJobId) => createLibraryJobItemFromRuntime(runtimeJobPatches.get(createdJobId), { stageAdapterPort }))
-      .filter(Boolean);
+      .filter((item): item is LibraryJobItem => Boolean(item));
     return [...missingCreatedItems, ...mergedItems];
   }
 
@@ -142,9 +136,6 @@ export function createRuntimePatchCommands({
     invalidateRecentJobImages(previousItem || {}, nextItem);
     // replaceItem 与运行时补丁共用同一 identity，重试换 id 不再绕过 store 整表回写。
     statePort.replaceItem(nextItem);
-    if (!storeDrivenRendering && !replaceRecentJobCard(nextItem)) {
-      renderCurrentRecentJobs({ reset: true });
-    }
     scheduleActiveRefresh?.({ resetTimer: false });
   }
 
@@ -183,19 +174,18 @@ export function createRuntimePatchCommands({
       status: firstNonEmpty((job as RuntimeJobPatch)?.status, "queued"),
       stage: firstNonEmpty((job as RuntimeJobPatch)?.stage, "queued"),
     };
-    runtimeJobPatches.set(nextItem.job_id, queuedFirstFrame);
+    // createLibraryJobItemFromRuntime 缺 job_id 时返回 null（上面已早返），这里必有值。
+    const createdJobId = nextItem.job_id || jobId;
+    runtimeJobPatches.set(createdJobId, queuedFirstFrame);
     // P4 无稳定书目身份只缓存 + 触发主动刷新，不 prepend（[I3] 防空壳卡）。
     if (!hasStableLibraryIdentity(nextItem)) {
       scheduleActiveRefresh?.({ resetTimer: false });
       return;
     }
     // P5 全新文档才 prepend + 记 created，供 apply() 补齐。
-    runtimeCreatedJobIds.add(nextItem.job_id);
+    runtimeCreatedJobIds.add(createdJobId);
     statePort.prependItem(nextItem);
     statePort.setHasMore(state.hasMore);
-    if (!storeDrivenRendering) {
-      renderCurrentRecentJobs({ reset: true });
-    }
     scheduleActiveRefresh?.({ resetTimer: false });
   }
 

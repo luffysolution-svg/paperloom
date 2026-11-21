@@ -1,9 +1,11 @@
-// 阅读器「返回主页」
+// 阅读器顶栏托盘里的按钮：「返回主页」。
 //
+// 「返回主页」：
 // 1) 软打开（主页 SoftReaderHost iframe）→ postMessage 父页 history.back，主页不刷新
 // 2) 独立 reader.html 且从主页 assign 进来 → history.back
 // 3) 深链直达 → location.assign(index.html)
 
+import type { ReactNode } from "react";
 import { X } from "lucide-react";
 import { SOFT_READER_CLOSE_MESSAGE } from "../../shared/navigation/soft-reader.js";
 
@@ -67,6 +69,29 @@ export function navigateReaderToHome() {
   window.location.assign(homeIndexUrl());
 }
 
+/** 托盘里的圆角按钮。 */
+function ReaderTrayButton({
+  id,
+  className,
+  label,
+  pressed,
+  onClick,
+  children,
+}: {
+  id?: string;
+  className: string;
+  label: string;
+  pressed?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button id={id} type="button" className={className} aria-label={label} title={label} aria-pressed={pressed} onClick={onClick}>
+      {children}
+    </button>
+  );
+}
+
 export function ReaderCloseHome({ onBeforeClose }: { onBeforeClose?: () => void } = {}) {
   const close = () => {
     onBeforeClose?.();
@@ -74,16 +99,9 @@ export function ReaderCloseHome({ onBeforeClose }: { onBeforeClose?: () => void 
   };
 
   return (
-    <button
-      id="reader-close-home-btn"
-      type="button"
-      className="reader-close-home-btn"
-      aria-label="返回主页"
-      title="返回主页"
-      onClick={close}
-    >
+    <ReaderTrayButton id="reader-close-home-btn" className="reader-close-home-btn" label="返回主页" onClick={close}>
       <X className="reader-close-home-icon" size={18} strokeWidth={2.25} aria-hidden />
       <span className="reader-close-home-label">关闭</span>
-    </button>
+    </ReaderTrayButton>
   );
 }

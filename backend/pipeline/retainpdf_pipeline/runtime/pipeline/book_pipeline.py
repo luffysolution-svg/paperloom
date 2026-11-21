@@ -2,26 +2,31 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+from retainpdf_pipeline.foundation.shared.stage_specs import DEFAULT_RENDER_ENGINE
 from retainpdf_pipeline.foundation.config import fonts
 from retainpdf_pipeline.foundation.config import runtime
-from retainpdf_pipeline.foundation.config.output_layout import ARTIFACTS_DIR_NAME
+from retainpdf_base.output_layout import ARTIFACTS_DIR_NAME
 from retainpdf_pipeline.render.render_mode import is_editable_pdf
 from retainpdf_pipeline.render.render_mode import resolve_effective_render_mode
 from retainpdf_pipeline.render.render_stage import build_book_from_translations
 from retainpdf_pipeline.render.render_stage import build_book_pipeline
 from retainpdf_pipeline.render.render_stage import run_render_stage
 from retainpdf_pipeline.translate.translation_stage import translate_book_pipeline
-from retainpdf_pipeline.render.analysis.document import build_render_document_analysis
+from retainpdf_pipeline.render.prepare.page_analysis import page_analysis
+from retainpdf_pipeline.render.prepare.hooks import prepare_hooks
+from retainpdf_pipeline.render.prepare.routes import route_prepare_needs
+from retainpdf_pipeline.render.prepare.store import PREPARE_DIR_NAME
 from retainpdf_pipeline.render.source.prewarm import prewarm_manifest_path_from_artifacts_dir
 from retainpdf_pipeline.render.source.prewarm import RenderPrewarmHandle
 from retainpdf_pipeline.render.source.prewarm import RenderPrewarmSpec
 from retainpdf_pipeline.render.source.prewarm import start_render_source_prewarm
-from retainpdf_pipeline.translate.public import resolve_page_range
-from retainpdf_pipeline.translate.public import write_translation_debug_index
-from retainpdf_pipeline.translate.public import write_translation_diagnostics
-from retainpdf_pipeline.translate.public import GlossaryEntry
-from retainpdf_pipeline.translate.public import blocking_untranslated_items
-from retainpdf_pipeline.translate.public import enforce_no_blocking_review_errors
+from retainpdf_translation.public import refresh_translation_qa_after_render
+from retainpdf_translation.public import resolve_page_range
+from retainpdf_translation.public import write_translation_debug_index
+from retainpdf_translation.public import write_translation_diagnostics
+from retainpdf_translation.public import GlossaryEntry
+from retainpdf_translation.public import blocking_untranslated_items
+from retainpdf_translation.public import enforce_no_blocking_review_errors
 
 
 def run_book_pipeline(
@@ -57,14 +62,15 @@ def run_book_pipeline(
     typst_font_family: str = fonts.TYPST_DEFAULT_FONT_FAMILY,
     pdf_compress_dpi: int = runtime.DEFAULT_PDF_COMPRESS_DPI,
     source_cleanup_strategy: str = "pikepdf_text_strip",
+    render_engine: str = DEFAULT_RENDER_ENGINE,
     invocation: dict | None = None,
     render_visual_prewarm_handle: RenderPrewarmHandle | None = None,
-    api_protocol: str | None = None,
-    thinking: str | None = None,
+    preparation: str = "off",
+    reviewer_model: str = "",
+    reviewer_base_url: str = "",
+    reviewer_api_key: str = "",
+    engine: str = "legacy",
 ) -> dict:
-    if api_protocol is not None or thinking is not None:
-        from retainpdf_pipeline.translate.public import register_connection
-        register_connection(base_url=base_url, model=model, protocol=api_protocol, thinking=thinking)
     total_started = time.perf_counter()
     translation_summary = translate_book_pipeline(
         source_json_path=source_json_path,
@@ -93,6 +99,11 @@ def run_book_pipeline(
         glossary_mode=glossary_mode,
         memory_mode=memory_mode,
         invocation=invocation,
+        preparation=preparation,
+        reviewer_model=reviewer_model,
+        reviewer_base_url=reviewer_base_url,
+        reviewer_api_key=reviewer_api_key,
+        engine=engine,
     )
     translate_elapsed = time.perf_counter() - total_started
     diagnostics_path = output_dir.parent / ARTIFACTS_DIR_NAME / "translation_diagnostics.json"
@@ -131,6 +142,7 @@ def run_book_pipeline(
     render_prewarm_manifest_path = prewarm_manifest_path_from_artifacts_dir(output_dir.parent / ARTIFACTS_DIR_NAME)
     render_preprocess_started = time.perf_counter()
     render_document_analysis = _try_build_render_document_analysis(
+        prepare_dir=output_dir.parent / ARTIFACTS_DIR_NAME / PREPARE_DIR_NAME,
         source_pdf_path=source_pdf_path,
         translated_pages=translation_summary["translated_pages_map"],
         start_page=translation_summary["start_page"],
@@ -146,22 +158,24 @@ def run_book_pipeline(
         translated_pages_map=translation_summary["translated_pages_map"],
         document_analysis=render_document_analysis,
     )
-    render_preprocess_handle = start_render_source_prewarm(
-        RenderPrewarmSpec(
-            source_pdf_path=source_pdf_path,
-            output_pdf_path=output_pdf_path,
-            artifacts_dir=output_dir.parent / ARTIFACTS_DIR_NAME,
-            translated_pages=translation_summary["translated_pages_map"],
-            render_mode=render_mode,
-            start_page=translation_summary["start_page"],
-            end_page=translation_summary["end_page"],
-            pdf_compress_dpi=pdf_compress_dpi,
-            source_cleanup_strategy=source_cleanup_strategy,
-            document_analysis=render_document_analysis,
-            include_source_cleanup=effective_prewarm_render_mode != "overlay",
+    # 路线声明：rpr_fit 不要完整版式 payload，不做翻译后的 prewarm，渲染阶段按步骤缓存取所需。
+    if route_prepare_needs(render_engine).payload_layout:
+        _run_post_translation_render_prewarm(
+            RenderPrewarmSpec(
+                source_pdf_path=source_pdf_path,
+                output_pdf_path=output_pdf_path,
+                artifacts_dir=output_dir.parent / ARTIFACTS_DIR_NAME,
+                translated_pages=translation_summary["translated_pages_map"],
+                render_mode=render_mode,
+                start_page=translation_summary["start_page"],
+                end_page=translation_summary["end_page"],
+                pdf_compress_dpi=pdf_compress_dpi,
+                source_cleanup_strategy=source_cleanup_strategy,
+                document_analysis=render_document_analysis,
+                include_source_cleanup=effective_prewarm_render_mode != "overlay",
+                prepare_hooks=prepare_hooks(output_dir.parent / ARTIFACTS_DIR_NAME / PREPARE_DIR_NAME),
+            )
         )
-    )
-    render_preprocess_handle.wait()
     render_preprocess_elapsed = time.perf_counter() - render_preprocess_started
 
     save_started = time.perf_counter()
@@ -182,7 +196,11 @@ def run_book_pipeline(
         pdf_compress_dpi=pdf_compress_dpi,
         source_cleanup_strategy=source_cleanup_strategy,
         render_prewarm_manifest_path=render_prewarm_manifest_path,
+        artifacts_dir=output_dir.parent / ARTIFACTS_DIR_NAME,
+        render_engine=render_engine,
     )
+    # 翻译阶段生成 QA 时还没排版；渲染完带上 fit 报告再算一次。失败只记日志。
+    refresh_translation_qa_after_render(output_dir.parent, translations_dir=output_dir)
     save_elapsed = time.perf_counter() - save_started
     total_elapsed = time.perf_counter() - total_started
     return {
@@ -197,6 +215,8 @@ def run_book_pipeline(
         "save_elapsed": save_elapsed,
         "render_preprocess_elapsed": render_preprocess_elapsed,
         "render_diagnostics": render_summary.get("render_diagnostics", {}),
+        "fit_report": render_summary.get("fit_report", {}),
+        "render_engine": render_summary.get("render_engine", {}),
         "total_elapsed": total_elapsed,
         "effective_render_mode": render_summary["effective_render_mode"],
         "translation_diagnostics_path": str(diagnostics_path) if diagnostics_summary else "",
@@ -212,15 +232,21 @@ def run_book_pipeline(
     }
 
 
+def _run_post_translation_render_prewarm(spec: RenderPrewarmSpec) -> None:
+    start_render_source_prewarm(spec).wait()
+
+
 def _try_build_render_document_analysis(
     *,
+    prepare_dir: Path,
     source_pdf_path: Path,
     translated_pages: dict[int, list[dict]],
     start_page: int,
     end_page: int,
 ):
     try:
-        return build_render_document_analysis(
+        return page_analysis(
+            prepare_dir,
             source_pdf_path=source_pdf_path,
             translated_pages=translated_pages,
             start_page=start_page,

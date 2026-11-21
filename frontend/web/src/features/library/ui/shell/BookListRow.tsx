@@ -2,7 +2,8 @@
 // 更新日期 + 右侧眼睛(快速阅读)。点行 → 书籍详情弹窗。数据/动作与卡片一致。
 
 import { memo } from "react";
-import { cn } from "@/ui/lib/utils";
+import type { KeyboardEvent, MouseEvent, SVGProps } from "react";
+import { IconButton, cn } from "@retainpdf/ui";
 import { formatZhDateCompact } from "@/platform/utils/datetime.js";
 import { cardSignatureOf } from "./BookCard.jsx";
 import { isLibraryCardProcessing, libraryCardBadge } from "../../domain/card/library-card-badge.js";
@@ -50,7 +51,7 @@ function IconFile() {
     </svg>
   );
 }
-function IconCheck(props) {
+function IconCheck(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" width="12" height="12" strokeLinecap="round" strokeLinejoin="round" {...props}>
       <path d="m5 12 5 5L20 7" />
@@ -106,18 +107,19 @@ function BookListRowImpl({
     }
     if (jobId) onSelect?.(jobId);
   }
-  function handleClick(event) {
-    if (event.target?.closest?.("button")) return;
+  // EventTarget 类型上没有 closest；点击目标实际都是 Element，这里只做类型收窄，保持原来的可选调用。
+  function handleClick(event: MouseEvent<HTMLDivElement>) {
+    if ((event.target as Element | null)?.closest?.("button")) return;
     event.preventDefault();
     open();
   }
-  function handleKeyDown(event) {
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key !== "Enter" && event.key !== " ") return;
-    if (event.target?.closest?.("button")) return;
+    if ((event.target as Element | null)?.closest?.("button")) return;
     event.preventDefault();
     open();
   }
-  function handleEye(event) {
+  function handleEye(event: MouseEvent<HTMLButtonElement>) {
     event.preventDefault();
     event.stopPropagation();
     if (readPresentation.target === "job") {
@@ -182,15 +184,9 @@ function BookListRowImpl({
 
       {batchMode ? null : (
         <div className="flex shrink-0 items-center self-center">
-          <button
-            type="button"
-            className="recent-job-reader flex h-9 w-9 items-center justify-center rounded-xl bg-muted/50 text-foreground transition hover:bg-muted active:scale-90"
-            title={readPresentation.label}
-            aria-label={readPresentation.label}
-            onClick={handleEye}
-          >
+          <IconButton variant="secondary" className="recent-job-reader" label={readPresentation.label} onClick={handleEye}>
             <IconEye />
-          </button>
+          </IconButton>
         </div>
       )}
     </div>

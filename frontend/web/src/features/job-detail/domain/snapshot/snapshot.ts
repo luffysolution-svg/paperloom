@@ -1,7 +1,8 @@
 import { resolveDisplayedStagePresentation } from "@retainpdf/domain/job-status";
+import type { EventsPayload } from "@retainpdf/domain/job-status";
 import { buildEventsPresentation } from "./events.js";
 import { buildStageHistoryPresentation } from "./history.js";
-import { isJobTerminal } from "@retainpdf/domain/job";
+import { isJobTerminal, jobStatusPresentation } from "@retainpdf/domain/job";
 import {
   resolveJobActions,
 } from "@retainpdf/domain/job";
@@ -103,8 +104,9 @@ export function buildFailureLogText(job: StatusDetailJob): string {
     const text = diagnosticValueText(value);
     return text && text !== "-" ? [`${label}: ${text}`] : [];
   });
-  const logTail = Array.isArray(job?.log_tail)
-    ? job.log_tail.map(diagnosticValueText).filter(Boolean)
+  const logTailSource = job?.log_tail;
+  const logTail = Array.isArray(logTailSource)
+    ? logTailSource.map(diagnosticValueText).filter(Boolean)
     : [];
   if (logTail.length) {
     lines.push("", "最近日志", ...logTail);
@@ -135,26 +137,26 @@ function stageIconMarkup(job: StatusDetailJob, stageText: string | undefined): s
 }
 
 function statusDetailNote(job: StatusDetailJob = {}): string {
-  return job.status === "failed"
+  // 类型上允许 null；null 时 status 视为空，落到默认文案（原先直接读 null.status 会抛错）。
+  return job?.status === "failed"
     ? "查看失败原因、建议与事件流"
-    : job.status === "succeeded" && isJobTerminal(job)
+    : job?.status === "succeeded" && isJobTerminal(job)
       ? "任务已完成，可查看概览与事件流"
       : "查看任务概览、失败原因与事件流";
 }
 
+// 文字统一出自 jobStatusPresentation。实时推送里 succeeded 可能先于最终快照到，
+// 所以这里要等完成信号（isJobTerminal）才算完成。以前取消的任务落到兜底，写成「准备中」。
 function headlineStatus(job: StatusDetailJob = {}) {
-  const status = `${job?.status || ""}`.trim().toLowerCase();
-  if (status === "failed") return { statusLabel: "失败", tone: "failed" as const };
-  if (status === "succeeded" && isJobTerminal(job)) {
-    return { statusLabel: "已完成", tone: "success" as const };
-  }
-  if (["running", "validating"].includes(status)) {
-    return { statusLabel: "处理中", tone: "running" as const };
-  }
-  if (["queued", "pending"].includes(status)) {
-    return { statusLabel: "排队中", tone: "neutral" as const };
-  }
-  return { statusLabel: "准备中", tone: "neutral" as const };
+  const { key, label } = jobStatusPresentation(job?.status, {
+    idleLabel: "准备中",
+    unknownLabel: "准备中",
+    succeededIsFinal: isJobTerminal(job),
+  });
+  if (key === "failed") return { statusLabel: label, tone: "failed" as const };
+  if (key === "succeeded") return { statusLabel: label, tone: "success" as const };
+  if (key === "running") return { statusLabel: label, tone: "running" as const };
+  return { statusLabel: label, tone: "neutral" as const };
 }
 
 function buildHeadline(job: StatusDetailJob, stageText: string | undefined) {
@@ -242,14 +244,14 @@ function buildFailureDetails(job: StatusDetailJob) {
 
 export function buildStatusDetailSnapshot(
   job: StatusDetailJob,
-  eventsPayload: unknown,
+  eventsPayload: EventsPayload | null | undefined,
   {
     durationOptions = {},
   }: StatusDetailSnapshotOptions = {},
 ) {
   const presentation = resolveDisplayedStagePresentation(job, eventsPayload) as StagePresentationLike;
   const actions = resolveJobActions(job);
-  const rerunEnabled = Boolean(actions.rerunEnabled && actions.rerun);
+  const rerunEnabled = Boolean(actions.resumeEnabled);
 
   return {
     headline: buildHeadline(job, presentation.detail),

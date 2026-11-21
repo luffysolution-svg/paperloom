@@ -57,7 +57,8 @@ export interface StatusDetailControllerDeps {
     apiPrefix: string | undefined,
     request: OcrAmbiguityResolutionRequest,
   ) => Promise<unknown>;
-  rerunJob: (actionUrl: string) => Promise<unknown>;
+  /** POST /jobs/:id/actions/resume */
+  resumeJob: (jobId: string, apiPrefix?: string) => Promise<unknown>;
   retryJobStage?: (
     jobId: string,
     apiPrefix: string | undefined,

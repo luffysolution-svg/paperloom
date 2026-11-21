@@ -1,17 +1,13 @@
 import json
 import multiprocessing
 import os
-import sys
 import tempfile
 import threading
 import unittest
 from pathlib import Path
 
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-from retainpdf_pipeline.translate.artifacts import TranslationRequestJournal
+from retainpdf_translation.artifacts import TranslationRequestJournal
 
 
 def _crash_after_durable_dispatch(path: str, request_key: str) -> None:

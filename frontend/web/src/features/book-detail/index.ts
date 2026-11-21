@@ -10,7 +10,6 @@ export { BookDetailShell } from "./ui/shell/BookDetailShell.jsx";
 export {
   BOOK_DETAIL_TABS,
   BookDetailArtifactsTab,
-  BookDetailManageTab,
   BookDetailOverviewTab,
   BookDetailProcessingTab,
   BookDetailRightTabs,

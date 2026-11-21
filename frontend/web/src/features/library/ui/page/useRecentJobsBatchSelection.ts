@@ -1,7 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { DeleteBlockedDocument } from "../../domain/types.js";
+import type { CollectionRecord, CollectionsController } from "@/features/collections/index.js";
+import type {
+  LibraryActions,
+  LibraryCardItem,
+} from "../../domain/types.js";
 import { libraryItemDocumentId } from "./recent-jobs-library-helpers.js";
+
+type RecentJobsBatchSelectionOptions = {
+  visibleItems: LibraryCardItem[];
+  onBatchModeChange?: (active: boolean) => void;
+  collectionsController: CollectionsController;
+  actions: LibraryActions;
+};
 
 // 批量选择/删除状态机(#31)。从 RecentJobsLibrary 抽出,行为与回调和
 // 上报通道(onBatchModeChange)保持不变。
@@ -10,7 +21,7 @@ export function useRecentJobsBatchSelection({
   onBatchModeChange,
   collectionsController,
   actions,
-}) {
+}: RecentJobsBatchSelectionOptions) {
   // 批量选择(#31):选中态用 document_id 做 key(和网格主键一致);批量模式
   // 开关经 onBatchModeChange 上报给 HomeApp,由它把底部栏(AppBottomBar)用
   // CSS 隐藏(batchMode 期间让位给这条批量工具栏——两者都固定在底部居中)。
@@ -18,10 +29,15 @@ export function useRecentJobsBatchSelection({
   const [selectedIds, setSelectedIds] = useState(() => new Set<string>());
   const [batchBusy, setBatchBusy] = useState(false);
   const [pendingDeleteIds, setPendingDeleteIds] = useState<string[] | null>(null);
-  const [pendingBlockedDelete, setPendingBlockedDelete] = useState<DeleteBlockedDocument[] | null>(null);
-  const [collections, setCollections] = useState([]);
+  const [collections, setCollections] = useState<CollectionRecord[]>([]);
 
-  function setBatchMode(next) {
+  // 列表一卸载（切 tab、开任务中心）批量模式就没了，要报回去；不然 HomeApp 回来时底部栏还藏着，
+  // 上传、搜索、设置、任务中心的入口全看不见。
+  const onBatchModeChangeRef = useRef(onBatchModeChange);
+  onBatchModeChangeRef.current = onBatchModeChange;
+  useEffect(() => () => onBatchModeChangeRef.current?.(false), []);
+
+  function setBatchMode(next: boolean) {
     setBatchModeState(next);
     if (!next) setSelectedIds(new Set());
     onBatchModeChange?.(next);
@@ -29,7 +45,7 @@ export function useRecentJobsBatchSelection({
   // useCallback:稳定引用——传给每张卡片当 onToggleSelect,不然
   // areCardPropsEqual 里的 onToggleSelect 每次 render 都判不相等,
   // RecentJobsLibrary 一重渲就拖着所有卡片一起重渲(memo 白做)。
-  const toggleSelect = useCallback((documentId) => {
+  const toggleSelect = useCallback((documentId: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(documentId)) next.delete(documentId);
@@ -79,7 +95,7 @@ export function useRecentJobsBatchSelection({
   const allSelected = selectableIds.length > 0 && selectableIds.every((id) => effectiveSelectedIds.has(id));
 
   function handleSelectAllToggle() {
-    setSelectedIds(allSelected ? new Set() : new Set(selectableIds));
+    setSelectedIds(allSelected ? new Set<string>() : new Set(selectableIds));
   }
 
   function handleBatchDelete() {
@@ -88,7 +104,7 @@ export function useRecentJobsBatchSelection({
     setPendingDeleteIds(ids);
   }
 
-  function reportBatchDeleteResult(confirmed, failed) {
+  function reportBatchDeleteResult(confirmed: number, failed: number) {
     if (failed === 0) toast.success(`已删除 ${confirmed} 篇`);
     else if (confirmed > 0) toast.warning(`已删除 ${confirmed} 篇，${failed} 篇失败`);
     else toast.error("删除失败，请稍后重试");
@@ -102,62 +118,18 @@ export function useRecentJobsBatchSelection({
       const result = await actions.deleteDocuments(ids);
       const confirmed = result?.confirmed || 0;
       const failed = result?.failed || 0;
-      const blocked = result?.blocked || [];
-      if (blocked.length > 0) {
-        // 已删除的报告完，剩下的被收藏挡住：弹第二步让用户决定是否清空收藏。
-        if (confirmed > 0) toast.success(`已删除 ${confirmed} 篇`);
-        setPendingDeleteIds(null);
-        setPendingBlockedDelete(blocked);
-        return;
-      }
       reportBatchDeleteResult(confirmed, failed);
       setBatchMode(false);
       setPendingDeleteIds(null);
     } catch (err) {
-      toast.error(err?.message || "删除失败，请稍后重试");
+      toast.error((err as { message?: string } | null)?.message || "删除失败，请稍后重试");
       setPendingDeleteIds(null);
     } finally {
       setBatchBusy(false);
     }
   }
 
-  // 第二步：清空被引用文档的收藏，再重试删除这些文档。
-  async function confirmClearFavoritesBatchDelete() {
-    const blocked = pendingBlockedDelete || [];
-    if (!blocked.length || batchBusy) return;
-    setBatchBusy(true);
-    try {
-      const clearedPaths = new Set<string>();
-      for (const entry of blocked) {
-        if (!entry.clearFavoritesPath || clearedPaths.has(entry.clearFavoritesPath)) continue;
-        clearedPaths.add(entry.clearFavoritesPath);
-        await actions.clearFavorites(entry.clearFavoritesPath);
-      }
-      const ids = blocked.map((entry) => entry.documentId);
-      const result = await actions.deleteDocuments(ids);
-      const confirmed = result?.confirmed || 0;
-      const failed = result?.failed || 0;
-      const stillBlocked = result?.blocked || [];
-      if (stillBlocked.length > 0) {
-        // 清空后又被并发收藏回来：保留确认态，更新计数让用户重试。
-        if (confirmed > 0 || failed > 0) {
-          reportBatchDeleteResult(confirmed, failed);
-        }
-        setPendingBlockedDelete(stillBlocked);
-        return;
-      }
-      reportBatchDeleteResult(confirmed, failed);
-      setPendingBlockedDelete(null);
-      setBatchMode(false);
-    } catch (err) {
-      toast.error(err?.message || "删除失败，请稍后重试");
-      setPendingBlockedDelete(null);
-    } finally {
-      setBatchBusy(false);
-    }
-  }
-
-  async function handleBatchAddToCollection(collectionId) {
+  async function handleBatchAddToCollection(collectionId: CollectionRecord["collection_id"]) {
     const ids = [...effectiveSelectedIds];
     if (!ids.length || batchBusy) return;
     setBatchBusy(true);
@@ -166,14 +138,11 @@ export function useRecentJobsBatchSelection({
       toast.success(`已加入合集，共 ${ids.length} 篇`);
       setBatchMode(false);
     } catch (err) {
-      toast.error(err?.message || "加入合集失败，请稍后重试");
+      toast.error((err as { message?: string } | null)?.message || "加入合集失败，请稍后重试");
     } finally {
       setBatchBusy(false);
     }
   }
-
-  const blockedFavoriteTotal = (pendingBlockedDelete || [])
-    .reduce((sum, entry) => sum + (Number(entry.favoriteCount) || 0), 0);
 
   return {
     batchMode,
@@ -184,15 +153,11 @@ export function useRecentJobsBatchSelection({
     batchBusy,
     pendingDeleteIds,
     setPendingDeleteIds,
-    pendingBlockedDelete,
-    setPendingBlockedDelete,
     collections,
     toggleSelect,
     handleSelectAllToggle,
     handleBatchDelete,
     confirmBatchDelete,
-    confirmClearFavoritesBatchDelete,
     handleBatchAddToCollection,
-    blockedFavoriteTotal,
   };
 }

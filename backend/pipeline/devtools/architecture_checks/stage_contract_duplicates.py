@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 from devtools.architecture_checks.common import PACKAGE_ROOT
+from devtools.architecture_checks.common import TRANSLATION_PACKAGE_ROOT
 from devtools.architecture_checks.common import display_path
 from devtools.architecture_checks.common import parse_python_file
 from devtools.architecture_checks.common import read_text
@@ -45,18 +46,22 @@ from devtools.architecture_checks.common import scan_py_files
 
 DUPLICATE_SCAN_ROOT = PACKAGE_ROOT
 PACKAGE_NAME = "retainpdf_pipeline"
+# 翻译拆成独立包 retainpdf-translation 以后，副本和源可能在两个包之间（渲染抄翻译的
+# payload 契约、翻译抄 document_schema 的词表），两个包都扫、两种模块名都认。
+TRANSLATION_SCAN_ROOT = TRANSLATION_PACKAGE_ROOT
+TRANSLATION_PACKAGE_NAME = "retainpdf_translation"
 
 # 标记措辞不统一,实际出现过的形态:
 #   "# Duplicated from retainpdf_pipeline.ocr.document_schema.classification"
-#   "Duplicated from:\n- retainpdf_pipeline.translate.core.payload.manifest\n- ..."
-#   "Duplicated normalization from\nretainpdf_pipeline.translate.core.terms.glossary"
-#   "Duplicated formula-only subset of\nretainpdf_pipeline.translate.core.payload.formula_protection"
+#   "Duplicated from:\n- retainpdf_translation.core.payload.manifest\n- ..."
+#   "Duplicated normalization from\nretainpdf_translation.core.terms.glossary"
+#   "Duplicated formula-only subset of\nretainpdf_translation.core.payload.formula_protection"
 #   "Duplicated constants/helpers from:\n- retainpdf_pipeline.ocr.document_schema.version"
 # 统一按「Duplicated ... from / subset of」识别,再从该行起往后收模块名。
 # 注意 render/layout/protected_tokens.py 写的是 "duplicated under :mod:`...`"
 # (方向相反:它是 facade,说自己的实现被搬去了别处),不是副本,故不匹配。
 DUPLICATE_MARKER_RE = re.compile(r"Duplicated\b[^\n]*\b(?:from|subset of)\b")
-MODULE_REF_RE = re.compile(rf"{PACKAGE_NAME}(?:\.[A-Za-z_][A-Za-z0-9_]*)+")
+MODULE_REF_RE = re.compile(rf"(?:{PACKAGE_NAME}|{TRANSLATION_PACKAGE_NAME})(?:\.[A-Za-z_][A-Za-z0-9_]*)+")
 
 CONTRACT_EXEMPT_NAMES = frozenset({"__all__"})
 
@@ -71,7 +76,7 @@ CONTRACT_EXEMPT_NAMES = frozenset({"__all__"})
 REQUIRED_COMPARISONS: dict[tuple[str, str], frozenset[str]] = {
     (
         "retainpdf_pipeline/render/workflow/translation_records.py",
-        f"{PACKAGE_NAME}.translate.core.payload.template_records",
+        f"{TRANSLATION_PACKAGE_NAME}.core.payload.template_records",
     ): frozenset(
         {
             "build_translation_record",
@@ -82,18 +87,18 @@ REQUIRED_COMPARISONS: dict[tuple[str, str], frozenset[str]] = {
     ),
     (
         "retainpdf_pipeline/render/workflow/source_page_records.py",
-        f"{PACKAGE_NAME}.translate.core.ocr.json_extractor",
+        f"{TRANSLATION_PACKAGE_NAME}.core.ocr.json_extractor",
     ): frozenset({"_TRANSLATION_METADATA_BRIDGE_KEYS", "DERIVED_STRUCTURE_ROLE_MAP"}),
     (
         "retainpdf_pipeline/render/source/translation_manifest.py",
-        f"{PACKAGE_NAME}.translate.core.payload.template_contract",
+        f"{TRANSLATION_PACKAGE_NAME}.core.payload.template_contract",
     ): frozenset({"REQUIRED_CONTRACT_FIELDS"}),
     (
         "retainpdf_pipeline/render/semantics/vocabulary.py",
         f"{PACKAGE_NAME}.ocr.document_schema.vocabulary",
     ): frozenset({"BLOCK_CLASSES", "CONTENT_KINDS"}),
     (
-        "retainpdf_pipeline/translate/core/vocabulary.py",
+        "translation/retainpdf_translation/core/vocabulary.py",
         f"{PACKAGE_NAME}.ocr.document_schema.vocabulary",
     ): frozenset({"BLOCK_CLASSES", "CONTENT_KINDS"}),
 }
@@ -157,12 +162,14 @@ def duplicate_source_modules(path: Path) -> list[str] | None:
 
 def resolve_module_path(module: str) -> Path | None:
     parts = module.split(".")
-    if not parts or parts[0] != PACKAGE_NAME:
+    roots = {PACKAGE_NAME: DUPLICATE_SCAN_ROOT, TRANSLATION_PACKAGE_NAME: TRANSLATION_SCAN_ROOT}
+    if not parts or parts[0] not in roots:
         return None
-    candidate = DUPLICATE_SCAN_ROOT.joinpath(*parts[1:]).with_suffix(".py")
+    root = roots[parts[0]]
+    candidate = root.joinpath(*parts[1:]).with_suffix(".py")
     if candidate.is_file():
         return candidate
-    package_init = DUPLICATE_SCAN_ROOT.joinpath(*parts[1:], "__init__.py")
+    package_init = root.joinpath(*parts[1:], "__init__.py")
     if package_init.is_file():
         return package_init
     return None
@@ -282,7 +289,8 @@ def check_stage_contract_duplicates(errors: list[str]) -> None:
     compared_strings = 0
     seen_required: set[tuple[str, str]] = set()
 
-    for copy_path in scan_py_files(DUPLICATE_SCAN_ROOT):
+    scan_roots = [root for root in (DUPLICATE_SCAN_ROOT, TRANSLATION_SCAN_ROOT) if root.is_dir()]
+    for copy_path in [path for root in scan_roots for path in scan_py_files(root)]:
         modules = duplicate_source_modules(copy_path)
         if modules is None:
             continue

@@ -1,4 +1,19 @@
 import { defineConnectedComponent } from "@/platform/store/connector.js";
+import type { LibraryJobItem, RecentJobsState, RecentJobsStatePort } from "./state.js";
+import type { RecentJobActionsPort } from "./commit.js";
+
+type RecentJobsStoreRendererActions = RecentJobActionsPort;
+
+type RecentJobsListPayload = {
+  items: LibraryJobItem[];
+  allItems: LibraryJobItem[];
+  invocationSummary: Record<string, unknown> | null;
+  reset: boolean;
+  hasMore: boolean;
+  onSelect?: RecentJobsStoreRendererActions["selectJob"];
+  onDelete?: RecentJobsStoreRendererActions["deleteJob"];
+  onReader?: RecentJobsStoreRendererActions["openJobReader"];
+};
 
 export function createRecentJobsStoreRenderer({
   recentJobsStatePort,
@@ -6,7 +21,13 @@ export function createRecentJobsStoreRenderer({
   actions,
   invocationSummary = null,
   renderActions = ["prependItem", "replaceItem", "removeJobFamily"],
-}: any = {}) {
+}: {
+  recentJobsStatePort?: Pick<RecentJobsStatePort, "store" | "getSnapshot">;
+  renderRecentJobsList?: (payload: RecentJobsListPayload) => void;
+  actions?: RecentJobsStoreRendererActions;
+  invocationSummary?: Record<string, unknown> | null;
+  renderActions?: string[];
+} = {}) {
   if (!recentJobsStatePort?.store || typeof renderRecentJobsList !== "function") {
     return {
       renderNow() {},
@@ -14,13 +35,20 @@ export function createRecentJobsStoreRenderer({
     };
   }
 
+  // 上面判断过之后存成常量：内部函数里 TS 不会把那次判断延续过来。
+  const statePort = recentJobsStatePort;
+  const renderListToView = renderRecentJobsList;
   let currentInvocationSummary = invocationSummary;
   const actionSet = new Set((Array.isArray(renderActions) ? renderActions : [])
     .map((action) => `${action || ""}`.trim())
     .filter(Boolean));
 
-  function renderList(viewModel) {
-    renderRecentJobsList({
+  function renderList(viewModel: {
+    items: LibraryJobItem[];
+    invocationSummary?: Record<string, unknown> | null;
+    hasMore: boolean;
+  }) {
+    renderListToView({
       items: viewModel.items,
       allItems: viewModel.items,
       invocationSummary: viewModel.invocationSummary ?? currentInvocationSummary,
@@ -37,14 +65,14 @@ export function createRecentJobsStoreRenderer({
     sources: {
       recentJobs: recentJobsStatePort.store,
     },
-    mapState({ recentJobs }) {
+    mapState({ recentJobs }: { recentJobs: RecentJobsState | undefined }) {
       return {
         hasMore: Boolean(recentJobs?.hasMore),
         invocationSummary: recentJobs?.invocationSummary ?? null,
         items: Array.isArray(recentJobs?.items) ? recentJobs.items : [],
       };
     },
-    render(viewModel, { meta = {} }: any = {}) {
+    render(viewModel, { meta = {} }: { meta?: { initial?: boolean; action?: string } } = {}) {
       if (meta.initial) {
         return;
       }
@@ -55,11 +83,11 @@ export function createRecentJobsStoreRenderer({
     },
   });
 
-  const mounted = component.mount();
+  const mounted = component.mount({}, {}) || undefined;
 
-  function renderNow({ invocationSummary: nextInvocationSummary = currentInvocationSummary }: any = {}) {
+  function renderNow({ invocationSummary: nextInvocationSummary = currentInvocationSummary }: { invocationSummary?: Record<string, unknown> | null } = {}) {
     currentInvocationSummary = nextInvocationSummary;
-    const snapshot = recentJobsStatePort.getSnapshot();
+    const snapshot = statePort.getSnapshot();
     renderList({
       items: snapshot.items,
       invocationSummary: snapshot.invocationSummary ?? currentInvocationSummary,

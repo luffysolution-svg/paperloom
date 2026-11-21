@@ -1,0 +1,115 @@
+/* 状态详情里几个组件共用的信息块：info-value / info-row / detail-info-list / status-panel-note。
+ * 概览、失败、翻译调试、日志弹窗都用，所以放在功能内的共享文件。
+ *
+ * @owns translation, info-value, info-row, detail-info-list, status-panel-note, ring
+ * @uses detail-item, status-card */
+
+@utility info-value {
+  .translation-summary-card & {
+    min-width: 0;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    overflow-wrap: anywhere;
+  }
+
+  .info-row.translation-detail-row & {
+    font-size: 13px;
+    text-align: right;
+  }
+
+  .status-card & {
+    color: var(--ink);
+  }
+
+  .detail-item & {
+    font-size: 15px;
+    line-height: 1.45;
+    color: var(--ink);
+    word-break: break-word;
+  }
+  @apply text-[15px];
+  color: var(--ink);
+
+  .failure-hero-card & {
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--ink);
+    word-break: break-word;
+  }
+
+  .info-row & {
+    font-size: 15px;
+    line-height: 1.45;
+    color: var(--ink);
+    word-break: break-word;
+  }
+
+  .status-card & {
+    color: var(--ink);
+  }
+}
+
+@utility status-panel-note {
+  .translation-debug-subhead & {
+    text-align: right;
+  }
+  font-size: 12px;
+  color: var(--muted);
+}
+
+@utility detail-info-list {
+  /* 提高特异性:后文的 .detail-info-list 定义了两列,这里要单列扁平键值行 */
+  &.translation-detail-grid {
+    margin: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+
+  @media (max-width: 767px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@utility info-row {
+  /* 详情字段用扁平键值行,盖掉 .info-row 的卡片样式 */
+  &.translation-detail-row {
+    grid-template-columns: minmax(120px, auto) 1fr;
+    align-items: baseline;
+    gap: 10px;
+    min-height: 0;
+    padding: 7px 2px;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+  }
+
+  &.translation-detail-row .info-value {
+    font-size: 13px;
+    text-align: right;
+  }
+  @apply grid gap-1 rounded-[14px] px-4 py-3;
+  background: linear-gradient(180deg, var(--paper) 0%, var(--paper) 100%);
+  border: 1px solid var(--line);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--shadow-color) 4%, transparent);
+  min-height: 56px;
+
+  & .label {
+    font-size: 12px;
+    letter-spacing: 0.01em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  & .info-value {
+    font-size: 15px;
+    line-height: 1.45;
+    color: var(--ink);
+    word-break: break-word;
+  }
+}

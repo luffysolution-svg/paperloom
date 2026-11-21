@@ -8,9 +8,9 @@ use std::process::{Child, Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use retain_core::models::domain::{JobSnapshot, JobStatusKind, WorkflowKind};
-use retain_core::models::request::CreateJobInput;
-use retain_data::db::{Db, PipelineDispatchBegin, PipelineDispatchIntent};
+use retainpdf_core::models::domain::{JobSnapshot, JobStatusKind, WorkflowKind};
+use retainpdf_core::models::request::CreateJobInput;
+use retainpdf_data::db::{Db, PipelineDispatchBegin, PipelineDispatchIntent};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 

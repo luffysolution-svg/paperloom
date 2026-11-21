@@ -16,6 +16,13 @@ export function syncReaderBodyClasses(body: HTMLElement = document.body): void {
   }
 }
 
+/**
+ * Removes any sibling markup that predates the Reader mount. Retained
+ * intentionally as a defensive cleanup: a stale cached MPA shell (old HTML)
+ * can still contain legacy markup, and this is the only guarantee that the
+ * React root owns <body>. `bootReader` calls it unless the host explicitly
+ * opts out via `purgeLegacyMarkup: false`.
+ */
 export function purgeLegacyMarkup(
   body: HTMLElement = document.body,
   preservedRoot?: HTMLElement,

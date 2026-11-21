@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import re
 
+from retainpdf_math.render_prep import normalize_angstrom_in_text
+from retainpdf_math.render_prep import prepare_formula_for_render
+
+from retainpdf_math.direct_typst import is_fullwidth_punctuation
 from retainpdf_pipeline.render.layout.text_analysis import analyze_text
 from retainpdf_pipeline.render.layout.text_analysis import math_token_body
 from retainpdf_pipeline.render.layout.text_analysis import normalize_direct_typst_math_boundaries
@@ -20,7 +24,6 @@ MARKDOWN_EMPHASIS_RE = re.compile(
 )
 TEXT_HEAVY_INLINE_MATH_MIN_TEXT_CHARS = 10
 TEXT_HEAVY_INLINE_MATH_MIN_TEXT_BLOCKS = 2
-
 
 def apply_to_non_math_segments(text: str, replacer) -> str:
     return replace_non_formula_segments(text, replacer)
@@ -51,20 +54,44 @@ def surround_inline_math_with_spaces(markdown: str) -> str:
     chunks: list[str] = []
     left_no_space = set("([{\"'“‘（【「『")
     right_no_space = set(".,;:!?)]}，。！？；：、（）【】「」『』")
+    after_math = False
     for token in analyze_text(text).tokens:
         if token.kind not in RAW_MATH_TOKEN_KINDS:
             chunks.append(token.value)
+            if after_math and token.value.strip():
+                # 全角标点和公式之间不留空格（「$x$ 。」→「$x$。」）。分词器可能把空格单切一段，
+                # 所以看的是公式之后拼起来的整段，而不是单个片段。
+                tail_index = after_math_index
+                tail = "".join(chunks[tail_index:])
+                if tail[:1] in (" ", "\t") and is_fullwidth_punctuation(tail.lstrip(" \t")[:1]):
+                    chunks[tail_index:] = [tail.lstrip(" \t")]
+                after_math = False
             continue
         expr = token.value
-        prev_char = text[token.start - 1] if token.start > 0 else ""
+        # 同上，公式前面（「， $x$」→「，$x$」）。
+        joined = "".join(chunks)
+        stripped = joined.rstrip(" \t")
+        if stripped != joined and is_fullwidth_punctuation(stripped[-1:]):
+            chunks = [stripped]
+            joined = stripped
+        prev_char = joined[-1:] if joined else ""
         next_char = text[token.end] if token.end < len(text) else ""
         prefix = ""
         suffix = ""
-        if prev_char and not prev_char.isspace() and prev_char not in left_no_space:
+        if (
+            prev_char and not prev_char.isspace() and prev_char not in left_no_space
+            and not is_fullwidth_punctuation(prev_char)
+        ):
             prefix = " "
-        if next_char and not next_char.isspace() and next_char not in right_no_space:
+        next_visible = text[token.end:].lstrip(" \t")[:1]
+        if (
+            next_char and not next_char.isspace() and next_char not in right_no_space
+            and not is_fullwidth_punctuation(next_char)
+        ):
             suffix = " "
         chunks.append(f"{prefix}{expr}{suffix}")
+        after_math = bool(next_visible)
+        after_math_index = len(chunks)
     return re.sub(r"[ \t]{2,}", " ", "".join(chunks)).strip()
 
 
@@ -228,43 +255,16 @@ def demote_text_heavy_inline_math(text: str) -> str:
 
 
 def sanitize_direct_typst_inline_math(text: str) -> str:
-    from retainpdf_pipeline.render.layout.inline_content.fallback.latex_normalizer import (
-        normalize_formula_for_latex_math,
-    )
-
-    from retainpdf_pipeline.foundation.shared.latex_source_repair import (
-        collapse_doubled_command_backslashes,
-    )
-
     def _sanitize_token(token: TextToken) -> str:
-        is_display = token.kind == TextTokenKind.DISPLAY_MATH
         expr = math_token_body(token)
-        if not is_display:
+        if token.kind == TextTokenKind.INLINE_MATH:
             expr = re.sub(r"[\r\n]+\s*", " ", expr)
         if not expr:
             return token.value
-        if expr in {"^®", "^{®}", r"^\circled{R}", r"^\textcircled{R}"}:
-            return "®"
-        spreadsheet_cell = re.fullmatch(r"\\([A-Za-z]{1,3})\\([0-9]{1,7})", expr)
-        if spreadsheet_cell:
-            return f"{spreadsheet_cell.group(1)}{spreadsheet_cell.group(2)}"
-        # 这三条修的是 OCR / 模型产物，不是 mitex 的能力缺口，所以留着。
-        # 第一条曾经是无条件的，把矩阵/cases 的换行符 `\\` 也合并掉，自己制造了
-        # `unknown command: \b`——约束和缘由都在 latex_source_repair 里。
-        expr = collapse_doubled_command_backslashes(expr)
-        expr = re.sub(r"\\langlen\b", r"\\langle n", expr)
-        expr = re.sub(r"\\angle(?=[A-Za-z])", r"\\angle ", expr)
-        # Do not rewrite prefix scripts (e.g. ⟨^{N} → ⟨{}^{N}).
-        # That regex treated LaTeX "\ " (backslash-space) as a delimiter and
-        # corrupted temperatures like -78\ ^{\circ}\mathrm{C} into -78\{}^{\circ}...
-        # Prefix-script form is owned by translation (protect / match-then-translate);
-        # rendering only does light mitex-compatible delimiter/symbol cleanup.
-        expr = re.sub(r"\\circled\s*\{\s*\\times\s*\}", r"\\otimes", expr)
-        expr = re.sub(r"\\circled\s*\{\s*\\parallel\s*\}", r"\\circ", expr)
-        expr = re.sub(r"\\circled\s*\{\s*([^{}]+?)\s*\}", r"\1", expr)
-        if is_display:
-            expr = normalize_formula_for_latex_math(expr)
-        return f"${expr}$"
+        # 公式级的改写（OCR 修补、渲染器写法兼容、埃符号……）在 retainpdf_math.render_prep：
+        # 翻译阶段的公式渲染检查用同一份规则，检查的就是这里交给渲染器的样子。
+        prepared, still_math = prepare_formula_for_render(expr, display=token.kind == TextTokenKind.DISPLAY_MATH)
+        return f"${prepared}$" if still_math else prepared
 
     chunks: list[str] = []
     for token in analyze_text(text or "").tokens:
@@ -278,6 +278,9 @@ def sanitize_direct_typst_inline_math(text: str) -> str:
 def build_direct_typst_passthrough_markdown(text: str) -> str:
     normalized = normalize_direct_typst_math_boundaries(str(text or "").strip())
     normalized = normalize_direct_typst_inline_math_whitespace(normalized)
-    markdown = apply_to_non_math_segments(normalized, escape_literal_asterisks_preserving_emphasis)
+    markdown = apply_to_non_math_segments(
+        normalized,
+        lambda segment: escape_literal_asterisks_preserving_emphasis(normalize_angstrom_in_text(segment)),
+    )
     markdown = sanitize_direct_typst_inline_math(markdown)
     return surround_inline_math_with_spaces(markdown)

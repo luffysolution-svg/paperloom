@@ -1,14 +1,9 @@
 from __future__ import annotations
 
-import sys
 import tempfile
 from pathlib import Path
 
 import fitz
-
-
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
 
 from retainpdf_pipeline.render.source.cleanup.margin_text_cleanup import cleanup_margin_text_blocks

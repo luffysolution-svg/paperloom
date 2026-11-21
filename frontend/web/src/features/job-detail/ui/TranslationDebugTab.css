@@ -1,0 +1,95 @@
+/* 状态详情 · 翻译调试页签：内容区、两栏布局、小标题、面板主体。
+ * ring-reader / ring-download 代码里已搜不到，@utility 未被使用时 Tailwind 不输出；留待确认删除。（TranslationDebugTab）
+ *
+ * @owns translation, info-value, info-row, detail-info-list, status-panel-note, ring */
+
+/* 状态详情 · 翻译调试 tab（列表/筛选/详情/重放） */
+
+/* 状态详情 / 翻译调试 / 事件时间线工具类（从 components.utilities 拆出） */
+
+
+@utility translation-debug-content {
+  display: grid;
+  gap: 16px;
+}
+
+
+
+@utility translation-debug-column {
+  /* 统计条与筛选行不做卡片,只有列表/详情两栏保留一层浅容器 */
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--paper);
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+  align-content: start;
+  padding: 12px 14px;
+}
+
+@utility translation-debug-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.88fr) minmax(0, 1.12fr);
+  gap: 16px;
+  align-items: start;
+
+  @media (max-width: 720px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+
+@utility translation-debug-subhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+
+  & h4 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+
+  & .status-panel-note {
+    text-align: right;
+  }
+}
+
+@utility translation-panel-body {
+  min-height: 320px;
+  max-height: 520px;
+  overflow: auto;
+  padding-right: 2px;
+
+  @media (max-width: 720px) {
+    max-height: none;
+  }
+}
+
+
+
+@utility translation-panel-body-detail {
+  max-height: 620px;
+
+  @media (max-width: 720px) {
+    max-height: none;
+  }
+}
+
+@utility ring-reader {
+  min-height: 38px;
+  padding-inline: 14px;
+  font-size: 13px;
+}
+
+
+
+@utility ring-download {
+  min-height: 38px;
+  padding-inline: 14px;
+  font-size: 13px;
+}

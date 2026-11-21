@@ -5,19 +5,31 @@ import { resolve } from "node:path";
 
 const manifest = JSON.parse(readFileSync(resolve("package.json"), "utf8"));
 const generatedCreateJob = readFileSync(resolve("src/create-job.ts"), "utf8");
-const generatedCreateJobFields = readFileSync(resolve("src/create-job-fields.ts"), "utf8").replaceAll("\r\n", "\n");
+const generatedCreateJobFields = readFileSync(resolve("src/create-job-fields.ts"), "utf8");
 const generatedJobStatus = readFileSync(resolve("src/job-status.ts"), "utf8");
 const generatedJobEvents = readFileSync(resolve("src/job-events.ts"), "utf8");
 const generatedLibraryBooks = readFileSync(resolve("src/library-books.ts"), "utf8");
+const generatedLibraryDocuments = readFileSync(resolve("src/library-documents.ts"), "utf8");
+const generatedOcrProviders = readFileSync(resolve("src/ocr-providers.ts"), "utf8");
+const generatedGlossaries = readFileSync(resolve("src/glossaries.ts"), "utf8");
 const generatedReaderData = readFileSync(resolve("src/reader-data.ts"), "utf8");
 const RAW_SCHEMA_EXPORTS = [
   "./create-job.v1.schema.json",
+  "./glossaries.v1.schema.json",
+  "./job-actions.v1.schema.json",
+  "./job-data.v1.schema.json",
   "./job-status.v1.schema.json",
   "./job-events.v2.schema.json",
+  "./job-reports.v1.schema.json",
   "./jobs-control.v1.schema.json",
   "./library-books.v1.schema.json",
+  "./library-documents.v1.schema.json",
+  "./ocr-providers.v1.schema.json",
   "./pipeline-stdout.v1.schema.json",
   "./reader-data.v1.schema.json",
+  "./refine-report.v1.schema.json",
+  "./token-usage.v1.schema.json",
+  "./translation-revisions.v1.schema.json",
 ];
 
 test("package exposes only explicit DTO and raw schema subpaths", () => {
@@ -26,10 +38,18 @@ test("package exposes only explicit DTO and raw schema subpaths", () => {
     [
       "./create-job",
       "./create-job-fields",
+      "./glossaries",
+      "./job-actions",
+      "./job-data",
       "./job-status",
       "./job-events",
+      "./job-reports",
       "./library-books",
+      "./library-documents",
+      "./ocr-providers",
       "./reader-data",
+      "./token-usage",
+      "./translation-revisions",
       ...RAW_SCHEMA_EXPORTS,
     ].sort(),
   );
@@ -95,16 +115,83 @@ test("generated DTO entries expose the stable consumer type names", () => {
   ]) {
     assert.match(generatedJobEvents, new RegExp(`export (?:interface|type) ${typeName}\\b`));
   }
-  for (const typeName of [
-    "ArtifactDisplayItemView",
-    "JobListItemView",
-    "JobListView",
-    "LibraryBookDetailView",
-    "LibraryBookListItemView",
-    "LibraryBookListView",
-  ]) {
+  for (const typeName of ["LibraryDeleteQuery", "LibraryDeleteResultView"]) {
     assert.match(generatedLibraryBooks, new RegExp(`export (?:interface|type) ${typeName}\\b`));
   }
+  // 任务列表的类型只从 job-status 导出（library-books 重复登记的 GET /jobs 2026-10-23 删了）。
+  for (const typeName of ["JobFailureBriefView", "JobListItemView", "JobListView", "ListJobsQuery"]) {
+    assert.match(generatedJobStatus, new RegExp(`export (?:interface|type) ${typeName}\\b`));
+    assert.doesNotMatch(generatedLibraryBooks, new RegExp(`export (?:interface|type) ${typeName}\\b`));
+  }
+});
+
+// 书库（书、合集、搜索、阅读入口、翻译覆盖、书的文件清单、元数据建议）：前端用这些名字换掉
+// frontend/packages/api/src/documents.ts、collections.ts、search.ts 里手写的类型。
+test("generated library-documents DTO entry exposes the book, collection and search types", () => {
+  for (const typeName of [
+    "AddCollectionDocumentsInput",
+    "ApplyDocumentMetadataSuggestionInput",
+    "BlockSearchHit",
+    "CollectionDeleteResultView",
+    "CollectionDocumentRemoveResultView",
+    "CollectionListView",
+    "CollectionRecord",
+    "CoverageJobView",
+    "CoverageSegment",
+    "CreateCollectionInput",
+    "CreateDocumentMetadataSuggestionInput",
+    "DeleteDocumentQuery",
+    "DocumentDeleteResultView",
+    "DocumentFilesView",
+    "DocumentListView",
+    "DocumentMetadataSuggestionApplyView",
+    "DocumentMetadataSuggestionListView",
+    "DocumentMetadataSuggestionView",
+    "DocumentReadingView",
+    "DocumentRecord",
+    "ListDocumentMetadataSuggestionsQuery",
+    "ListDocumentsQuery",
+    "PatchCollectionInput",
+    "PatchDocumentInput",
+    "SearchQuery",
+    "SearchResultView",
+    "TranslationCoverageView",
+  ]) {
+    assert.match(generatedLibraryDocuments, new RegExp(`export (?:interface|type) ${typeName}\\b`));
+  }
+  // 书列表的项是结构化的 DocumentRecord，不是 Record<string, any>。
+  assert.match(generatedLibraryDocuments, /documents: DocumentRecord\[\];/);
+  assert.match(generatedLibraryDocuments, /hits: BlockSearchHit\[\];/);
+  assert.doesNotMatch(generatedLibraryDocuments, /\[k: string\]: unknown/);
+});
+
+// OCR 提供方清单 GET /providers/ocr（2026-10-22）：选项带 client_settable，只能服务器定的不给默认值。
+test("generated ocr-providers DTO entry exposes the provider list types", () => {
+  for (const typeName of [
+    "OcrProviderListView",
+    "OcrProviderPublicDefinition",
+    "OcrProviderCredentialSpec",
+    "OcrProviderOptionSpec",
+    "OcrProviderCapabilities",
+    "OcrProviderArtifactLayout",
+  ]) {
+    assert.match(generatedOcrProviders, new RegExp(`export (?:interface|type) ${typeName}\\b`));
+  }
+  assert.match(generatedOcrProviders, /export type OcrProviderListView = OcrProviderPublicDefinition\[\];/);
+  assert.match(generatedOcrProviders, /client_settable: boolean;/);
+});
+
+// 书架批量删除 2026-10-19 前就删了；书架列表、单本、删除旧地址 2026-10-22 删了。契约里不再留它们的类型。
+test("library-books no longer publishes the removed shelf DTOs", () => {
+  assert.doesNotMatch(generatedLibraryBooks, /LibraryBatchDelete/);
+  assert.doesNotMatch(generatedLibraryBooks, /LibraryBook(?:List|ListItem|Detail)View|ListLibraryBooksQuery/);
+  assert.doesNotMatch(generatedLibraryBooks, /ArtifactDisplayItemView/);
+});
+
+// 任务列表的定义只在 job-status.v1；library-books.v1 以前抄的 14 个 2026-10-23 删了，不再抄回来。
+test("library-books schema keeps only the delete-job definitions", () => {
+  const libraryBooks = JSON.parse(readFileSync(resolve("library-books.v1.schema.json"), "utf8"));
+  assert.deepEqual(Object.keys(libraryBooks.definitions).sort(), ["LibraryDeleteQuery", "LibraryDeleteResultView"]);
 });
 
 test("generated job DTOs keep request and event records structurally typed", () => {
@@ -121,7 +208,6 @@ test("generated Reader DTO entry exposes host-port read model types", () => {
     "LiveTranslationLayout",
     "LiveTranslationPageSnapshot",
     "MarkdownDocumentView",
-    "ReaderArtifactManifestView",
     "ReaderMetadataView",
     "ReaderRegionsView",
   ]) {
@@ -131,4 +217,22 @@ test("generated Reader DTO entry exposes host-port read model types", () => {
   assert.doesNotMatch(generatedReaderData, /provider_raw_dir:/);
   assert.doesNotMatch(generatedReaderData, /provider_zip:/);
   assert.doesNotMatch(generatedReaderData, /provider_summary_json:/);
+});
+
+// 术语表（设置类第 2 批第 1 组，2026-10-29）。
+test("generated glossaries DTO entry exposes the glossary types", () => {
+  for (const typeName of [
+    "GlossaryListView",
+    "GlossarySummaryView",
+    "GlossaryDetailView",
+    "GlossaryEntryInput",
+    "ListGlossariesQuery",
+    "GlossaryUpsertInput",
+    "GlossaryCsvParseInput",
+    "GlossaryCsvParseView",
+  ]) {
+    assert.match(generatedGlossaries, new RegExp(`export (?:interface|type) ${typeName}\\b`));
+  }
+  assert.match(generatedGlossaries, /items: GlossarySummaryView\[\];/);
+  assert.match(generatedGlossaries, /duplicate_count: number;/);
 });

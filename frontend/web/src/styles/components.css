@@ -45,7 +45,7 @@
     Dialog 后,原来举例的 `.detail-modal{display:grid}` 本身已随之删除,但
     `.detail-list`/`.detail-empty` 这类内层切换仍然依赖这条规则)。
     迁移工具把它错误地拆并进了多个 `@utility hidden { &.xxx {...} }` 块
-    (src/styles/{components,upload-workflow,credential-settings,status-card}
+    (src/styles/{components,upload-workflow,status-card}、features/credentials|glossaries/ui/*.css
     .utilities.css/.css),而 "hidden" 是 Tailwind 内置保留的工具类名——
     Tailwind 会丢弃自定义 @utility 里对内置工具类"裸类名"层级的重新声明,
     只保留嵌套的复合选择器变体,导致裸 `.hidden` 的 `!important` 静默丢失,

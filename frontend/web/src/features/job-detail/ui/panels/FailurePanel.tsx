@@ -1,6 +1,6 @@
 import { Clock3, Copy, FileText, Link2, RefreshCw, Settings2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { ConfirmDialog } from "@/ui/components/confirm-dialog.js";
+import { ConfirmDialog } from "@retainpdf/ui";
 import {
   useHomeSettingsHub,
   useHomeStatusDetail,
@@ -17,6 +17,7 @@ import type { OcrReceiptValues } from "../../domain/ocr-ambiguity-recovery.js";
 import type { StatusDetailOverview } from "../../domain/status-detail-store.js";
 import type { StatusDetailControllerApi } from "../useStatusDetailOverview.js";
 import { useRerunAction } from "../useRerunAction.js";
+import { useRetryCountdownNow } from "../useRetryCountdownNow.js";
 import { STATUS_DETAIL_DIALOG_IDS } from "../../domain/status-detail-dom-ids.js";
 import { StatusDetailTabPanel } from "./StatusDetailTabPanel.jsx";
 
@@ -49,7 +50,6 @@ export function FailurePanel({
   const [logDialogOpen, setLogDialogOpen] = useState(false);
   const [retryPending, setRetryPending] = useState(false);
   const [recoveryFeedback, setRecoveryFeedback] = useState("");
-  const [countdownNow, setCountdownNow] = useState(() => Date.now());
   const descriptor = overview.ocrAmbiguity.descriptor;
   const canBindReceipt = Boolean(
     descriptor?.allowed_resolutions.includes("bind_existing_receipt"),
@@ -67,11 +67,8 @@ export function FailurePanel({
   useEffect(() => {
     setRecoveryFeedback("");
     setRetryPending(false);
-    setCountdownNow(Date.now());
-    if (recovery.retryAtMs === null) return undefined;
-    const timer = window.setInterval(() => setCountdownNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
   }, [overview.ocrAmbiguity.jobId, recovery.retryAtMs]);
+  const countdownNow = useRetryCountdownNow(recovery.retryAtMs, overview.ocrAmbiguity.jobId);
 
   const retrySeconds = retryCountdownSeconds(recovery, countdownNow);
   // 重试按钮禁用必有理由：后端 disabled_reason 为空时给默认文案，保证 title 可达。
@@ -285,7 +282,7 @@ export function FailurePanel({
                 title={rerun.disabled ? rerunDisabledReason : undefined}
                 onClick={rerun.run}
               >
-                从断点恢复/重新运行
+                从断点继续
               </button>
               <span id={ids.failure.rerunStatus} className="status-panel-note">
                 {rerun.status || "失败后如后端允许，可基于已有产物创建恢复任务。"}

@@ -1,34 +1,18 @@
-use axum::routing::{get, post};
-use axum::Router;
+//! 服务商：OCR 服务商清单、各家的密钥校验和余额。
 
 use crate::app::AppState;
 use crate::routes::providers;
 
-pub(super) fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/api/v1/providers/ocr", get(providers::list_ocr_providers))
-        .route(
-            "/api/v1/providers/mineru/validate-token",
-            post(providers::validate_mineru_token),
-        )
-        .route(
-            "/api/v1/providers/paddle/validate-token",
-            post(providers::validate_paddle_token),
-        )
-        .route(
-            "/api/v1/providers/deepseek/validate-token",
-            post(providers::validate_deepseek_token),
-        )
-        .route(
-            "/api/v1/providers/deepseek/balance",
-            post(providers::query_deepseek_balance),
-        )
-        .route(
-            "/api/v1/providers/models",
-            post(providers::list_models),
-        )
-        .route(
-            "/api/v1/providers/private-access",
-            post(providers::set_private_provider_access),
-        )
+crate::endpoints! {
+    state: AppState;
+    /// 能用的 OCR 服务商
+    GET "/api/v1/providers/ocr" => providers::list_ocr_providers, signed;
+    /// 校验 MinerU 的 token
+    POST "/api/v1/providers/mineru/validate-token" => providers::validate_mineru_token, admin;
+    /// 校验 Paddle 的 token
+    POST "/api/v1/providers/paddle/validate-token" => providers::validate_paddle_token, admin;
+    /// 校验 DeepSeek 的 API 密钥
+    POST "/api/v1/providers/deepseek/validate-token" => providers::validate_deepseek_token, admin;
+    /// 查 DeepSeek 余额
+    POST "/api/v1/providers/deepseek/balance" => providers::query_deepseek_balance, admin;
 }

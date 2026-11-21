@@ -8,13 +8,27 @@ import type { LibraryJobItem } from "./runtime-item.js";
 
 export const RECENT_JOBS_PAGE_SIZE = 24;
 
+/** 列表回包里的调用协议汇总（stage_spec_count / unknown_count 等），原样透传。 */
+export type RecentJobsInvocationSummary = Record<string, unknown> | null;
+
+export type RecentJobsPagePayload = {
+  items?: LibraryJobItem[];
+  has_more?: boolean;
+  invocation_summary?: RecentJobsInvocationSummary;
+};
+
+export type RecentJobsPageFetcher = (
+  apiPrefix: string,
+  opts: { limit: number; offset: number; q: string },
+) => Promise<RecentJobsPagePayload>;
+
 export function dedupeRecentJobs(
   items: LibraryJobItem[] | null | undefined,
 ): LibraryJobItem[] {
   return dedupeLibraryCards(items);
 }
 
-export function isPrimaryRecentJob(item) {
+export function isPrimaryRecentJob(item: LibraryJobItem | null | undefined) {
   const jobId = `${item?.job_id || ""}`.trim();
   // Translation workflows create a canonical `<parent>-ocr` child. Standalone
   // OCR jobs are document roots and must remain visible in the library.
@@ -26,15 +40,21 @@ export function isPrimaryRecentJob(item) {
 
 export async function collectRecentJobsPage({
   fetchJobList,
-  fetchLibraryBookList,
   apiPrefix,
   startOffset,
   pageSize,
   existingJobIds = new Set(),
   query = "",
-}: any) {
+}: {
+  fetchJobList?: RecentJobsPageFetcher;
+  apiPrefix: string;
+  startOffset: number;
+  pageSize: number;
+  existingJobIds?: Iterable<string> | null;
+  query?: string;
+}) {
   const fetchLimit = Math.max(pageSize, 20);
-  const collected = [];
+  const collected: LibraryJobItem[] = [];
   const seenCardIdentities = new Set(
     Array.from(existingJobIds || [])
       .map((value) => `${value || ""}`.trim())
@@ -45,7 +65,7 @@ export async function collectRecentJobsPage({
           : `job:${value}`
       )),
   );
-  let latestInvocationSummary = null;
+  let latestInvocationSummary: RecentJobsInvocationSummary = null;
   let nextOffset = startOffset;
   let hasMore = true;
   let requestCount = 0;
@@ -56,8 +76,6 @@ export async function collectRecentJobsPage({
     let payload = null;
     if (fetchJobList) {
       payload = await fetchJobList(apiPrefix, { limit: fetchLimit, offset: nextOffset, q: query });
-    } else if (fetchLibraryBookList) {
-      payload = await fetchLibraryBookList(apiPrefix, { limit: fetchLimit, offset: nextOffset, q: query });
     }
     latestInvocationSummary = payload?.invocation_summary || latestInvocationSummary;
     const items = Array.isArray(payload?.items) ? payload.items : [];
@@ -83,7 +101,9 @@ export async function collectRecentJobsPage({
         continue;
       }
       aliases.forEach((alias) => seenCardIdentities.add(alias));
-      collected.push(flattenStageSnapshot(item));
+      // flattenStageSnapshot 只把 stage_snapshot 摊平到同一条卡片上，形状不变；领域包把它声明成
+      // 返回宽松的 JobLike（failure 等字段可空），这里按卡片类型收回来。
+      collected.push(flattenStageSnapshot(item) as LibraryJobItem);
       if (collected.length >= pageSize) {
         break;
       }

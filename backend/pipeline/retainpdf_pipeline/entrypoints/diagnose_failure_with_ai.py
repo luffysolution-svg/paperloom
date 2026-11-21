@@ -4,12 +4,12 @@ import argparse
 import json
 from pathlib import Path
 
-from retainpdf_pipeline.translate.public import DEFAULT_BASE_URL
-from retainpdf_pipeline.translate.public import DEFAULT_MODEL
-from retainpdf_pipeline.translate.public import get_api_key
-from retainpdf_pipeline.translate.public import normalize_base_url
-from retainpdf_pipeline.translate.public import request_chat_content
-from retainpdf_pipeline.translate.public import extract_json_text
+from retainpdf_translation.public import DEFAULT_BASE_URL
+from retainpdf_translation.public import DEFAULT_MODEL
+from retainpdf_translation.public import get_api_key
+from retainpdf_translation.public import normalize_base_url
+from retainpdf_translation.public import request_chat_content
+from retainpdf_translation.public import extract_json_text
 
 
 def parse_args() -> argparse.Namespace:

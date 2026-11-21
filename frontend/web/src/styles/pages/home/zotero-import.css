@@ -21,9 +21,9 @@
   margin-bottom: 8px;
   padding: 6px 8px;
   border: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
-  border-radius: 8px;
+  border-radius: var(--ui-radius-sm);
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--ui-text-md);
   background: var(--paper);
 }
 
@@ -34,9 +34,9 @@
 
 .home-zotero-collections > button {
   padding: 6px 10px;
-  border-radius: 8px;
+  border-radius: var(--ui-radius-sm);
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--ui-text-md);
   text-align: left;
   background: transparent;
   overflow: hidden;
@@ -77,7 +77,7 @@
   gap: 6px;
   padding: 6px 9px;
   border: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
-  border-radius: 8px;
+  border-radius: var(--ui-radius-sm);
   background: var(--paper);
 }
 
@@ -93,7 +93,7 @@
   border: 0;
   outline: none;
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--ui-text-md);
   background: transparent;
 }
 
@@ -102,19 +102,19 @@
   gap: 3px;
   padding: 8px 10px;
   border: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
-  border-radius: 10px;
+  border-radius: var(--ui-radius-md);
 }
 
 .home-zotero-item-title {
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--ui-text-md);
   font-weight: 600;
   line-height: 1.4;
 }
 
 .home-zotero-item-meta {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--ui-text-sm);
 }
 
 .home-zotero-attachment {
@@ -122,7 +122,7 @@
   align-items: center;
   gap: 8px;
   color: var(--ink);
-  font-size: 12px;
+  font-size: var(--ui-text-sm);
 }
 
 .home-zotero-attachment > span {
@@ -135,9 +135,9 @@
 .home-zotero-attachment > em {
   flex: 0 0 auto;
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--ui-radius-pill);
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--ui-text-xs);
   font-style: normal;
   background: color-mix(in srgb, var(--line) 40%, transparent);
 }
@@ -151,24 +151,24 @@
   align-items: center;
   gap: 8px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--ui-text-md);
 }
 
 .home-zotero-error {
   color: var(--danger);
-  font-size: 12px;
+  font-size: var(--ui-text-sm);
 }
 
 .home-zotero-summary {
   display: grid;
   gap: 8px;
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--ui-text-md);
 }
 
 .home-zotero-summary li {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--ui-text-sm);
 }
 
 .home-zotero-translate {
@@ -177,7 +177,7 @@
   gap: 6px;
   margin-right: auto;
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--ui-text-md);
 }
 
 @media (max-width: 640px) {
@@ -196,17 +196,17 @@
 }
 
 .home-zotero-status > svg,
-#home-zotero-dialog .app-dialog-footer svg {
+.home-zotero-dialog .app-dialog-footer svg {
   width: 14px;
   height: 14px;
 }
 
-#home-zotero-dialog svg.is-spinning {
+.home-zotero-dialog svg.is-spinning {
   animation: spin 850ms linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #home-zotero-dialog svg.is-spinning {
+  .home-zotero-dialog svg.is-spinning {
     animation: none;
   }
 }

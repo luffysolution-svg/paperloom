@@ -4,7 +4,7 @@
  *
  * Source of truth: `contracts/job-status.v1.schema.json`
  * (JobProgressView / JobStageSnapshotView / JobStagesView / JobTimestampsView).
- * Rust origin: `backend/packages/retain-core/src/models/view/{job_types.rs, common.rs}`.
+ * Rust origin: `backend/packages/retainpdf-jobs/src/views/{job_types.rs, common.rs}`.
  * Contract test: `tests/job-status-contract.test.mjs` locks `stage_snapshot/progress/percent/unit` and `JobStageStateView`.
  * TODO: replace hand-written progress/stage types with generated types from schemas.
  */

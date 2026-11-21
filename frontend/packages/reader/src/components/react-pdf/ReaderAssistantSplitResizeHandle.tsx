@@ -1,0 +1,130 @@
+/** 文档和助手面板之间那根可拖的分隔。
+ *
+ * 名字里曾经带 AI（ReaderAiSplitResizeHandle），但它跟 AI 从来没关系 —— 分的是
+ * 「文档」和「当前开着的那个 dock 面板」，Markdown、批注、终端共用同一根。
+ * 叫 AI 是因为它最早只给 AI 问答面板用；那个面板删掉之后这个名字纯属误导。
+ */
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import {
+  Group,
+  Panel,
+  Separator,
+  type Layout,
+  type LayoutChangedMeta,
+} from "react-resizable-panels";
+import {
+  DEFAULT_ASSISTANT_PERCENT,
+  MAX_ASSISTANT_PERCENT,
+  MAX_DOCUMENT_PERCENT,
+  MIN_ASSISTANT_PERCENT,
+  MIN_DOCUMENT_PERCENT,
+  clampAssistantPercent,
+  documentPercentForAssistant,
+  panelPercent,
+} from "./reader-assistant-split-constraints.js";
+
+const DOCUMENT_PANEL_ID = "reader-document";
+const ASSISTANT_PANEL_ID = "reader-assistant";
+const STORAGE_KEY = "retainpdf.reader.ai-split-layout.v1";
+
+const DEFAULT_LAYOUT: Layout = {
+  [DOCUMENT_PANEL_ID]: documentPercentForAssistant(DEFAULT_ASSISTANT_PERCENT),
+  [ASSISTANT_PANEL_ID]: DEFAULT_ASSISTANT_PERCENT,
+};
+
+export function normalizeReaderAiSplitLayout(
+  layout: Partial<Layout> | null | undefined,
+): Layout {
+  const assistant = clampAssistantPercent(layout?.[ASSISTANT_PANEL_ID]);
+  return {
+    [DOCUMENT_PANEL_ID]: documentPercentForAssistant(assistant),
+    [ASSISTANT_PANEL_ID]: assistant,
+  };
+}
+
+function loadLayout(): Layout {
+  try {
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null") as Partial<Layout> | null;
+    return normalizeReaderAiSplitLayout(stored);
+  } catch {
+    return DEFAULT_LAYOUT;
+  }
+}
+
+function saveLayout(layout: Layout): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeReaderAiSplitLayout(layout)));
+  } catch {
+    // Storage may be disabled; resizing should still work for this session.
+  }
+}
+
+function applyAssistantWidth(group: HTMLDivElement | null, layout: Layout): void {
+  const root = group?.closest<HTMLElement>(".reader-react-root");
+  if (!root) return;
+  const normalized = normalizeReaderAiSplitLayout(layout);
+  root.style.setProperty(
+    "--reader-ai-split-width",
+    `${normalized[ASSISTANT_PANEL_ID]}vw`,
+  );
+}
+
+/**
+ * Transparent layout controller over the existing Reader panes. The library owns
+ * pointer/keyboard resizing; the real PDF and AI panes follow one CSS variable.
+ */
+export function ReaderAssistantSplitResizeHandle() {
+  const groupRef = useRef<HTMLDivElement | null>(null);
+  const [defaultLayout] = useState(loadLayout);
+
+  useLayoutEffect(() => {
+    const group = groupRef.current;
+    applyAssistantWidth(group, defaultLayout);
+    return () => {
+      group?.closest<HTMLElement>(".reader-react-root")
+        ?.style.removeProperty("--reader-ai-split-width");
+    };
+  }, [defaultLayout]);
+
+  const handleLayoutChange = useCallback((layout: Layout) => {
+    applyAssistantWidth(groupRef.current, layout);
+  }, []);
+
+  const handleLayoutChanged = useCallback((layout: Layout, meta: LayoutChangedMeta) => {
+    applyAssistantWidth(groupRef.current, layout);
+    if (meta.isUserInteraction) saveLayout(layout);
+  }, []);
+
+  return (
+    <Group
+      id="reader-ai-split"
+      className="reader-ai-split-resizer"
+      elementRef={groupRef}
+      orientation="horizontal"
+      defaultLayout={defaultLayout}
+      onLayoutChange={handleLayoutChange}
+      onLayoutChanged={handleLayoutChanged}
+      resizeTargetMinimumSize={{ fine: 12, coarse: 28 }}
+    >
+      <Panel
+        id={DOCUMENT_PANEL_ID}
+        defaultSize={panelPercent(documentPercentForAssistant(DEFAULT_ASSISTANT_PERCENT))}
+        minSize={panelPercent(MIN_DOCUMENT_PERCENT)}
+        maxSize={panelPercent(MAX_DOCUMENT_PERCENT)}
+      />
+      <Separator
+        id="reader-ai-split-separator"
+        className="reader-ai-split-separator"
+        aria-label="调整文档与 AI 问答宽度"
+      >
+        <span aria-hidden="true" />
+      </Separator>
+      <Panel
+        id={ASSISTANT_PANEL_ID}
+        defaultSize={panelPercent(DEFAULT_ASSISTANT_PERCENT)}
+        minSize={panelPercent(MIN_ASSISTANT_PERCENT)}
+        maxSize={panelPercent(MAX_ASSISTANT_PERCENT)}
+      />
+    </Group>
+  );
+}

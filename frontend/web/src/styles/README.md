@@ -36,12 +36,63 @@ Reader 样式只改 `frontend/packages/reader/styles/*`。`src/styles/reader/` �
 
 | 文件 | 负责范围 |
 |------|----------|
-| `book-detail-shell.css` | 弹窗双栏、封面区、顶部 Tabs 与滚动容器 |
-| `book-detail-overview.css` | 概览主视觉、元信息、阅读与活动 |
-| `book-detail-processing.css` | OCR、翻译、阶段进度与内嵌任务状态 |
+| `features/book-detail/ui/` 下 5 个外壳文件 | 弹窗双栏、封面区、快速下载、右栏 Tabs、滚动条与窄屏适配（`BookDetailShell` → `ArtifactQuickDownloads` → `BookDetailLeftReading` → `BookDetailRightTabs` → `BookDetailShellResponsive`，全是普通规则，顺序不能换） |
+| `features/book-detail/ui/tabs/overview/` | 概览：layout → info → activity → danger → responsive（普通规则，顺序不能换） |
+| `book-detail-processing/` | 「进度」分区，按组件一个文件（见下表） |
 | `book-detail-artifacts.css` | 文件分组、产物卡片、预览和下载动作 |
 
-跨 Tab 的结构规则只放入 shell；业务卡片只能修改自己的文件，避免重新形成相互覆盖的巨型样式表。
+跨 Tab 的结构规则只放入外壳文件；业务卡片只能修改自己的文件，避免重新形成相互覆盖的巨型样式表。
+
+`book-detail-processing/` 内部同样按组件拆分，`entries/home.css` 按下表顺序逐个引入：
+
+| 文件 | 负责范围 |
+|------|----------|
+| `layout.css` | 分区根布局；**共享变量**（卡片底色 / 圆角、墨色深浅色阶）与小节标题。必须最先引入 |
+| `processing-card.css` | 「进度」卡片外壳，流水线各站点开后的「重新处理」清单 |
+| `processing-head.css` | 状态行：标题、右边的按钮（含实时译文、详情、取消）、页码行、提醒和报错 |
+| `processing-hud.css` | HUD 条：小进度环、总耗时、模型、token 合计 |
+| `processing-details.css` | 细节区：错误 / 编辑部 / 活动的切换 |
+| `pipeline-rail.css` | 流水线各站徽标的底样（挂在画面上的位置在 `assembly-line-labels.css`） |
+| `editorial-flow.css` | 编辑部精修流程图（第几轮、这一步第几批） |
+| `ocr-range.css` | OCR 指定页码 |
+| `failure-card.css` | 「错误」页里的一块失败 |
+| `job-history.css` | 任务记录 |
+
+卡片之间共享的值只在 `layout.css` 里定义成变量，其它文件引用变量，不复制数值、不借用别的组件的类名。响应式规则跟着组件走，放在各自文件末尾。
+
+## 组件样式放在组件旁边
+
+新写或迁移的组件样式放在组件文件旁边，同名：`JobHistoryPanel.tsx` 旁边是
+`JobHistoryPanel.css`。类名不改（仍是全局类名 + 组件前缀），`entries/*.css` 逐个
+`@import` 这些文件、显式写明顺序 —— Tailwind CLI 能解析任意相对路径，构建不用改。
+
+文件开头声明归属：
+
+```css
+/* @owns translation-coverage
+ * @uses status-stage-flow        ← 可选：确实要引用的别的组件的类 */
+```
+
+文件里的选择器只能用 `@owns` 的前缀、`is-` / `has-` 状态类和 `@uses` 登记的类。
+跨组件共享的值（底色、圆角、色阶）定义成 CSS 变量放在共享层，组件引用变量、不复制数值。
+
+门禁（`tests/architecture/css-module-boundaries.test.mjs`）：
+
+- 单个样式文件 ≤ 400 行。超标清单 `helpers/css-oversize-allowlist.json` 已清空（2026-10 迁移完成），
+  只减不增 —— 不要往里加，文件变大就按组件拆；
+- 组件旁样式的 `@owns` / `@uses` 约束。
+
+拆分或搬家时用 `npm run css:equivalence -- snapshot <基准.json>`（改前）和 `compare`（改后）核对
+home / detail / reader 三份编译结果：
+规则、声明、顺序都相同才算纯搬家；顺序变了会列出「先后调换且设置同一属性」的规则对 ——
+它们若命中同一元素界面就会变。拆分时尽量保持规则原来的先后顺序。
+
+拆分时踩过的坑：
+
+- `@utility` 的输出顺序由 Tailwind 决定，跟它在哪个文件、第几行无关，可以随意归属；
+  普通规则、`@media`、`@layer` 块按源码先后输出，只能按连续行段切，并按原顺序引入；
+- 同名 `@utility`（比如 `hidden`）不要拆成两个文件里的两段 —— 输出顺序会变；
+- 跨行的选择器列表（`a,\nb {`）以第一行为起点，切口落在中间会少一条规则。
 
 ## 归属规则
 

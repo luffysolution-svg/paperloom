@@ -1,0 +1,289 @@
+use std::fs::{File, OpenOptions};
+use std::io;
+use std::path::{Path, PathBuf};
+
+use walkdir::WalkDir;
+use zip::write::FileOptions;
+
+use retainpdf_data::db::Db;
+use retainpdf_api_base::error::AppError;
+use retainpdf_core::models::domain::{JobArtifactRecord, JobSnapshot};
+use retainpdf_core::storage_paths::{
+    resolve_registered_artifact_path, ARTIFACT_KEY_MARKDOWN_BUNDLE_ZIP,
+    ARTIFACT_KEY_MARKDOWN_IMAGES_DIR, ARTIFACT_KEY_MARKDOWN_RAW, ARTIFACT_KEY_TRANSLATED_PDF,
+};
+
+use super::registry::find_registry_artifact;
+
+/// Owns an unpublished same-directory file; dropping after any error removes it.
+struct PendingOutput {
+    path: PathBuf,
+}
+
+impl PendingOutput {
+    fn create(destination: &Path) -> io::Result<(Self, File)> {
+        let parent = destination
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        for _ in 0..16 {
+            let path = parent.join(format!(".retain-bundle-{:032x}.tmp", fastrand::u128(..)));
+            match OpenOptions::new().write(true).create_new(true).open(&path) {
+                Ok(file) => return Ok((Self { path }, file)),
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(error),
+            }
+        }
+        Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "cannot reserve bundle temporary file",
+        ))
+    }
+
+    fn publish(self, file: File, destination: &Path) -> io::Result<()> {
+        file.sync_all()?;
+        // Close before rename, including on Windows. Never remove the old output.
+        drop(file);
+        std::fs::rename(&self.path, destination)
+    }
+}
+
+impl Drop for PendingOutput {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+pub fn build_bundle_for_job(
+    db: &Db,
+    data_root: &Path,
+    downloads_dir: &Path,
+    job: &JobSnapshot,
+) -> Result<PathBuf, AppError> {
+    let zip_path = downloads_dir.join(format!("{}.zip", job.job_id));
+    let pdf_path = find_registry_artifact(db, data_root, job, ARTIFACT_KEY_TRANSLATED_PDF)?
+        .and_then(|item| resolve_registered_artifact_path(data_root, &item).ok());
+    let markdown_path = find_registry_artifact(db, data_root, job, ARTIFACT_KEY_MARKDOWN_RAW)?
+        .and_then(|item| resolve_registered_artifact_path(data_root, &item).ok());
+    let markdown_images_dir =
+        find_registry_artifact(db, data_root, job, ARTIFACT_KEY_MARKDOWN_IMAGES_DIR)?
+            .and_then(|item| resolve_registered_artifact_path(data_root, &item).ok());
+    build_zip(
+        &zip_path,
+        pdf_path.as_deref(),
+        markdown_path.as_deref(),
+        markdown_images_dir.as_deref(),
+    )?;
+    // 以前还复制一份到译文 PDF 旁边（`rendered/<任务>.zip`），没有任何地方读，2026-10-28 起不再写，
+    // 已经有的由清理删掉（`prune_succeeded_job_intermediates`）。
+    Ok(zip_path)
+}
+
+pub fn build_markdown_bundle_for_job(
+    db: &Db,
+    data_root: &Path,
+    job: &JobSnapshot,
+    include_job_dir: bool,
+) -> Result<(JobArtifactRecord, PathBuf), AppError> {
+    // 任务在、Markdown 还没产出：404 + `reason: not_ready`（文案用对外文件名，见 `AppError::not_ready`）。
+    let markdown_item = find_registry_artifact(db, data_root, job, ARTIFACT_KEY_MARKDOWN_RAW)?
+        .filter(|item| item.ready)
+        .ok_or_else(|| AppError::not_ready("ocr.md"))?;
+    let bundle_item = find_registry_artifact(db, data_root, job, ARTIFACT_KEY_MARKDOWN_BUNDLE_ZIP)?
+        .ok_or_else(|| AppError::not_ready("ocr.zip"))?;
+    let registered_zip_path = resolve_registered_artifact_path(data_root, &bundle_item)
+        .map_err(|err| AppError::internal(err.to_string()))?;
+    let zip_path = markdown_bundle_variant_path(&registered_zip_path, include_job_dir);
+    if let Some(parent) = zip_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let markdown_path = resolve_registered_artifact_path(data_root, &markdown_item)
+        .map_err(|err| AppError::internal(err.to_string()))?;
+    let markdown_images_dir =
+        find_registry_artifact(db, data_root, job, ARTIFACT_KEY_MARKDOWN_IMAGES_DIR)?
+            .and_then(|item| resolve_registered_artifact_path(data_root, &item).ok());
+    build_markdown_zip(
+        &zip_path,
+        &markdown_path,
+        markdown_images_dir.as_deref(),
+        markdown_zip_root(job, include_job_dir),
+    )?;
+    Ok((bundle_item, zip_path))
+}
+
+fn build_zip(
+    zip_path: &Path,
+    pdf_path: Option<&Path>,
+    markdown_path: Option<&Path>,
+    markdown_images_dir: Option<&Path>,
+) -> Result<(), AppError> {
+    let (pending, file) = PendingOutput::create(zip_path)?;
+    let mut zip = zip::ZipWriter::new(file);
+    let options = FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+
+    if let Some(pdf_path) = pdf_path {
+        if pdf_path.exists() {
+            add_file_to_zip(
+                &mut zip,
+                pdf_path,
+                pdf_path.file_name().unwrap().to_string_lossy().as_ref(),
+                options,
+            )?;
+        }
+    }
+    if let Some(markdown_path) = markdown_path {
+        if markdown_path.exists() {
+            add_file_to_zip(&mut zip, markdown_path, "markdown/full.md", options)?;
+        }
+    }
+    if let Some(images_dir) = markdown_images_dir {
+        if images_dir.exists() && images_dir.is_dir() {
+            for entry in WalkDir::new(images_dir).into_iter().filter_map(|e| e.ok()) {
+                if !entry.file_type().is_file() {
+                    continue;
+                }
+                let rel = entry
+                    .path()
+                    .strip_prefix(images_dir)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                add_file_to_zip(
+                    &mut zip,
+                    entry.path(),
+                    &format!("markdown/images/{rel}"),
+                    options,
+                )?;
+            }
+        }
+    }
+    pending.publish(zip.finish()?, zip_path)?;
+    Ok(())
+}
+
+fn build_markdown_zip(
+    zip_path: &Path,
+    markdown_path: &Path,
+    markdown_images_dir: Option<&Path>,
+    archive_root: String,
+) -> Result<(), AppError> {
+    let (pending, file) = PendingOutput::create(zip_path)?;
+    let mut zip = zip::ZipWriter::new(file);
+    let options = FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    if markdown_path.exists() {
+        add_file_to_zip(
+            &mut zip,
+            markdown_path,
+            &format!("{archive_root}/full.md"),
+            options,
+        )?;
+    }
+    if let Some(images_dir) = markdown_images_dir {
+        if images_dir.exists() && images_dir.is_dir() {
+            for entry in WalkDir::new(images_dir).into_iter().filter_map(|e| e.ok()) {
+                if !entry.file_type().is_file() {
+                    continue;
+                }
+                let rel = entry
+                    .path()
+                    .strip_prefix(images_dir)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                add_file_to_zip(
+                    &mut zip,
+                    entry.path(),
+                    &format!("{archive_root}/images/{rel}"),
+                    options,
+                )?;
+            }
+        }
+    }
+    pending.publish(zip.finish()?, zip_path)?;
+    Ok(())
+}
+
+fn add_file_to_zip(
+    zip: &mut zip::ZipWriter<std::fs::File>,
+    path: &Path,
+    archive_name: &str,
+    options: FileOptions,
+) -> Result<(), AppError> {
+    let mut file = File::open(path)?;
+    zip.start_file(archive_name, options)?;
+    io::copy(&mut file, zip)?;
+    Ok(())
+}
+
+pub enum ZipSource<'a> {
+    File(&'a Path),
+    Bytes(&'a [u8]),
+    /// Expand an existing generated bundle under this entry's directory prefix.
+    Archive(&'a Path),
+}
+
+/// 按给定顺序写 ZIP；先写同目录临时文件再原子替换，失败不留半成品。
+pub fn write_zip_atomically(
+    zip_path: &Path,
+    entries: &[(String, ZipSource<'_>)],
+) -> Result<(), AppError> {
+    let (pending, file) = PendingOutput::create(zip_path)?;
+    let mut zip = zip::ZipWriter::new(file);
+    let options = FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    for (archive_name, source) in entries {
+        match source {
+            ZipSource::File(path) => add_file_to_zip(&mut zip, path, archive_name, options)?,
+            ZipSource::Bytes(bytes) => {
+                zip.start_file(archive_name.as_str(), options)?;
+                io::Write::write_all(&mut zip, bytes)?;
+            }
+            ZipSource::Archive(path) => {
+                let mut source = zip::ZipArchive::new(File::open(path)?)?;
+                for index in 0..source.len() {
+                    let mut entry = source.by_index(index)?;
+                    if entry.is_dir() {
+                        continue;
+                    }
+                    let relative = entry
+                        .enclosed_name()
+                        .ok_or_else(|| AppError::internal("导出包中的附件路径无效"))?
+                        .to_string_lossy()
+                        .replace('\\', "/");
+                    zip.start_file(format!("{archive_name}/{relative}"), options)?;
+                    io::copy(&mut entry, &mut zip)?;
+                }
+            }
+        }
+    }
+    pending.publish(zip.finish()?, zip_path)?;
+    Ok(())
+}
+
+#[cfg(test)]
+#[path = "bundle_tests.rs"]
+mod tests;
+
+fn markdown_zip_root(job: &JobSnapshot, include_job_dir: bool) -> String {
+    if include_job_dir {
+        format!("{}-markdown", job.job_id)
+    } else {
+        "markdown".to_string()
+    }
+}
+
+/// Different archive layouts cannot safely publish to the same cache file.
+fn markdown_bundle_variant_path(registered_path: &Path, include_job_dir: bool) -> PathBuf {
+    if include_job_dir {
+        return registered_path.to_owned();
+    }
+    let mut name = registered_path
+        .file_stem()
+        .unwrap_or_default()
+        .to_os_string();
+    name.push("-flat");
+    if let Some(extension) = registered_path.extension() {
+        name.push(".");
+        name.push(extension);
+    }
+    registered_path.with_file_name(name)
+}

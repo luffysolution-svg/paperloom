@@ -1,18 +1,13 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-import sys
-from pathlib import Path
 
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-from retainpdf_pipeline.translate.services.memory import JobMemory
-from retainpdf_pipeline.translate.services.memory import JobMemorySnapshot
-from retainpdf_pipeline.translate.services.memory import JobMemoryStore
-from retainpdf_pipeline.translate.services.memory import update_job_memory_from_batch
-from retainpdf_pipeline.translate.services.memory.candidates import extract_scored_term_candidates
+from retainpdf_translation.services.memory import JobMemory
+from retainpdf_translation.services.memory import JobMemorySnapshot
+from retainpdf_translation.services.memory import JobMemoryStore
+from retainpdf_translation.services.memory import update_job_memory_from_batch
+from retainpdf_translation.services.memory.candidates import extract_scored_term_candidates
 
 
 def test_job_memory_extracts_translated_term_pairs_and_prompt_summary(tmp_path) -> None:

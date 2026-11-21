@@ -10,6 +10,7 @@ from retainpdf_pipeline.render.output.typst.block_fit import fit_dimensions
 from retainpdf_pipeline.render.output.typst import block_config as typst_config
 from retainpdf_pipeline.render.output.typst.block_fields import typst_block_fields
 from retainpdf_pipeline.render.output.typst.block_fields import typst_rgb
+from retainpdf_pipeline.render.output.typst.block_markup import typst_fixed_fit_probe
 from retainpdf_pipeline.render.output.typst.block_markup import typst_markdown_block
 from retainpdf_pipeline.render.output.typst.block_markup import typst_markdown_fit_call
 from retainpdf_pipeline.render.output.typst.block_markup import typst_place_context
@@ -63,7 +64,7 @@ def _toc_estimated_text_width_pt(text: str, font_size_pt: float) -> float:
 def _circled(inner: str) -> str:
     """①～⑳、Ⓐ～Ⓩ、ⓐ～ⓩ；别的写成「(x)」。"""
     inner = inner.strip()
-    if inner.isdecimal() and 0 < int(inner) <= 20:
+    if inner.isdigit() and 0 < int(inner) <= 20:
         return chr(0x2460 + int(inner) - 1)
     if inner == "0":
         return "⓪"
@@ -101,7 +102,47 @@ def _typst_string_array(values: list[str]) -> str:
     return "(" + ", ".join(f'"{escape_typst_string(value)}"' for value in values) + ("," if len(values) == 1 else "") + ")"
 
 
-def _build_preserved_line_box_typst(block_id: str, block: RenderBlock, *, text_fill: str, block_fill: str) -> str:
+def _clipped_fill_rect_typst(
+    rect_name: str,
+    block: RenderBlock,
+    *,
+    x_pt: float,
+    y_pt: float,
+    width_pt: float,
+    height_pt: float,
+    fill: str,
+) -> str:
+    """译文块的实心底色，限定在原始 OCR 擦除框（cover_bbox）里。
+
+    文字排版框可能被加宽（标题对齐正文右沿、短正文向右扩展、单行拟合的目标宽度、
+    8pt 最小块尺寸），但原文只存在于 OCR 框内；填充跟着排版框走会把压在加宽区域里的
+    图标 / 装饰图形一起盖掉。OCR 框之外本来没有原文，裁掉那部分不会露出原文残影。
+    """
+    x0, y0 = float(x_pt), float(y_pt)
+    x1, y1 = x0 + float(width_pt), y0 + float(height_pt)
+    cover = block.cover_bbox
+    if cover is not None and len(cover) == 4:
+        cx0, cy0, cx1, cy1 = (float(value) for value in cover)
+        if cx1 > cx0 and cy1 > cy0:
+            x0, y0, x1, y1 = max(x0, cx0), max(y0, cy0), min(x1, cx1), min(y1, cy1)
+    if x1 - x0 <= 0.0 or y1 - y0 <= 0.0:
+        return ""
+    width = round(x1 - x0, 3)
+    height = round(y1 - y0, 3)
+    return (
+        f"#let {rect_name} = rect(width: {width}pt, height: {height}pt, fill: {fill}, stroke: none)\n"
+        + typst_place_context(x_pt=round(x0, 3), y_pt=round(y0, 3), body_name=rect_name)
+    )
+
+
+def _build_preserved_line_box_typst(
+    block_id: str,
+    block: RenderBlock,
+    *,
+    text_fill: str,
+    fill_color: str,
+    fit_probe_id: str | None = None,
+) -> str:
     parts: list[str] = []
     font_weight = block.font_weight if str(block.font_weight or "").strip() else "regular"
     if block.use_cover_fill:
@@ -128,16 +169,29 @@ def _build_preserved_line_box_typst(block_id: str, block: RenderBlock, *, text_f
         min_scale = 0.36 if dense_single_line else 0.58
         min_floor = 4.8 if dense_single_line else 1.0
         min_font_pt = round(max(min_floor, min(max_font_pt, height * min_scale)), 2)
+        line_fit_id_arg = "" if fit_probe_id is None else f', fit_id: "{fit_probe_id}/l{index}"'
         line_name = f"{block_id.replace('-', '_')}_line_{index}_md"
         body_name = f"{block_id.replace('-', '_')}_line_{index}_body"
+        if fill_color:
+            line_fill = _clipped_fill_rect_typst(
+                f"{block_id.replace('-', '_')}_line_{index}_fill",
+                block,
+                x_pt=x0,
+                y_pt=y0,
+                width_pt=width,
+                height_pt=height,
+                fill=fill_color,
+            ).rstrip()
+            if line_fill:
+                parts.append(line_fill)
         parts.extend(
             [
                 f'#let {line_name} = "{escape_typst_string(line_markdown)}"',
-                f"#let {body_name} = block(width: {width}pt, height: {height}pt{block_fill})[#{{ "
+                f"#let {body_name} = block(width: {width}pt, height: {height}pt)[#{{ "
                 f"set text(fill: {text_fill}); "
                 f'pdftr_fit_single_line_markdown({line_name}, max_size: {max_font_pt}pt, '
                 f'min_size: {min_font_pt}pt, fit_width: {width}pt, fit_height: {height}pt, '
-                f'weight: "{font_weight}", justify: false) }}]',
+                f'weight: "{font_weight}", justify: false{line_fit_id_arg}) }}]',
                 typst_place_context(x_pt=x0, y_pt=y0, body_name=body_name).rstrip(),
             ]
         )
@@ -193,7 +247,42 @@ def _build_toc_entry_typst(block_id: str, block: RenderBlock, *, text_fill: str)
     return "\n".join(parts) + ("\n" if parts else "")
 
 
-def build_typst_block(block_id: str, block: RenderBlock, *, include_fill: bool = False) -> str:
+def _plain_line_fit_probe(
+    fit_probe_id: str,
+    *,
+    base_name: str,
+    width_pt: float,
+    height_pt: float,
+    font_size_pt: float,
+) -> str:
+    """短 plain 行按宽度等比缩字（见 build_typst_block 的 scaled-font），探针里照同一公式复算。"""
+    return "\n".join(
+        [
+            "#context {",
+            f"  let base-size = measure({base_name})",
+            f"  let scaled-font = if base-size.width > {width_pt}pt {{ {font_size_pt}pt * ({width_pt}pt / base-size.width) }} else {{ {font_size_pt}pt }}",
+            f"  let ratio = scaled-font / {font_size_pt}pt",
+            '  let tier = if ratio < 1 { "shrink" } else { "base" }',
+            f'  pdftr_fit_emit("{fit_probe_id}", "plain_line", {font_size_pt}pt, scaled-font, scaled-font, 1em, tier, '
+            f"(width: base-size.width * ratio, height: base-size.height * ratio), base-size.height * ratio, {height_pt}pt, "
+            f"(width: {width_pt}pt, height: {height_pt}pt))",
+            "}",
+        ]
+    ) + "\n"
+
+
+def build_typst_block(
+    block_id: str,
+    block: RenderBlock,
+    *,
+    include_fill: bool = False,
+    fit_probe_id: str | None = None,
+) -> str:
+    """生成一个译文块的 Typst 源码。
+
+    fit_probe_id 只在 fit 报告探针源码里传：缩字调用多带一个 fit_id，固定字号的块追加一段
+    度量。正式渲染不传，输出与以前逐字节一致。
+    """
     fields = typst_block_fields(
         block_id,
         block.inner_bbox,
@@ -202,11 +291,22 @@ def build_typst_block(block_id: str, block: RenderBlock, *, include_fill: bool =
         font_weight=block.font_weight,
     )
     text_fill = typst_rgb(block.text_color)
-    block_fill = typst_config.cover_fill_arg(
-        include_fill=include_fill,
-        use_cover_fill=block.use_cover_fill,
-        cover_fill=typst_rgb(block.cover_fill),
-    )
+    # 底色不再挂在文字 block 上（那样会跟着加宽的排版框一起变宽），
+    # 而是单独画一块裁到原始 OCR 擦除框里的矩形，再在上面排文字。
+    fill_color = typst_rgb(block.cover_fill) if (include_fill or block.use_cover_fill) else ""
+
+    def fill_rect(x_pt: float, y_pt: float, width_pt: float, height_pt: float) -> str:
+        if not fill_color:
+            return ""
+        return _clipped_fill_rect_typst(
+            f"{fields.var_prefix}_fill",
+            block,
+            x_pt=x_pt,
+            y_pt=y_pt,
+            width_pt=width_pt,
+            height_pt=height_pt,
+            fill=fill_color,
+        ).rstrip()
 
     if block.render_kind in {"plain", "plain_line"}:
         plain_text = block.plain_text
@@ -223,31 +323,54 @@ def build_typst_block(block_id: str, block: RenderBlock, *, include_fill: bool =
                 justify_text=typst_config.typst_bool(block.justify_text),
             )
             parts = [
+                fill_rect(fields.x0, fields.y0, fields.width, fields.height),
                 f'#let {text_name} = "{escape_typst_string(plain_text)}"',
                 typst_markdown_block(
                     body_name,
                     width_pt=fields.width,
                     height_pt=fields.height,
-                    block_fill=block_fill,
+                    block_fill="",
                     body_expr=body_expr,
                 ),
                 typst_place_context(x_pt=fields.x0, y_pt=fields.y0, body_name=body_name),
             ]
-            return "\n".join(parts) + "\n"
+            if fit_probe_id is not None:
+                parts.append(
+                    typst_fixed_fit_probe(
+                        fit_probe_id,
+                        body_expr=body_expr,
+                        width_pt=fields.width,
+                        height_pt=fields.height,
+                        font_size_pt=fields.font_size,
+                        leading_em=fields.leading,
+                    )
+                )
+            return "\n".join(part for part in parts if part) + "\n"
         text_name = f"{fields.var_prefix}_txt"
         base_name = f"{fields.var_prefix}_base"
         scaled_name = f"{fields.var_prefix}_scaled"
         parts = [
+            fill_rect(fields.x0, fields.y0, fields.width, fields.height),
             f'#let {text_name} = "{escape_typst_string(plain_text)}"',
             f'#let {base_name} = box[#{{ set text(size: {fields.font_size}pt, weight: "{fields.font_weight}", fill: {text_fill}); {text_name} }}]',
             "#context {",
             f"  let base-size = measure({base_name})",
             f"  let scaled-font = if base-size.width > {fields.width}pt {{ {fields.font_size}pt * ({fields.width}pt / base-size.width) }} else {{ {fields.font_size}pt }}",
-            f'  let {scaled_name} = block(width: {fields.width}pt, height: {fields.height}pt{block_fill})[#{{ set text(size: scaled-font, weight: "{fields.font_weight}", fill: {text_fill}); {text_name} }}]',
+            f'  let {scaled_name} = block(width: {fields.width}pt, height: {fields.height}pt)[#{{ set text(size: scaled-font, weight: "{fields.font_weight}", fill: {text_fill}); {text_name} }}]',
             f"  place(top + left, dx: {fields.x0}pt, dy: {fields.y0}pt, {scaled_name})",
             "}",
         ]
-        return "\n".join(parts) + "\n"
+        if fit_probe_id is not None:
+            parts.append(
+                _plain_line_fit_probe(
+                    fit_probe_id,
+                    base_name=base_name,
+                    width_pt=fields.width,
+                    height_pt=fields.height,
+                    font_size_pt=fields.font_size,
+                )
+            )
+        return "\n".join(part for part in parts if part) + "\n"
 
     markdown_name = f"{fields.var_prefix}_md"
     body_name = f"{fields.var_prefix}_body"
@@ -270,7 +393,13 @@ def build_typst_block(block_id: str, block: RenderBlock, *, include_fill: bool =
     if block.toc_entries:
         return _build_toc_entry_typst(block_id, block, text_fill=text_fill)
     if block.preserve_line_breaks and block.preserved_line_boxes:
-        return _build_preserved_line_box_typst(block_id, block, text_fill=text_fill, block_fill=block_fill)
+        return _build_preserved_line_box_typst(
+            block_id,
+            block,
+            text_fill=text_fill,
+            fill_color=fill_color,
+            fit_probe_id=fit_probe_id,
+        )
     if block.preserve_line_breaks and "\n" in markdown:
         lines_name = f"{fields.var_prefix}_lines"
         line_values = [line.strip() for line in markdown.splitlines() if line.strip()]
@@ -283,19 +412,33 @@ def build_typst_block(block_id: str, block: RenderBlock, *, include_fill: bool =
             justify_text="false",
         )
         parts = [
+            fill_rect(fields.x0, fields.y0, fields.width, fields.height),
             f"#let {lines_name} = {_typst_string_array(line_values)}",
             typst_markdown_block(
                 body_name,
                 width_pt=fields.width,
                 height_pt=fields.height,
-                block_fill=block_fill,
+                block_fill="",
                 body_expr=body_expr,
                 content_top_inset_pt=formula_insets.top_pt,
                 content_bottom_inset_pt=formula_insets.bottom_pt,
             ),
             typst_place_context(x_pt=fields.x0, y_pt=fields.y0, body_name=body_name),
         ]
-        return "\n".join(parts) + "\n"
+        if fit_probe_id is not None:
+            parts.append(
+                typst_fixed_fit_probe(
+                    fit_probe_id,
+                    body_expr=body_expr,
+                    width_pt=fields.width,
+                    height_pt=fields.height,
+                    font_size_pt=fields.font_size,
+                    leading_em=fields.leading,
+                    content_top_inset_pt=formula_insets.top_pt,
+                    content_bottom_inset_pt=formula_insets.bottom_pt,
+                )
+            )
+        return "\n".join(part for part in parts if part) + "\n"
     if block.fit_to_box:
         if block.fit_single_line:
             single_line_fit = typst_config.single_line_fit_config(
@@ -314,21 +457,28 @@ def build_typst_block(block_id: str, block: RenderBlock, *, include_fill: bool =
                 single_line_fit,
                 font_weight=fields.font_weight,
                 justify_text=justify_text,
+                fit_id=fit_probe_id,
             )
             parts = [
+                fill_rect(
+                    fields.x0,
+                    fields.y0 - single_line_fit.shift_up_pt,
+                    single_line_fit.width_pt,
+                    fields.height,
+                ),
                 f'#let {markdown_name} = "{escape_typst_string(markdown)}"',
                 typst_markdown_block(
                     body_name,
                     width_pt=single_line_fit.width_pt,
                     height_pt=fields.height,
-                    block_fill=block_fill,
+                    block_fill="",
                     body_expr=f"set text(fill: {text_fill}); {fit_call}",
                     content_top_inset_pt=formula_insets.top_pt,
                     content_bottom_inset_pt=formula_insets.bottom_pt,
                 ),
                 typst_place_context(x_pt=fields.x0, y_pt=fields.y0 - single_line_fit.shift_up_pt, body_name=body_name),
             ]
-            return "\n".join(parts) + "\n"
+            return "\n".join(part for part in parts if part) + "\n"
         fit = fit_dimensions(
             width=fields.width,
             height=content_fit_height,
@@ -356,21 +506,23 @@ def build_typst_block(block_id: str, block: RenderBlock, *, include_fill: bool =
             font_weight=fields.font_weight,
             first_line_indent_pt=first_line_indent,
             justify_text=justify_text,
+            fit_id=fit_probe_id,
         )
         parts = [
+            fill_rect(fields.x0, fields.y0, fit["width"], fields.height),
             f'#let {markdown_name} = "{escape_typst_string(markdown)}"',
             typst_markdown_block(
                 body_name,
                 width_pt=fit["width"],
                 height_pt=fields.height,
-                block_fill=block_fill,
+                block_fill="",
                 body_expr=f"set text(fill: {text_fill}); {fit_call}",
                 content_top_inset_pt=formula_insets.top_pt,
                 content_bottom_inset_pt=formula_insets.bottom_pt,
             ),
             typst_place_context(x_pt=fields.x0, y_pt=fields.y0, body_name=body_name),
         ]
-        return "\n".join(parts) + "\n"
+        return "\n".join(part for part in parts if part) + "\n"
     body_expr = typst_plain_markdown_expr(
         markdown_name,
         font_size_pt=fields.font_size,
@@ -381,19 +533,33 @@ def build_typst_block(block_id: str, block: RenderBlock, *, include_fill: bool =
         justify_text=justify_text,
     )
     parts = [
+        fill_rect(fields.x0, fields.y0, fields.width, fields.height),
         f'#let {markdown_name} = "{escape_typst_string(markdown)}"',
         typst_markdown_block(
             body_name,
             width_pt=fields.width,
             height_pt=fields.height,
-            block_fill=block_fill,
+            block_fill="",
             body_expr=body_expr,
             content_top_inset_pt=formula_insets.top_pt,
             content_bottom_inset_pt=formula_insets.bottom_pt,
         ),
         typst_place_context(x_pt=fields.x0, y_pt=fields.y0, body_name=body_name),
     ]
-    return "\n".join(parts) + "\n"
+    if fit_probe_id is not None:
+        parts.append(
+            typst_fixed_fit_probe(
+                fit_probe_id,
+                body_expr=body_expr,
+                width_pt=fields.width,
+                height_pt=fields.height,
+                font_size_pt=fields.font_size,
+                leading_em=fields.leading,
+                content_top_inset_pt=formula_insets.top_pt,
+                content_bottom_inset_pt=formula_insets.bottom_pt,
+            )
+        )
+    return "\n".join(part for part in parts if part) + "\n"
 
 
 def build_typst_cover_rect(block_id: str, block: RenderBlock) -> str:

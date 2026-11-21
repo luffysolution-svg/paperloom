@@ -171,12 +171,16 @@ PyMuPDF 主要保留在读和分析场景：
 
 大文档 overlay 路径不要退化成逐页 Typst 编译。逐页 PDF 会重复嵌入字体和资源，最终文件体积容易膨胀。
 
-当前分片是显式 opt-in 策略，不作为默认路径。默认仍优先整本 Typst 编译，因为这通常体积最小，并且很多大文档整本编译并不慢。
+分片对 2000 页以下的书是显式 opt-in 策略，不作为默认路径：整本 Typst 编译通常体积最小，很多大文档整本编译并不慢。
+
+2000 页以上的书（`AUTO_CHUNKED_OVERLAY_PAGES`）不等开关自动分片，每片 `1024` 页（`AUTO_CHUNK_PAGE_COUNT`）：
+6574 页的手册整本编译 Typst 栈溢出（`thread 'main' has overflowed its stack`，SIGABRT），3287 页的半本能编过（2026-11-03）。
+前提同样是能用 `pikepdf` 合并 overlay；不能合并的超大书仍走整本编译。
 
 显式开启后，策略是体积受控的大块分片：
 
 - 只有设置 `RETAIN_TYPST_OVERLAY_CHUNKED=1` 且可以用 `pikepdf` 合并 overlay 的大文档才启用。
-- 默认 `256` 页以上启用分片，默认每片 `128` 页。
+- 默认 `256` 页以上启用分片，默认每片 `128` 页（开了开关的超大书也是 `128` 页一片）。
 - 每片生成一个多页 overlay PDF，再由 `pikepdf` 一次性合并回源 PDF。
 - 小文档继续走整本 Typst 编译，保持体积最优。
 
@@ -184,7 +188,7 @@ PyMuPDF 主要保留在读和分析场景：
 
 - `RETAIN_TYPST_OVERLAY_CHUNKED=1` 开启分片编译。
 - `RETAIN_TYPST_OVERLAY_CHUNK_MIN_PAGES` 调整启用阈值。
-- `RETAIN_TYPST_OVERLAY_CHUNK_PAGES` 调整每片页数。不要轻易设得太小，除非已经确认文件体积可接受。
+- `RETAIN_TYPST_OVERLAY_CHUNK_PAGES` 调整每片页数（自动分片也认它）。不要轻易设得太小，除非已经确认文件体积可接受。
 
 ## Render Prewarm 复用
 
@@ -274,3 +278,25 @@ python3 backend/pipeline/devtools/run_golden_flow.py \
 - 正式输入边界是 `source_pdf_path + translations_dir/translation_manifest_path`
 - 如果修改渲染输入协议、manifest 读取方式或最终产物命名，必须同步更新 `runtime/pipeline`、调用入口、README 和测试
 - 遇到上游 OCR 或翻译问题，优先把问题退回对应模块修，不要在 rendering 层堆跨层补丁
+
+## 排版引擎开关 render.engine
+
+`render.engine = "rpr_fit"`（默认）走自研排版引擎（`backend/rendering-engine`，见那里的 README），引擎按测量定字号、
+直接写出叠加层 PDF（不经过 Typst），实现在 `output/rpr_fit/`。`"typst"` 走上面的 Typst 路线，也是引擎用不了时的回退。
+旧取值 `"rpr"`（同一引擎、字号用 retain-pdf 的规则，只用来对比）2026-11-02 删了，接口照旧收，按 `rpr_fit` 处理：
+
+- 分流在 `workflow/engine_dispatch.py`；`output/rpr/` 只剩公用部分：`engine_cli.py` 调子进程，`text.py` 把 cmarker
+  markdown 还原成引擎文本。
+- 首行缩进：引擎只能从 OCR 行框估（Paddle、GLM 只有块级框，估不出来），所以两条引擎路线都用 retain-pdf
+  量好的值（读原 PDF 文字层，读不到再看墨迹：扫描件每块渲染一小块灰度图找各行左缘，2026-11-02 起默认打开，
+  时间上限每页 0.1 秒、至少 8 秒，481 页的扫描书全书 16.5 秒；`RETAIN_RENDER_PIXMAP_INDENT=0` 关掉）。`rpr_fit` 不算版式 payload，
+  由 `engine_dispatch._first_line_indents` 现算（预热有就直接用），随译文条目的 `first_line_indent_pt` 交给引擎。
+  算失败就不缩进，不回退 Typst；`render_diagnostics` 记 `rpr_fit_indent_source` 和缩进了几块。
+- 查公式（`rpr_fit`，`output/rpr_fit/formula_check.py`，2026-11-02）：合并完看译文 PDF 上**看得见**的文字里有没有
+  LaTeX 命令（`\frac`、`^{`……；引擎给公式配的隐形复制层、单独的 `$` 不算），加上引擎报的 MathJax 失败，对到译文条目。
+  `$` 不成对、根本没被认成公式的引擎看不见也不报，只能这样查。查出来的条目改成保留原文、引擎整本重排一次
+  （481 页 5 秒，别的块会让开它），再把上传原文件（带文字层）的那一块盖回去。结果在 `render_diagnostics.rpr_fit_formula_check`
+  和 `fit_report.v1.json`：`math.failed` 照第一遍、`math.kept_origin`（哪些块改成了原文、为什么）、
+  `math.visible_latex`（重排后还剩的），`summary` 里 `math_failed`、`math_kept_origin`、`math_visible_latex` 是条数。
+- dual、只抽选中页、非思源宋体、引擎没装 / Node < 22.8 / 引擎失败 → 回退 Typst，原因写进
+  `pipeline_summary.render_engine`、`render_diagnostics` 和 `fit_report.v1.json` 的 reason。

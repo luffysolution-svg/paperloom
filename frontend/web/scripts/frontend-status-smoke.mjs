@@ -38,7 +38,7 @@ Options:
   --model <name>             Default deepseek-flash
   --base-url <url>           Default https://api.deepseek.com/v1
   --page-ranges <ranges>     Optional page ranges, e.g. 1-3
-  --ocr-options <json>       Provider options JSON; local requires a configured command
+  --ocr-options <json>       Provider options JSON (the backend rejects a `command` key with 400)
   --timeout-seconds <n>      Job runtime timeout payload field, default 1800
   --poll-ms <n>              Detail polling interval, default 1000
   --max-wait-ms <n>          Max local wait before abort, default 1800000
@@ -316,19 +316,19 @@ async function submitJob({
   timeoutSeconds,
 }) {
   if (workflow === "ocr") {
-    const form = new FormData();
-    form.append("workflow", "ocr");
-    form.append("upload_id", uploadId);
-    form.append("provider", ocrProvider);
+    // 只做 OCR 的任务和别的任务一样走 POST /jobs 的 JSON（旧入口 /ocr/jobs 的 multipart 已删）。
+    const ocr = {
+      provider: ocrProvider,
+      language: "ch",
+      page_ranges: pageRanges || "",
+    };
     if (ocrProvider === "paddle" && ocrToken) {
-      form.append("paddle_token", ocrToken);
-      form.append("paddle_model", "PaddleOCR-VL-1.6");
+      ocr.paddle_token = ocrToken;
+      ocr.paddle_model = "PaddleOCR-VL-1.6";
     } else if (ocrProvider === "mineru" && ocrToken) {
-      form.append("mineru_token", ocrToken);
-      form.append("model_version", "vlm");
+      ocr.mineru_token = ocrToken;
+      ocr.model_version = "vlm";
     }
-    form.append("language", "ch");
-    form.append("page_ranges", pageRanges || "");
     if (ocrOptions) {
       let parsed;
       try {
@@ -339,14 +339,17 @@ async function submitJob({
       if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
         throw new Error("--ocr-options must be a JSON object");
       }
-      form.append("ocr_options", JSON.stringify(parsed));
+      ocr.options = parsed;
     }
-    form.append("timeout_seconds", String(timeoutSeconds));
-    form.append("no_output_timeout_seconds", "0");
-    const response = await safeFetch(`${apiBase}/api/v1/ocr/jobs`, {
+    const response = await safeFetch(`${apiBase}/api/v1/jobs`, {
       method: "POST",
-      headers: buildHeaders(xApiKey),
-      body: form,
+      headers: buildHeaders(xApiKey, { "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        workflow: "ocr",
+        source: { upload_id: uploadId },
+        ocr,
+        runtime: { timeout_seconds: timeoutSeconds, no_output_timeout_seconds: 0 },
+      }),
     });
     const created = await readApiEnvelope(response, "submit OCR job failed");
     if (created?.workflow !== "ocr" || created?.status !== "queued" || !`${created?.job_id || ""}`.trim()) {
@@ -402,10 +405,9 @@ async function submitJob({
   return readApiEnvelope(response, "submit job failed");
 }
 
-function jobApiPath(workflow, jobId) {
-  return workflow === "ocr"
-    ? `/api/v1/ocr/jobs/${jobId}`
-    : `/api/v1/jobs/${jobId}`;
+// OCR 任务也在 /jobs 下（旧地址 /ocr/jobs/:id 已删）。workflow 参数留着，调用处不用改。
+function jobApiPath(_workflow, jobId) {
+  return `/api/v1/jobs/${encodeURIComponent(jobId)}`;
 }
 
 async function fetchJob(apiBase, xApiKey, workflow, jobId) {
@@ -419,7 +421,7 @@ async function fetchAllEvents(apiBase, xApiKey, workflow, jobId) {
   const items = [];
   let query = "limit=500&start=head";
   while (true) {
-    const response = await safeFetch(`${apiBase}${jobApiPath(workflow, jobId)}/events?${query}`, {
+    const response = await safeFetch(`${apiBase}${jobApiPath(workflow, jobId)}/progress/events?${query}`, {
       headers: buildHeaders(xApiKey),
     });
     const data = await readApiEnvelope(response, "fetch events failed");
@@ -452,21 +454,24 @@ function expectedPageCountFromRanges(value) {
 
 async function validateOcrArtifacts(apiBase, xApiKey, jobId, pageRanges = "") {
   const headers = buildHeaders(xApiKey);
-  const artifactsResponse = await safeFetch(
-    `${apiBase}/api/v1/ocr/jobs/${jobId}/artifacts`,
+  // 文件清单 /jobs/:id/files：按文件名看就绪（旧的 /ocr/jobs/:id/artifacts 已删）。
+  const filesResponse = await safeFetch(
+    `${apiBase}/api/v1/jobs/${jobId}/files`,
     { headers },
   );
-  const artifacts = await readApiEnvelope(artifactsResponse, "fetch OCR artifacts failed");
+  const files = await readApiEnvelope(filesResponse, "fetch OCR files failed");
+  const fileEntries = [...(files?.output || []), ...(files?.internal || [])];
+  const fileReady = (name) => fileEntries.some((entry) => entry?.name === name && entry?.ready);
   if (
-    !artifacts?.normalized_document?.ready
-    || !artifacts?.normalization_report?.ready
-    || !artifacts?.markdown?.ready
+    !fileReady("normalized-document.json")
+    || !fileReady("normalization-report.json")
+    || !fileReady("ocr.md")
   ) {
     throw new Error("OCR artifacts incomplete: normalized document/report/Markdown not ready");
   }
 
   const normalizedResponse = await safeFetch(
-    `${apiBase}/api/v1/ocr/jobs/${jobId}/normalized-document`,
+    `${apiBase}/api/v1/jobs/${jobId}/files/internal/normalized-document.json`,
     { headers },
   );
   await assertOkResponse(normalizedResponse, "fetch normalized document failed");
@@ -529,7 +534,7 @@ async function validateOcrArtifacts(apiBase, xApiKey, jobId, pageRanges = "") {
   }
 
   const reportResponse = await safeFetch(
-    `${apiBase}/api/v1/ocr/jobs/${jobId}/normalization-report`,
+    `${apiBase}/api/v1/jobs/${jobId}/files/internal/normalization-report.json`,
     { headers },
   );
   await assertOkResponse(reportResponse, "fetch normalization report failed");
@@ -540,7 +545,7 @@ async function validateOcrArtifacts(apiBase, xApiKey, jobId, pageRanges = "") {
   }
 
   const markdownResponse = await safeFetch(
-    `${apiBase}/api/v1/jobs/${jobId}/markdown?raw=true`,
+    `${apiBase}/api/v1/jobs/${jobId}/files/output/ocr.md`,
     { headers },
   );
   await assertOkResponse(markdownResponse, "fetch raw Markdown failed");
@@ -548,7 +553,7 @@ async function validateOcrArtifacts(apiBase, xApiKey, jobId, pageRanges = "") {
   if (!markdown.trim()) throw new Error("OCR Markdown is empty");
 
   const markdownDocumentResponse = await safeFetch(
-    `${apiBase}/api/v1/jobs/${jobId}/markdown/document`,
+    `${apiBase}/api/v1/jobs/${jobId}/reader/markdown`,
     { headers },
   );
   const markdownDocument = await readApiEnvelope(

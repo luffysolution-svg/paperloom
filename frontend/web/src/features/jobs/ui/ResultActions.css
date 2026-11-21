@@ -1,0 +1,55 @@
+/* 状态卡底栏与结果操作（下载 / 对照阅读）。（ResultActions）
+ *
+ * @owns status, progress-track, progress-bar, task-toolbar-btn-result
+ * @uses hidden */
+
+@utility status-card-footer {
+  grid-area: footer;
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: center;
+  gap: var(--status-actions-gap, 8px);
+  height: var(--status-footer-slot-height, 48px);
+  min-height: var(--status-actions-min-height, 38px);
+  max-height: var(--status-footer-slot-height, 48px);
+  width: 100%;
+  padding-top: 0;
+  border-top: 1px solid var(--line);
+  overflow: hidden;
+
+  .status-card-body:not(.has-result-actions) & {
+    display: none;
+  }
+}
+
+@utility status-result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--status-actions-gap, 8px);
+  width: 100%;
+  min-height: var(--status-actions-min-height, 32px);
+
+  &.hidden {
+    display: none;
+  }
+
+  & .task-toolbar-btn-result {
+    min-height: var(--status-action-btn-min-height, 32px);
+    padding-inline: var(--status-action-btn-padding, 12px);
+    font-size: var(--status-action-btn-font-size, 12px);
+    font-weight: 650;
+  }
+}
+
+@utility task-toolbar-btn-result {
+  .status-result-actions & {
+    min-height: var(--status-action-btn-min-height, 32px);
+    padding-inline: var(--status-action-btn-padding, 12px);
+    font-size: var(--status-action-btn-font-size, 12px);
+    font-weight: 650;
+  }
+}

@@ -3,25 +3,25 @@ from __future__ import annotations
 from pathlib import Path
 
 # Import submodules (not package __init__) to avoid circular import with
-# document_schema adapters that may load pipeline_shared.io.
+# document_schema adapters that may load retainpdf_base.io.
 from retainpdf_pipeline.ocr.document_schema.reporting import build_normalization_summary
 from retainpdf_pipeline.ocr.document_schema.reporting import load_normalization_report
 from retainpdf_pipeline.ocr.document_schema.validator import build_validation_report_from_path
 
-from .contracts import STDOUT_LABEL_JOB_ROOT
-from .contracts import STDOUT_LABEL_LAYOUT_JSON
-from .contracts import STDOUT_LABEL_NORMALIZATION_REPORT_JSON
-from .contracts import STDOUT_LABEL_NORMALIZED_DOCUMENT_JSON
-from .contracts import STDOUT_LABEL_EVENTS_JSONL
-from .contracts import STDOUT_LABEL_OUTPUT_PDF
-from .contracts import STDOUT_LABEL_SOURCE_JSON_USED
-from .contracts import STDOUT_LABEL_SOURCE_PDF
-from .contracts import STDOUT_LABEL_SUMMARY
-from .contracts import STDOUT_LABEL_TRANSLATIONS_DIR
-from .events import emit_artifact_published
-from .events import get_active_pipeline_event_writer
-from .contracts import format_stdout_kv
-from .io import save_json
+from retainpdf_base.contracts import STDOUT_LABEL_JOB_ROOT
+from retainpdf_base.contracts import STDOUT_LABEL_LAYOUT_JSON
+from retainpdf_base.contracts import STDOUT_LABEL_NORMALIZATION_REPORT_JSON
+from retainpdf_base.contracts import STDOUT_LABEL_NORMALIZED_DOCUMENT_JSON
+from retainpdf_base.contracts import STDOUT_LABEL_EVENTS_JSONL
+from retainpdf_base.contracts import STDOUT_LABEL_OUTPUT_PDF
+from retainpdf_base.contracts import STDOUT_LABEL_SOURCE_JSON_USED
+from retainpdf_base.contracts import STDOUT_LABEL_SOURCE_PDF
+from retainpdf_base.contracts import STDOUT_LABEL_SUMMARY
+from retainpdf_base.contracts import STDOUT_LABEL_TRANSLATIONS_DIR
+from retainpdf_base.events import emit_artifact_published
+from retainpdf_base.events import get_active_pipeline_event_writer
+from retainpdf_base.contracts import format_stdout_kv
+from retainpdf_base.io import save_json
 
 
 def write_pipeline_summary(

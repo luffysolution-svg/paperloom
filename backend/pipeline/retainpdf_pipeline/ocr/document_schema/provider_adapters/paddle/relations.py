@@ -8,23 +8,30 @@ from retainpdf_pipeline.ocr.document_schema.provider_adapters.paddle.block_label
 
 
 _PADDLE_METADATA_TEXT_RE = re.compile(
-    r"(?:^keywords?\s*:|^doi:|^cite this article as:|submit your manuscript here|open access|copyright|"
+    r"(?:^doi:|^cite this article as:|submit your manuscript here|open access|copyright|"
     r"authors declare|competing interests?|competing financial interest|funded by|received:|accepted:|published:|"
     r"supporting information is available free of charge|e-mail:|orcid)",
     re.I,
 )
 _PADDLE_METADATA_BULLET_RE = re.compile(
-    r"^[•▪◦]\s*(?:keywords?\s*:|doi:|cite this article as:|submit your manuscript here|open access|copyright|"
+    r"^[•▪◦]\s*(?:doi:|cite this article as:|submit your manuscript here|open access|copyright|"
     r"authors declare|competing interests?|competing financial interest|funded by|received:|accepted:|published:|"
     r"supporting information is available free of charge|e-mail:|orcid)",
     re.I,
 )
 _ASCII_WORD_RE = re.compile(r"[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)?")
-_ANCILLARY_TAIL_HEADINGS = {
-    "competing interests",
-    "authors' contributions",
-    "acknowledgments",
+# 文末只有参考文献区的标题留原文：它下面的条目本身就不翻译（reference_content → skip_translation），
+# 标题跟条目一起保持英文。致谢 / 作者贡献 / 利益声明 / 资助等小标题下面的正文都会翻译，
+# 小标题也必须翻译——原来把其中几个（而且只认美式拼写）判 metadata，同一页中英混杂，
+# 也和 MinerU（一律判 heading 并翻译）不一致。
+# "Keywords: …" 同理不再算元数据线索：MinerU 判 body 并翻译。
+_REFERENCE_SECTION_HEADINGS = {
+    "reference",
     "references",
+    "references and notes",
+    "bibliography",
+    "works cited",
+    "literature cited",
 }
 
 
@@ -68,8 +75,8 @@ def _resolve_block_kind(
         return "text", "metadata", ["metadata", "skip_translation"], {"front_matter_text": True}
     if label == "text" and _looks_like_metadata_text(text):
         return "text", "metadata", ["metadata", "skip_translation"], {"metadata_text_cue": True}
-    if label == "paragraph_title" and _looks_like_ancillary_tail_heading(text):
-        return "text", "metadata", ["metadata", "skip_translation"], {"ancillary_tail_heading": True}
+    if label == "paragraph_title" and _looks_like_reference_section_heading(text):
+        return "text", "metadata", ["metadata", "skip_translation"], {"reference_section_heading": True}
     if label == "figure_title":
         return resolve_figure_title(text=text, previous_anchor=previous_anchor)
     if label == "vision_footnote":
@@ -139,11 +146,19 @@ def _body_flow_start_order(parsing_res_list: list[dict]) -> int:
             continue
         label = str((block.get("block_label", "") or "")).strip().lower()
         text = " ".join(str(block.get("block_content", "") or "").split()).strip().lower()
-        if label == "paragraph_title" and text and text != "abstract" and not _looks_like_ancillary_tail_heading(text):
+        if label == "paragraph_title" and text and text != "abstract" and not _looks_like_reference_section_heading(text):
             return order
         if label in {"text", "abstract"} and text and not _looks_like_metadata_text(text):
             return order
     return -1
+
+
+# 线索词出现在段中时，只有短句才算元数据。版权 / 资助 / 利益声明本来就是一两句话；
+# 正文顺带提到一句「copyrighted by」「funded by」「open access」很常见，原来不看长度，
+# 整段正文（实测一段 189 词的方法学描述）就被当成元数据跳过、不翻译。
+# 线索在开头时（"Received: …"、"Funding: …"）声明可以写得长一些，上限放宽。
+_METADATA_CUE_MID_MAX_WORDS = 40
+_METADATA_CUE_START_MAX_WORDS = 80
 
 
 def _looks_like_metadata_text(text: str) -> bool:
@@ -152,12 +167,18 @@ def _looks_like_metadata_text(text: str) -> bool:
         return False
     if _is_short_metadata_bullet(compact):
         return True
-    return bool(_PADDLE_METADATA_TEXT_RE.search(compact))
+    match = _PADDLE_METADATA_TEXT_RE.search(compact)
+    if not match:
+        return False
+    words = _ascii_word_count(compact)
+    if match.start() == 0:
+        return words <= _METADATA_CUE_START_MAX_WORDS
+    return words <= _METADATA_CUE_MID_MAX_WORDS
 
 
-def _looks_like_ancillary_tail_heading(text: str) -> bool:
+def _looks_like_reference_section_heading(text: str) -> bool:
     compact = " ".join((text or "").split()).strip().lower()
-    return compact in _ANCILLARY_TAIL_HEADINGS
+    return compact in _REFERENCE_SECTION_HEADINGS
 
 
 def _ascii_word_count(text: str) -> int:

@@ -15,6 +15,7 @@ export function formatCardDate(value: string | null | undefined) {
 /**
  * memo / 列表行共用：item 展示签名（命中才重渲）。
  * 身份：job_id/document_id/workflow/job_type/library_only/reading_status —— 决定点卡进详情还是切选中态。
+ * 可读：has_translation —— 决定阅读按钮是对照阅读还是读原文、失败角标的轻重。
  * 时间：updated_at —— 卡片副标题日期。
  * 状态三件套：status（后端终态 succeeded/failed/canceled/running…）/ stage（列表投影原生 stage，live.rs 无 display_stage）/ display_stage（轮询·lane 合并后的公开阶段）/ substage（阶段内细分）。
  * 进度：progress.*（顶层）+ runtime_status.progress.*（轮询快照）—— 驱动中央 loading 与底部进度条。
@@ -32,6 +33,7 @@ export function cardSignatureOf(item: LibraryCardItem = {}) {
     item.workflow,
     item.job_type,
     item.library_only ? "lib" : "",
+    item.has_translation ? "tr" : "",
     item.reading_status,
     item.updated_at,
     item.status,

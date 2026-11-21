@@ -1,4 +1,4 @@
-// 文档元数据更新（标题 / 标签 / 阅读状态）:PATCH 后乐观写网格/详情。
+// 文档元数据更新（标题 / 阅读状态）:PATCH 后乐观写网格/详情。
 
 import type { DialogStore } from "@/platform/store/dialog-store.js";
 import { API_PREFIX } from "@/platform/config/api-constants.js";
@@ -19,7 +19,7 @@ export function createDocumentUpdateAction({
   patchLibraryDocumentItem?: LibraryControllerDeps["patchLibraryDocumentItem"];
   reload: (opts?: ReloadRecentJobsOptions) => void | Promise<void>;
 }) {
-  // 前置条件: documentId 非空;空返回 null,仅 title/tags/reading_status 可 patch。
+  // 前置条件: documentId 非空;空返回 null,仅 title/reading_status 可 patch。
   async function updateDocument(
     documentId?: string | null,
     payload: UpdateDocumentPayload = {},
@@ -38,9 +38,6 @@ export function createDocumentUpdateAction({
         : {}),
       ...(payload.reading_status !== undefined
         ? { reading_status: `${updated?.reading_status ?? payload.reading_status ?? ""}` }
-        : {}),
-      ...(payload.tags !== undefined
-        ? { tags: (Array.isArray(updated?.tags) ? updated.tags : payload.tags) as string[] }
         : {}),
     };
     if (Object.keys(patch).length) {

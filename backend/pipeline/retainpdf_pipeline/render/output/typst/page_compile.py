@@ -10,7 +10,7 @@ from retainpdf_pipeline.foundation.config import fonts
 from retainpdf_pipeline.render.output.typst.compiler import is_typst_runtime_failure
 from retainpdf_pipeline.render.output.typst.overlay_compile import compile_page_overlay_pdf
 from retainpdf_pipeline.render.output.typst.shared import default_compile_workers
-from retainpdf_pipeline.services.pipeline_shared.events import emit_render_page_progress
+from retainpdf_base.events import emit_render_page_progress
 
 OverlayPageSpec = tuple[int, float, float, list[dict], str]
 TypstRepairRequestFn = Callable[..., str]

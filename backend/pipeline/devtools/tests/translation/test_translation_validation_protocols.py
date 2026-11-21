@@ -1,22 +1,16 @@
 from __future__ import annotations
 
 import json
-import sys
-from pathlib import Path
 
 import pytest
 
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-
-from retainpdf_pipeline.translate.llm import placeholder_guard
-from retainpdf_pipeline.translate.llm.providers.deepseek import client as deepseek_client
-from retainpdf_pipeline.translate.llm.shared import structured_models
-from retainpdf_pipeline.translate.llm.shared import structured_output
-from retainpdf_pipeline.translate.llm.shared import structured_parsers
-from retainpdf_pipeline.translate.llm.shared.orchestration import segment_routing
+from retainpdf_translation.llm import placeholder_guard
+from retainpdf_translation.llm.providers.deepseek import client as deepseek_client
+from retainpdf_translation.llm.shared import structured_models
+from retainpdf_translation.llm.shared import structured_output
+from retainpdf_translation.llm.shared import structured_parsers
+from retainpdf_translation.llm.shared.orchestration import segment_routing
 
 
 def test_single_item_extractor_returns_plain_text_when_not_json() -> None:
@@ -210,6 +204,52 @@ def test_domain_context_parser_salvages_fields_from_malformed_json() -> None:
     assert result["domain"] == "computational chemistry"
     assert result["summary"] == "A materials-modeling paper with equation-heavy prose."
     assert result["translation_guidance"] == "保留术语、缩写和公式记号，不要意译。"
+
+
+_CONTROL_CHARS = {chr(code) for code in range(0x20)} - {"\n"}
+
+
+def test_domain_context_parser_keeps_single_backslash_latex_commands() -> None:
+    # 回归：领域推断模型返回的 JSON 里 LaTeX 只有单反斜杠，直接 json.loads 会把
+    # \beta→退格+eta、\boldsymbol→退格+oldsymbol、\theta/\tau→制表符、\rho→回车、
+    # \nu→换行、\frac→换页（真实样本 b343d1 / 41a078 的 domain-context.json）。
+    content = (
+        r'{"domain": "量子化学", "summary": "密度泛函理论论文。", '
+        r'"translation_guidance": "函数（如 $\rho(\boldsymbol{r})$）、$\beta$、$\theta$、$\tau$、'
+        r'$\nu$、$\frac{a}{b}$、$\rightarrow$、$\text{eV}$ 必须原样保留。\n- 术语保留英文缩写。"}'
+    )
+
+    result = structured_parsers.parse_domain_context_response(content, preview_text="preview")
+
+    guidance = result["translation_guidance"]
+    for command in (
+        r"$\rho(\boldsymbol{r})$",
+        r"$\beta$",
+        r"$\theta$",
+        r"$\tau$",
+        r"$\nu$",
+        r"$\frac{a}{b}$",
+        r"$\rightarrow$",
+        r"$\text{eV}$",
+    ):
+        assert command in guidance
+    assert not (_CONTROL_CHARS & set(guidance))
+    # 真正的 JSON 换行转义（\n 后不是小写字母）仍然是换行。
+    assert "保留。\n- 术语" in guidance
+
+
+def test_structured_json_keeps_legitimate_json_escapes() -> None:
+    content = (
+        r'{"a": "already \\beta escaped", "b": "quote \" slash \/ uni 中", '
+        r'"c": "line\nNext\tTab 1\r\n2", "d": "invalid \alpha and \{x\}"}'
+    )
+
+    payload = structured_output.parse_structured_json(content)
+
+    assert payload["a"] == r"already \beta escaped"
+    assert payload["b"] == 'quote " slash / uni 中'
+    assert payload["c"] == "line\nNext\tTab 1\r\n2"
+    assert payload["d"] == r"invalid \alpha and \{x\}"
 
 
 def test_placeholder_guard_canonicalizes_nested_json_shell() -> None:

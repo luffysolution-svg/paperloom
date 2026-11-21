@@ -10,14 +10,14 @@ test("分页溢出:同页填满后尾部有效条目不丢,offset 按实际消�
     { job_id: "job-skip-ocr", workflow: "ocr" },
     ...Array.from({ length: 24 }, (_, index) => ({ job_id: `job-p0-${index}`, workflow: "book" })),
   ];
-  const fetchLibraryBookList = async (_apiPrefix, params) => ({
+  const fetchJobList = async (_apiPrefix, params) => ({
     items: serverItems.slice(params.offset, params.offset + params.limit),
   });
   const first = await collectRecentJobsPage({
     apiPrefix: "/api/v1",
     startOffset: 0,
     pageSize: 2,
-    fetchLibraryBookList,
+    fetchJobList,
   });
 
   assert.deepEqual(first.collected.map((item) => item.job_id), ["job-p0-0", "job-p0-1"]);
@@ -28,7 +28,7 @@ test("分页溢出:同页填满后尾部有效条目不丢,offset 按实际消�
     apiPrefix: "/api/v1",
     startOffset: first.nextOffset,
     pageSize: 2,
-    fetchLibraryBookList,
+    fetchJobList,
   });
   assert.deepEqual(
     second.collected.map((item) => item.job_id),
@@ -39,7 +39,7 @@ test("分页溢出:同页填满后尾部有效条目不丢,offset 按实际消�
 
 test("整页被过滤不判无更多:继续拉下一页回收有效条目", async () => {
   const calls = [];
-  const fetchLibraryBookList = async (_apiPrefix, params) => {
+  const fetchJobList = async (_apiPrefix, params) => {
     calls.push(params);
     if (params.offset === 0) {
       return {
@@ -56,7 +56,7 @@ test("整页被过滤不判无更多:继续拉下一页回收有效条目", asyn
     apiPrefix: "/api/v1",
     startOffset: 0,
     pageSize: 2,
-    fetchLibraryBookList,
+    fetchJobList,
   });
 
   assert.equal(calls.length, 2, "首个零增长页后必须继续拉下一页");
@@ -67,7 +67,7 @@ test("整页被过滤不判无更多:继续拉下一页回收有效条目", asyn
 
 test("连续两页零增长才判无更多", async () => {
   const calls = [];
-  const fetchLibraryBookList = async (_apiPrefix, params) => {
+  const fetchJobList = async (_apiPrefix, params) => {
     calls.push(params);
     return { items: [{ job_id: `job-filtered-${params.offset}-ocr`, workflow: "ocr" }], has_more: true };
   };
@@ -75,7 +75,7 @@ test("连续两页零增长才判无更多", async () => {
     apiPrefix: "/api/v1",
     startOffset: 0,
     pageSize: 2,
-    fetchLibraryBookList,
+    fetchJobList,
   });
 
   assert.equal(calls.length, 2, "单个零增长页不断流,连续两页才停");
@@ -85,7 +85,7 @@ test("连续两页零增长才判无更多", async () => {
 
 test("服务端限页小于 fetchLimit:has_more 为 true 时继续拉下一页", async () => {
   const calls = [];
-  const fetchLibraryBookList = async (_apiPrefix, params) => {
+  const fetchJobList = async (_apiPrefix, params) => {
     calls.push(params);
     if (params.offset === 0) {
       return {
@@ -103,7 +103,7 @@ test("服务端限页小于 fetchLimit:has_more 为 true 时继续拉下一页",
     apiPrefix: "/api/v1",
     startOffset: 0,
     pageSize: 24,
-    fetchLibraryBookList,
+    fetchJobList,
   });
 
   assert.equal(calls.length, 2, "短页但 has_more=true 时不得误判无更多");

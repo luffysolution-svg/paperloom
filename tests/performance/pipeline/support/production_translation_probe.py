@@ -14,15 +14,14 @@ def probe(transport, route, outcome, cache_dir):
     from importlib import import_module
     from types import SimpleNamespace
     from unittest.mock import Mock, patch
-    import socket
     import time
     import requests
-    from retainpdf_pipeline.foundation.config import paths
-    from retainpdf_pipeline.translate.llm.shared.rust_executor import ExecutorError
-    from retainpdf_pipeline.translate.llm.shared import executor_context as executor
-    from retainpdf_pipeline.translate.llm.shared.orchestration import translate_batch
-    from retainpdf_pipeline.translate.llm.shared.request_capture import digest
-    from retainpdf_pipeline.translate.llm.providers.deepseek import client
+    from retainpdf_base import paths
+    from retainpdf_translation.llm.shared.rust_executor import ExecutorError
+    from retainpdf_translation.llm.shared import executor_context as executor
+    from retainpdf_translation.llm.shared.orchestration import translate_batch
+    from retainpdf_translation.llm.shared.request_capture import digest
+    from retainpdf_translation.llm.providers.deepseek import client
 
     paths.TRANSLATION_UNIT_CACHE_DIR = Path(cache_dir)
     source = "The energy remains conserved in this experiment."
@@ -38,7 +37,8 @@ def probe(transport, route, outcome, cache_dir):
                      translation_unit_members=[{"item_id": i, "protected_source_text": source} for i in ("a", "b")],
                      translation_unit_protected_source_text=source + " " + source)
         batch = [group]
-        content = json.dumps({"member_translations": [{"item_id": i, "translated_text": translated} for i in ("a", "b")]})
+        # 续接组整段一次请求、返回整段纯文本，程序再切回各框。
+        content = translated + translated
     elif route == "batch":
         batch = [dict(item(i), _batched_plain_candidate=True) for i in ("a", "b")]
         content = "\n".join(f"<<<ITEM item_id={i}>>>\n{translated}\n<<<END>>>" for i in ("a", "b"))
@@ -47,14 +47,9 @@ def probe(transport, route, outcome, cache_dir):
         content = translated
     if outcome == "protocol":
         content = ""
-    elif outcome == "malformed_json":
-        content = "invalid json"
     elif outcome == "semantic":
         # Syntactically valid envelopes, but no translated member content.
-        if route == "group":
-            content = json.dumps({"member_translations": [
-                {"item_id": i, "translated_text": ""} for i in ("a", "b")]})
-        elif route == "batch":
+        if route == "batch":
             content = "\n".join(f"<<<ITEM item_id={i}>>>\n\n<<<END>>>" for i in ("a", "b"))
         else:
             content = "   "
@@ -81,7 +76,7 @@ def probe(transport, route, outcome, cache_dir):
          patch.object(client, "_prewarm_dns"), patch.object(client, "should_use_stream_responses", return_value=False), \
          patch.object(client, "get_session", return_value=SimpleNamespace(post=fake_post)):
         for name in ("plain_text_retry", "segment_windows", "segment_executor", "sentence_level", "direct_typst"):
-            module = import_module("retainpdf_pipeline.translate.llm.shared.orchestration." + name)
+            module = import_module("retainpdf_translation.llm.shared.orchestration." + name)
             stack.enter_context(patch.object(module, "time", clock))
         stack.enter_context(patch.object(client, "time", clock))
         failed = False
@@ -109,7 +104,7 @@ def probe(transport, route, outcome, cache_dir):
                       "purposes": [c.get("purpose") for c in calls],
                       "unit_ids": [c.get("unit_id") for c in calls],
                       "thinking": calls[0].get("enable_thinking") if calls else None,
-                      "result": {i: {k: v for k, v in r.items() if k in {"translated_text", "decision", "final_status", "member_translations"}}
+                      "result": {i: {k: v for k, v in r.items() if k in {"translated_text", "decision", "final_status"}}
                                  for i, r in result.items()}}, ensure_ascii=False))
 
 

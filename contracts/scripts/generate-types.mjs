@@ -13,9 +13,24 @@ const TARGETS = [
     rootName: "CreateJobSchema",
   },
   {
+    input: "job-actions.v1.schema.json",
+    output: "src/job-actions.ts",
+    rootName: "JobActionsSchema",
+  },
+  {
+    input: "job-data.v1.schema.json",
+    output: "src/job-data.ts",
+    rootName: "JobDataSchema",
+  },
+  {
     input: "job-events.v2.schema.json",
     output: "src/job-events.ts",
     rootName: "JobEventsSchema",
+  },
+  {
+    input: "job-reports.v1.schema.json",
+    output: "src/job-reports.ts",
+    rootName: "JobReportsSchema",
   },
   {
     input: "job-status.v1.schema.json",
@@ -23,14 +38,39 @@ const TARGETS = [
     rootName: "JobStatusSchema",
   },
   {
+    input: "glossaries.v1.schema.json",
+    output: "src/glossaries.ts",
+    rootName: "GlossariesSchema",
+  },
+  {
     input: "library-books.v1.schema.json",
     output: "src/library-books.ts",
     rootName: "LibraryBooksSchema",
   },
   {
+    input: "library-documents.v1.schema.json",
+    output: "src/library-documents.ts",
+    rootName: "LibraryDocumentsSchema",
+  },
+  {
+    input: "ocr-providers.v1.schema.json",
+    output: "src/ocr-providers.ts",
+    rootName: "OcrProvidersSchema",
+  },
+  {
     input: "reader-data.v1.schema.json",
     output: "src/reader-data.ts",
     rootName: "ReaderDataSchema",
+  },
+  {
+    input: "token-usage.v1.schema.json",
+    output: "src/token-usage.ts",
+    rootName: "TokenUsageSchema",
+  },
+  {
+    input: "translation-revisions.v1.schema.json",
+    output: "src/translation-revisions.ts",
+    rootName: "TranslationRevisionsSchema",
   },
 ];
 

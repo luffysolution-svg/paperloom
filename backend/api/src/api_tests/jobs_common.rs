@@ -1,58 +1,19 @@
-use std::collections::HashSet;
-use std::fs;
 use std::sync::Arc;
 
 use axum::body::to_bytes;
 
 use crate::app::build_state;
-use crate::config::AppConfig;
+use crate::test_support::config::TestDirs;
+
+// 一页、指定尺寸的最小 PDF 在底座包里（书库包的测试也用），这里转一下，原有写法不变。
+pub(crate) use retainpdf_api_base::test_fixtures::minimal_pdf_bytes;
+
 pub(crate) fn test_state(test_name: &str) -> crate::AppState {
-    let root = std::env::temp_dir().join(format!(
+    let dirs = TestDirs::create(&format!(
         "rust-api-query-routes-{test_name}-{}",
         fastrand::u64(..)
     ));
-    let data_root = root.join("data");
-    let output_root = data_root.join("jobs");
-    let downloads_dir = data_root.join("downloads");
-    let uploads_dir = data_root.join("uploads");
-    let rust_api_root = root.join("rust_api");
-    let scripts_dir = root.join("scripts");
-    fs::create_dir_all(&output_root).expect("create output root");
-    fs::create_dir_all(&downloads_dir).expect("create downloads dir");
-    fs::create_dir_all(&uploads_dir).expect("create uploads dir");
-    fs::create_dir_all(&rust_api_root).expect("create rust_api root");
-    fs::create_dir_all(&scripts_dir).expect("create scripts dir");
-
-    build_state(Arc::new(AppConfig {
-        project_root: root.clone(),
-        rust_api_root,
-        data_root: data_root.clone(),
-        scripts_dir: scripts_dir.clone(),
-        uploads_dir,
-        downloads_dir,
-        jobs_db_path: data_root.join("db").join("jobs.db"),
-        output_root,
-        python_bin: "python3".to_string(),
-        pipeline_command: "retainpdf-pipeline".to_string(),
-        bind_host: "127.0.0.1".to_string(),
-        port: 41000,
-        simple_port: 42000,
-        upload_max_bytes: 0,
-        upload_max_pages: 0,
-        min_free_disk_bytes: 0,
-        upload_processing: Default::default(),
-        api_keys: HashSet::from(["test-key".to_string()]),
-        max_running_jobs: 1,
-        provider_limits: crate::config::ProviderLimitsConfig::default(),
-        provider_runtime: crate::config::ProviderRuntimeConfig::default(),
-        job_runner: crate::config::JobRunnerConfig::default(),
-        jobs_service: crate::config::JobsServiceConfig::default(),
-        asset: crate::config::AssetConfig::default(),
-        cleanup: crate::config::CleanupConfig::default(),
-        db: crate::config::DbConfig::default(),
-        public_base_url: None,
-    }))
-    .expect("build state")
+    build_state(Arc::new(dirs.config())).expect("build state")
 }
 
 pub(crate) async fn read_json(response: axum::response::Response) -> serde_json::Value {
@@ -64,31 +25,46 @@ pub(crate) async fn read_json(response: axum::response::Response) -> serde_json:
     .expect("parse json")
 }
 
-pub(crate) fn minimal_pdf_bytes(width: i64, height: i64) -> Vec<u8> {
-    let objects = [
-        "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
-        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_string(),
-        format!("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {width} {height}] >>"),
-    ];
-    let mut bytes = b"%PDF-1.4\n".to_vec();
-    let mut offsets = vec![0usize];
-    for (idx, object) in objects.iter().enumerate() {
-        offsets.push(bytes.len());
-        bytes.extend_from_slice(format!("{} 0 obj\n{}\nendobj\n", idx + 1, object).as_bytes());
-    }
-    let xref_offset = bytes.len();
-    bytes.extend_from_slice(format!("xref\n0 {}\n", offsets.len()).as_bytes());
-    bytes.extend_from_slice(b"0000000000 65535 f \n");
-    for offset in offsets.iter().skip(1) {
-        bytes.extend_from_slice(format!("{offset:010} 00000 n \n").as_bytes());
-    }
-    bytes.extend_from_slice(
-        format!(
-            "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{}\n%%EOF\n",
-            offsets.len(),
-            xref_offset
-        )
-        .as_bytes(),
-    );
-    bytes
+
+/// 一份合并阅读的虚拟任务：库里有它的基底任务 `job-base`，合并目录里有说明文件和 `translated/`。
+/// 返回虚拟任务 id 和合并目录（没有 `artifacts/`、`logs/`）。
+pub(crate) fn seed_virtual_job(state: &crate::AppState) -> (String, std::path::PathBuf) {
+    use crate::models::{CreateJobInput, JobSnapshot};
+
+    let base = JobSnapshot::new("job-base".to_string(), CreateJobInput::default(), vec![]);
+    state.db.save_job(&base).expect("save base job");
+    let id = crate::storage_paths::MergedJobId {
+        document_id: "a".repeat(64),
+        fingerprint: "0123456789abcdef".to_string(),
+    };
+    let root = id.root(&state.config.data_root);
+    std::fs::create_dir_all(root.join("translated")).expect("merged dir");
+    std::fs::write(
+        root.join("reading.json"),
+        serde_json::json!({
+            "document_id": id.document_id,
+            "base_job_id": "job-base",
+            "contributing_job_ids": ["job-base"],
+            "page_count": 2,
+            "source_pdf": "uploads/up-1/book.pdf",
+        })
+        .to_string(),
+    )
+    .expect("sidecar");
+    (id.format(), root)
+}
+
+/// 给任务建一个旧布局的目录（`originPDF/`），`load_supported_job` 会拒绝它。
+pub(crate) fn seed_legacy_layout_job(state: &crate::AppState, job_id: &str) {
+    use crate::models::domain::JobArtifacts;
+    use crate::models::{CreateJobInput, JobSnapshot};
+
+    let root = state.config.data_root.join("jobs").join(job_id);
+    std::fs::create_dir_all(root.join("originPDF")).expect("legacy dir");
+    let mut job = JobSnapshot::new(job_id.to_string(), CreateJobInput::default(), vec![]);
+    job.artifacts = Some(JobArtifacts {
+        job_root: Some(format!("jobs/{job_id}")),
+        ..JobArtifacts::default()
+    });
+    state.db.save_job(&job).expect("save legacy job");
 }

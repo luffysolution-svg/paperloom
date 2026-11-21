@@ -5,7 +5,84 @@
 /**
  * Endpoint input, query, and output DTOs published by reader-data.v1.schema.json.
  */
-export type ReaderDataSchema = LiveTranslationCommitEvent | LiveTranslationLayout | LiveTranslationPageSnapshot | MarkdownDocumentView | ReaderArtifactLinks | ReaderArtifactManifestView | ReaderMetadataView | ReaderRegionsView;
+export type ReaderDataSchema = JobFilesView | LiveTranslationCommitEvent | LiveTranslationLayout | LiveTranslationPageSnapshot | MarkdownDocumentView | ReaderMetadataView | ReaderRegionItem | ReaderRegionsView;
+export interface JobFilesView {
+    job_id: string;
+    /**
+     * One-based durable pipeline attempt; increases after a rerun or stage retry. Same as the attempt of each manifest item.
+     */
+    attempt: number;
+    source: JobFileEntryView;
+    output: JobFileEntryView1[];
+    pages: JobPagesView;
+    /**
+     * Intermediate artifacts. Present only for administrators (and in single-user mode); omitted otherwise.
+     */
+    internal?: JobFileEntryView1[];
+}
+/**
+ * The source PDF. It is a document file: the url is /api/v1/documents/:id/files/source.pdf. When no document id is known there is no address: url is an empty string and ready is false.
+ */
+export interface JobFileEntryView {
+    name: string;
+    url: string;
+    content_type: string;
+    /**
+     * Whether the file can be fetched now. For on-demand files it means everything needed to generate it exists.
+     */
+    ready: boolean;
+    /**
+     * Generated on first request, so the first fetch is slower.
+     */
+    on_demand: boolean;
+    /**
+     * Only files already on disk have a size.
+     */
+    size_bytes: number | null;
+    /**
+     * Update time from the artifact registry; null when the registry has no entry (on-demand files not generated yet).
+     */
+    updated_at: string | null;
+    /**
+     * Stage that produced the file (registry source_stage, e.g. ocr, translation, render); null when unknown.
+     */
+    stage: string | null;
+}
+/**
+ * One downloadable file of a job. url is an absolute public URL of /api/v1/jobs/:job_id/files/<group>/<name>.
+ */
+export interface JobFileEntryView1 {
+    name: string;
+    url: string;
+    content_type: string;
+    /**
+     * Whether the file can be fetched now. For on-demand files it means everything needed to generate it exists.
+     */
+    ready: boolean;
+    /**
+     * Generated on first request, so the first fetch is slower.
+     */
+    on_demand: boolean;
+    /**
+     * Only files already on disk have a size.
+     */
+    size_bytes: number | null;
+    /**
+     * Update time from the artifact registry; null when the registry has no entry (on-demand files not generated yet).
+     */
+    updated_at: string | null;
+    /**
+     * Stage that produced the file (registry source_stage, e.g. ocr, translation, render); null when unknown.
+     */
+    stage: string | null;
+}
+export interface JobPagesView {
+    /**
+     * Replace {page} with a one-based page number.
+     */
+    url_template: string;
+    page_count: number | null;
+}
 /**
  * SSE event data for event: translation_units_committed. It is a refresh hint: reconnect using the greater of after_seq and Last-Event-ID, then refetch the authoritative page snapshot.
  */
@@ -114,102 +191,6 @@ export interface MarkdownImageView {
     content_type: string;
     size_bytes: number | null;
 }
-/**
- * Reader-safe subset of ArtifactLinksView. The endpoint may carry compatibility fields outside this subset; hosts must ignore them and consume only public resource links/readiness values instead of artifact storage conventions.
- */
-export interface ReaderArtifactLinks {
-    pdf_ready: boolean;
-    markdown_ready: boolean;
-    bundle_ready: boolean;
-    pdf_url: string;
-    markdown_url: string;
-    markdown_images_base_url: string;
-    bundle_url: string;
-    normalized_document_url: string;
-    normalization_report_url: string;
-    /**
-     * Public API path for the artifact manifest.
-     */
-    manifest_path: string;
-    /**
-     * Public URL for the artifact manifest.
-     */
-    manifest_url: string;
-    /**
-     * Existing job action links; this schema does not own their detailed control-plane shape.
-     */
-    actions: {};
-    normalized_document: PublicResourceLink;
-    normalization_report: PublicResourceLink;
-    pdf: PublicResourceLink;
-    markdown: MarkdownArtifactLink;
-    bundle: PublicResourceLink;
-    [k: string]: any;
-}
-/**
- * A publicly routable API resource. path is an API path and url may be absolute; neither is a filesystem path.
- */
-export interface PublicResourceLink {
-    ready: boolean;
-    /**
-     * Public API path, never a local filesystem path.
-     */
-    path: string;
-    /**
-     * Public absolute or API-relative URL.
-     */
-    url: string;
-    method: "GET";
-    content_type: string;
-    file_name: string | null;
-    size_bytes: number | null;
-}
-/**
- * Published Markdown artifact links from ArtifactLinksView.
- */
-export interface MarkdownArtifactLink {
-    ready: boolean;
-    json_path: string;
-    json_url: string;
-    raw_path: string;
-    raw_url: string;
-    images_base_path: string;
-    images_base_url: string;
-    file_name: string | null;
-    size_bytes: number | null;
-}
-export interface ReaderArtifactManifestView {
-    job_id: string;
-    items: ReaderArtifactManifestItem[];
-}
-/**
- * Reader-safe subset of a job artifact manifest entry. The endpoint may carry compatibility fields such as relative_path; hosts must discard those fields and use public resource links only.
- */
-export interface ReaderArtifactManifestItem {
-    artifact_key: string;
-    artifact_group: string;
-    artifact_kind: string;
-    ready: boolean;
-    file_name: string | null;
-    content_type: string;
-    size_bytes: number | null;
-    checksum: string | null;
-    source_stage: string | null;
-    updated_at: string;
-    /**
-     * One-based durable pipeline attempt.
-     */
-    attempt: number;
-    /**
-     * Public API path when published.
-     */
-    resource_path: string | null;
-    /**
-     * Public URL when published.
-     */
-    resource_url: string | null;
-    [k: string]: any;
-}
 export interface ReaderMetadataView {
     source: ReaderDocumentMetadata | null;
     translated: ReaderDocumentMetadata | null;
@@ -226,9 +207,6 @@ export interface ReaderPageMetadata {
     width: number;
     height: number;
 }
-export interface ReaderRegionsView {
-    items: ReaderRegionItem[];
-}
 /**
  * item_id is canonicalized and joinable with other Reader projections when they describe the same document block. Empty asset collections are serialized as [] rather than omitted.
  */
@@ -241,6 +219,26 @@ export interface ReaderRegionItem {
     status: string;
     asset_ids: string[];
     asset_urls: string[];
+    /**
+     * Page-local reading order. Items are emitted sorted by (source.page, reading_order), with source-only blocks interleaved.
+     */
+    reading_order?: number;
+    /**
+     * Normalized document sub_type, e.g. body, heading, title, page_number, reference_entry, figure_caption, image_body, display_formula. Vocabulary depends on the OCR provider.
+     */
+    sub_type?: string;
+    /**
+     * Present only for title/heading blocks; 1 is the top level.
+     */
+    heading_level?: number;
+    /**
+     * Shared by the blocks of one paragraph that translation joined across blocks or pages.
+     */
+    continuation_group_id?: string;
+    /**
+     * Present with continuation_group_id: this block's own share of the translation, while translated.text carries the whole group.
+     */
+    translated_block_text?: string;
 }
 /**
  * Reader regions use a one-based page number and a [x0,y0,x1,y1] bbox in top-left-origin PDF points. text may be null for non-text/image blocks.
@@ -260,4 +258,7 @@ export interface ReaderRegionBox {
     unit: "pdf_point";
     origin: "top_left";
     text: string | null;
+}
+export interface ReaderRegionsView {
+    items: ReaderRegionItem[];
 }

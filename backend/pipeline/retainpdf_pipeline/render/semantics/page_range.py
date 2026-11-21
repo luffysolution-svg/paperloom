@@ -1,6 +1,6 @@
 """Render-local page-range helper (file-contract duplicate).
 
-Duplicated from retainpdf_pipeline.translate.workflow.page_range
+Duplicated from retainpdf_translation.workflow.page_range
 (stage-decouple: render must not import translate; duplicate wins over cross-package).
 """
 

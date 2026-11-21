@@ -57,63 +57,16 @@ fn query_dependencies_do_not_capture_execution_resources() {
 }
 
 #[tokio::test]
-async fn ocr_list_keeps_its_scope_when_query_requests_another_workflow() {
-    let state = test_state("ocr-query-list-scope");
-    seed_job(&state, "query-book", WorkflowKind::Book);
-    seed_job(&state, "query-ocr", WorkflowKind::Ocr);
-    let response = build_app(state)
-        .oneshot(
-            Request::builder()
-                .uri("/api/v1/ocr/jobs?workflow=book&limit=1")
-                .header("X-API-Key", "test-key")
-                .body(Body::empty())
-                .expect("list request"),
-        )
-        .await
-        .expect("list response");
-    assert_eq!(response.status(), StatusCode::OK);
-    let payload = read_json(response).await;
-    let items = payload["data"]["items"].as_array().expect("items");
-    assert_eq!(items.len(), 1);
-    assert_eq!(items[0]["job_id"], "query-ocr");
-    assert_eq!(items[0]["workflow"], "ocr");
-}
-
-#[tokio::test]
-async fn ocr_read_routes_reject_non_ocr_jobs_before_building_views() {
-    let state = test_state("ocr-query-scope");
-    seed_job(&state, "query-book", WorkflowKind::Book);
-    let app = build_app(state);
-    for suffix in ["", "/events", "/artifacts", "/artifacts-manifest"] {
-        let response = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .uri(format!("/api/v1/ocr/jobs/query-book{suffix}"))
-                    .header("X-API-Key", "test-key")
-                    .body(Body::empty())
-                    .expect("request"),
-            )
-            .await
-            .expect("response");
-        assert_eq!(response.status(), StatusCode::NOT_FOUND, "{suffix}");
-        let payload = read_json(response).await;
-        assert_eq!(payload["error"]["code"], "NOT_FOUND");
-        assert!(payload.get("data").is_none());
-    }
-}
-
-#[tokio::test]
-async fn ocr_read_routes_accept_ocr_jobs() {
+async fn job_read_routes_accept_ocr_jobs() {
     let state = test_state("ocr-query-views");
     seed_job(&state, "query-ocr", WorkflowKind::Ocr);
     let app = build_app(state);
-    for suffix in ["", "/events", "/artifacts", "/artifacts-manifest"] {
+    for suffix in ["", "/progress/events", "/files"] {
         let response = app
             .clone()
             .oneshot(
                 Request::builder()
-                    .uri(format!("/api/v1/ocr/jobs/query-ocr{suffix}"))
+                    .uri(format!("/api/v1/jobs/query-ocr{suffix}"))
                     .header("X-API-Key", "test-key")
                     .body(Body::empty())
                     .expect("request"),
@@ -127,7 +80,7 @@ async fn ocr_read_routes_accept_ocr_jobs() {
 }
 
 #[tokio::test]
-async fn ocr_events_keep_limit_and_resume_with_cursor() {
+async fn ocr_job_events_keep_limit_and_resume_with_cursor() {
     let state = test_state("ocr-query-event-pagination");
     seed_job(&state, "query-ocr", WorkflowKind::Ocr);
     for message in ["first event", "second event", "third event"] {
@@ -156,7 +109,7 @@ async fn ocr_events_keep_limit_and_resume_with_cursor() {
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/api/v1/ocr/jobs/query-ocr/events?limit=1&start=head")
+                .uri("/api/v1/jobs/query-ocr/progress/events?limit=1&start=head")
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("events request"),
@@ -172,7 +125,7 @@ async fn ocr_events_keep_limit_and_resume_with_cursor() {
         .oneshot(
             Request::builder()
                 .uri(format!(
-                    "/api/v1/ocr/jobs/query-ocr/events?limit=1&cursor={cursor}"
+                    "/api/v1/jobs/query-ocr/progress/events?limit=1&cursor={cursor}"
                 ))
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())

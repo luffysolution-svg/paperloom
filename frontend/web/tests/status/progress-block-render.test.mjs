@@ -12,6 +12,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
+import { waitFor } from "../helpers/async.mjs";
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/" });
 for (const key of ["window", "document", "HTMLElement", "Event", "Node", "MutationObserver"]) {
@@ -22,7 +23,7 @@ for (const key of ["window", "document", "HTMLElement", "Event", "Node", "Mutati
   });
 }
 globalThis.window = dom.window;
-globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+globalThis.IS_REACT_ACT_ENVIRONMENT = false;
 
 const { createRoot } = await import("react-dom/client");
 const React = await import("react");
@@ -32,7 +33,9 @@ async function renderProgress(renderOptions) {
   const host = dom.window.document.createElement("div");
   dom.window.document.body.appendChild(host);
   const root = createRoot(host);
-  await React.act(async () => root.render(React.createElement(ProgressBlock, { renderOptions })));
+  root.render(React.createElement(ProgressBlock, { renderOptions }));
+  // 等真的渲染出来再读：固定等 30ms 在机器忙（负载几十）时不够，读到的全是 null。
+  await waitFor(() => host.firstElementChild, "ProgressBlock 渲染出来");
   const view = {
     ringText: host.querySelector(".status-progress-ring-text")?.textContent ?? null,
     footPercent: host.querySelector(".status-progress-percent")?.textContent ?? null,
@@ -41,7 +44,7 @@ async function renderProgress(renderOptions) {
     ringHidden: host.querySelector(".status-progress-ring-wrap")?.getAttribute("aria-hidden"),
     progressbarCount: host.querySelectorAll('[role="progressbar"]').length,
   };
-  await React.act(async () => root.unmount());
+  root.unmount();
   host.remove();
   return view;
 }

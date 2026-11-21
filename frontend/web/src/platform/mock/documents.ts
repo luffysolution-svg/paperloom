@@ -1,5 +1,5 @@
 // platform/mock/documents 的公开出口（兼容旧 import 路径）。
-// 实现按职责拆到：document-seed / document-actions / collections / favorites / search / reader。
+// 实现按职责拆到：document-seed / document-actions / collections / search / reader。
 
 export {
   MOCK_DOCUMENT_ID,
@@ -29,14 +29,6 @@ export {
   removeMockCollectionDocument,
 } from "./collections.js";
 
-export {
-  createMockFavorite,
-  getMockFavorites,
-  deleteMockFavorite,
-  countMockFavoritesByJob,
-  clearMockFavoritesForDocument,
-} from "./favorites.js";
-
 export { getMockSearchHits } from "./search.js";
 
 export { getMockReaderRegions } from "./reader.js";
@@ -52,8 +44,6 @@ export type {
   MockCollectionWithCount,
   MockCollectionCreate,
   MockCollectionPatch,
-  MockFavoriteKind,
-  MockFavorite,
   MockFavoriteCreatePayload,
   MockSearchHit,
 } from "./documents.types.js";

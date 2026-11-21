@@ -1,12 +1,12 @@
 from copy import deepcopy
 import json
 
-from retainpdf_pipeline.translate.core.orchestration.units import (
+from retainpdf_translation.core.orchestration.units import (
     refresh_translation_units_and_collect_changed_pages,
     refresh_translation_units_by_page,
 )
-from retainpdf_pipeline.translate.services.results.page_io import save_pages
-from retainpdf_pipeline.translate.workflow.phases import repair
+from retainpdf_translation.services.results.page_io import save_pages
+from retainpdf_translation.workflow.phases import repair
 
 
 def _pages():

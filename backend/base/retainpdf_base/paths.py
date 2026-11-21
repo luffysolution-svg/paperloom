@@ -1,0 +1,48 @@
+import os
+from pathlib import Path
+
+
+PROJECT_ROOT_ENV_NAMES = ("RETAIN_PDF_PROJECT_ROOT", "RUST_API_PROJECT_ROOT")
+
+
+def _project_root() -> Path:
+    for name in PROJECT_ROOT_ENV_NAMES:
+        value = os.environ.get(name, "").strip()
+        if value:
+            return Path(value).expanduser().resolve()
+
+    file_path = Path(__file__).resolve()
+    for parent in file_path.parents:
+        if (parent / "backend" / "pipeline").is_dir() and (parent / "contracts").is_dir():
+            return parent
+        if (parent / ".git").exists():
+            return parent
+    # An installed package has no repository root. Keep the default anchored
+    # to the caller's working directory; production callers set OUTPUT_ROOT.
+    return Path.cwd().resolve()
+
+
+ROOT_DIR = _project_root()
+BACKEND_ROOT = ROOT_DIR / "backend"
+DATA_DIR = ROOT_DIR / "en2zh" / "Data"
+
+
+def _path_from_env(*names: str, default: Path) -> Path:
+    for name in names:
+        value = os.getenv(name, "").strip()
+        if value:
+            return Path(value).expanduser()
+    return default
+
+
+OUTPUT_DIR = _path_from_env("OUTPUT_ROOT", "RUST_API_OUTPUT_ROOT", default=ROOT_DIR / "data")
+TRANSLATIONS_DIR = OUTPUT_DIR / "translations"
+TRANSLATION_UNIT_CACHE_DIR = OUTPUT_DIR / "_translation_unit_cache"
+DOMAIN_CONTEXT_CACHE_DIR = OUTPUT_DIR / "_domain_context_cache"
+# 翻译 agent 的请求缓存（键是整个请求体的哈希）：各任务共用，重试翻译新建的任务也用得上
+AGENT_REQUEST_CACHE_DIR = OUTPUT_DIR / "_agent_request_cache"
+# GLM-OCR 各片的原始结果（键是原文 sha256、模型、分片页数）：各任务共用，OCR 中断后新建、重试的任务不再为做过的页付钱
+GLM_OCR_CHUNK_CACHE_DIR = OUTPUT_DIR / "_glm_ocr_chunk_cache"
+
+SOURCE_PDF = DATA_DIR / "std2_manual.pdf"
+SOURCE_JSON = DATA_DIR / "std2_manual.json"

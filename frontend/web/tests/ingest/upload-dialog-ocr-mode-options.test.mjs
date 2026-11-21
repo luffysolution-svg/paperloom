@@ -13,82 +13,23 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { JSDOM } from "jsdom";
-
-function makeDom(search = "") {
-  const dom = new JSDOM("<!doctype html><html><body></body></html>", {
-    url: `http://localhost/index.html${search}`,
-  });
-  for (const key of ["window", "document", "DocumentFragment", "HTMLElement", "HTMLButtonElement", "HTMLFormElement", "HTMLInputElement", "CustomEvent", "Event", "KeyboardEvent", "MouseEvent", "Node", "MutationObserver", "NodeFilter"]) {
-    Object.defineProperty(globalThis, key, {
-      value: dom.window[key] ?? dom.window,
-      writable: true,
-      configurable: true,
-    });
-  }
-  globalThis.window = dom.window;
-  globalThis.requestAnimationFrame = (callback) => setTimeout(() => callback(0), 0);
-  globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
-  globalThis.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
-  globalThis.IS_REACT_ACT_ENVIRONMENT = false;
-  return dom;
-}
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitFor(predicate, description) {
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    if (predicate()) return;
-    await wait(15);
-  }
-  assert.fail(`等待超时：${description}`);
-}
-
-function click(dom, element) {
-  element.dispatchEvent(new dom.window.MouseEvent("mousedown", { bubbles: true, button: 0 }));
-  element.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-}
-
-async function bootHomeApp(dom) {
-  const { createRoot } = await import("react-dom/client");
-  const React = await import("react");
-  const { createHomeComposition } = await import("../../src/app/home/create-home-composition.js");
-  const { HomeApp } = await import("../../src/app/home/HomeApp.jsx");
-
-  const host = dom.window.document.createElement("div");
-  host.id = "home-root";
-  dom.window.document.body.appendChild(host);
-
-  const services = createHomeComposition({
-    fetchGlossaries: async () => ({ items: [] }),
-    loadPersistedDeveloperConfig: () => ({}),
-    loadPersistedBrowserConfig: () => ({}),
-  });
-  services.initialize();
-
-  const root = createRoot(host);
-  root.render(React.createElement(HomeApp, { services }));
-  await waitFor(() => dom.window.document.getElementById("app-shell"), "HomeApp 首帧渲染");
-  await wait(0);
-  return { services, root, host };
-}
+import { waitFor } from "../helpers/async.mjs";
+import { clickWithMouseDown, makeDom } from "../helpers/dom.mjs";
+import { bootHomeApp } from "../helpers/home-app.mjs";
 
 test("从「翻译」切到「仅 OCR」时，已展开的翻译选项面板不会留在屏上", async () => {
   const dom = makeDom("?mock=parallel");
   const byId = (id) => dom.window.document.getElementById(id);
   const { services, root, host } = await bootHomeApp(dom);
 
-  click(dom, byId("library-add-pdf-btn"));
+  clickWithMouseDown(dom, byId("library-add-pdf-btn"));
   await waitFor(() => byId("translation-workflow-dialog") !== null, "添加对话框打开");
 
   // 文件就绪才会露出处理方式区（含「选项」开关按钮）
   services.stores.uploadView.actions.patch({ ready: true, actionSlotVisible: true });
   await waitFor(() => byId("page-range-btn"), "翻译选项开关按钮出现");
 
-  click(dom, byId("page-range-btn"));
+  clickWithMouseDown(dom, byId("page-range-btn"));
   await waitFor(() => byId("page-range-dialog"), "翻译选项面板展开");
   assert.equal(
     services.stores.uploadView.getSnapshot().translationOptionsOpen,
@@ -98,7 +39,7 @@ test("从「翻译」切到「仅 OCR」时，已展开的翻译选项面板不�
 
   const ocrModeTab = dom.window.document.querySelector('[aria-label="仅 OCR 模式"]');
   assert.ok(ocrModeTab, "仅 OCR 模式入口存在");
-  click(dom, ocrModeTab);
+  clickWithMouseDown(dom, ocrModeTab);
 
   await waitFor(
     () => services.stores.workflowView.getSnapshot().ocrOnly === true,
@@ -126,17 +67,17 @@ test("切回「翻译」后已填的页码还在（收起只翻开关，不吃�
   const byId = (id) => dom.window.document.getElementById(id);
   const { services, root, host } = await bootHomeApp(dom);
 
-  click(dom, byId("library-add-pdf-btn"));
+  clickWithMouseDown(dom, byId("library-add-pdf-btn"));
   await waitFor(() => byId("translation-workflow-dialog") !== null, "添加对话框打开");
   services.stores.uploadView.actions.patch({ ready: true, actionSlotVisible: true });
   await waitFor(() => byId("page-range-btn"), "翻译选项开关按钮出现");
 
-  click(dom, byId("page-range-btn"));
+  clickWithMouseDown(dom, byId("page-range-btn"));
   await waitFor(() => byId("page-range-dialog"), "翻译选项面板展开");
   services.stores.uploadView.actions.setPageRange({ start: "2", end: "7" });
 
   const tab = (label) => dom.window.document.querySelector(`[aria-label="${label}"]`);
-  click(dom, tab("仅 OCR 模式"));
+  clickWithMouseDown(dom, tab("仅 OCR 模式"));
   await waitFor(
     () => services.stores.uploadView.getSnapshot().translationOptionsOpen === false,
     "切到 OCR 后面板收起",
@@ -147,7 +88,7 @@ test("切回「翻译」后已填的页码还在（收起只翻开关，不吃�
   assert.equal(services.stores.uploadView.getSnapshot().pageRangeStart, "2");
   assert.equal(services.stores.uploadView.getSnapshot().pageRangeEnd, "7");
 
-  click(dom, tab("翻译模式"));
+  clickWithMouseDown(dom, tab("翻译模式"));
   await waitFor(
     () => services.stores.workflowView.getSnapshot().ocrOnly === false,
     "切回翻译模式",

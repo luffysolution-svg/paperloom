@@ -1,16 +1,13 @@
-import sys
 from pathlib import Path
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
-from retainpdf_pipeline.translate.core.ocr.models import TextItem
-from retainpdf_pipeline.translate.core.payload.token_protection import formula_map_from_protected_map
-from retainpdf_pipeline.translate.core.payload.inline_protection import protect_inline_content
-from retainpdf_pipeline.translate.core.payload.inline_protection import protect_inline_formulas_in_segments
-from retainpdf_pipeline.translate.core.payload.formula_protection import re_protect_restored_formulas
-from retainpdf_pipeline.translate.core.payload.token_protection import restore_protected_tokens
-from retainpdf_pipeline.translate.core.payload.translations import export_translation_template
+from retainpdf_translation.core.ocr.models import TextItem
+from retainpdf_translation.core.payload.token_protection import formula_map_from_protected_map
+from retainpdf_translation.core.payload.inline_protection import protect_inline_content
+from retainpdf_translation.core.payload.inline_protection import protect_inline_formulas_in_segments
+from retainpdf_translation.core.payload.formula_protection import re_protect_restored_formulas
+from retainpdf_translation.core.payload.token_protection import restore_protected_tokens
+from retainpdf_translation.core.payload.translations import export_translation_template
 
 
 def test_restored_formula_tokens_are_wrapped_as_inline_math() -> None:

@@ -116,7 +116,7 @@ async fn zotero_writeback_batch_continues_after_failure_deduplicates_and_reuses_
     let server = tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
     });
-    let env_name = crate::services::integrations::zotero::ZOTERO_API_ENV;
+    let env_name = crate::services::integrations::ZOTERO_API_ENV;
     let previous = std::env::var_os(env_name);
     std::env::set_var(env_name, base);
     let state = setup("zotero-batch-success", true);

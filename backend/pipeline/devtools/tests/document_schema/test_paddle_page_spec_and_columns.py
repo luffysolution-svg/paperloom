@@ -1,36 +1,14 @@
-import json
-import subprocess
-import sys
-from pathlib import Path
-
-
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-from retainpdf_pipeline.ocr.document_schema import adapt_path_to_document_v1_with_report
-from retainpdf_pipeline.ocr.document_schema.provider_adapters.paddle import looks_like_paddle_layout
 from retainpdf_pipeline.ocr.document_schema.provider_adapters.paddle.column_signals import (
     analyze_page_column_signals,
 )
-from retainpdf_pipeline.ocr.document_schema.provider_adapters.paddle.body_repair import repair_body_cross_column_blocks
-from retainpdf_pipeline.ocr.document_schema.provider_adapters.paddle.content_extract import build_lines
 from retainpdf_pipeline.ocr.document_schema.provider_adapters.paddle.page_reader import build_page_spec
 from retainpdf_pipeline.ocr.document_schema.provider_adapters.paddle.payload_reader import (
     data_info_is_complete,
     iter_page_specs,
 )
 from retainpdf_pipeline.ocr.document_schema.provider_adapters.paddle.adapter import build_paddle_document
-from retainpdf_pipeline.ocr.document_schema.provider_adapters.paddle.relations import classify_page_blocks
-from retainpdf_pipeline.translate.core.ocr.json_extractor import extract_text_items
-from retainpdf_pipeline.foundation.shared.job_dirs import ensure_job_dirs
-from retainpdf_pipeline.foundation.shared.job_dirs import resolve_job_dirs
-from devtools.tests.document_schema.fixtures.registry import PADDLE_FIXTURES_ROOT
-
-
-PADDLE_FIXTURE_JSON = PADDLE_FIXTURES_ROOT / "json_full.json"
-PADDLE_SCI_FIXTURE_JSON = PADDLE_FIXTURES_ROOT / "json_sci.json"
-PADDLE_FIXTURE_PDF = PADDLE_FIXTURES_ROOT / "paddle_ocr_json_split.pdf"
-NORMALIZE_ENTRYPOINT = REPO_SCRIPTS_ROOT / "retainpdf_pipeline" / "entrypoints" / "run_normalize_ocr.py"
+from retainpdf_translation.core.ocr.json_extractor import extract_text_items
+from devtools.tests.document_schema.fixtures.registry import PADDLE_FIXTURE_JSON
 
 
 def test_legacy_jsonl_infers_incomplete_page_metadata_from_count_mismatch() -> None:

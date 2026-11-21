@@ -1,14 +1,8 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 
 import pytest
 import requests
-
-
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
 
 from retainpdf_pipeline.ocr.ocr_provider import paddle_api

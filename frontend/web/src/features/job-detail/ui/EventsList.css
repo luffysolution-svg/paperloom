@@ -1,0 +1,129 @@
+/* 状态详情 · 事件列表：事件条目、徽标、负载展开，（按状态着色的通用徽标 badge 在 styles/pages/home/job-ui-shared.css，书架卡片也用）。（EventsList）
+ *
+ * @owns status-detail, detail, stage-history, events, event, failure, info-list
+ * @uses warn, error */
+
+@utility events-empty {
+  @apply rounded-[18px] px-4 py-4 text-sm;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--muted);
+  text-align: center;
+}
+
+
+
+@utility events-lead {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+
+
+@utility events-list {
+  @apply grid gap-3;
+}
+
+
+
+@utility event-item {
+  @apply rounded-[20px] border px-4 py-4;
+  border-color: var(--line);
+  background: linear-gradient(180deg, var(--paper) 0%, var(--paper) 100%);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--shadow-color) 4%, transparent);
+}
+
+
+
+@utility event-meta {
+  @apply flex flex-wrap items-center gap-2 text-[12px];
+  color: var(--muted);
+}
+
+
+
+@utility event-badge {
+  @apply inline-flex items-center rounded-full px-2 py-1 text-[11px] font-semibold;
+  background: var(--bg);
+  color: var(--ink);
+
+  &.warn {
+    background: color-mix(in srgb, var(--warn) 12%, transparent);
+    color: var(--warn);
+  }
+
+  &.error {
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    color: var(--danger);
+  }
+}
+
+
+
+@utility warn {
+  &.event-badge {
+    background: color-mix(in srgb, var(--warn) 12%, transparent);
+    color: var(--warn);
+  }
+}
+
+
+
+@utility error {
+  &.event-badge {
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    color: var(--danger);
+  }
+}
+
+
+
+@utility event-title {
+  @apply mt-3 text-[14px] font-medium leading-6;
+  color: var(--ink);
+}
+
+
+
+@utility event-payload-wrap {
+  margin-top: 10px;
+
+  &[open] .event-payload-toggle {
+    background: var(--line);
+    color: var(--ink);
+  }
+}
+
+
+
+@utility event-payload-toggle {
+  @apply inline-flex items-center rounded-full px-3 py-1 text-[12px] font-medium;
+  cursor: pointer;
+  list-style: none;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--line);
+
+  &::-webkit-details-marker {
+    display: none;
+  }
+
+  .event-payload-wrap[open] & {
+    background: var(--line);
+    color: var(--ink);
+  }
+}
+
+
+
+@utility event-payload {
+  @apply mt-3 rounded-[16px] px-3 py-3 text-[12px] leading-5;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}

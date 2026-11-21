@@ -1,0 +1,28 @@
+[package]
+name = "retainpdf-accounts"
+version = "0.1.0"
+edition = "2021"
+description = "账号：登录、会话、访问控制、邀请码、页额度、平台设置（多用户模式）"
+
+[dependencies]
+retainpdf-api-base = { path = "../retainpdf-api-base" }
+retainpdf-core = { path = "../retainpdf-core" }
+retainpdf-data = { path = "../retainpdf-data" }
+retainpdf-providers = { path = "../retainpdf-providers" }
+anyhow = "1"
+argon2 = "0.5"
+axum = "0.7"
+base64 = "0.22"
+chrono = { version = "0.4", features = ["serde", "clock"] }
+fastrand = "2"
+getrandom = "0.2"
+# 生成盐用的 OsRng 要 rand_core 的 getrandom 特性。原来在 rust_api 里是别的依赖（tungstenite → rand）碰巧打开的。
+rand_core = { version = "0.6", features = ["getrandom"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_urlencoded = "0.7"
+sha2 = "0.11.0"
+tracing = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }

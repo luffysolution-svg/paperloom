@@ -1,6 +1,6 @@
 """Render-local source page extractor (file-contract duplicate).
 
-Duplicated from retainpdf_pipeline.translate.core.ocr.json_extractor
+Duplicated from retainpdf_translation.core.ocr.json_extractor
 (stage-decouple: render must not import translate/ocr; duplicate wins over
 cross-package). The input is always the ``document.v1.json`` file produced by
 the ocr stage; non-normalized payloads are rejected instead of adapted.
@@ -88,8 +88,10 @@ PRIMARY_TRANSLATABLE_STRUCTURE_ROLES = {
     ROLE_HEADING,
     ROLE_CAPTION,
     ROLE_FIGURE_CAPTION,
-    ROLE_IMAGE_CAPTION,
+    # 和翻译侧 json_extractor 那份保持一致（render 不能 import translate，只能复制；
+    # devtools/tests/rendering/test_render_caption_roles.py 守着两份不漂移）。
     ROLE_TABLE_CAPTION,
+    ROLE_IMAGE_CAPTION,
     ROLE_CODE_CAPTION,
     ROLE_FOOTNOTE,
     ROLE_IMAGE_FOOTNOTE,

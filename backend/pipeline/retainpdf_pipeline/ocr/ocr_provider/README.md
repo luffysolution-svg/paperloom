@@ -37,7 +37,7 @@
 
 3. raw -> normalized 必须显式经过 adapter
    - 任何 provider 返回结果，先进入 `ocr/document_schema/adapters.py`
-   - 不能直接让 `translate/core/ocr`、`render/` 去理解 provider JSON
+   - 不能直接让 `retainpdf_translation/core/ocr`、`render/` 去理解 provider JSON
 
 4. provider 能力是可变的，统一 schema 才是稳定契约
    - provider 可能变接口、变字段、变返回格式
@@ -143,7 +143,8 @@ provider 层产物一旦落盘，下一步只做一件事：
 - `ocr/ocr_provider/paddle_markdown.py`
   这是 Paddle Markdown 和图片产物落盘
 - `ocr/ocr_provider/paddle_normalize.py`
-  这是 Paddle normalized document 几何修正等纯实现
+  Paddle 自己的「适配 → 缩放 → 补行 → 校验 → 落盘」（`save_normalized_document_for_paddle`）。缩放、补行各家通用，2026-10-29 挪到
+  `ocr/document_schema/pdf_geometry.py`，这里只留旧名字
 - `ocr/mineru_provider/`
   这是 MinerU provider 的具体实现，不是“OCR 总入口”
 - `ocr/document_schema/`
@@ -249,6 +250,43 @@ CLI 原始 JSON、stdout/stderr 与 `--save_resources` 下载内容保存在
 
 如果第 4 步之前就让 provider 原始 JSON 进入主流程，后面一定继续耦合。
 
+## 智谱 GLM-OCR（`glm_ocr`，2026-10-31）
+
+`glm_ocr_api.py` 调 `POST https://open.bigmodel.cn/api/paas/v4/layout_parsing`（模型 `glm-ocr`），`glm_ocr_driver.py`
+在 provider worker 里做完整流程（和命令型 OCR、Paddle 官方 CLI 一样，Rust 只拉起进程、注入凭据 `args.ocr_credential`）：
+
+1. 选页（`page_ranges`）先切出子 PDF 当原文；只支持上传的本地文件，不支持 `source.file_url`。
+2. 按 `RETAIN_GLM_OCR_CHUNK_PAGES` 页（默认 10，服务端上限 100）分片，base64 带 `data:application/pdf;base64,` 前缀交上去。
+   同步接口：一次请求等到整片解析完（实测 10 页约 12 秒，分片不多花钱）。`RETAIN_GLM_OCR_WORKERS` 路并发（默认 1，最多 4；
+   实测 2 路不比串行快）。
+3. 每片原始结果存 `ocr/glm_ocr_raw/chunk-<序号>-<起>-<止>.json`，`chunks.json` 记原文 sha256 和分片页数；重跑时对得上的片不再请求。
+   另存一份到各任务共用的 `paths.GLM_OCR_CHUNK_CACHE_DIR`（输出目录下 `_glm_ocr_chunk_cache/<原文 sha256>/<模型>-p<分片页数>/`，
+   2026-11-02）：OCR 失败后重试新建的任务（任务目录是空的）也先从这里取，做过的片不再付钱，取到的片照样抄进任务目录。
+4. 每做完一片报一次进度（页），任务"多久没有进展"的超时按它算。
+5. 拼成一份 `ocr/glm_ocr_result.json`（和单次请求同样形状，`_meta.chunks` 记各片页范围、用量），按图片块的框从原文裁图到
+   `md/images/page-<N>/imgs/img_in_<标签>_box_….jpg`（和 Paddle 的图片放一处），`md_results` 的图片占位换成本地图写 `md/full.md`。
+6. 走 `document_schema` 的 `glm_ocr` 适配器归一化、缩放到原文 PDF。
+8. 两栏被框成一块（2026-11-01，`glm_ocr_repair.py`）：本页左右两栏都有正常宽度的正文块、这一块宽过页宽 70%，而且原文文字层在块中间有一条
+   没有词跨过的竖缝时，按右栏开头几个词在 GLM 文字里的位置拆成左右两块，右块排进右栏的阅读顺序。没有文字层（扫描件）、找不到缝或找不到词就不拆。
+   适配器另外去掉正文开头和压在它上面的标题重复的那段。
+7. 流式公布（2026-10-31）：每做完一片，把前面连着做完的页归一化写到 `ocr/stream/document.v1.json`，就绪清单 `ocr/stream/manifest.json`
+   （`ocr_stream_v1`：`ready_page_indices`、`ready_pages`、`total_pages`、`done`、`failed`，契约在 `retainpdf_base/ocr_stream.py`），
+   后面的拼接和翻译不用等 OCR 做完。GLM 串行，就绪的总是前几页。
+
+报错：key 不对、参数不对（4xx，429 除外）直接失败，报服务端的 code 和 message，不带 key；429、5xx、网络错误退避重试
+（`request_with_retry`，5 次，15 秒起，认 `Retry-After`）。`RETAIN_GLM_OCR_API_URL`、`RETAIN_GLM_OCR_TIMEOUT_SECONDS` 可改；不写时单片超时按页数算：60 秒加每页 12 秒（10 页一片 180 秒）。
+
+## Paddle 按片并行提交（`paddle_chunked.py`，2026-11-01）
+
+整本任务和翻译并行时（Rust `execute_ocr_job_streaming`），官方云服务、官方 HTTP、上传的文件不再由 Rust 整份提交，而在 provider worker 里：
+原文切成每份 `RETAIN_PADDLE_CHUNK_PAGES` 页（默认 10，0 是整份一份），同时最多 `RETAIN_PADDLE_CHUNK_WORKERS` 份（默认 4）；
+没有等着提交的份了、某份交上去 `RETAIN_PADDLE_HEDGE_SECONDS` 秒（默认 15）还一页没识别就再交一份，谁先完用谁；失败重交，最多 3 次。
+每份结果存 `ocr/paddle_raw_chunks/`（按原文 sha256 续跑）；拼接时各份的 `global_block_id` / `global_group_id` 加「起始页 × 1000」，
+不让不同份的块撞成一个接续组，偏移只看份从哪页开始，先公布的页和最后整份编号一致。
+做完哪份就公布哪份（2026-11-01 起，以前只公布前面连着做完的）：没做完的份放同样大小的空页占位，清单的 `ready_page_indices` 列出就绪的页；
+图片最后整份一次下载。和 Rust 那条路相比少了"派发意向"记录：进程死在提交途中，
+重跑时在途的那几份会再交一次（最多多花在途几份）。自建服务（`paddle_api_url`）、远程地址照旧走 Rust。
+
 ## 对 MinerU 文档的工程化结论
 
 从当前 MinerU API 文档看，最值得吸收的是这些抽象信息：
@@ -288,14 +326,14 @@ CLI 原始 JSON、stdout/stderr 与 `--save_resources` 下载内容保存在
 - `provider_pipeline.py` 负责 stage/provider 分发和稳定兼容面
 - `drivers.py` 负责 Python provider registry；新增 provider 先挂这里，不要把分发逻辑写回主流程
 - `types.py` 定义 provider driver 的稳定输入/输出契约，`OcrProviderResult.artifact_manifest` 是 provider 产物边界
-- Rust API 侧 provider 产物路径由 `backend/packages/retain-data/src/ocr_provider/catalog.rs` 的 artifact layout 声明，任务编排不要在 workspace 里写 provider 文件名
-- Rust API 侧 provider transport 由 `backend/packages/retain-jobs/src/job_runner/ocr_flow/provider_transport.rs` 分发，新增内置 provider 时先注册 transport handler
+- Rust API 侧 provider 产物路径由 `backend/packages/retainpdf-data/src/ocr_provider/catalog.rs` 的 artifact layout 声明，任务编排不要在 workspace 里写 provider 文件名
+- Rust API 侧 provider transport 由 `backend/packages/retainpdf-runner/src/job_runner/ocr_flow/provider_transport.rs` 分发，新增内置 provider 时先注册 transport handler
 - 新增的纯实现优先下沉到独立模块，不直接堆回 `provider_pipeline.py`
 - 如果测试需要 monkeypatch，patch 点应保留在 `provider_pipeline.py`
 - `ocr/ocr_provider/__init__.py` 必须显式导出 `provider_pipeline`
 - `paddle_api.py` 不处理 normalized schema
 - `paddle_markdown.py` 只处理 Markdown/图片产物，不碰翻译和渲染
-- `paddle_normalize.py` 只处理 normalized document 和几何修正，不碰 provider transport
+- `paddle_normalize.py` 只处理 Paddle 的 normalized document 落盘，不碰 provider transport；几何在 `document_schema/pdf_geometry.py`
 - `local_command_driver.py` 是本地 OCR 模型的最小接入口；它不关心模型实现，只校验落盘契约
 - `ocr/document_schema/adapters.py` 只做 adapter registry，不直接 import `ocr/mineru_provider/*`；MinerU 走 `ocr/document_schema/provider_adapters/mineru/`
 - Paddle 默认模型和 alias 配在 `backend/config/ocr_providers.json`；不要在 Python/Rust 里硬编码版本号
@@ -446,7 +484,7 @@ GET /api/v1/providers/ocr
 - `display_name`：展示名
 - `provider_kind`：`remote`、`local_command` 或 `remote_command`
 - `credential`：凭据字段和环境变量约定；本地 provider 可以是 `null`
-- `options`：provider 参数定义，包括 `type/default/env/aliases/choices/required`
+- `options`：provider 参数定义，包括 `type/default/env/aliases/choices/required/client_settable`；`client_settable: false` 的只能服务器定，`default` 恒为 `null`
 - `capabilities`：是否支持 URL、本地文件、轮询、bundle、公式/表格开关
 - `artifact_layout`：provider 原始产物的稳定落盘位置
 
@@ -526,10 +564,13 @@ GET /api/v1/providers/ocr
 }
 ```
 
-Python provider registry 会动态发现 `kind=local_command|remote_command` 的 provider，并用同一个 command driver 执行。`command/raw_provider` 的读取顺序是：
+Python provider registry 会动态发现 `kind=local_command|remote_command` 的 provider，并用同一个 command driver 执行。`command/raw_provider` 只能服务器定（2026-10-22），读取顺序是：
 
-1. stage spec 或运行参数里的 provider options
+1. `ocr_providers.json` 里这个 provider 的 `options.command.default` / `options.raw_provider.default`（内置的 `local` 也一样，每次现读）
 2. `RETAIN_LOCAL_OCR_COMMAND` / `RETAIN_OCR_RAW_PROVIDER`
+
+stage spec 的 `ocr.options` 来自任务请求，`provider_pipeline._args_from_spec` 用 `client_ocr_options` 去掉其中只能服务器定的键
+（`command`、`raw_provider`、配置里带 `env` 的），不拿它们执行。Rust 那边建任务时已经 400、写 spec 时也不让请求覆盖，这里是兜底。
 
 command provider 会收到这些稳定环境变量：
 

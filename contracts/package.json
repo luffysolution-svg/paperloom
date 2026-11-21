@@ -13,9 +13,25 @@
       "types": "./dist/create-job-fields.d.ts",
       "import": "./dist/create-job-fields.js"
     },
+    "./glossaries": {
+      "types": "./dist/glossaries.d.ts",
+      "import": "./dist/glossaries.js"
+    },
+    "./job-actions": {
+      "types": "./dist/job-actions.d.ts",
+      "import": "./dist/job-actions.js"
+    },
+    "./job-data": {
+      "types": "./dist/job-data.d.ts",
+      "import": "./dist/job-data.js"
+    },
     "./job-events": {
       "types": "./dist/job-events.d.ts",
       "import": "./dist/job-events.js"
+    },
+    "./job-reports": {
+      "types": "./dist/job-reports.d.ts",
+      "import": "./dist/job-reports.js"
     },
     "./job-status": {
       "types": "./dist/job-status.d.ts",
@@ -25,17 +41,42 @@
       "types": "./dist/library-books.d.ts",
       "import": "./dist/library-books.js"
     },
+    "./library-documents": {
+      "types": "./dist/library-documents.d.ts",
+      "import": "./dist/library-documents.js"
+    },
+    "./ocr-providers": {
+      "types": "./dist/ocr-providers.d.ts",
+      "import": "./dist/ocr-providers.js"
+    },
     "./reader-data": {
       "types": "./dist/reader-data.d.ts",
       "import": "./dist/reader-data.js"
     },
+    "./token-usage": {
+      "types": "./dist/token-usage.d.ts",
+      "import": "./dist/token-usage.js"
+    },
+    "./translation-revisions": {
+      "types": "./dist/translation-revisions.d.ts",
+      "import": "./dist/translation-revisions.js"
+    },
     "./create-job.v1.schema.json": "./create-job.v1.schema.json",
+    "./glossaries.v1.schema.json": "./glossaries.v1.schema.json",
+    "./job-actions.v1.schema.json": "./job-actions.v1.schema.json",
+    "./job-data.v1.schema.json": "./job-data.v1.schema.json",
     "./job-status.v1.schema.json": "./job-status.v1.schema.json",
     "./job-events.v2.schema.json": "./job-events.v2.schema.json",
+    "./job-reports.v1.schema.json": "./job-reports.v1.schema.json",
     "./jobs-control.v1.schema.json": "./jobs-control.v1.schema.json",
     "./library-books.v1.schema.json": "./library-books.v1.schema.json",
+    "./library-documents.v1.schema.json": "./library-documents.v1.schema.json",
+    "./ocr-providers.v1.schema.json": "./ocr-providers.v1.schema.json",
     "./pipeline-stdout.v1.schema.json": "./pipeline-stdout.v1.schema.json",
-    "./reader-data.v1.schema.json": "./reader-data.v1.schema.json"
+    "./reader-data.v1.schema.json": "./reader-data.v1.schema.json",
+    "./refine-report.v1.schema.json": "./refine-report.v1.schema.json",
+    "./token-usage.v1.schema.json": "./token-usage.v1.schema.json",
+    "./translation-revisions.v1.schema.json": "./translation-revisions.v1.schema.json"
   },
   "files": [
     "dist",

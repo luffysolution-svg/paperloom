@@ -4,6 +4,7 @@ import { RECENT_JOBS_IDS } from "../recent-jobs-dom-contract.js";
 import { fetchDocumentList, patchDocument } from "@/platform/api/index.js";
 import { searchLibrary } from "@/platform/api/index.js";
 import { fetchAllDocuments } from "../../domain/documents/fetch-all-documents.js";
+import type { BlockSearchHit, PatchDocumentInput } from "@retainpdf/contracts/library-documents";
 
 /** Anchor payload used to open the reader from a search hit / document row. */
 export interface LibrarySearchAnchor {
@@ -17,18 +18,26 @@ export interface LibrarySearchAnchor {
 /** 书卡可改的字段。原先直接复用 mock 层的 MockDocumentPatch——那是 mock 夹具
  *  的形状，不该出现在功能的公开端口上。改为结构类型，与 canonical
  *  patchDocument 的 Record<string, unknown> 兼容。 */
-export interface LibraryDocumentPatch {
+export type LibraryDocumentPatch = PatchDocumentInput;
+
+/** 全文检索命中：锚点字段外，还带原文与译文两段 snippet（[ ] 包裹命中词）。形状以契约为准。 */
+export type LibrarySearchHit = BlockSearchHit;
+
+/** 搜索下拉里一本书要用到的字段。文档列表的每一行都有 document_id，它是行的主键。 */
+export interface LibrarySearchDocumentRow {
+  document_id: string;
+  active_job_id?: string;
   title?: string;
+  source_filename?: string;
+  page_count?: number;
   reading_status?: string;
-  tags?: string[];
-  [key: string]: unknown;
 }
 
 export type LibrarySearchQuerySubscriber = (value: string) => void;
 
 export interface LibrarySearchPorts {
-  searchLibrary: (q: string) => Promise<{ hits?: LibrarySearchAnchor[] } | null | undefined>;
-  fetchDocumentList: () => Promise<{ documents?: unknown[] } | null | undefined>;
+  searchLibrary: (q: string) => Promise<{ hits?: LibrarySearchHit[] } | null | undefined>;
+  fetchDocumentList: () => Promise<{ documents?: LibrarySearchDocumentRow[] } | null | undefined>;
   patchDocument: (documentId: string, payload: LibraryDocumentPatch) => Promise<unknown>;
   openReader: (anchor: LibrarySearchAnchor) => void;
   subscribeQuery: (subscriber: LibrarySearchQuerySubscriber) => () => void;
@@ -43,10 +52,10 @@ export interface LibrarySearchAppHandle {
 // - React 应用经动态 import 惰性加载:首个非空查询才拉起,node 测试环境不解析 JSX;
 // - 数据经 ports 注入,组件内不直接 import api 层。
 class LibrarySearchIsland extends HTMLElement {
-  querySubscribers: Set<LibrarySearchQuerySubscriber>;
-  appPromise: Promise<LibrarySearchAppHandle | null> | null;
-  searchInput: HTMLElement | null;
-  handleInput: ((event: Event) => void) | null;
+  querySubscribers: Set<LibrarySearchQuerySubscriber> = new Set();
+  appPromise: Promise<LibrarySearchAppHandle | null> | null = null;
+  searchInput: HTMLElement | null = null;
+  handleInput: ((event: Event) => void) | null = null;
 
   connectedCallback() {
     if (this.dataset.mounted === "1") {
@@ -78,6 +87,7 @@ class LibrarySearchIsland extends HTMLElement {
     const island = this;
     return {
       searchLibrary: (q) => searchLibrary(API_PREFIX, q),
+      // 书名匹配在前端过滤，要拿到全部书，不能只取默认的第一页 50 本。
       fetchDocumentList: async () => ({
         documents: await fetchAllDocuments((page) => fetchDocumentList(API_PREFIX, page)),
       }),

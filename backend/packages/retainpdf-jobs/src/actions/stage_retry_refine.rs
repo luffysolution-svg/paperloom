@@ -1,0 +1,214 @@
+//! `retry-stage stage=refine`：对已提交的译文原地精修，再原地重渲染一次。
+//!
+//! 精修放在渲染阶段里、真正渲染之前跑（Python `run_refine_for_render`），所以这里不新增
+//! workflow：原地提交一次 Render workflow，并把这次的精修参数写成一次性覆盖
+//! （`specs/refine-override.json`，见 retainpdf-data `worker_command::refine_override`）。
+//! 覆盖**不**进任务的 `translation.refine`：否则之后每次普通重渲染都会再精修、再花钱。
+
+use std::path::Path;
+
+use serde_json::Value;
+
+use retainpdf_api_base::error::AppError;
+use crate::views::RefineRetryRequest;
+use retainpdf_core::models::domain::{now_iso, CreateJobInput, JobSnapshot, RefineOverride};
+use retainpdf_providers::{
+    acquire_credential_usage_lock, get_or_create_managed_credential, CredentialUsageLock,
+};
+use crate::lifecycle::validation::validate_translation_credential_reference;
+use retainpdf_core::storage_paths::JobPaths;
+use retainpdf_data::worker_command::refine_override::clear_refine_override;
+
+use crate::actions::rerun::prepare_in_place_render_job;
+use crate::actions::stage_retry_overrides::{apply_retry_overrides_to_resolved_spec, discard_ocr_secret_sources};
+
+/// 精修重试允许的模式。`off` 不在里面：不精修的重渲染请用 stage=render。
+const REFINE_RETRY_MODES: &[&str] = &["review_only", "review_and_fix", "editorial"];
+const DEFAULT_REFINE_RETRY_MODE: &str = "review_and_fix";
+
+/// 校验 `refine` 对象并归一成要落盘的一次性覆盖。省略 = 全书 review_and_fix。
+pub(super) fn validate_refine_request(
+    request: Option<&RefineRetryRequest>,
+) -> Result<RefineOverride, AppError> {
+    let default = RefineRetryRequest::default();
+    let request = request.unwrap_or(&default);
+    let mode = request
+        .mode
+        .as_deref()
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| DEFAULT_REFINE_RETRY_MODE.to_string());
+    if !REFINE_RETRY_MODES.contains(&mode.as_str()) {
+        return Err(AppError::bad_request(format!(
+            "refine.mode must be one of: {} (use stage=render to re-render without refine)",
+            REFINE_RETRY_MODES.join(", ")
+        )));
+    }
+    for (field, value) in [("refine.max_items", request.max_items), ("refine.max_tokens", request.max_tokens)] {
+        if value.is_some_and(|limit| limit < 0) {
+            return Err(AppError::bad_request(format!("{field} must be >= 0 (0 = no limit)")));
+        }
+    }
+    for (field, value) in [
+        ("refine.start_page", request.start_page),
+        ("refine.end_page", request.end_page),
+    ] {
+        if value.is_some_and(|page| page < 1) {
+            return Err(AppError::bad_request(format!(
+                "{field} is 1-based and must be >= 1"
+            )));
+        }
+    }
+    if let (Some(start), Some(end)) = (request.start_page, request.end_page) {
+        if start > end {
+            return Err(AppError::bad_request(
+                "refine.start_page must be <= refine.end_page (inclusive range)",
+            ));
+        }
+    }
+    Ok(RefineOverride {
+        mode,
+        start_page: request.start_page,
+        end_page: request.end_page,
+        max_items: request.max_items,
+        max_tokens: request.max_tokens,
+        requested_at: now_iso(),
+    })
+}
+
+/// 换了 key 之后精修要用新 key：前端设置里多半只有明文 key、没有凭据引用。和创建任务一样，
+/// 把 `overrides.translation.api_key`（及 reviewer_api_key）导入凭据库、换成引用、删掉明文，
+/// 返回改写后的 overrides。与同名引用一起给时按创建任务的规则拒绝（二者互斥）。
+///
+/// 返回的使用锁要一直持有到任务落库：中间凭据被回收的话，任务会引用一个不存在的凭据。
+pub(super) fn import_inline_refine_keys(
+    overrides: &Value,
+    data_root: &Path,
+) -> Result<(Value, Option<CredentialUsageLock>), AppError> {
+    let mut overrides = overrides.clone();
+    let mut imported = Vec::new();
+    if let Some(translation) = overrides.get_mut("translation").and_then(Value::as_object_mut) {
+        for (key, reference, label) in [
+            ("api_key", "credential_ref", "Imported legacy translation credential"),
+            ("reviewer_api_key", "reviewer_credential_ref", "Imported legacy reviewer credential"),
+        ] {
+            let secret = translation.get(key).and_then(Value::as_str).unwrap_or("").trim().to_string();
+            if secret.is_empty() {
+                translation.remove(key);
+                continue;
+            }
+            if translation.get(reference).and_then(Value::as_str).is_some_and(|value| !value.trim().is_empty()) {
+                return Err(AppError::bad_request(format!(
+                    "translation.{key} and translation.{reference} are mutually exclusive"
+                )));
+            }
+            let created = get_or_create_managed_credential(
+                data_root,
+                "translation_api_key",
+                "openai_compatible",
+                label,
+                &secret,
+            )?;
+            translation.remove(key);
+            translation.insert(reference.to_string(), Value::String(created.credential.credential_ref.clone()));
+            imported.push(created.credential.credential_ref);
+        }
+    }
+    if imported.is_empty() {
+        return Ok((overrides, None));
+    }
+    let guard = acquire_credential_usage_lock(data_root)?;
+    for reference in &imported {
+        retainpdf_data::credentials::resolve_credential(data_root, reference, "translation_api_key")
+            .map_err(crate::lifecycle::validation::map_credential_reference_error)?;
+    }
+    Ok((overrides, Some(guard)))
+}
+
+/// 把源任务改写成一次原地 Render workflow，并保留精修要用的模型凭据引用。
+///
+/// 精修要调模型：保留**引用**（credential_ref / reviewer_credential_ref），内联 key 一律
+/// 清掉（普通原地重渲染现在也保留引用，见 rerun.rs）。调用方可以用
+/// `overrides.translation.credential_ref`（或 reviewer_*）换成别的引用；明文 key 要先经
+/// [`import_inline_refine_keys`] 换成引用，到这里还带明文就拒绝。
+pub(super) fn prepare_in_place_refine_job(
+    source_job: JobSnapshot,
+    overrides: &Value,
+    data_root: &Path,
+) -> Result<JobSnapshot, AppError> {
+    reject_inline_keys(overrides)?;
+    let credential_ref = source_job.request_payload.translation.credential_ref.clone();
+    let reviewer_credential_ref = source_job
+        .request_payload
+        .translation
+        .reviewer_credential_ref
+        .clone();
+    let mut job = prepare_in_place_render_job(source_job)?;
+    {
+        let translation = &mut job.request_payload.translation;
+        translation.credential_ref = credential_ref;
+        translation.reviewer_credential_ref = reviewer_credential_ref;
+    }
+    apply_retry_overrides_to_resolved_spec(&mut job.request_payload, overrides)?;
+    discard_ocr_secret_sources(&mut job.request_payload.ocr);
+    job.request_payload.translation.api_key.clear();
+    job.request_payload.translation.reviewer_api_key.clear();
+    require_refine_model(&job)?;
+    validate_translation_credential_reference(
+        &CreateJobInput {
+            translation: job.request_payload.translation.clone(),
+            ..CreateJobInput::default()
+        },
+        data_root,
+    )?;
+    job.request_payload.runtime.job_id = job.job_id.clone();
+    job.sync_runtime_state();
+    Ok(job)
+}
+
+/// 任何一次原地渲染提交前清掉没用完的精修覆盖（不存在时是空操作）。
+pub(super) fn clear_pending_refine_override(
+    output_root: &Path,
+    job_id: &str,
+) -> Result<(), AppError> {
+    clear_refine_override(&JobPaths::for_job(output_root, job_id))
+        .map_err(|error| AppError::internal(format!("failed to clear refine override: {error:#}")))
+}
+
+fn reject_inline_keys(overrides: &Value) -> Result<(), AppError> {
+    let translation = overrides.get("translation");
+    for key in ["api_key", "reviewer_api_key"] {
+        if translation
+            .and_then(|section| section.get(key))
+            .and_then(Value::as_str)
+            .is_some_and(|value| !value.trim().is_empty())
+        {
+            return Err(AppError::bad_request(format!(
+                "refine retry does not accept inline translation.{key}; pass a vault credential reference (credential_ref / reviewer_credential_ref)"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// 精修至少要有一套能用的模型：审校三件套齐全，或翻译三件套齐全（审校留空回退到它）。
+fn require_refine_model(job: &JobSnapshot) -> Result<(), AppError> {
+    let translation = &job.request_payload.translation;
+    let complete = |model: &str, base_url: &str, credential_ref: &str| {
+        !model.trim().is_empty() && !base_url.trim().is_empty() && !credential_ref.trim().is_empty()
+    };
+    if complete(
+        &translation.reviewer_model,
+        &translation.reviewer_base_url,
+        &translation.reviewer_credential_ref,
+    ) || complete(
+        &translation.model,
+        &translation.base_url,
+        &translation.credential_ref,
+    ) {
+        return Ok(());
+    }
+    Err(AppError::bad_request(
+        "refine needs a model credential, but this job has none (for example it was created without one or the credential was deleted); pass overrides.translation.{model, base_url, credential_ref}",
+    ))
+}

@@ -6,6 +6,7 @@
 //   artifact-resources          下载 URL 解析与细清单补全
 //   artifact-center-sections    section 组装与可见性过滤
 //   artifact-quick-downloads    常用下载投影与排序
+//   artifact-visibility         文件页的明面 / 调试文件拆分
 //   artifact-format             字节/时间格式化
 
 export type {
@@ -26,4 +27,6 @@ export type {
 export { buildArtifactCenterSections } from "./artifact-center-sections.js";
 export { mergeArtifactLinksIntoManifest } from "./artifact-resources.js";
 export { selectArtifactQuickDownloads } from "./artifact-quick-downloads.js";
+export { layoutArtifactCenter } from "./artifact-visibility.js";
+export type { ArtifactCenterLayout, ArtifactDebugEntry } from "./artifact-visibility.js";
 export { formatArtifactBytes, formatArtifactTime } from "./artifact-format.js";

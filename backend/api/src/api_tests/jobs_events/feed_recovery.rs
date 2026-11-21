@@ -39,6 +39,8 @@ async fn bootstrap_stage_basis_matches_published_order_across_chunk_boundaries()
             "stage_detail": format!("JSONL page {seq}"), "event_type": "stage_progress",
             "message": format!("JSONL page {seq}"), "progress_current": seq,
             "progress_total": 10000, "progress_unit": "page",
+            // 撑过 1 MiB：文件按字节分批，1025 行照样分成两批导入（建事件流时按条数一批 16384 条，单靠条数分不出两批）
+            "padding": "x".repeat(1100),
         })
         .to_string()
             + "\n"
@@ -210,7 +212,7 @@ async fn first_parent_feed_after_cleanup_does_not_resurrect_expired_terminal_chi
     // seq 1, which mutates the source revision and must expire the old cursor.
     let (status, expired) = response(
         &app,
-        &format!("/api/v1/jobs/{parent_id}/events?cursor={}", cursor(&first)),
+        &format!("/api/v1/jobs/{parent_id}/progress/events?cursor={}", cursor(&first)),
     )
     .await;
     assert_eq!(status, StatusCode::GONE, "{expired}");
@@ -346,7 +348,7 @@ async fn modifying_a_db_event_expires_cursor_but_preserves_its_stable_identity()
     .expect("modify event source");
     let (status, error) = response(
         &app,
-        &format!("/api/v1/jobs/modify-feed/events?cursor={}", cursor(&first)),
+        &format!("/api/v1/jobs/modify-feed/progress/events?cursor={}", cursor(&first)),
     )
     .await;
     assert_eq!(status, StatusCode::GONE, "{error}");
@@ -373,7 +375,7 @@ async fn terminal_context_change_expires_cursor_without_replacing_source_identit
     let (status, error) = response(
         &app,
         &format!(
-            "/api/v1/jobs/terminal-feed/events?cursor={}",
+            "/api/v1/jobs/terminal-feed/progress/events?cursor={}",
             cursor(&first)
         ),
     )
@@ -400,7 +402,7 @@ async fn db_sequence_reuse_after_deletion_does_not_reuse_event_identity() {
     append_events(&state, "reuse-feed", 1, 1);
     let (status, error) = response(
         &app,
-        &format!("/api/v1/jobs/reuse-feed/events?cursor={}", cursor(&first)),
+        &format!("/api/v1/jobs/reuse-feed/progress/events?cursor={}", cursor(&first)),
     )
     .await;
     assert_eq!(status, StatusCode::GONE, "{error}");
@@ -432,7 +434,7 @@ async fn replacing_jsonl_invalidates_cursor_even_when_replacement_has_same_lengt
     fs::rename(replacement, path).expect("replace event log");
     let (status, error) = response(
         &app,
-        &format!("/api/v1/jobs/replace-feed/events?cursor={}", cursor(&first)),
+        &format!("/api/v1/jobs/replace-feed/progress/events?cursor={}", cursor(&first)),
     )
     .await;
     assert_eq!(status, StatusCode::GONE, "{error}");

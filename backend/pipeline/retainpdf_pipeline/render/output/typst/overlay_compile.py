@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Callable
 
 from retainpdf_pipeline.foundation.config import fonts
-from retainpdf_pipeline.foundation.config import paths
+from retainpdf_base import paths
 from retainpdf_pipeline.render.output.typst.compiler import compile_typst_book_overlay_pdf
 from retainpdf_pipeline.render.output.typst.sanitize import compile_overlay_pdf_resilient
 from retainpdf_pipeline.render.output.typst.shared import prepare_typst_work_dir

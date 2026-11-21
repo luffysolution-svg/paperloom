@@ -67,7 +67,12 @@ def _is_escaped(text: str, index: int) -> bool:
     return backslashes % 2 == 1
 
 
+_FORMULA_PLACEHOLDER_FIRST_CHARS = frozenset("[_\u27e6<")
+
+
 def _match_formula_placeholder(text: str, index: int) -> int:
+    if text[index] not in _FORMULA_PLACEHOLDER_FIRST_CHARS:
+        return index
     for prefix, suffix in (
         ("[[FORMULA_", "]]"),
         ("__FORMULA_", "__"),

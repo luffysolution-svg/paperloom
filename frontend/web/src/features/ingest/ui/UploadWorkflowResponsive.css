@@ -1,0 +1,34 @@
+/* 窄屏（≤ 620px）下上传工作流的适配，跨面板 / 拖放区 / 处理方式选择。
+ *
+ * @owns upload, translation-workflow-card, translation-budget-note, result-panel, form, math-mode-inline, page-range, credential-gate, progress-track, progress-bar */
+
+@media (max-width: 620px) {
+  .translation-workflow-card {
+    padding: 14px;
+  }
+
+  .translation-workflow-card .upload-tile.is-ready {
+    grid-template-columns: auto minmax(0, 1fr);
+    min-height: 124px;
+    padding: 18px;
+  }
+
+  .upload-process-choice-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .upload-process-choice-card {
+    min-height: 58px;
+  }
+
+  .upload-options-trigger {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+    padding: 11px;
+  }
+
+  .upload-options-trigger #page-range-btn {
+    width: 100%;
+  }
+}

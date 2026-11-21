@@ -55,9 +55,29 @@ def run_translate_only() -> int:
 
 
 def run_render_only() -> int:
-    from retainpdf_pipeline.render.workflow.render_only import main
+    from retainpdf_pipeline.runtime.pipeline.render_only_pipeline import main
 
     return _run_structured(main, default_stage="rendering", provider="rendering")
+
+
+def run_revise_translation_item() -> int:
+    from retainpdf_pipeline.entrypoints.revise_translation_item import main
+
+    return main()
+
+
+def run_merge_translated_artifacts() -> int:
+    from retainpdf_pipeline.render.tools.merge_translated_artifacts import main
+
+    main()
+    return 0
+
+
+def run_merge_translated_pdf() -> int:
+    from retainpdf_pipeline.render.tools.merge_translated_pdf import main
+
+    main()
+    return 0
 
 
 def run_side_by_side_pdf() -> int:
@@ -91,6 +111,18 @@ COMMANDS: dict[str, tuple[Callable[[], int], str]] = {
     ),
     "translate-only": (run_translate_only, "translate normalized OCR artifacts"),
     "render-only": (run_render_only, "render existing translation artifacts"),
+    "translation-revise": (
+        run_revise_translation_item,
+        "validate and write back one translated item (stdin JSON request)",
+    ),
+    "merge-translated-artifacts": (
+        run_merge_translated_artifacts,
+        "merge per-range translation JSON, OCR pages and images into one job-shaped directory",
+    ),
+    "merge-translated-pdf": (
+        run_merge_translated_pdf,
+        "stitch per-range translated PDFs into one full-length PDF",
+    ),
     "side-by-side-pdf": (
         run_side_by_side_pdf,
         "build a left/right source-vs-translated PDF",

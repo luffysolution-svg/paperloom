@@ -6,7 +6,7 @@ from pathlib import Path
 
 import fitz
 
-from retainpdf_pipeline.services.pipeline_shared.events import emit_render_page_progress
+from retainpdf_base.events import emit_render_page_progress
 from retainpdf_pipeline.render.source.background.fill import draw_white_covers
 from retainpdf_pipeline.render.source.text_redaction import remove_text_under_rects_with_pymupdf_redaction
 from retainpdf_pipeline.render.source.vector_profile import page_drawing_count

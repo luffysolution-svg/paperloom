@@ -1,12 +1,5 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
 
 from retainpdf_pipeline.render.analysis.profile.text_layer import TextLayerProfile
 from retainpdf_pipeline.render.analysis.route.background_route import decide_page_background_route

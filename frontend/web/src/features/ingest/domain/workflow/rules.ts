@@ -2,8 +2,11 @@ import {
   normalizeTranslationApiProtocol,
   normalizeTranslationThinking,
 } from "@/platform/config/providers.js";
+import type { WorkflowConstants } from "./contracts.js";
+import type { WorkflowConfigDefaults } from "./developer-config.js";
+import type { WorkflowDeveloperConfig } from "./payload.js";
 
-export function positiveInteger(value, fallback) {
+export function positiveInteger(value: unknown, fallback: unknown): number {
   const fallbackNumber = Number(fallback);
   const normalizedFallback = Number.isFinite(fallbackNumber) && fallbackNumber > 0
     ? Math.floor(fallbackNumber)
@@ -22,8 +25,15 @@ export function buildDeveloperConfigWithDefaults({
   defaults,
   defaultModelName,
   defaultModelBaseUrl,
-}: any) {
-  const source = saved || {};
+}: {
+  saved: WorkflowDeveloperConfig | Record<string, unknown> | null | undefined;
+  normalizeWorkflow: (value?: unknown) => string;
+  normalizeMathMode: (value?: unknown) => string;
+  defaults: WorkflowConfigDefaults;
+  defaultModelName: () => string;
+  defaultModelBaseUrl: () => string;
+}): WorkflowDeveloperConfig & { workflow: string } {
+  const source: Partial<WorkflowDeveloperConfig> = saved || {};
   return {
     workflow: normalizeWorkflow(source.workflow),
     translationProvider: `${source.translationProvider || ""}`.trim(),
@@ -31,13 +41,14 @@ export function buildDeveloperConfigWithDefaults({
       ? source.translationProfiles
       : {},
     renderSourceJobId: `${source.renderSourceJobId || ""}`.trim(),
-    mathMode: normalizeMathMode(source.mathMode),
+    // normalizeMathMode 的上游实现已归一到 TRANSLATION_MATH_MODES 两个值，这里收窄到契约类型。
+    mathMode: normalizeMathMode(source.mathMode) as WorkflowDeveloperConfig["mathMode"],
     model: source.model || defaultModelName(),
     baseUrl: source.baseUrl || defaultModelBaseUrl(),
-    apiProtocol: normalizeTranslationApiProtocol(source.apiProtocol),
-    thinking: normalizeTranslationThinking(source.thinking),
     glossaryId: `${source.glossaryId || source.glossary_id || ""}`.trim(),
     workers: positiveInteger(source.workers, defaults.workers),
+    apiProtocol: normalizeTranslationApiProtocol(source.apiProtocol),
+    thinking: normalizeTranslationThinking(source.thinking),
     batchSize: positiveInteger(source.batchSize, defaults.batchSize),
     classifyBatchSize: positiveInteger(source.classifyBatchSize, defaults.classifyBatchSize),
     compileWorkers: positiveInteger(source.compileWorkers, defaults.compileWorkers),
@@ -46,19 +57,19 @@ export function buildDeveloperConfigWithDefaults({
   };
 }
 
-export function workflowNeedsUpload(workflow, constants) {
+export function workflowNeedsUpload(workflow: string | undefined, constants: WorkflowConstants) {
   return workflow !== constants.WORKFLOW_RENDER;
 }
 
-export function workflowNeedsCredentials(workflow, constants) {
+export function workflowNeedsCredentials(workflow: string | undefined, constants: WorkflowConstants) {
   return workflow !== constants.WORKFLOW_RENDER;
 }
 
-export function workflowUsesRenderStage(workflow, constants) {
+export function workflowUsesRenderStage(workflow: string | undefined, constants: WorkflowConstants) {
   return workflow === constants.WORKFLOW_BOOK || workflow === constants.WORKFLOW_RENDER;
 }
 
-export function workflowSubmitLabel(workflow, constants) {
+export function workflowSubmitLabel(workflow: string | undefined, constants: WorkflowConstants) {
   // UI 文案：上传弹窗主按钮「直接翻译」；render 仍用「开始渲染」
   switch (workflow) {
     case constants.WORKFLOW_RENDER:
@@ -72,7 +83,7 @@ export function workflowSubmitLabel(workflow, constants) {
   }
 }
 
-export function workflowHeadline(workflow, constants) {
+export function workflowHeadline(workflow: string | undefined, constants: WorkflowConstants) {
   switch (workflow) {
     case constants.WORKFLOW_RENDER:
       return "当前工作流会复用已有任务产物重新生成 PDF。";

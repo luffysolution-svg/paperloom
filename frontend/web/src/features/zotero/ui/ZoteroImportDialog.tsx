@@ -2,8 +2,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BookOpen, LoaderCircle, Search } from "lucide-react";
 
-import { Button } from "@/ui/components/button.js";
 import {
+  Button,
+  Checkbox,
   Dialog,
   DialogBody,
   DialogClose,
@@ -13,7 +14,9 @@ import {
   DialogHeader,
   DialogShell,
   DialogTitle,
-} from "@/ui/components/dialog.js";
+  Input,
+  Select,
+} from "@retainpdf/ui";
 import {
   getZoteroStatus,
   importZoteroAttachments,
@@ -159,7 +162,7 @@ export function ZoteroImportDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent id="home-zotero-dialog" showCloseButton={false} size="wide">
+      <DialogContent id="zotero-import-dialog" className="home-zotero-dialog" showCloseButton={false} size="wide">
         <DialogShell>
           <DialogHeader>
             <DialogTitle>从 Zotero 导入</DialogTitle>
@@ -182,7 +185,7 @@ export function ZoteroImportDialog({
               <div className="home-zotero-layout">
                 <nav className="home-zotero-collections" aria-label="Zotero 分类">
                   {status && status.libraries.length > 1 ? (
-                    <select
+                    <Select
                       id="home-zotero-library"
                       value={libraryId}
                       onChange={(event) => {
@@ -193,17 +196,17 @@ export function ZoteroImportDialog({
                       {status.libraries.map((library) => (
                         <option key={library.id} value={library.id}>{library.name}</option>
                       ))}
-                    </select>
+                    </Select>
                   ) : null}
-                  <button
+                  <Button
                     type="button"
                     className={collectionKey === "" ? "is-active" : ""}
                     onClick={() => setCollectionKey("")}
                   >
                     全部文献
-                  </button>
+                  </Button>
                   {orderedCollections.map((collection) => (
-                    <button
+                    <Button
                       key={collection.key}
                       type="button"
                       className={collectionKey === collection.key ? "is-active" : ""}
@@ -211,7 +214,7 @@ export function ZoteroImportDialog({
                       onClick={() => setCollectionKey(collection.key)}
                     >
                       {collection.name}
-                    </button>
+                    </Button>
                   ))}
                 </nav>
 
@@ -225,7 +228,7 @@ export function ZoteroImportDialog({
                     }}
                   >
                     <Search aria-hidden="true" />
-                    <input
+                    <Input
                       id="home-zotero-search"
                       type="search"
                       value={queryInput}
@@ -248,8 +251,7 @@ export function ZoteroImportDialog({
                               key={attachment.key}
                               className={`home-zotero-attachment${attachment.available ? "" : " is-unavailable"}`}
                             >
-                              <input
-                                type="checkbox"
+                              <Checkbox
                                 disabled={!attachment.available}
                                 checked={selected.has(selectionKey(item.key, attachment.key))}
                                 onChange={(event) => toggle(item, attachment.key, event.target.checked)}
@@ -272,7 +274,7 @@ export function ZoteroImportDialog({
                     <p className="home-zotero-status">这里没有文献。</p>
                   ) : null}
                   {!itemsLoading && items.length < total ? (
-                    <Button type="button" variant="outline" onClick={() => void loadItems(items.length)}>
+                    <Button type="button" variant="secondary" onClick={() => void loadItems(items.length)}>
                       加载更多（{items.length}/{total}）
                     </Button>
                   ) : null}
@@ -311,17 +313,15 @@ export function ZoteroImportDialog({
               </DialogClose>
             ) : (
               <>
-                <label className="home-zotero-translate">
-                  <input
-                    id="home-zotero-translate"
-                    type="checkbox"
-                    checked={translate}
-                    onChange={(event) => setTranslate(event.target.checked)}
-                  />
-                  <span>导入后立即翻译</span>
-                </label>
+                <Checkbox
+                  id="home-zotero-translate"
+                  className="home-zotero-translate"
+                  checked={translate}
+                  onChange={(event) => setTranslate(event.target.checked)}
+                  label="导入后立即翻译"
+                />
                 <DialogClose asChild>
-                  <Button type="button" variant="outline">取消</Button>
+                  <Button type="button" variant="secondary">取消</Button>
                 </DialogClose>
                 <Button
                   type="button"

@@ -9,7 +9,7 @@ from retainpdf_pipeline.render.layout.model.models import RenderPageSpec
 from retainpdf_pipeline.render.output.typst import block_config as typst_config
 from retainpdf_pipeline.render.output.typst.fit_helpers import page_spec_fit_helpers
 from retainpdf_pipeline.render.output.typst.block_renderer import build_typst_block
-from retainpdf_pipeline.services.pipeline_shared.events import emit_render_page_progress
+from retainpdf_base.events import emit_render_page_progress
 
 
 def build_typst_source_from_page_specs(

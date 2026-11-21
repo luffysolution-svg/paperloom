@@ -1,4 +1,19 @@
 // @retainpdf/reader — 包内运行时访问层（runtime access layer）。
+//
+// 与 frontend/web/src/app/reader/external.ts 同名但方向相反、职责不同：
+//   - 本文件（包内）：包内代码「读取」宿主注入能力的访问层，实现是
+//     adapters 注入 + 轻量 fallback，未注入时返回空/默认，保证 standalone
+//     可 tsc/build；深功能需宿主先 setReaderAdapters。
+//   - web app/reader/external.ts（宿主）：RetainPDF Web「提供」给包的能力出口。
+// 二者不是互相转发关系，改动任一侧前先确认方向，避免误把宿主导出搬进包内。
+//
+// 职责边界：adapters.ts 是宿主能力的「注入注册表」，本文件是包内读取这些
+// 能力的「运行时访问层」。历史上独立的 config-port.ts 已删除，其宿主配置
+// 能力统一由 adapters + runtime/config 承载，不要再新增平行入口。
+// 未注入的 port 尽量给出空/默认实现；缺失关键能力时才 requireAdapter 抛错。
+// data/pageConfig port 采用显式方法转发（见下方），方法名与形状都由包内 runtime
+// 工厂签名派生，宿主漏接或拼错会在 tsc/运行时立刻暴露。极少数 `as any` 仅用于
+// port 签名比宿主实现窄（0 参 vs 可选入参），属有意为之且已就近注释。
 
 import { getReaderAdapters, requireAdapter } from "./adapters.js";
 import type { createReaderDataPort } from "./runtime/data.js";
@@ -9,10 +24,6 @@ import {
   resolveReaderDownloadName as defaultResolveReaderDownloadName,
   resolveReaderDownloadUrls as defaultResolveReaderDownloadUrls,
 } from "./shared/state/downloads/resolve.js";
-import {
-  createReaderServerFavoritesPort as createSharedReaderServerFavoritesPort,
-} from "./shared/state/server-favorites-port.js";
-import type { CreateServerFavoritesPortOptions } from "./shared/types/types.js";
 
 // —— config / mock / messaging ——
 export const isMockMode = (...args: any[]): boolean => (getReaderAdapters()?.isMockMode as any)?.(...args) ?? false;
@@ -32,6 +43,9 @@ export const resolvePdfjsVendorUrl = (relativePath = ""): string =>
   (getReaderAdapters()?.resolvePdfjsVendorUrl as any)?.(relativePath) ?? "";
 
 // —— js/reader 共享 ports ——
+// 显式方法转发：方法名写死，宿主 port 缺失或拼错方法名都会在此抛错，
+// 而不是旧 Proxy 静默返回 undefined。形状由 adapter 契约（runtime 工厂
+// 派生的具体类型）约束，方法增删会在 tsc 阶段暴露。
 type ReaderDataPort = ReturnType<typeof createReaderDataPort>;
 type ReaderPageConfigPort = ReturnType<typeof createReaderPageConfigPort>;
 const readDataPort = (): ReaderDataPort => requireAdapter("defaultReaderDataPort");
@@ -46,6 +60,7 @@ export const defaultReaderDataPort: ReaderDataPort = {
     readDataPort().loadMarkdownRange(rawUrl, start, endInclusive, etag, signal),
   loadJobPayload: (jobId) => readDataPort().loadJobPayload(jobId),
   loadReaderPayload: (jobId, options) => readDataPort().loadReaderPayload(jobId, options),
+  loadReaderOptionalArtifacts: (jobId) => readDataPort().loadReaderOptionalArtifacts(jobId),
   get liveTranslation() { return readDataPort().liveTranslation; },
 };
 export const defaultReaderPageConfigPort: ReaderPageConfigPort = {
@@ -68,6 +83,8 @@ export const readerSessionDataPort = (): ReaderSessionDataPort => {
   if (!data) throw new Error("Reader adapter missing: defaultReaderDataPort (call setReaderAdapters)");
   return {
     loadReaderPayload: data.loadReaderPayload,
+    // 旧宿主 / 测试替身可能没有这个方法：缺了就是 undefined，session 照旧一并加载。
+    loadReaderOptionalArtifacts: data.loadReaderOptionalArtifacts,
     loadJobPayload: data.loadJobPayload,
     fetchDocumentByJobId: (...args) => requireAdapter("fetchDocumentByJobId")(...args),
     fetchProtected: data.fetchProtected,
@@ -80,6 +97,8 @@ export const readerSessionDataPort = (): ReaderSessionDataPort => {
 
 export const resolveReaderAnchor = (...a: any[]) => getReaderAdapters()?.resolveReaderAnchor?.(...a) ?? null;
 export const resolveReaderDocumentId = (): string => getReaderAdapters()?.resolveReaderDocumentId?.() ?? "";
+// resolveReaderJobId / resolvePdfjsVendorUrl 的 port 签名比宿主实现窄
+//（0 参 vs 可选入参），保留最小局部 cast 以原样转发参数。
 export const resolveReaderJobId = (...a: any[]): string => (getReaderAdapters()?.resolveReaderJobId as any)?.(...a) ?? "";
 export const resolveReaderArtifactUrl = (...a: any[]) => getReaderAdapters()?.resolveReaderArtifactUrl?.(...a) ?? "";
 export const resolveReaderSourcePdf = (...a: any[]) => getReaderAdapters()?.resolveReaderSourcePdf?.(...a) ?? null;
@@ -112,27 +131,8 @@ export const resolveMarkdownAssetUrl = (
 ): string => requireAdapter("resolveMarkdownAssetUrl")(imagesBaseUrl, relativePath);
 export { parseMarkdownWithMath } from "./shared/content/markdown-math.js";
 
-// —— 服务端收藏 ——
+// —— 文档身份（按 jobId 反查）——
 export const API_PREFIX = "/api/v1";
 export const fetchDocumentByJobId = (...args: [string, string]) =>
   requireAdapter("fetchDocumentByJobId")(...args);
-export const fetchFavorites = (
-  apiPrefix = API_PREFIX,
-  options: { documentId?: string } = {},
-) => requireAdapter("fetchFavorites")(
-  getReaderAdapters()?.apiPrefix ?? apiPrefix,
-  options,
-);
-export function createReaderServerFavoritesPort(options: CreateServerFavoritesPortOptions = {}) {
-  const adapters = getReaderAdapters();
-  return createSharedReaderServerFavoritesPort({
-    apiPrefix: adapters?.apiPrefix ?? API_PREFIX,
-    documentByJobId: (...args) => requireAdapter("fetchDocumentByJobId")(...args),
-    submitFavorite: (...args) => requireAdapter("createFavorite")(...args),
-    loadFavorites: (...args) => requireAdapter("fetchFavorites")(...args),
-    removeFavorite: (...args) => requireAdapter("deleteFavorite")(...args),
-    ...options,
-  });
-}
-export { normalizeServerFavorite } from "./shared/state/server-favorites-port.js";
-export type { ServerFavorite } from "./shared/types/types.js";
+

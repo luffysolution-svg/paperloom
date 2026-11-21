@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from retainpdf_pipeline.foundation.config import paths
+from retainpdf_base import paths
 from retainpdf_pipeline.render.layout.inline_content.fallback import png_renderer
 from retainpdf_pipeline.render.output.typst import shared as typst_shared
 

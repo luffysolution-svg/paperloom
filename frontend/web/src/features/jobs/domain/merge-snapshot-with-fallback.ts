@@ -4,39 +4,18 @@
 // （status=queued, stage_detail=正在读取…），已完成书会被盖成排队。
 // 本函数把书架 item 的终态/进度补回 snapshot，详情与主流程共用一处。
 
+import type { LibraryCardItem } from "@/platform/contracts/library-payloads.js";
 import type { StatusCardJobRecord, StatusCardSnapshot } from "./status-card-store.js";
 import { isPollingBootstrapPlaceholder } from "./polling-placeholder.js";
+import { isActiveJobStatus } from "@retainpdf/domain/job";
 
 // 保持向后兼容：旧路径仍可 import isPollingBootstrapPlaceholder（迁移期）
 export { isPollingBootstrapPlaceholder } from "./polling-placeholder.js";
 
 /** 书架 live 行（library item）上与进度合并相关的字段 */
-export type StatusCardFallbackItem = {
-  job_id?: string;
-  status?: string;
-  stage_detail?: string;
-  detail?: string;
-  output_pdf_ready?: boolean;
-  created_at?: string;
-  updated_at?: string;
-  progress?: {
-    percent?: number;
-    current?: number;
-    total?: number;
-    unit?: string;
-  } | null;
-  stage_snapshot?: {
-    display_stage?: string;
-    stage_detail?: string;
-    progress?: {
-      percent?: number;
-      current?: number;
-      total?: number;
-      unit?: string;
-    } | null;
-  } | null;
-  [key: string]: unknown;
-};
+/** 书架条目（状态卡在没有实时快照时拿它兜底）。以前这里抄了一份字段子集，开严格检查后
+ *  和书架卡片的进度字段（可为 null）对不上。 */
+export type StatusCardFallbackItem = LibraryCardItem;
 
 /**
  * @param snapshot statusCardStore.snapshot
@@ -251,7 +230,7 @@ export function mergeSnapshotWithFallback(
     };
   }
 
-  if (["running", "queued", "pending", "validating"].includes(itemStatus) && snapIsWeak) {
+  if (isActiveJobStatus(itemStatus) && snapIsWeak) {
     return {
       ...isolatedSnapshot!,
       jobId: itemJob,

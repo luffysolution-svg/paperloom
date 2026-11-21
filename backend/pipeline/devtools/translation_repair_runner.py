@@ -16,14 +16,14 @@ if str(REPO_SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
 from retainpdf_pipeline.foundation.shared.stage_specs import TranslateStageSpec
-from retainpdf_pipeline.foundation.shared.stage_specs import resolve_credential_ref
-from retainpdf_pipeline.services.pipeline_shared.io import save_json
-from retainpdf_pipeline.translate.services.agents.repair import RepairAgent
-from retainpdf_pipeline.translate.services.agents.repair import TranslationRepairRequest
-from retainpdf_pipeline.translate.artifacts.review import TRANSLATION_REVIEW_FILE_NAME
-from retainpdf_pipeline.translate.llm.shared.provider_runtime import request_chat_content
-from retainpdf_pipeline.translate.core.payload import load_translation_manifest_file
-from retainpdf_pipeline.translate.services.quality import TranslationQualityIssue
+from retainpdf_base.credentials import resolve_credential_ref
+from retainpdf_base.io import save_json
+from retainpdf_translation.services.agents.repair import RepairAgent
+from retainpdf_translation.services.agents.repair import TranslationRepairRequest
+from retainpdf_translation.artifacts.review import TRANSLATION_REVIEW_FILE_NAME
+from retainpdf_translation.llm.shared.provider_runtime import request_chat_content
+from retainpdf_translation.core.payload import load_translation_manifest_file
+from retainpdf_translation.services.quality import TranslationQualityIssue
 
 
 TRANSLATION_REPAIR_PLAN_FILE_NAME = "translation_repair_plan.json"

@@ -6,6 +6,7 @@ import {
   clampReaderZoom,
   defaultZoomForMode,
   preserveScrollCenter,
+  readerViewportWidth,
   stepReaderZoom,
 } from "../pdf/reader-zoom.js";
 import {
@@ -26,21 +27,40 @@ export function useReaderZoom(
   persistenceKey = "",
 ): ReaderZoomApi {
   const [userZoom, setUserZoom] = useState(() => (
-    loadReaderViewState(persistenceKey)?.zoom ?? defaultZoomForMode(initialMode)
+    loadReaderViewState(persistenceKey)?.zoom ?? defaultZoomForMode(initialMode, readerViewportWidth())
   ));
   const zoomRef = useRef(userZoom);
   const persistenceKeyRef = useRef(persistenceKey);
   zoomRef.current = userZoom;
   const pendingRatioRef = useRef(1);
+  // 当前缩放是不是用户选的（存档里有，或本次会话里调过）。不是的话它只是「模式
+  // 默认」，模式变了要跟着变 —— 窄屏上单栏默认 100%、对照默认 50%，开书时会话先是
+  // 对照、恢复/窄屏默认再切到译文，停在 50% 的话单栏页宽只有半屏。
+  const chosenRef = useRef(loadReaderViewState(persistenceKey)?.zoom !== undefined);
 
   useEffect(() => {
     if (persistenceKeyRef.current === persistenceKey) return;
     persistenceKeyRef.current = persistenceKey;
-    const next = loadReaderViewState(persistenceKey)?.zoom ?? defaultZoomForMode(initialMode);
+    const saved = loadReaderViewState(persistenceKey)?.zoom;
+    chosenRef.current = saved !== undefined;
+    const next = saved ?? defaultZoomForMode(initialMode, readerViewportWidth());
     pendingRatioRef.current = 1;
     zoomRef.current = next;
     setUserZoom(next);
   }, [initialMode, persistenceKey]);
+
+  // 用户没选过缩放时，模式默认跟着模式走；只改显示，不写存档（写了就成了「选过」）。
+  useEffect(() => {
+    if (chosenRef.current) return;
+    const next = defaultZoomForMode(initialMode, readerViewportWidth());
+    const prev = zoomRef.current;
+    if (Math.abs(next - prev) < 0.0005) return;
+    // 不按比例钉视口中心：这是跟着换模式一起发生的，换模式自己会冻结并恢复阅读
+    // 锚点（页 + 页内比例，见 beginModeSwitch），两套一起拉滚动条会互相打架。
+    pendingRatioRef.current = 1;
+    zoomRef.current = next;
+    setUserZoom(next);
+  }, [initialMode]);
 
   const onZoomChange = useCallback((zoom: number) => {
     const next = clampReaderZoom(zoom);
@@ -49,6 +69,7 @@ export function useReaderZoom(
       return;
     }
     pendingRatioRef.current = next / (prev || 1);
+    chosenRef.current = true;
     saveReaderViewState(persistenceKeyRef.current, { zoom: next });
     setUserZoom(next);
   }, []);

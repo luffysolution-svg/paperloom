@@ -3,8 +3,17 @@ import {
   collectRecentJobsPage,
   RECENT_JOBS_PAGE_SIZE,
 } from "./pagination.js";
+import type { RecentJobsPageFetcher } from "./pagination.js";
 
-function normalizeExistingJobIds(value) {
+/** 分页加载参数（书架列表资源的 load 入参，也决定缓存键）。 */
+export type LibraryPageParams = {
+  startOffset?: number;
+  pageSize?: number;
+  query?: string;
+  existingJobIds?: Set<string> | string[];
+};
+
+export function normalizeExistingJobIds(value: LibraryPageParams["existingJobIds"] | Iterable<string> | null | undefined): Set<string> {
   if (value instanceof Set) {
     return value;
   }
@@ -17,9 +26,11 @@ function normalizeExistingJobIds(value) {
 
 export function createLibraryBooksResource({
   fetchJobList,
-  fetchLibraryBookList,
   apiPrefix,
-}: any = {}) {
+}: {
+  fetchJobList?: RecentJobsPageFetcher;
+  apiPrefix: string;
+}) {
   return createResource({
     name: "libraryBooks",
     cacheKey: ({
@@ -27,7 +38,7 @@ export function createLibraryBooksResource({
       pageSize = RECENT_JOBS_PAGE_SIZE,
       query = "",
       existingJobIds = [],
-    } = {}) => JSON.stringify({
+    }: LibraryPageParams = {}) => JSON.stringify({
       startOffset: Number(startOffset) || 0,
       pageSize: Number(pageSize) || RECENT_JOBS_PAGE_SIZE,
       query: `${query || ""}`.trim(),
@@ -36,11 +47,10 @@ export function createLibraryBooksResource({
     loader: ({
       startOffset = 0,
       pageSize = RECENT_JOBS_PAGE_SIZE,
-      existingJobIds = new Set(),
+      existingJobIds = new Set<string>(),
       query = "",
-    } = {}) => collectRecentJobsPage({
+    }: LibraryPageParams = {}) => collectRecentJobsPage({
       fetchJobList,
-      fetchLibraryBookList,
       apiPrefix,
       startOffset,
       pageSize,
@@ -50,6 +60,6 @@ export function createLibraryBooksResource({
   });
 }
 
-export function invalidateLibraryBooksResource(resource) {
+export function invalidateLibraryBooksResource(resource: { invalidate?: () => void } | null | undefined) {
   resource?.invalidate?.();
 }

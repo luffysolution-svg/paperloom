@@ -1,4 +1,4 @@
-// 提交前的两道 provider 预检：DeepSeek 余额、OCR Provider Token。
+// 提交前的两道 provider 预检：DeepSeek 余额、OCR Provider Token（只在单机模式跑）。
 //
 // 它们以前挡在 submitJobRequest 前面，各自是一次第三方网络往返（余额检测的超时
 // 上限是 12 秒），而 OCR 校验缓存是纯内存的（getRuntime().ocrValidation，无 TTL、
@@ -13,8 +13,13 @@
 // 结果不再写 error-box：提交成功后弹窗会关掉并跳到书籍详情，error-box 那时已经
 // 不在屏上。改为经 notify 端口报出（composition 接的是 toast）。
 
+import { getApiAuthMode } from "@retainpdf/api/http";
 import { ensureDeepSeekBudgetReady } from "./budget.js";
 import { ensureOcrCredentialsForSubmit } from "./credentials.js";
+import type {
+  EnsureDeepSeekBudgetReadyOptions,
+  EnsureOcrCredentialsForSubmitOptions,
+} from "./contracts.js";
 
 export type SubmitPreflightOptions = {
   workflow?: string;
@@ -22,8 +27,8 @@ export type SubmitPreflightOptions = {
   workflowNeedsUpload?: (workflow?: string) => boolean | unknown;
   workflowNeedsCredentials?: (workflow?: string) => boolean | unknown;
   currentBudgetState?: (workflow?: string) => unknown;
-  refreshDeepSeekBalance?: (options?: unknown) => unknown;
-  ensureOcrCredentialsReady?: (options?: unknown) => unknown;
+  refreshDeepSeekBalance?: EnsureDeepSeekBudgetReadyOptions["refreshDeepSeekBalance"];
+  ensureOcrCredentialsReady?: EnsureOcrCredentialsForSubmitOptions["ensureOcrCredentialsReady"];
   /** 预检失败时报给用户（composition 接 toast）。不传则静默。 */
   notifyPreflightWarning?: (message: string) => void;
 };
@@ -45,6 +50,9 @@ export function startSubmitPreflight({
   ensureOcrCredentialsReady,
   notifyPreflightWarning,
 }: SubmitPreflightOptions = {}): Promise<void> {
+  // 多用户模式下模型和 OCR 用平台的（服务器上配），本机的 DeepSeek 余额、OCR Token 跟这次提交无关，
+  // 查了只会弹出「OCR 凭据未配置」之类的误导提示。
+  if (getApiAuthMode() === "multi") return Promise.resolve();
   const warn = (message: string) => {
     const text = `${message || ""}`.trim();
     // "-" 是 error-box 的清空约定，不是给人看的内容。
@@ -63,8 +71,8 @@ export function startSubmitPreflight({
       workflowNeedsUpload,
       currentBudgetState,
       refreshDeepSeekBalance,
-      setText: captureText as any,
-    } as any))
+      setText: captureText,
+    }))
     .catch(() => false);
 
   const credentials = Promise.resolve()
@@ -76,8 +84,8 @@ export function startSubmitPreflight({
       // 任务已经提交了，这时再把凭据弹窗怼到用户脸上只会打断他；
       // 失败原因由 setText shim 经 notify 报出，用户自己决定什么时候去改。
       openBrowserCredentialsDialog: undefined,
-      setText: captureText as any,
-    } as any))
+      setText: captureText,
+    }))
     .catch(() => false);
 
   return Promise.all([budget, credentials]).then(() => undefined);

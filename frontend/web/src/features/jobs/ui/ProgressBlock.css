@@ -1,0 +1,286 @@
+/* 进度区：百分比、进度条 / 进度环、子阶段，以及进度动画的 @keyframes。（ProgressBlock / SubstageFlow）
+ *
+ * @owns status, progress-track, progress-bar, task-toolbar-btn-result */
+
+@utility status-progress-content {
+  grid-area: content;
+  @apply flex min-h-0 min-w-0 flex-col justify-center self-center overflow-hidden;
+  gap: max(var(--status-progress-content-gap, 0px), clamp(10px, 2.2cqh, 18px));
+
+  @media (max-width: 767px) {
+    width: 100%;
+  }
+}
+
+@utility status-progress-copy {
+  @apply grid min-w-0 text-left;
+  gap: clamp(5px, 1.2cqh, 10px);
+
+  @media (max-width: 767px) {
+    text-align: center;
+    justify-items: center;
+  }
+}
+
+@utility status-ring-value {
+  @apply block overflow-hidden text-ellipsis whitespace-nowrap font-bold leading-[1.18] tracking-normal text-[var(--ink)];
+  max-width: var(--status-value-max-width, 280px);
+  min-height: auto;
+  font-size: max(
+    var(--status-value-font-size, 0px),
+    var(--status-proportional-title-font)
+  );
+  font-weight: 760;
+}
+
+@utility status-stage-detail {
+  @apply overflow-hidden text-[var(--muted)];
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  max-width: var(--status-detail-max-width, 300px);
+  min-height: auto;
+  font-size: max(
+    var(--status-detail-font-size, 0px),
+    var(--status-proportional-detail-font)
+  );
+  font-weight: 560;
+  line-height: 1.38;
+}
+
+@utility status-substage-flow {
+  @apply flex w-full flex-nowrap gap-[7px] overflow-hidden;
+  min-height: 20px;
+  max-height: 22px;
+
+  &.hidden {
+    display: none;
+  }
+}
+
+@utility status-substage-step {
+  @apply inline-flex min-w-0 shrink items-center justify-center overflow-hidden text-ellipsis whitespace-nowrap rounded-full border border-[var(--line)] bg-[var(--paper)] px-2 font-semibold leading-none text-[var(--muted)];
+  height: 20px;
+  font-size: var(--status-substage-font-size, 10px);
+
+  &.is-active {
+    @apply border-[var(--ink)] bg-[var(--ink)] text-[var(--paper)];
+    font-weight: 760;
+  }
+
+  &.is-done:not(.is-active) {
+    @apply border-[var(--line)] bg-[var(--bg)] text-[var(--ink)];
+  }
+}
+
+@utility status-progress-block {
+  @apply grid w-full content-start;
+  gap: var(--status-progress-gap, 0);
+  min-height: var(--status-progress-min-height, 18px);
+
+  &.hidden {
+    display: none;
+  }
+
+  & .status-progress-bar {
+    display: none;
+  }
+}
+
+@utility status-progress-bar {
+  --status-progress-percent: 0%;
+  --status-progress-indicator-color: var(--ink);
+  @apply relative h-[var(--status-progress-track-height,5px)] w-full overflow-hidden rounded-full bg-[var(--line)];
+
+  .status-progress-block & {
+    display: none;
+  }
+
+  &.is-indeterminate .status-progress-bar-fill {
+    animation: status-progress-indeterminate 1.2s ease-in-out infinite;
+    width: 42%;
+  }
+
+  .status-card[data-status='succeeded'] & {
+    --status-progress-indicator-color: var(--ok);
+  }
+
+  .status-card[data-status='failed'] & {
+    --status-progress-indicator-color: var(--danger);
+  }
+
+  .status-card[data-status='canceled'] & {
+    --status-progress-indicator-color: var(--danger);
+  }
+}
+
+@utility status-progress-bar-fill {
+  @apply block h-full rounded-[inherit] bg-[var(--status-progress-indicator-color)];
+  width: var(--status-progress-percent);
+  transition: width 0.25s ease;
+
+  .status-progress-bar.is-indeterminate & {
+    animation: status-progress-indeterminate 1.2s ease-in-out infinite;
+    width: 42%;
+  }
+}
+
+@utility is-indeterminate {
+  &.status-progress-bar .status-progress-bar-fill {
+    animation: status-progress-indeterminate 1.2s ease-in-out infinite;
+    width: 42%;
+  }
+
+  &.status-progress-ring {
+    --status-ring-percent: 42%;
+  }
+
+  .status-card &.progress-bar {
+    animation: status-progress-indeterminate 1.2s ease-in-out infinite;
+    transition: none;
+  }
+}
+
+@utility status-progress-foot {
+  @apply flex items-center justify-start gap-3 font-semibold leading-tight text-[var(--muted)];
+  font-size: max(
+    var(--status-progress-text-font-size, 0px),
+    var(--status-proportional-progress-font)
+  );
+}
+
+@utility status-progress-text {
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  text-align: left;
+}
+
+@utility status-progress-percent {
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  text-align: left;
+  display: none;
+}
+
+@utility status-progress-ring-wrap {
+  grid-area: ring;
+  @apply grid min-h-0 min-w-0 content-center justify-items-center gap-0 self-center;
+
+  & .status-animation-meta {
+    display: block;
+    max-width: var(--status-ring-column-width, 128px);
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 650;
+    line-height: 1.25;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 767px) {
+    order: -1;
+  }
+}
+
+@utility status-progress-ring {
+  --status-progress-ring-size-effective: max(
+    var(--status-progress-ring-size, 0px),
+    var(--status-proportional-ring-size)
+  );
+  --status-progress-ring-stroke-effective: max(
+    var(--status-progress-ring-track-width, 0px),
+    var(--status-proportional-ring-stroke)
+  );
+  --status-ring-percent: 0%;
+  --status-ring-indicator-color: var(--ink);
+  @apply relative grid place-items-center rounded-full text-[var(--ink)];
+  width: var(--status-progress-ring-size-effective);
+  height: var(--status-progress-ring-size-effective);
+  background:
+    radial-gradient(
+      closest-side,
+      var(--paper) calc(100% - var(--status-progress-ring-stroke-effective)),
+      transparent
+        calc(100% - var(--status-progress-ring-stroke-effective) + 1px)
+    ),
+    conic-gradient(
+      var(--status-ring-indicator-color) var(--status-ring-percent),
+      var(--line) 0
+    );
+  font-size: max(
+    var(--status-progress-ring-font-size, 0px),
+    clamp(18px, 3.2cqw, 25px)
+  );
+  font-weight: 780;
+  line-height: 1;
+
+  &.is-indeterminate {
+    --status-ring-percent: 42%;
+  }
+
+  .status-card[data-status='succeeded'] & {
+    --status-ring-indicator-color: var(--ok);
+  }
+
+  .status-card[data-status='failed'] & {
+    --status-ring-indicator-color: var(--danger);
+  }
+
+  .status-card[data-status='canceled'] & {
+    --status-ring-indicator-color: var(--danger);
+  }
+}
+
+@utility status-progress-ring-text {
+  @apply relative z-[1];
+}
+
+@utility progress-track {
+  .status-card & {
+    height: var(--status-progress-track-height, 5px);
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--line);
+  }
+}
+
+@utility progress-bar {
+  .status-card & {
+    width: 0%;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--ink);
+    transition: width 0.25s ease;
+  }
+
+  .status-card &.is-indeterminate {
+    animation: status-progress-indeterminate 1.2s ease-in-out infinite;
+    transition: none;
+  }
+}
+
+@layer components {
+  @keyframes status-translation-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes status-progress-indeterminate {
+    0% {
+      transform: translateX(-110%);
+    }
+    50% {
+      transform: translateX(55%);
+    }
+    100% {
+      transform: translateX(210%);
+    }
+  }
+}

@@ -1,10 +1,5 @@
 import json
-import sys
-from pathlib import Path
 
-
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
 from retainpdf_pipeline.foundation.shared.structured_errors import classify_exception
 from retainpdf_pipeline.foundation.shared.structured_errors import infer_failure_stage
@@ -51,7 +46,7 @@ def test_direct_typst_protocol_shell_is_classified_as_translation_not_render():
     trace = (
         'File "/Applications/RetainPDF.app/Contents/Resources/backend/pipeline/'
         'translate/llm/shared/orchestration/direct_typst.py", line 399\n'
-        "retainpdf_pipeline.translate.llm.placeholder_guard.TranslationProtocolError: "
+        "retainpdf_translation.llm.placeholder_guard.TranslationProtocolError: "
         "p007-b004: translated output still contains protocol/json shell"
     )
 

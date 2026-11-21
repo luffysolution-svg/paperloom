@@ -1,27 +1,20 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
 from retainpdf_pipeline.foundation.shared.job_dirs import ensure_job_dirs
 from retainpdf_pipeline.foundation.shared.job_dirs import resolve_job_dirs
-from retainpdf_pipeline.foundation.shared.stage_specs import NormalizeStageSpec
 from retainpdf_pipeline.foundation.shared.stage_specs import build_stage_invocation_metadata
 from retainpdf_pipeline.foundation.shared.stage_specs import BookStageSpec
 from retainpdf_pipeline.foundation.shared.stage_specs import BOOK_STAGE_SCHEMA_VERSION
-from retainpdf_pipeline.foundation.shared.stage_specs import NORMALIZE_STAGE_SCHEMA_VERSION
 from retainpdf_pipeline.foundation.shared.stage_specs import ProviderStageSpec
 from retainpdf_pipeline.foundation.shared.stage_specs import PROVIDER_STAGE_SCHEMA_VERSION
-from retainpdf_pipeline.foundation.shared.stage_specs import resolve_credential_ref
 from retainpdf_pipeline.foundation.shared.stage_specs import TranslateStageSpec
 from retainpdf_pipeline.foundation.shared.stage_specs import TRANSLATE_STAGE_SCHEMA_VERSION
 from retainpdf_pipeline.foundation.shared.stage_specs import RenderStageSpec
 from retainpdf_pipeline.foundation.shared.stage_specs import RENDER_STAGE_SCHEMA_VERSION
-from retainpdf_pipeline.foundation.config import fonts
 
 def test_stage_spec_loaders_preserve_zero_end_page(tmp_path: Path) -> None:
     job_root = tmp_path / "20260513-zero-end-page"
@@ -155,6 +148,10 @@ def test_stage_spec_loaders_preserve_zero_end_page(tmp_path: Path) -> None:
     assert ProviderStageSpec.load(provider_path).render.font_unify_mode == "off"
     assert BookStageSpec.load(book_path).translation.end_page == 0
     assert BookStageSpec.load(book_path).render.font_unify_mode == "off"
+    # render.engine 缺省 = 默认路线 rpr_fit（旧 spec 没有这个 key）
+    assert RenderStageSpec.load(render_path).params.engine == "rpr_fit"
+    assert ProviderStageSpec.load(provider_path).render.engine == "rpr_fit"
+    assert BookStageSpec.load(book_path).render.engine == "rpr_fit"
 
 
 def test_build_stage_invocation_metadata_is_always_stage_spec() -> None:

@@ -8,7 +8,6 @@ export type CredentialMetadata = {
     revision: number;
     created_at: string;
     updated_at: string;
-    secret?: string;
 };
 export type CredentialListView = {
     credentials: CredentialMetadata[];
@@ -16,11 +15,6 @@ export type CredentialListView = {
 };
 export type CredentialMutationView = {
     credential: CredentialMetadata;
-    revision: number;
-};
-export type CredentialDeleteView = {
-    credential_ref: string;
-    deleted: boolean;
     revision: number;
 };
 export type CreateCredentialInput = {
@@ -42,9 +36,6 @@ export interface CredentialRequestError extends Error {
     status?: number;
     code?: string;
 }
-export declare function listCredentials(apiPrefix?: string, { includeValues }?: {
-    includeValues?: boolean;
-}): Promise<CredentialListView>;
+export declare function listCredentials(apiPrefix?: string): Promise<CredentialListView>;
 export declare function createCredential(apiPrefix: string | undefined, input: CreateCredentialInput): Promise<CredentialMutationView>;
 export declare function updateCredential(apiPrefix: string | undefined, credentialRef: string, input: UpdateCredentialInput): Promise<CredentialMutationView>;
-export declare function deleteCredential(apiPrefix: string | undefined, credentialRef: string, expectedRevision?: number): Promise<CredentialDeleteView>;

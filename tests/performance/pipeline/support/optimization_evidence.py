@@ -2,7 +2,7 @@
 import json
 
 from tools.analysis.inspect_capture import load_capture
-from retainpdf_pipeline.translate.llm.shared.request_capture import digest
+from retainpdf_translation.llm.shared.request_capture import digest
 
 
 SCHEMA = "translation_benchmark_evidence_v1"

@@ -122,7 +122,7 @@ def _run(args: argparse.Namespace) -> dict:
             method="GET",
             base_url=args.base_url,
             api_key=args.api_key,
-            path=f"/api/v1/jobs/{args.job_id}/translation/diagnostics",
+            path=f"/api/v1/jobs/{args.job_id}/reports/translation",
             timeout=args.timeout,
         )
     if args.command == "items":
@@ -130,7 +130,7 @@ def _run(args: argparse.Namespace) -> dict:
             method="GET",
             base_url=args.base_url,
             api_key=args.api_key,
-            path=f"/api/v1/jobs/{args.job_id}/translation/items",
+            path=f"/api/v1/jobs/{args.job_id}/translations",
             timeout=args.timeout,
             query=_query_dict(args),
         )
@@ -139,7 +139,7 @@ def _run(args: argparse.Namespace) -> dict:
             method="GET",
             base_url=args.base_url,
             api_key=args.api_key,
-            path=f"/api/v1/jobs/{args.job_id}/translation/items/{args.item_id}",
+            path=f"/api/v1/jobs/{args.job_id}/translations/{args.item_id}",
             timeout=args.timeout,
         )
     if args.command == "replay":
@@ -147,7 +147,7 @@ def _run(args: argparse.Namespace) -> dict:
             method="POST",
             base_url=args.base_url,
             api_key=args.api_key,
-            path=f"/api/v1/jobs/{args.job_id}/translation/items/{args.item_id}/replay",
+            path=f"/api/v1/jobs/{args.job_id}/translations/{args.item_id}/replay",
             timeout=args.timeout,
         )
     raise RuntimeError(f"unsupported command: {args.command}")

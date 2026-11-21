@@ -1,19 +1,7 @@
-import json
-import sys
 import unittest
-from dataclasses import replace
-from pathlib import Path
 
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-from retainpdf_pipeline.translate.llm.result_payload import result_entry
-from retainpdf_pipeline.translate.llm.shared.orchestration.heavy_formula import heavy_formula_split_reason
-from retainpdf_pipeline.translate.llm.shared.orchestration.heavy_formula import translate_heavy_formula_block
-from retainpdf_pipeline.translate.llm.shared.orchestration.metadata import should_store_translation_result
-from retainpdf_pipeline.translate.llm.shared.orchestration.sentence_level import sentence_level_fallback
-from retainpdf_pipeline.translate.llm.shared.orchestration.transport import DeferredTransportRetry
+from retainpdf_translation.llm.result_payload import result_entry
 
 
 from retrying_translator_test_support import load_retrying_translator
@@ -103,9 +91,9 @@ def make_formula_dense_prose_item() -> dict:
 
 class RetryingTranslatorFormulaRoutesTests(unittest.TestCase):
     def test_plain_text_retry_for_large_formula_block_uses_plain_route(self):
-        module = load_retrying_translator()
-        import retainpdf_pipeline.translate.llm.shared.orchestration.fallbacks as fallbacks
-        from retainpdf_pipeline.translate.llm.shared.control_context import build_translation_control_context
+        load_retrying_translator()
+        import retainpdf_translation.llm.shared.orchestration.fallbacks as fallbacks
+        from retainpdf_translation.llm.shared.control_context import build_translation_control_context
 
         item = make_formula_item(20)
         item["_heavy_formula_split_applied"] = True
@@ -134,9 +122,9 @@ class RetryingTranslatorFormulaRoutesTests(unittest.TestCase):
         self.assertEqual(result[item["item_id"]]["decision"], "translate")
 
     def test_small_formula_inline_uses_plain_text_directly(self):
-        module = load_retrying_translator()
-        import retainpdf_pipeline.translate.llm.shared.orchestration.fallbacks as fallbacks
-        from retainpdf_pipeline.translate.llm.shared.control_context import build_translation_control_context
+        load_retrying_translator()
+        import retainpdf_translation.llm.shared.orchestration.fallbacks as fallbacks
+        from retainpdf_translation.llm.shared.control_context import build_translation_control_context
 
         item = make_small_formula_inline_item()
         calls: list[str] = []
@@ -183,9 +171,9 @@ class RetryingTranslatorFormulaRoutesTests(unittest.TestCase):
         )
 
     def test_formula_dense_prose_uses_plain_text_before_segmented(self):
-        module = load_retrying_translator()
-        import retainpdf_pipeline.translate.llm.shared.orchestration.fallbacks as fallbacks
-        from retainpdf_pipeline.translate.llm.shared.control_context import build_translation_control_context
+        load_retrying_translator()
+        import retainpdf_translation.llm.shared.orchestration.fallbacks as fallbacks
+        from retainpdf_translation.llm.shared.control_context import build_translation_control_context
 
         item = make_formula_dense_prose_item()
         calls: list[str] = []

@@ -1,15 +1,5 @@
-import sys
-from pathlib import Path
-
-
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-REPO_ROOT = REPO_SCRIPTS_ROOT.parent
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
 from retainpdf_pipeline.ocr.document_schema.provider_adapters.paddle.adapter import build_paddle_document
-
-
-PADDLE_FIXTURE_JSON = REPO_ROOT / "rust_api" / "src" / "ocr_provider" / "paddle" / "json_full.json"
+from devtools.tests.document_schema.fixtures.registry import PADDLE_FIXTURE_JSON
 
 
 def test_paddle_document_suppresses_provider_continuation_after_body_repair() -> None:

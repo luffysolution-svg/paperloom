@@ -37,7 +37,6 @@ layout/inline_content/
     markdown.py
   fallback/
     __init__.py
-    latex_normalizer.py
     placeholder_markdown.py
     png_renderer.py
 ```
@@ -119,7 +118,9 @@ layout/inline_content/
 
 如果未来彻底去掉 placeholder，这个文件会继续缩小。
 
-### `fallback/latex_normalizer.py`
+### 公式修补（已移到公式包）
+
+原来的 `fallback/latex_normalizer.py` 现在是 `retainpdf_math.normalize`（backend/math），单个公式交给渲染器之前的改写在 `retainpdf_math.render_prep`——翻译阶段的公式渲染检查用同一份规则。
 
 负责旧 LaTeX-ish 公式修补。
 
@@ -169,7 +170,6 @@ layout/inline_content/
 - `render.layout.inline_content.core.markdown`
 - `render.layout.inline_content.core.inline_math`
 - `render.layout.inline_content.fallback.placeholder_markdown`
-- `render.layout.inline_content.fallback.latex_normalizer`
 - `render.layout.inline_content.fallback.png_renderer`
 
 不要再引用已经删除的历史路径，比如：
@@ -203,8 +203,8 @@ layout/inline_content/
 2. [`core/markdown.py`](core/markdown.py)
 3. [`core/inline_math.py`](core/inline_math.py)
 4. [`fallback/placeholder_markdown.py`](fallback/placeholder_markdown.py)
-5. [`fallback/latex_normalizer.py`](fallback/latex_normalizer.py)
-6. [`fallback/png_renderer.py`](fallback/png_renderer.py)
+5. [`fallback/png_renderer.py`](fallback/png_renderer.py)
+6. 公式改写：`backend/math/retainpdf_math/{normalize,render_prep}.py`
 
 ## 当前状态
 

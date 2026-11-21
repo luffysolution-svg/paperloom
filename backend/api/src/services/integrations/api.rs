@@ -5,9 +5,14 @@
 // 沿用书库的「翻译此文档」流程提交，已有译文或在跑的任务会直接复用。
 
 use std::path::Path;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
+use super::markdown_export::{
+    normalize_vault_folder, note_uri_path, obsidian_vault_export_async, ConflictPolicy,
+    DownloadJobsDeps, VaultWriteStatus,
+};
 use super::obsidian::{
     self, default_obsidian_config_path, discover_vaults, find_available_vault, mounted_vaults_dir,
 };
@@ -22,12 +27,10 @@ use crate::db::external_refs::ExternalRefRecord;
 use crate::db::Db;
 use crate::error::AppError;
 use crate::models::domain::{JobStatusKind, WorkflowKind};
-use crate::services::jobs::{
-    normalize_vault_folder, note_uri_path, ConflictPolicy, JobDownloads, VaultWriteStatus,
-};
-use crate::services::uploads::api::{store_upload, UploadApiDeps};
-use crate::services::uploads::UploadService;
-use crate::storage_paths::resolve_output_pdf;
+use crate::services::accounts::Principal;
+use crate::services::files::DownloadGeneration;
+use crate::services::ingest::{store_upload, UploadApiDeps, UploadService};
+use crate::services::jobs::{stored_path, StoredFile};
 
 const MAX_IMPORT_ATTACHMENTS: usize = 200;
 const MAX_OBSIDIAN_BATCH_DOCUMENTS: usize = 200;
@@ -38,17 +41,40 @@ pub(crate) use zotero_batch::{
 };
 
 pub(crate) struct IntegrationApiDeps<'a> {
-    db: &'a Db,
-    uploads: &'a UploadService,
-    data_root: &'a Path,
+    pub(crate) db: &'a Db,
+    pub(crate) uploads: &'a UploadService,
+    pub(crate) data_root: &'a Path,
+    pub(crate) downloads_dir: &'a Path,
+    pub(crate) download_generation: &'a Arc<DownloadGeneration>,
+    pub(crate) public_base_url: Option<&'a str>,
 }
 
 impl<'a> IntegrationApiDeps<'a> {
-    pub(crate) fn new(db: &'a Db, uploads: &'a UploadService, data_root: &'a Path) -> Self {
+    pub(crate) fn new(
+        db: &'a Db,
+        uploads: &'a UploadService,
+        data_root: &'a Path,
+        downloads_dir: &'a Path,
+        download_generation: &'a Arc<DownloadGeneration>,
+        public_base_url: Option<&'a str>,
+    ) -> Self {
         Self {
             db,
             uploads,
             data_root,
+            downloads_dir,
+            download_generation,
+            public_base_url,
+        }
+    }
+
+    pub(crate) fn download_deps(&self) -> DownloadJobsDeps<'a> {
+        DownloadJobsDeps {
+            db: self.db,
+            data_root: self.data_root,
+            downloads_dir: self.downloads_dir,
+            download_generation: self.download_generation,
+            public_base_url: self.public_base_url,
         }
     }
 }
@@ -229,6 +255,7 @@ async fn import_one(
             resolved.filename.clone(),
             bytes,
             false,
+            Principal::local(),
         )
         .await?;
         debug_assert_eq!(upload.content_hash, document_id);
@@ -391,21 +418,21 @@ fn resolve_obsidian_export(
 }
 
 async fn export_job_to_resolved_obsidian(
-    downloads: &JobDownloads<'_>,
+    deps: &IntegrationApiDeps<'_>,
     job_id: &str,
     request: &ObsidianExportRequest,
     resolved: &ResolvedObsidianExport,
 ) -> Result<ObsidianExportView, AppError> {
-    let outcome = downloads
-        .obsidian_vault_export(
-            job_id,
-            resolved.vault.path.clone().into(),
-            resolved.folder.clone(),
-            resolved.include_source,
-            resolved.folder_by_collection,
-            request.on_conflict,
-        )
-        .await?;
+    let outcome = obsidian_vault_export_async(
+        &deps.download_deps(),
+        job_id,
+        resolved.vault.path.clone().into(),
+        resolved.folder.clone(),
+        resolved.include_source,
+        resolved.folder_by_collection,
+        request.on_conflict,
+    )
+    .await?;
     let written = matches!(
         outcome.status,
         VaultWriteStatus::Created | VaultWriteStatus::Updated
@@ -444,12 +471,11 @@ fn remember_obsidian_export(
 
 pub(crate) async fn export_job_to_obsidian_view(
     deps: &IntegrationApiDeps<'_>,
-    downloads: &JobDownloads<'_>,
     job_id: &str,
     request: &ObsidianExportRequest,
 ) -> Result<ObsidianExportView, AppError> {
     let resolved = resolve_obsidian_export(deps, request)?;
-    let view = export_job_to_resolved_obsidian(downloads, job_id, request, &resolved).await?;
+    let view = export_job_to_resolved_obsidian(deps, job_id, request, &resolved).await?;
     if matches!(
         view.status,
         VaultWriteStatus::Created | VaultWriteStatus::Updated
@@ -502,7 +528,6 @@ fn latest_exportable_job_id(db: &Db, document_id: &str) -> Result<Option<String>
 
 pub(crate) async fn export_documents_to_obsidian_view(
     deps: &IntegrationApiDeps<'_>,
-    downloads: &JobDownloads<'_>,
     request: &ObsidianBatchExportRequest,
 ) -> Result<ObsidianBatchExportView, AppError> {
     if request.document_ids.is_empty() {
@@ -555,7 +580,7 @@ pub(crate) async fn export_documents_to_obsidian_view(
                 continue;
             }
         };
-        match export_job_to_resolved_obsidian(downloads, &job_id, &request.export, &resolved).await
+        match export_job_to_resolved_obsidian(deps, &job_id, &request.export, &resolved).await
         {
             Ok(result) => {
                 match result.status {
@@ -610,7 +635,7 @@ pub(crate) async fn write_translated_pdf_to_zotero_view(
     if job.status != JobStatusKind::Succeeded || job.workflow == WorkflowKind::Ocr {
         return Err(AppError::conflict("译文 PDF 尚未生成"));
     }
-    let pdf_path = resolve_output_pdf(&job, deps.data_root)
+    let pdf_path = stored_path(&job, deps.data_root, StoredFile::TranslatedPdf)
         .filter(|path| path.is_file())
         .ok_or_else(|| AppError::not_found(format!("translated pdf not ready: {job_id}")))?;
     let document = deps

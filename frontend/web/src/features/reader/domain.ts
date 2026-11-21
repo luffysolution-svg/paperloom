@@ -4,7 +4,7 @@
 // React 侧从 index.ts 导入。index.ts 逐条转出本文件，两处不会漂移。
 //
 // 说明：阅读器本体的实现在 @retainpdf/reader 包内，本功能只提供 RetainPDF 侧的
-// 宿主接线——把数据、AI、收藏、下载、配置等能力注入给那个包。
+// 宿主接线——把数据、下载、配置等能力注入给那个包。
 //
 // 出口逐条显式列举，不用 export * 整体转出 host/* ——那会把包 runtime 的全部
 // 导出与模块级适配器注册一并泄漏/提前触发，且无法审计真实对外面。
@@ -17,11 +17,7 @@ export {
 } from "./domain/host/config.js";
 
 export {
-  ANNOTATION_KIND_META,
-  annotationAnchor,
-  buildAnnotationsMarkdown,
   extractMarkdownMath,
-  groupAnnotationsByPage,
   materializeMarkdownMathFallbackHtml,
   materializeMarkdownMathHtml,
   mathFailureStats,
@@ -30,7 +26,6 @@ export {
   resetMarkdownMathEngineLoader,
   revealProtectedTokens,
   setMarkdownMathEngineLoader,
-  sortAnnotations,
   wrapMathSvgHtml,
 } from "./domain/host/content.js";
 
@@ -51,10 +46,7 @@ export {
   READER_PROGRESS_COPY,
   computeReaderProgressSnapshot,
   createReaderPageState,
-  createReaderServerFavoritesPort,
-  dedupeServerFavorites,
   disabledReason,
-  normalizeServerFavorite,
   resetReaderProgressState,
   resolveReaderDownloadName,
   resolveReaderDownloadUrls,

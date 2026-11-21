@@ -1,16 +1,13 @@
 import json
-import sys
 from pathlib import Path
 
-
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
+import pytest
 
 
-from retainpdf_pipeline.translate.artifacts import blocking_untranslated_items
-from retainpdf_pipeline.translate.services.finalization import recover_blocking_untranslated_items
-from retainpdf_pipeline.translate.workflow import stages
-from retainpdf_pipeline.translate.workflow.phases import repair as repair_phase
+from retainpdf_translation.artifacts import blocking_untranslated_items
+from retainpdf_translation.services.finalization import recover_blocking_untranslated_items
+from retainpdf_translation.workflow import stages
+from retainpdf_translation.workflow.phases import repair as repair_phase
 
 
 def _failed_item(item_id: str, source_text: str) -> dict:
@@ -137,6 +134,38 @@ def test_final_untranslated_recovery_stage_saves_pages(monkeypatch, tmp_path: Pa
     assert saved[0]["translated_text"] == "该矩阵在基组中被对角化。"
 
 
+def test_final_recovery_reports_progress_and_saves_only_the_touched_pages(monkeypatch, tmp_path: Path) -> None:
+    # 以前收口完整本每一页都重写（6574 页的书半小时），进度只有开始和结束。
+    blocked = _failed_item("p001-b003", "The matrix is diagonalized in the basis.")
+    done = {**_failed_item("p002-b001", "Already translated text."), "page_idx": 1}
+    done.update({"final_status": "translated", "translated_text": "已经翻好的文字。", "protected_translated_text": "已经翻好的文字。"})
+    done["translation_diagnostics"] = {"final_status": "translated"}
+    pages = {0: [blocked], 1: [done]}
+    paths = {0: tmp_path / "page-001.json", 1: tmp_path / "page-002.json"}
+    paths[0].write_text(json.dumps([blocked]), encoding="utf-8")
+    paths[1].write_text("SENTINEL", encoding="utf-8")  # 这一页没改，不该被重写
+    monkeypatch.setattr(repair_phase, "request_chat_content", lambda *_args, **_kwargs: "该矩阵在基组中被对角化。")
+    messages: list[str] = []
+    monkeypatch.setattr(repair_phase, "emit_stage_progress", lambda **kwargs: messages.append(kwargs["message"]))
+
+    summary = stages.run_final_untranslated_recovery_stage(
+        page_payloads=pages,
+        translation_paths=paths,
+        api_key="sk-test",
+        model="demo-model",
+        base_url="https://example.com/v1",
+        translation_context=None,
+        workers=1,
+    )
+
+    assert summary["recovered_items"] == 1
+    assert "正在补翻第 1/1 块（p001-b003）" in messages
+    assert "正在保存改动过的 1 页" in messages
+    assert messages[-1] == "最终未翻译收口完成：补成 1 块，保留原文 0 块，还有 0 块没处理"
+    assert json.loads(paths[0].read_text(encoding="utf-8"))[0]["translated_text"] == "该矩阵在基组中被对角化。"
+    assert paths[1].read_text(encoding="utf-8") == "SENTINEL"
+
+
 def test_final_untranslated_recovery_respects_item_budget(monkeypatch) -> None:
     payload = [
         _failed_item("p001-b001", "The density functional is evaluated."),
@@ -163,15 +192,19 @@ def test_final_untranslated_recovery_respects_item_budget(monkeypatch) -> None:
     assert summary.skipped_by_budget == 1
 
 
-def test_final_recovery_limit_defaults_to_small_fast_budget(monkeypatch) -> None:
-    monkeypatch.delenv("RETAIN_TRANSLATION_REPAIR_PROFILE", raising=False)
-    monkeypatch.delenv("RETAIN_TRANSLATION_FINAL_RECOVERY_MAX_ITEMS", raising=False)
-
-    assert repair_phase._final_recovery_limit_from_env() == 4
-
-
-def test_final_recovery_limit_uses_quality_budget(monkeypatch) -> None:
-    monkeypatch.setenv("RETAIN_TRANSLATION_REPAIR_PROFILE", "quality")
+@pytest.mark.parametrize("profile", ["", "quality"])
+def test_final_recovery_budget_grows_with_the_book(monkeypatch, profile: str) -> None:
+    # 64 块加全书条目的 1%；快档、质量档一样（以前快档报 4，其实没传进去，一直按 64 跑）。
+    # 6.9 万条的书剩 386 块没补成：以前只补 64 块、其余卡导出，现在名额 753。
+    monkeypatch.setenv("RETAIN_TRANSLATION_REPAIR_PROFILE", profile)
     monkeypatch.delenv("RETAIN_TRANSLATION_FINAL_RECOVERY_MAX_ITEMS", raising=False)
 
     assert repair_phase._final_recovery_limit_from_env() == 64
+    assert repair_phase._final_recovery_limit_from_env(payload_size=3000) == 94
+    assert repair_phase._final_recovery_limit_from_env(payload_size=68998) == 753
+
+
+def test_final_recovery_budget_env_override_still_wins(monkeypatch) -> None:
+    monkeypatch.setenv("RETAIN_TRANSLATION_FINAL_RECOVERY_MAX_ITEMS", "7")
+
+    assert repair_phase._final_recovery_limit_from_env(payload_size=68998) == 7

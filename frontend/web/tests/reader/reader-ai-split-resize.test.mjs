@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { normalizeReaderAiSplitLayout } from "../../../../frontend/packages/reader/src/components/react-pdf/ReaderAiSplitResizeHandle.tsx";
+import { normalizeReaderAiSplitLayout } from "../../../../frontend/packages/reader/src/components/react-pdf/ReaderAssistantSplitResizeHandle.tsx";
 
 test("AI split layout defaults to 50:50 and clamps both panes", () => {
   assert.deepEqual(normalizeReaderAiSplitLayout(null), {
@@ -20,7 +20,7 @@ test("AI split layout defaults to 50:50 and clamps both panes", () => {
 
 test("assistant dock uses the library-owned resizable split", async () => {
   const [component, app, css, dockCss, manifest] = await Promise.all([
-    readFile(new URL("../../../../frontend/packages/reader/src/components/react-pdf/ReaderAiSplitResizeHandle.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../../../../frontend/packages/reader/src/components/react-pdf/ReaderAssistantSplitResizeHandle.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../../../frontend/packages/reader/src/ReaderAppReactPdf.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../../../frontend/packages/reader/styles/react-pdf.css", import.meta.url), "utf8"),
     readFile(new URL("../../../../frontend/packages/reader/styles/assistant-dock.css", import.meta.url), "utf8"),
@@ -32,7 +32,7 @@ test("assistant dock uses the library-owned resizable split", async () => {
   assert.match(component, /onLayoutChanged=\{handleLayoutChanged\}/);
   assert.match(component, /meta\.isUserInteraction/);
   assert.doesNotMatch(component, /onPointerMove|setPointerCapture|pointermove/);
-  assert.match(app, /assistantOpen \? <ReaderAiSplitResizeHandle \/>/);
+  assert.match(app, /assistantOpen \? <ReaderAssistantSplitResizeHandle \/>/);
   assert.match(app, /is-workspace-\$\{workspaceView\}/);
   assert.match(css, /\.reader-ai-split-separator/);
   assert.match(dockCss, /\.reader-react-root\.is-assistant-open \.reader-react-scroll-shell[\s\S]*?right:\s*var\(--reader-ai-split-width\)/);

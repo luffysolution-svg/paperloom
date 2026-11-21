@@ -14,6 +14,7 @@
 
 @layer tokens, base, pages;
 
+
 @import "./tokens.css" layer(tokens);
 @import "./shadcn-theme.css" layer(tokens);
 @import "./base.css" layer(base);
@@ -28,16 +29,15 @@
 @import "./reader.utilities.css";
 @import "./layout.css" layer(pages);
 @import "./chrome.css" layer(pages);
+@import "./finder.css" layer(pages);
 @import "./assistant-dock.css" layer(pages);
 @import "./content.css" layer(pages);
 @import "./react-pdf.css" layer(pages);
 @import "./live-translation.css" layer(pages);
-@import "./fab.css" layer(pages);
-@import "./fab-menu.css" layer(pages);
-@import "./fab-downloads.css" layer(pages);
 @import "./selection-pop.css" layer(pages);
-@import "./notes-float.css" layer(pages);
+@import "./panel-shell.css" layer(pages);
 @import "./float-markdown.css" layer(pages);
 @import "./hud.css" layer(pages);
 /* Markdown 悬浮预览（含 MathJax） */
 @import "./markdown.css" layer(pages);
+@import "./markdown-blocks.css" layer(pages);

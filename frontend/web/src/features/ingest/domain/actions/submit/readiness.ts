@@ -1,3 +1,4 @@
+import { getApiAuthMode } from "@retainpdf/api/http";
 import {
   resolveSubmitReadiness,
   SUBMIT_BLOCK_REASONS,
@@ -27,7 +28,8 @@ export function currentSubmitReadiness({
     desktopConfigured,
     uploadId,
     renderSourceJobId: currentRenderSourceJobId?.(),
-    hasBrowserCredentials: Boolean(hasBrowserCredentials?.()),
+    // 多用户模式下 OCR / 翻译的凭证由服务器统一管，用户不填，也不拦。
+    hasBrowserCredentials: getApiAuthMode() === "multi" || Boolean(hasBrowserCredentials?.()),
     needsUpload: workflowNeedsUpload?.(workflow),
     needsCredentials: workflowNeedsCredentials?.(workflow),
     budgetBlocking: Boolean(asBudgetState(currentBudgetState?.())?.blocking),
@@ -40,14 +42,14 @@ export function handleSubmitReadinessBlock({
   openBrowserCredentialsDialog,
   currentBudgetState,
   setText,
-}: HandleSubmitReadinessBlockOptions = {}) {
+}: HandleSubmitReadinessBlockOptions) {
   switch (readiness?.reason) {
     case SUBMIT_BLOCK_REASONS.DESKTOP_NOT_CONFIGURED:
       openSetupDialog?.();
       setText("error-box", "请先完成首次配置。");
       return true;
     case SUBMIT_BLOCK_REASONS.MISSING_CREDENTIALS:
-      setText("error-box", "请先补全本次任务所需的接口设置。");
+      setText("error-box", "请先填写当前 OCR Provider 凭证。");
       openBrowserCredentialsDialog?.();
       return true;
     case SUBMIT_BLOCK_REASONS.MISSING_UPLOAD:

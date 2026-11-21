@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
+import { wait, waitFor } from "../helpers/async.mjs";
 
 // useAppEvent(APP_EVENTS → React 适配 hook)单测:
 // 订阅生命周期、handler ref 更新不重订阅、卸载解绑、自定义 target。
@@ -26,21 +27,6 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = false;
 const { createRoot } = await import("react-dom/client");
 const React = await import("react");
 const { useAppEvent } = await import("../../src/ui/hooks/use-app-event.js");
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitFor(predicate, description) {
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    if (predicate()) {
-      return;
-    }
-    await wait(10);
-  }
-  assert.fail(`等待超时：${description}`);
-}
 
 function Probe({ eventName, handler, target }) {
   useAppEvent(eventName, handler, { target });

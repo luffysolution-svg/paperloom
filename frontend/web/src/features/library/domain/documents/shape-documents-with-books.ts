@@ -1,6 +1,6 @@
 // "一批文档 → 一批网格卡片 item"的唯一编排(重构②)。
 //
-// 之前这套"收集有 active_job_id 的文档 → 批量取 library/books 活态 → 建
+// 之前这套"收集有 active_job_id 的文档 → 批量取任务活态 → 建
 // bookMap → 逐篇 shapeDocumentCardItem"的编排被抄了两份:图书馆主网格
 // (document-library-source.js)和合集展开(collections/controller.js)。两份
 // 发散是"空合集" bug 的根源——合集那份是 F2 文档中心化之前的旧拷贝,自己
@@ -11,41 +11,58 @@
 // 各消费方自己的关切,留在调用方)。
 
 import { shapeDocumentCardItem } from "./document-card-item.js";
+import type { LibraryDocumentRecord } from "./document-card-item.js";
+import type { LibraryCardItem } from "../types.js";
 
-function normalizedJobId(value) {
+// GET /jobs?job_ids= 按编号批量取任务列表项（名单超过 500 个由接口层分批）。
+export type JobsByIdsFetcher = (
+  apiPrefix: string,
+  jobIds: string[],
+) => Promise<{ items?: LibraryCardItem[] }>;
+
+export type JobPayloadFetcher = (
+  jobId: string,
+  opts: { apiPrefix?: string },
+) => Promise<unknown>;
+
+function normalizedJobId(value: unknown) {
   return `${value || ""}`.trim();
 }
 
 // documents: /documents 返回的文档数组
-// fetchLibraryBookList: (apiPrefix, { jobIds, limit }: any) => { items } 端口(可缺省)
-// fetchJobPayload: (jobId, { apiPrefix }) => job detail; library/books 不投影
-// OCR-only，因此仅对未命中的 active job 做 best-effort 回填。
+// fetchJobsByIds: (apiPrefix, jobIds) => { items } 端口(可缺省)
+// fetchJobPayload: (jobId, { apiPrefix }) => job detail;/jobs 列表连 OCR 任务也给，
+// 这里只给列表里没有的 active job 兜底（少见：任务刚建、刚被删）。
 // 返回:与 documents 等长、同序的卡片 item 数组(已翻译叠加 book 活态,馆藏走
 // 合成 job_id)。
 //
 // 投影合并规则(逐篇,见 shapeDocumentCardItem 三分支):
 // 1) active_job_id 缺失 → 投影传 null,卡片走馆藏分支(`doc:<document_id>` 合成
 //    job_id,library_only=true),不查 book/不回填;
-// 2) 投影未命中 → library/books 无行时用 fetchJobPayload 按 job 逐个 best-effort
+// 2) 投影未命中 → /jobs 列表里没有时用 fetchJobPayload 按 job 逐个 best-effort
 //    回填(吞错留空),仍保留真实 job_id 等轮询接管,不降级成馆藏合成 id;
 // 3) 馆藏合成 id → 仅由下游 shapeDocumentCardItem 在分支 1) 内生成,本函数不造 id。
 export async function shapeDocumentsWithBooks(
-  documents,
-  { fetchLibraryBookList, fetchJobPayload, apiPrefix }: any = {},
+  documents: LibraryDocumentRecord[],
+  { fetchJobsByIds, fetchJobPayload, apiPrefix }: {
+    fetchJobsByIds?: JobsByIdsFetcher;
+    fetchJobPayload?: JobPayloadFetcher;
+    apiPrefix: string;
+  },
 ) {
   const docs = Array.isArray(documents) ? documents : [];
   const jobIds = Array.from(new Set(
     docs.map((doc) => normalizedJobId(doc?.active_job_id)).filter(Boolean),
   ));
 
-  // job_id → book 活态 / job 回填投影;缺 key 即"投影未命中",不抛错。
+  // job_id → 任务列表项 / job 回填投影;缺 key 即"投影未命中",不抛错。
   const jobProjectionById = new Map();
-  if (jobIds.length && typeof fetchLibraryBookList === "function") {
-    const payload = await fetchLibraryBookList(apiPrefix, { jobIds, limit: jobIds.length });
-    for (const book of (Array.isArray(payload?.items) ? payload.items : [])) {
-      const id = normalizedJobId(book?.job_id);
+  if (jobIds.length && typeof fetchJobsByIds === "function") {
+    const payload = await fetchJobsByIds(apiPrefix, jobIds);
+    for (const job of (Array.isArray(payload?.items) ? payload.items : [])) {
+      const id = normalizedJobId(job?.job_id);
       if (id) {
-        jobProjectionById.set(id, book);
+        jobProjectionById.set(id, job);
       }
     }
   }

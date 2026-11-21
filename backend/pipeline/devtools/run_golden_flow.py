@@ -20,7 +20,7 @@ if str(PIPELINE_ROOT) not in sys.path:
     sys.path.insert(0, str(PIPELINE_ROOT))
 
 from retainpdf_pipeline.foundation.shared.job_dirs import create_job_dirs
-from retainpdf_pipeline.translate.artifacts.io import aggregate_payload_diagnostics
+from retainpdf_translation.artifacts.io import aggregate_payload_diagnostics
 
 
 DEFAULT_SAMPLE = REPO_ROOT / "tests" / "fixtures" / "pdfs" / "1.pdf"

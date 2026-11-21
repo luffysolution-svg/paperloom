@@ -10,7 +10,7 @@ import { collectDocumentLibraryPage } from "../../src/features/library/domain/do
 
 // ===== shapeDocumentCardItem:三种文档态映射 =====
 
-test("已翻译文档:合并 library/books 活态,保留真实 job_id 与文档身份", () => {
+test("已翻译文档:合并任务活态,保留真实 job_id 与文档身份", () => {
   const document = {
     document_id: "docA",
     title: "共轭选择性",
@@ -18,7 +18,6 @@ test("已翻译文档:合并 library/books 活态,保留真实 job_id 与文档�
     page_count: 10,
     active_job_id: "20260601-a",
     reading_status: "reading",
-    tags: ["化学"],
     source_pdf_url: "/api/v1/documents/docA/source.pdf",
     cover_url: "/api/v1/documents/docA/cover",
     updated_at: "2026-06-01T12:00:00Z",
@@ -40,10 +39,26 @@ test("已翻译文档:合并 library/books 活态,保留真实 job_id 与文档�
   assert.equal(item.document_id, "docA");
   assert.equal(item.status, "succeeded");
   assert.equal(item.reading_status, "reading");
-  assert.deepEqual(item.tags, ["化学"]);
+  assert.equal("tags" in item, false, "标签 2026-09-26 已删，书卡不再带 tags");
   assert.equal(item.source_pdf_url, "/api/v1/documents/docA/source.pdf");
   // book 带了 cover → 用 book 的(与现网格视觉一致)
   assert.equal(item.cover_url, "/api/v1/library/books/20260601-a/cover");
+  // 书名和书籍详情一致：用文档标题（会被自动改名 / 手改），不用任务里的上传文件名。
+  assert.equal(item.title, "共轭选择性");
+  assert.equal(item.display_name, "共轭选择性");
+});
+
+test("文档没有标题时：任务标题兜底，占位标题（job_id）再退回文件名", () => {
+  const fromBook = shapeDocumentCardItem(
+    { document_id: "d", active_job_id: "j1", title: "", source_filename: "file.pdf" },
+    { job_id: "j1", title: "book 标题", status: "succeeded", progress: {} },
+  );
+  assert.equal(fromBook.title, "book 标题");
+  const placeholder = shapeDocumentCardItem(
+    { document_id: "d", active_job_id: "j1", title: "", source_filename: "file.pdf" },
+    { job_id: "j1", title: "j1.pdf", status: "succeeded", progress: {} },
+  );
+  assert.equal(placeholder.title, "file.pdf");
 });
 
 test("已翻译但 book 缺 cover:封面回退到文档级 cover_url", () => {
@@ -62,7 +77,6 @@ test("馆藏文档(无 active_job_id):合成 job_id + library_only 标记", () =
     page_count: 42,
     active_job_id: null,
     reading_status: "unread",
-    tags: ["工具书"],
     source_pdf_url: "/api/v1/documents/docRef/source.pdf",
     cover_url: "/api/v1/documents/docRef/cover",
     updated_at: "2026-06-10T09:00:00Z",
@@ -107,7 +121,7 @@ test("OCR-only active job falls back to canonical job payload and keeps readines
       }],
       total: 1,
     }),
-    fetchLibraryBookList: async (_apiPrefix, { jobIds }) => {
+    fetchJobsByIds: async (_apiPrefix, jobIds) => {
       calls.push(["books", jobIds]);
       return { items: [] };
     },
@@ -160,7 +174,7 @@ test("OCR-only job fallback is best effort", async () => {
       documents: [{ document_id: "doc-ocr-missing", active_job_id: "job-ocr-missing" }],
       total: 1,
     }),
-    fetchLibraryBookList: async () => ({ items: [] }),
+    fetchJobsByIds: async () => ({ items: [] }),
     fetchJobPayload: async () => {
       throw new Error("temporary unavailable");
     },
@@ -185,12 +199,12 @@ function makeFetchers({ documents, total, books }) {
     const limit = params.limit || documents.length;
     return { documents: documents.slice(offset, offset + limit), total, limit, offset };
   };
-  const fetchLibraryBookList = async (_prefix, { jobIds = [] } = {}) => {
+  const fetchJobsByIds = async (_prefix, jobIds = []) => {
     calls.bookJobIds = jobIds;
     const wanted = new Set(jobIds);
     return { items: books.filter((b) => wanted.has(b.job_id)) };
   };
-  return { fetchDocumentList, fetchLibraryBookList, calls };
+  return { fetchDocumentList, fetchJobsByIds, calls };
 }
 
 test("整合一页:已翻译合并 book,馆藏用合成 id,hasMore 由 total 决定", async () => {
@@ -203,11 +217,11 @@ test("整合一页:已翻译合并 book,馆藏用合成 id,hasMore 由 total 决
     { job_id: "j1", status: "succeeded", progress: { percent: 100 } },
     { job_id: "j3", status: "running", progress: { percent: 40 } },
   ];
-  const { fetchDocumentList, fetchLibraryBookList, calls } = makeFetchers({ documents, total: 5, books });
+  const { fetchDocumentList, fetchJobsByIds, calls } = makeFetchers({ documents, total: 5, books });
 
   const page = await collectDocumentLibraryPage({
     fetchDocumentList,
-    fetchLibraryBookList,
+    fetchJobsByIds,
     apiPrefix: "/api/v1",
     startOffset: 0,
     pageSize: 3,
@@ -242,7 +256,7 @@ test("分页严格使用后端 total，并按实际返回条数推进 offset", a
 
   const page = await collectDocumentLibraryPage({
     fetchDocumentList,
-    fetchLibraryBookList: async () => ({ items: [] }),
+    fetchJobsByIds: async () => ({ items: [] }),
     apiPrefix: "/api/v1",
     startOffset: 2,
     pageSize: 24,
@@ -260,10 +274,10 @@ test("跨页去重:existingJobIds 命中的(含合成 id)不重复收集", async
     { document_id: "d1", active_job_id: "j1", title: "a" },
     { document_id: "d2", active_job_id: null, title: "b" },
   ];
-  const { fetchDocumentList, fetchLibraryBookList } = makeFetchers({ documents, total: 2, books: [{ job_id: "j1", status: "succeeded" }] });
+  const { fetchDocumentList, fetchJobsByIds } = makeFetchers({ documents, total: 2, books: [{ job_id: "j1", status: "succeeded" }] });
   const page = await collectDocumentLibraryPage({
     fetchDocumentList,
-    fetchLibraryBookList,
+    fetchJobsByIds,
     apiPrefix: "/api/v1",
     startOffset: 0,
     pageSize: 10,
@@ -275,14 +289,14 @@ test("跨页去重:existingJobIds 命中的(含合成 id)不重复收集", async
 });
 
 test("跨页去重接受稳定 document identity", async () => {
-  const { fetchDocumentList, fetchLibraryBookList } = makeFetchers({
+  const { fetchDocumentList, fetchJobsByIds } = makeFetchers({
     documents: [{ document_id: "d1", active_job_id: "job-retry", title: "a" }],
     total: 1,
     books: [{ job_id: "job-retry", status: "running" }],
   });
   const page = await collectDocumentLibraryPage({
     fetchDocumentList,
-    fetchLibraryBookList,
+    fetchJobsByIds,
     apiPrefix: "/api/v1",
     startOffset: 0,
     pageSize: 10,
@@ -297,10 +311,10 @@ test("搜索:query 经 q 透传后端，分页照常按后端 total 走", async 
   const documents = [
     { document_id: "d1", active_job_id: null, title: "量子化学导论" },
   ];
-  const { fetchDocumentList, fetchLibraryBookList, calls } = makeFetchers({ documents, total: 3, books: [] });
+  const { fetchDocumentList, fetchJobsByIds, calls } = makeFetchers({ documents, total: 3, books: [] });
   const page = await collectDocumentLibraryPage({
     fetchDocumentList,
-    fetchLibraryBookList,
+    fetchJobsByIds,
     apiPrefix: "/api/v1",
     startOffset: 0,
     pageSize: 2,
@@ -324,7 +338,7 @@ test("搜索:第二页带 q 与 offset 继续向后翻", async () => {
   };
   const page = await collectDocumentLibraryPage({
     fetchDocumentList,
-    fetchLibraryBookList: async () => ({ items: [] }),
+    fetchJobsByIds: async () => ({ items: [] }),
     apiPrefix: "/api/v1",
     startOffset: 1,
     pageSize: 2,

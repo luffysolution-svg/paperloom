@@ -1,11 +1,11 @@
 """Render-local translation-manifest / payload file readers.
 
 Duplicated from:
-- retainpdf_pipeline.translate.core.payload.manifest
+- retainpdf_translation.core.payload.manifest
   (``TRANSLATION_MANIFEST_FILE_NAME``, ``translation_manifest_path``,
   ``load_translation_manifest_file``, ``load_translation_manifest``)
-- retainpdf_pipeline.translate.core.payload.translations (``load_translations``)
-- retainpdf_pipeline.translate.core.payload.template_contract
+- retainpdf_translation.core.payload.translations (``load_translations``)
+- retainpdf_translation.core.payload.template_contract
   (``validate_translation_payload_contract`` + required contract fields)
 
 (stage-decouple: render must read ``translation-manifest.json`` and page

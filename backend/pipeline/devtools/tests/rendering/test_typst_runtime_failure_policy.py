@@ -3,13 +3,11 @@ from __future__ import annotations
 from concurrent.futures import Future
 from pathlib import Path
 import subprocess
-import sys
 from unittest import mock
 
 import fitz
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from retainpdf_pipeline.foundation.config.external_tools import ExternalToolNotFound
 from retainpdf_pipeline.render.output.typst import book_renderer

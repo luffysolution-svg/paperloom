@@ -9,6 +9,24 @@
  *   - VML 是 Office 2007 之前的遗留格式，新版 Word 对它的支持一直在退化；
  *   - 更要紧的是 VML 文本框**不裁切**。字稍微排多一点就糊到相邻块上，而 DrawingML
  *     的 `bodyPr` 有 `vertOverflow="clip"`，多出来的会被裁掉而不是盖住别人。
+ *
+ * # `normAutofit` 而不是 `noAutofit`
+ *
+ * 字号和行距是导出时按 `resources/fonts/SourceHanSerifSC-Regular.otf` 的字形宽度算的，
+ * 而 docx 只**声明**这个字体名、**没有嵌入**它（24.5MB，33 倍于已嵌入的公式字体，
+ * 不子集化没法带）。打开文档的机器上没装这个字体时 Word 会替换，字形宽度一变，
+ * 同一段文字就换行成更多行 —— 总高超过框，被上面那个 `vertOverflow="clip"` 裁掉。
+ * 这就是「有些块会溢出/被截断」。
+ *
+ * `noAutofit` 是明确告诉 Word「别缩，裁掉」。换成 `normAutofit` 让它在装不下时自己
+ * 缩字号 —— 宁可小一点也别少字。
+ *
+ * **已知局限**：Word 重算 autofit 的时机是编辑时，不保证打开就生效。所以这不是
+ * 替代嵌入字体的方案，是读不到正确字体时的兜底。
+ *
+ * **不要把 `w:lineRule` 从 `exact` 换成 `auto`**：`exact` 让「N 行占 N×行距」这个账
+ * 算得准，是框内布局的前提。`auto` 会让行高跟着替换字体的自然行距走，而 CJK 字体
+ * 行间距很大，1.289 倍可能变成 1.8 倍字号 —— 比现在更糟。
  */
 
 import { rawXml, xml } from "../vendor/visualtex/office/docx/ooxml/xml.ts";
@@ -30,11 +48,28 @@ const TWIPS_PER_POINT = 20;
  */
 const MATH_RE = /\$\$([\s\S]+?)\$\$|(?<!\\)\$((?:\\.|[^$\n])+?)\$/g;
 
+/** 没有底数的上/下标，比如引文标记 `$^{[1]}$`。
+ *
+ * **为什么要单独认**：MathJax 会把它转成 `<m:sSup>` 且 `<m:e>` 是**空的**，而 Word
+ * 对空的数学元素画一个虚线占位框 —— 用户看到的是每个引文标记前面多一个空方框。
+ * 实测 19 个 job 的前 6 页共 1561 个公式，**369 个（23.6%）是这种**，分布在 13 本书上。
+ *
+ * 而且它本来也不是数学：引文上标就是「带上标格式的文本」，用 `w:vertAlign` 表达更
+ * 准确，也不用把 Latin Modern Math 那套字体套上去。 */
+const BARE_SCRIPT_RE = /^\s*([_^])\s*(?:\{([^{}]*)\}|([^{}\s]))\s*$/;
+
 const emu = (pt) => Math.round(pt * EMU_PER_POINT);
 const twips = (pt) => Math.round(pt * TWIPS_PER_POINT);
+/** pt → 半磅（w:sz 的单位）。
+ *
+ * **向下取整，不是四舍五入。** Python 侧是按**未取整**的字号判「这个块装得下吗」的，
+ * 而 `Math.round` 会把 9.8pt 写成 10pt —— 判定按 9.8 做，Word 按 10 排，凭空多出来的
+ * 那 0.2pt 就可能多断一行。实测用户那个 job：54 个块里 **35 个（65%）**被取整取大。
+ *
+ * 向下取整只会让字更小，方向和「宁可小一点也别溢出」一致。 */
 const halfPoints = (pt) => Math.max(1, Math.floor(pt * 2));
 
-function runProperties(block, fontFamily) {
+function runProperties(block, fontFamily, vertAlign = null) {
   return xml("w:rPr", {}, [
     rawXml(xml("w:rFonts", {
       "w:ascii": fontFamily,
@@ -46,13 +81,13 @@ function runProperties(block, fontFamily) {
     block.bold ? rawXml(xml("w:bCs")) : undefined,
     rawXml(xml("w:sz", { "w:val": halfPoints(block.fontSizePt) })),
     rawXml(xml("w:szCs", { "w:val": halfPoints(block.fontSizePt) })),
-    block.superscript ? rawXml(xml("w:vertAlign", { "w:val": "superscript" })) : undefined,
+    vertAlign ? rawXml(xml("w:vertAlign", { "w:val": vertAlign })) : undefined,
   ]);
 }
 
-function textRun(text, block, fontFamily) {
+function textRun(text, block, fontFamily, strong = false, vertAlign = null) {
   return xml("w:r", {}, [
-    rawXml(runProperties(block, fontFamily)),
+    rawXml(runProperties(strong ? { ...block, bold: true } : block, fontFamily, vertAlign)),
     // xml:space=preserve:行首行尾的空格是排版的一部分，丢了字就挤在一起。
     rawXml(xml("w:t", { "xml:space": "preserve" }, [text])),
   ]);
@@ -65,48 +100,56 @@ function textRun(text, block, fontFamily) {
  * 毁掉整份文档，而且把源码显示出来，用户至少看得见那里本来是什么。失败会记进
  * `errors`，由调用方决定要不要报。
  */
+/** markdown 的强调标记。
+ *
+ * **为什么非处理不可**：`page_specs.py` 给的是
+ * `plain_text if render_kind == "plain" else markdown_text` —— 非 plain 的块交的是
+ * **原始 markdown**。而这里原来只解析 `$...$`，于是 `**1k**` 被原样印成带星号的
+ * 文本，既没加粗又多了四个字符。实测 19 个 job 的前 8 页共 820 个块，**44 个（5.4%）
+ * 带 `**`**，分布在 6 本书上。
+ *
+ * 只收 `**`（强调），不碰 `*`：单星号在化学名和脚注里是正常字符，而译文里的强调
+ * 一律是双星号。贪婪匹配会把两处强调之间的正文也吃掉，所以用 `+?`。 */
+const STRONG_RE = /\*\*([^*\n]+?)\*\*/g;
+
+/** 把一段纯文本切成若干 run，`**…**` 的部分加粗。 */
+function pushText(runs, text, block, fontFamily) {
+  if (!text) return;
+  let cursor = 0;
+  STRONG_RE.lastIndex = 0;
+  for (let match = STRONG_RE.exec(text); match; match = STRONG_RE.exec(text)) {
+    if (match.index > cursor) {
+      runs.push(rawXml(textRun(text.slice(cursor, match.index), block, fontFamily)));
+    }
+    runs.push(rawXml(textRun(match[1], block, fontFamily, true)));
+    cursor = match.index + match[0].length;
+  }
+  if (cursor < text.length) {
+    runs.push(rawXml(textRun(text.slice(cursor), block, fontFamily)));
+  }
+}
+
 function inlineRuns(line, block, fontFamily, errors) {
   const runs = [];
-  const tokens = [];
   let cursor = 0;
   MATH_RE.lastIndex = 0;
   for (let match = MATH_RE.exec(line); match; match = MATH_RE.exec(line)) {
     if (match.index > cursor) {
-      tokens.push({ text: line.slice(cursor, match.index) });
+      pushText(runs, line.slice(cursor, match.index), block, fontFamily);
     }
-    tokens.push({ math: match });
-    cursor = match.index + match[0].length;
-  }
-  if (cursor < line.length) tokens.push({ text: line.slice(cursor) });
-
-  // Only paired delimiters outside formulas are markup; unmatched/single stars stay literal.
-  const strongRe = /(?<![\\*])\*\*(?!\*)/g;
-  const delimiterCount = tokens.reduce((count, token) => count + (token.text?.match(strongRe) || []).length, 0);
-  let remaining = delimiterCount - delimiterCount % 2;
-  let strong = false;
-  for (const token of tokens) {
-    const styled = () => ({ ...block, bold: block.bold || strong });
-    if (token.text !== undefined) {
-      let start = 0;
-      for (const delimiter of token.text.matchAll(strongRe)) {
-        if (!remaining) break;
-        if (delimiter.index > start) {
-          runs.push(rawXml(textRun(token.text.slice(start, delimiter.index), styled(), fontFamily)));
-        }
-        strong = !strong;
-        remaining -= 1;
-        start = delimiter.index + 2;
-      }
-      if (start < token.text.length) runs.push(rawXml(textRun(token.text.slice(start), styled(), fontFamily)));
-      continue;
-    }
-    const match = token.math;
     // `$$...$$` 和 `$...$` 产出一样的 OMML（见 formula.mjs）。正则要分开两支只是
     // 为了让 `$$a$$` 被当成**一个**公式吃掉，否则会解析成两个空的行内公式。
     const latex = match[1] !== undefined ? match[1] : match[2];
-    const citation = /^(?:\{\})?\s*\^\s*\{(\[\d+(?:\s*[,;\-–—]\s*\d+)*\])\}\s*$/.exec(latex);
-    if (citation) {
-      runs.push(rawXml(textRun(citation[1], { ...styled(), superscript: true }, fontFamily)));
+    const bare = BARE_SCRIPT_RE.exec(latex);
+    if (bare) {
+      const content = bare[2] !== undefined ? bare[2] : bare[3];
+      if (content) {
+        runs.push(rawXml(textRun(
+          content, block, fontFamily, false,
+          bare[1] === "^" ? "superscript" : "subscript",
+        )));
+      }
+      cursor = match.index + match[0].length;
       continue;
     }
     try {
@@ -114,16 +157,18 @@ function inlineRuns(line, block, fontFamily, errors) {
       runs.push(rawXml(omml));
     } catch (error) {
       errors.push({ blockId: block.id, latex, message: error.message });
-      runs.push(rawXml(textRun(match[0], styled(), fontFamily)));
+      runs.push(rawXml(textRun(match[0], block, fontFamily)));
     }
+    cursor = match.index + match[0].length;
+  }
+  if (cursor < line.length) {
+    pushText(runs, line.slice(cursor), block, fontFamily);
   }
   return runs;
 }
 
 function paragraph(line, block, fontFamily, errors) {
   const properties = [
-    // OOXML uses off/0 to allow character-level breaks in western words.
-    rawXml(xml("w:wordWrap", { "w:val": 0 })),
     rawXml(xml("w:spacing", {
       "w:before": 0,
       "w:after": 0,
@@ -136,6 +181,16 @@ function paragraph(line, block, fontFamily, errors) {
       ? rawXml(xml("w:ind", { "w:firstLine": twips(block.firstLineIndentPt) }))
       : undefined,
     rawXml(xml("w:jc", { "w:val": block.justify ? "both" : "left" })),
+    // **允许西文词中间断行**（中日韩文档的兼容开关，val=0 = 不保持整词）。
+    //
+    // Word 默认不在西文词中间断行，而 Typst 会。化学论文正文里全是长拉丁词
+    // （`2-(4-methoxyphenyl)`、`1-s2.0-S2468823121003047`），一个断不开的词就能把
+    // 半行浪费掉。按「西文不断词」估算这个 job 的前 6 页，20 个块里 12 个会超框，
+    // 而同样的内容在 PDF 里**一个都不超**（最挤的只占 0.90×）。
+    //
+    // 这是 Word 和 Typst 断行差异里能直接关掉的那一项。剩下的（两端对齐的伸缩、
+    // 行内 OMML 的宽度）没有对应开关，只能靠余量。
+    rawXml(xml("w:wordWrap", { "w:val": "0" })),
   ];
   return xml("w:p", {}, [
     rawXml(xml("w:pPr", {}, properties)),

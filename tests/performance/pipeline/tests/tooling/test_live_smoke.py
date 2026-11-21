@@ -2,7 +2,6 @@ import sys
 import json
 import copy
 import hashlib
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -160,6 +159,8 @@ def smoke_lifecycle(tmp_path, monkeypatch):
                 for hook in session.hooks["response"]:
                     hook(response)
                 raise RuntimeError("synthetic local HTTP error")
+            assert "job_id" not in kwargs["json"]["runtime"]
+            return {"job_id": "server-job", "status": "queued"}
         return {"status": "running" if state.failure == "timeout" else "succeeded"}
 
     def monotonic():
@@ -230,7 +231,9 @@ def test_live_run_cleans_credentials_without_resubmission(smoke_lifecycle, failu
     submissions = [call for call in state.calls if call == ("POST", "/api/v1/jobs")]
     assert len(submissions) == (0 if failure in {"copy", "port", "second_port", "startup"} else 1)
     cancellations = [call for call in state.calls if call[0] == "POST" and call[1].endswith("/cancel")]
-    assert len(cancellations) == len(submissions)
+    # 任务编号由服务器分配：提交请求本身出错（返回不确定）时拿不到编号，没法取消。
+    assert len(cancellations) == (0 if failure in {"submission", "http_error"} else len(submissions))
+    assert all("/server-job/" in call[1] for call in cancellations)
     assert all(session.closed for session in state.sessions)
     assert all(process.stopped for process in state.processes) == (failure != "process_cleanup")
     assert state.secret not in capsys.readouterr().out

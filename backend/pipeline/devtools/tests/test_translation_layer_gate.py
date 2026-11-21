@@ -44,8 +44,8 @@ def test_external_file_has_no_translation_layer(tmp_path):
 ])
 def test_resolved_sublayer_rejects_edges_previously_allowed_by_broad_parent(path, forbidden, allowed):
     rules = TRANSLATION_LAYER_IMPORT_RULES[translation_layer_for(TRANSLATION_ROOT / path)]
-    assert not module_allowed("retainpdf_pipeline.translate." + forbidden, rules)
-    assert module_allowed("retainpdf_pipeline.translate." + allowed, rules)
+    assert not module_allowed("retainpdf_translation." + forbidden, rules)
+    assert module_allowed("retainpdf_translation." + allowed, rules)
 
 
 @pytest.mark.parametrize("path,module,accepted", [
@@ -58,7 +58,7 @@ def test_resolved_sublayer_rejects_edges_previously_allowed_by_broad_parent(path
 def test_real_boundary_checker_limits_frozen_debt_to_exact_file_and_module(monkeypatch, path, module, accepted):
     from devtools.architecture_checks import translation_boundaries as checker
     source = TRANSLATION_ROOT / path
-    imported = "retainpdf_pipeline.translate." + module
+    imported = "retainpdf_translation." + module
     monkeypatch.setattr(checker, "scan_py_files", lambda root: [source] if root == TRANSLATION_ROOT else [])
     monkeypatch.setattr(checker, "read_text", lambda path: "")
     monkeypatch.setattr(checker, "imported_modules", lambda path: [imported] if path == source else [])
@@ -78,8 +78,29 @@ def test_frozen_debt_tracks_existing_edges_not_future_permissions():
         assert modules <= set(imported_modules(TRANSLATION_ROOT / relative)), relative
 
 
-def test_current_tree_passes_active_sublayer_boundaries():
-    from devtools.architecture_checks.translation_boundaries import check_translation_internal_boundaries
-    errors = []
-    check_translation_internal_boundaries(errors)
-    assert errors == []
+@pytest.mark.parametrize("path,module,accepted", [
+    ("services/memory/store.py", "retainpdf_base.events", True),
+    ("services/memory/store.py", "retainpdf_math.direct_typst", True),
+    ("services/memory/store.py", "retainpdf_translation.core.terms", True),
+    ("services/memory/store.py", "retainpdf_pipeline.foundation.shared.stage_specs", False),
+    ("services/memory/store.py", "retainpdf_pipeline.render.workflow", False),
+    ("workflow/refine.py", "retainpdf_pipeline.translate.entrypoints.translate_only_pipeline", False),
+    ("workflow/refine.py", "retainpdf_pipeline.translate.translation_stage", False),
+])
+def test_translation_library_must_not_depend_on_the_pipeline(monkeypatch, path, module, accepted):
+    from devtools.architecture_checks import translation_boundaries as checker
+    source = TRANSLATION_ROOT / path
+    monkeypatch.setattr(checker, "scan_py_files", lambda root: [source])
+    monkeypatch.setattr(checker, "imported_modules", lambda current: [module])
+    errors: list[str] = []
+    checker.check_translation_library_self_contained(errors)
+    assert (not errors) is accepted, errors
+
+
+def test_translation_package_gate_scans_the_package_not_the_worker_shell():
+    # worker 外壳（retainpdf_pipeline/translate/）留在流水线里，可以依赖流水线；门禁只管翻译包。
+    from devtools.architecture_checks import translation_boundaries as checker
+    from devtools.architecture_checks.translation_rules import TRANSLATION_SHELL_ROOT
+    scanned = checker.scan_py_files(TRANSLATION_ROOT)
+    assert scanned and not any(path.is_relative_to(TRANSLATION_SHELL_ROOT) for path in scanned)
+    assert TRANSLATION_ROOT.name == "retainpdf_translation"

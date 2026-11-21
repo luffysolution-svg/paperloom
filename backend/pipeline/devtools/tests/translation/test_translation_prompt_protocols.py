@@ -1,19 +1,11 @@
 from __future__ import annotations
 
 import json
-import sys
-from pathlib import Path
 from unittest import mock
 
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-
-from retainpdf_pipeline.translate.llm.providers.deepseek import client as deepseek_client
-from retainpdf_pipeline.translate.llm.providers.deepseek import translation_client
-from retainpdf_pipeline.translate.core.context import build_item_context
-from retainpdf_pipeline.translate.llm.shared.prompt_protocols import group_member_json_user_prompt
+from retainpdf_translation.llm.providers.deepseek import client as deepseek_client
+from retainpdf_translation.llm.providers.deepseek import translation_client
 
 
 def test_translate_single_item_plain_text_uses_plain_text_protocol() -> None:
@@ -87,36 +79,6 @@ def test_translate_batch_once_uses_tagged_protocol_without_schema() -> None:
     assert result["p001-b002"]["translated_text"] == "更快的算力提升了模拟能力。"
 
 
-def test_translate_continuation_group_members_repairs_loose_json_response() -> None:
-    item = {
-        "item_id": "__cg__:cg-010-001",
-        "translation_unit_id": "__cg__:cg-010-001",
-        "translation_unit_member_ids": ["p010-b001", "p010-b002"],
-        "protected_source_text": "This sentence starts and continues.",
-        "translation_unit_protected_source_text": "This sentence starts and continues.",
-        "block_type": "text",
-        "metadata": {"structure_role": "body"},
-    }
-
-    def _fake_request(_messages, **_kwargs):
-        return """
-        {
-          translated_text: "这句话开始并继续。",
-          member_translations: [
-            {"item_id": "p010-b001", "translated_text": "这句话开始"},
-            {"item_id": "p010-b002", "translated_text": "并继续。"},
-          ],
-        }
-        """
-
-    with mock.patch.object(translation_client, "request_chat_content", side_effect=_fake_request):
-        result = translation_client.translate_continuation_group_members(item)
-
-    payload = result["__cg__:cg-010-001"]
-    assert payload["translated_text"] == "这句话开始并继续。"
-    assert payload["member_translations"][1]["translated_text"] == "并继续。"
-
-
 def test_build_messages_sci_tagged_uses_translation_only_protocol() -> None:
     messages = deepseek_client.build_messages(
         [
@@ -172,7 +134,7 @@ def test_build_single_item_fallback_messages_sanitizes_continuation_context_plac
         response_style="plain_text",
     )
     assert "当前原文是不完整片段；译文必须保持同等不完整，不要用后文上下文补全。" in messages[1]["content"]
-    assert "后文上下文（仅供理解，禁止翻译进输出）：evidence against a catalytic cycle and reaction pathway" in messages[1]["content"]
+    assert "【后文开始（仅供理解，禁止翻译进输出）】\nevidence against a catalytic cycle and reaction pathway\n【后文结束】" in messages[1]["content"]
     assert "<f1-2e5/>" not in messages[1]["content"]
     assert "<f2-9ad/>" not in messages[1]["content"]
 
@@ -222,37 +184,6 @@ def test_build_single_item_fallback_messages_plain_text_user_prompt_is_not_json(
     assert "JSON" not in messages[1]["content"]
     assert '"item_id"' not in messages[1]["content"]
     assert '"source_text"' not in messages[1]["content"]
-
-
-def test_group_member_json_user_prompt_includes_member_ids_and_schema() -> None:
-    item_context = build_item_context(
-        {
-            "item_id": "__cg__:cg-010-001",
-            "translation_unit_member_ids": ["p010-b001", "p010-b002"],
-            "translation_unit_members": [
-                {"item_id": "p010-b001", "protected_source_text": "This sentence starts"},
-                {"item_id": "p010-b002", "protected_source_text": "and continues."},
-            ],
-            "continuation_group": "cg-010-001",
-            "translation_unit_protected_source_text": "This sentence starts and continues.",
-            "protected_source_text": "This sentence starts and continues.",
-            "translation_context_after": "Do not include this context in output.",
-            "metadata": {"structure_role": "body"},
-        }
-    )
-
-    payload = json.loads(group_member_json_user_prompt(item_context))
-
-    assert payload["group"]["item_id"] == "__cg__:cg-010-001"
-    assert payload["group"]["member_ids"] == ["p010-b001", "p010-b002"]
-    assert payload["group"]["members"] == [
-        {"item_id": "p010-b001", "source_text": "This sentence starts"},
-        {"item_id": "p010-b002", "source_text": "and continues."},
-    ]
-    assert payload["output_schema"]["member_translations"][0]["item_id"] == "member id from member_ids"
-    assert "translated_text" not in payload["output_schema"]
-    assert "combined_source_text" not in payload["group"]
-    assert "Do not include this context" in payload["context_after"]
 
 
 def test_plain_text_prompt_keeps_literal_preservation_in_translation_scope() -> None:
@@ -469,7 +400,7 @@ def test_prompt_builder_can_render_non_default_target_language() -> None:
 
     assert "适合论文排版的英文" in combined_prompt
     assert "直接输出英文译文" in combined_prompt
-    assert "最终英文译文正文" in combined_prompt
+    assert "直接输出【当前原文】的英文译文" in combined_prompt
     assert "适合论文排版的简体中文" not in combined_prompt
 
 
@@ -597,111 +528,8 @@ def test_direct_typst_single_prompt_has_no_rewrite_hint_for_clean_source() -> No
     assert "渲染器不支持" not in messages[1]["content"]
 
 
-def _cg_item(**overrides):
-    item = {
-        "item_id": "__cg__:cg-010-001",
-        "translation_unit_id": "__cg__:cg-010-001",
-        "translation_unit_member_ids": ["p010-b001", "p010-b002"],
-        "protected_source_text": "The energy $E = mc^2$ starts and continues here.",
-        "translation_unit_protected_source_text": "The energy $E = mc^2$ starts and continues here.",
-        "block_type": "text",
-        "math_mode": "direct_typst",
-        "metadata": {"structure_role": "body"},
-    }
-    item.update(overrides)
-    return item
-
-
-def test_group_members_retries_when_member_ids_are_missing() -> None:
-    # 此前缺 member id 会静默退化成几何切分;现在先重试一次,第二次
-    # 返回完整就采用结构化切分。
-    responses = iter([
-        json.dumps({
-            "translated_text": "能量 $E = mc^2$ 开始并在此继续。",
-            "member_translations": [
-                {"item_id": "p010-b001", "translated_text": "能量 $E = mc^2$ 开始"},
-            ],
-        }, ensure_ascii=False),
-        json.dumps({
-            "translated_text": "能量 $E = mc^2$ 开始并在此继续。",
-            "member_translations": [
-                {"item_id": "p010-b001", "translated_text": "能量 $E = mc^2$ 开始"},
-                {"item_id": "p010-b002", "translated_text": "并在此继续。"},
-            ],
-        }, ensure_ascii=False),
-    ])
-    calls = {"n": 0}
-
-    def _fake_request(_messages, **_kwargs):
-        calls["n"] += 1
-        return next(responses)
-
-    with mock.patch.object(translation_client, "request_chat_content", side_effect=_fake_request):
-        result = translation_client.translate_continuation_group_members(_cg_item())
-
-    assert calls["n"] == 2
-    members = result["__cg__:cg-010-001"]["member_translations"]
-    assert [m["item_id"] for m in members] == ["p010-b001", "p010-b002"]
-
-
-def test_group_members_drops_repeated_aggregate_member_splits() -> None:
-    aggregate = "考虑到这些困难，第一部分在前页；而第二部分在下一页。"
-    repeated = json.dumps(
-        {
-            "translated_text": aggregate,
-            "member_translations": [
-                {"item_id": "p010-b001", "translated_text": aggregate},
-                {"item_id": "p010-b002", "translated_text": aggregate},
-            ],
-        },
-        ensure_ascii=False,
-    )
-
-    with mock.patch.object(translation_client, "request_chat_content", return_value=repeated):
-        result = translation_client.translate_continuation_group_members(_cg_item(math_mode="placeholder"))
-
-    payload = result["__cg__:cg-010-001"]
-    assert payload["translated_text"] == aggregate
-    assert payload["member_translations"] == []
-
-
-def test_group_members_drops_splits_when_member_math_stays_unbalanced() -> None:
-    # 公式跨 member 断开:整体 $ 奇偶数正确,但逐 member 都是坏的。
-    # 重试后仍坏则丢弃 member 切分(显式走几何兜底),整体译文保留。
-    bad = json.dumps({
-        "translated_text": "能量 $E = mc^2$ 开始并在此继续。",
-        "member_translations": [
-            {"item_id": "p010-b001", "translated_text": "能量 $E = mc^2 开始"},
-            {"item_id": "p010-b002", "translated_text": "$ 并在此继续。"},
-        ],
-    }, ensure_ascii=False)
-
-    with mock.patch.object(translation_client, "request_chat_content", return_value=bad):
-        result = translation_client.translate_continuation_group_members(_cg_item())
-
-    payload = result["__cg__:cg-010-001"]
-    assert payload["translated_text"] == "能量 $E = mc^2$ 开始并在此继续。"
-    assert payload["member_translations"] == []
-
-
-def test_group_members_salvages_aggregate_text_from_broken_json() -> None:
-    # LaTeX 反斜杠转义损坏导致 JSON 无法解析:两轮解析都失败后,
-    # 抢救 translated_text 字符串,不再整段丢弃。
-    broken = (
-        '{"translated_text": "能量守恒在此继续。",\n'
-        '"member_translations": [{"item_id": "p010-b001", "translated_text": "能量 $\\alpha 守恒"'
-    )
-
-    with mock.patch.object(translation_client, "request_chat_content", return_value=broken):
-        result = translation_client.translate_continuation_group_members(_cg_item())
-
-    payload = result["__cg__:cg-010-001"]
-    assert payload["translated_text"] == "能量守恒在此继续。"
-    assert payload["member_translations"] == []
-
-
 def test_context_bleed_downgraded_to_warning_for_continuation_items() -> None:
-    from retainpdf_pipeline.translate.llm.validation.quality import review_translation_item
+    from retainpdf_translation.llm.validation.quality import review_translation_item
 
     # 连续段片段按设计无终止标点,后文公式泄漏由 apply 层机械修剪,
     # 不应触发昂贵的错误级重试。
@@ -742,3 +570,30 @@ def test_direct_typst_single_prompt_moves_scoped_terms_into_user_message() -> No
     assert "SCF => 自洽场" not in messages[0]["content"]
     assert "术语要求：" in messages[1]["content"]
     assert "SCF => 自洽场" in messages[1]["content"]
+
+
+def test_single_prompt_puts_context_first_and_answer_instruction_last() -> None:
+    # 20261014032006-e2f12c p006-b009：作答要求夹在中间、原文后面跟着「前文上下文：……」「后文上下文：……」，
+    # 读完没有一处说「下面就是回答」，模型照着格式自己补了个「译文：」再写译文。
+    for math_mode in ("direct_typst", "placeholder"):
+        messages = deepseek_client.build_single_item_fallback_messages(
+            {
+                "item_id": "p006-b009",
+                "protected_source_text": "whereas the experimental value of the ionization energy is 0.9033 Eh",
+                "translation_context_before": "The exact energy of the hydrogen atom is -0.5 Eh,",
+                "translation_context_after": "Example 9-2 illustrates another shortcoming.",
+                "math_mode": math_mode,
+                "metadata": {"structure_role": "body"},
+            },
+            mode="sci",
+            response_style="plain_text",
+        )
+        user_prompt = messages[1]["content"]
+        before = user_prompt.index("The exact energy of the hydrogen atom")
+        after = user_prompt.index("Example 9-2 illustrates")
+        source_start = user_prompt.index("【当前原文开始】")
+        source_end = user_prompt.index("【当前原文结束】")
+        assert before < source_start and after < source_start, math_mode
+        tail = user_prompt[source_end:]
+        assert "上下文（" not in tail and "【前文" not in tail and "【后文" not in tail, math_mode
+        assert user_prompt.splitlines()[-1].startswith("现在直接输出【当前原文】的简体中文译文。"), math_mode

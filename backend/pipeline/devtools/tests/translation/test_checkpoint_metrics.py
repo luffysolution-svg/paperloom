@@ -2,13 +2,13 @@ import json
 
 import pytest
 
-from retainpdf_pipeline.translate.workflow.checkpoint.session import TranslationCheckpointSession
+from retainpdf_translation.workflow.checkpoint.session import TranslationCheckpointSession
 
 
 def test_metrics_measure_submillisecond_success_and_failure_without_payload_mutation(tmp_path, monkeypatch):
     session = TranslationCheckpointSession(output_dir=tmp_path, identity={}, attempt_id="test")
     ticks = iter([0, 100, 100, 350])
-    monkeypatch.setattr("retainpdf_pipeline.translate.workflow.checkpoint.session.time.perf_counter_ns", lambda: next(ticks))
+    monkeypatch.setattr("retainpdf_translation.workflow.checkpoint.session.time.perf_counter_ns", lambda: next(ticks))
     assert session._measure("save", lambda: "ok") == "ok"
     def fail():
         raise RuntimeError("original")

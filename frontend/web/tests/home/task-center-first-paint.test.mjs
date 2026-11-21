@@ -65,3 +65,44 @@ test('API client: ordinary list requests keep live projection by default', async
     assert.equal(new URL(request, 'http://localhost').searchParams.has('include_live_stage'), false);
   } finally { globalThis.fetch = oldFetch; }
 });
+
+test('task center DOM: 取消任务后只刷新这一条，已经翻过的页留着', async () => {
+  const oldFetch = globalThis.fetch;
+  const listQueries = [];
+  let job0Status = 'running';
+  globalThis.fetch = async (url, init = {}) => {
+    const parsed = new URL(url, 'http://localhost');
+    if ((init.method || 'GET') !== 'GET') return Response.json({ code: 0, data: { job_id: 'job-0' } });
+    if (parsed.pathname.endsWith('/jobs')) {
+      listQueries.push(parsed.searchParams);
+      const offset = Number(parsed.searchParams.get('offset'));
+      const items = offset ? [job(50)] : Array.from({ length: 50 }, (_, index) => job(index));
+      return Response.json({ code: 0, data: { items } });
+    }
+    return Response.json({ code: 0, data: { ...job(0), status: job0Status, updated_at: '2026-09-14T00:00:01Z' } });
+  };
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await React.act(async () => { root.render(React.createElement(TaskCenter, { onOpenBookDetail() {} })); await tick(); });
+    const more = [...host.querySelectorAll('button')].find((button) => button.textContent === '加载更多任务');
+    await React.act(async () => { more.click(); await tick(); });
+    assert.equal(host.querySelectorAll('[data-task-id]').length, 51);
+    const queriesBeforeCancel = listQueries.length;
+
+    job0Status = 'canceled';
+    const cancel = [...host.querySelectorAll('button')].find((button) => button.textContent === '取消任务');
+    await React.act(async () => { cancel.click(); await tick(); await tick(); });
+
+    assert.equal(listQueries.length, queriesBeforeCancel, '取消后不该整页重拉');
+    assert.equal(host.querySelectorAll('[data-task-id]').length, 51, '翻过的第二页还在');
+    const row = host.querySelector('[data-task-id="job:job-0"]');
+    assert.match(row.textContent, /已取消/);
+    assert.ok(row.closest('section[aria-labelledby="task-group-canceled"]'), '已取消的任务进「已取消」组，不进「已完成」');
+  } finally {
+    await React.act(async () => root.unmount());
+    host.remove();
+    globalThis.fetch = oldFetch;
+  }
+});

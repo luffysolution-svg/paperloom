@@ -22,6 +22,21 @@ test("summarizeStageProgressText formats stable user-facing progress copy", () =
     "第 2/5 批",
   );
 
+  // 翻译批次进度现在按本轮待翻译块计（unit=block），不能再显示成「批」。
+  assert.equal(
+    summarizeStageProgressText({
+      status: "running",
+      display_stage: "translation",
+      substage: "translation_batches",
+      progress: {
+        unit: "block",
+        current: 96,
+        total: 408,
+      },
+    }),
+    "已翻译 96/408 块",
+  );
+
   assert.equal(
     summarizeStageProgressText({
       status: "running",

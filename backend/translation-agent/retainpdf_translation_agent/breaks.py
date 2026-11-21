@@ -1,0 +1,165 @@
+"""接续组（分栏、分页拆开的同一段）译文怎么切回各块。
+
+模型只翻整段（2026-10-30 起不再让它放 `[[BREAK]]`：它常把断点放到整句之后，按原文大小定的小框被塞进整句），
+程序按原文各段的正文长度比例，在附近找最近的中文标点切开，不切开公式、脚注标记、行内代码。
+后半块不许以标点开头：开头的标点挪回前一块末尾。
+"""
+
+from __future__ import annotations
+
+import re
+
+# 切点前面最好是这些标点（句号、分号优先，逗号其次）
+STRONG = "。；！？"
+WEAK = "，、：）」』”"
+LEADING_PUNCT = "，。；：、！？）」』”"
+PROTECTED_RE = re.compile(r"\$\$[^$]+\$\$|\$[^$]+\$|\{\{fn:[^}]+\}\}|`[^`\n]+`")
+DISPLAY_RE = re.compile(r"\$\$[^$]+\$\$")
+# 夹着的公式后面那段开头的标点（模型在公式后接 "，其他分量……"）：原文的标点在公式块里，删掉
+AFTER_FORMULA_PUNCT = "，。、；：,.;:"
+WINDOW = 0.35  # 在比例位置前后各找这一段（占一段平均长度的比例）
+# 句末标点后面紧跟的引用角标（"。{{fn:28-32}}"，模型有时写成 "。$ ^{26,27} $"）跟着前一句：切点挪到角标后面。
+# 2026-10-31 ACS 论文第 2 页：引用都在句号后面，以前句号后面紧跟角标就不能切，切点被推到下一个后面没有角标的句号，
+# 前一块多拿了一整句（原文占 35%，译文分到 45%）
+TRAILING_MARKS_RE = re.compile(r"(?:\s*(?:\{\{fn:[^}]+\}\}|\$\s*\^\s*\{[^{}$]*\}\s*\$))+")
+
+
+def _protected(text: str) -> list[tuple[int, int]]:
+    return [(m.start(), m.end()) for m in PROTECTED_RE.finditer(text)]
+
+
+def _safe(position: int, text: str, spans: list[tuple[int, int]]) -> bool:
+    """能不能在 position 前切：不在公式、脚注标记、行内代码中间，不把英文单词、数字切开。"""
+    if position <= 0 or position >= len(text):
+        return False
+    if any(start < position < end for start, end in spans):
+        return False
+    if text.startswith("{{fn:", position) or text[position - 1] in "（(“「《":
+        return False  # 脚注标记跟着前面的词；左括号、左引号不放在段尾
+    before, after = text[position - 1], text[position]
+    return not (before.isascii() and before.isalnum() and after.isascii() and after.isalnum())
+
+
+def _past_marks(text: str, position: int) -> int:
+    match = TRAILING_MARKS_RE.match(text, position)
+    return match.end() if match else position
+
+
+def _prose_positions(text: str, spans: list[tuple[int, int]]) -> list[int]:
+    """译文里每个正文字符（不在公式、脚注标记、行内代码里）的位置。"""
+    inside = set()
+    for start, end in spans:
+        inside.update(range(start, end))
+    return [i for i in range(len(text)) if i not in inside and not text[i].isspace()]
+
+
+def split_by_ratio(text: str, source_lengths: list[int]) -> list[str]:
+    """把一整段译文按原文各段长度的比例切成 len(source_lengths) 段，切点尽量落在标点后面。
+
+    比例按正文算（`source_lengths` 是各段原文的正文长度，译文这边也只数正文）：公式两边一样长，算进去会把切点推偏。"""
+    count = len(source_lengths)
+    if count <= 1:
+        return [text.strip()]
+    total = sum(source_lengths) or 1
+    spans = _protected(text)
+    length = len(text)
+    prose = _prose_positions(text, spans)
+    window = max(4, int(length / count * WINDOW))
+    cuts: list[int] = []
+    cumulative = 0
+    for size in source_lengths[:-1]:
+        cumulative += size
+        if prose:
+            target = prose[min(len(prose) - 1, max(0, round(len(prose) * cumulative / total) - 1))] + 1
+        else:
+            target = round(length * cumulative / total)
+        low = max((cuts[-1] + 1) if cuts else 1, target - window)
+        high = min(length - 1, target + window)
+        best = None
+        for marks, weight in ((STRONG, 0), (WEAK, 1)):
+            ends = [_past_marks(text, i + 1) for i in range(low - 1, high) if 0 <= i < length and text[i] in marks]
+            candidates = [c for c in ends if _safe(c, text, spans)]
+            if candidates:
+                best = min(candidates, key=lambda c: (abs(c - target), weight))
+                break
+        if best is None:
+            near = sorted(range(low, high + 1), key=lambda c: abs(c - target))
+            best = next((c for c in near if _safe(c, text, spans)), None)
+        if best is None:
+            # 比例位置落在一个长公式中间，附近一个能切的地方都没有：往两边找最近的能切处，宁可偏一点，
+            # 也不把公式切成两半（2026-10-30 论文第 5 页：前块以 `$ \Delta\mathbf{g}_{l+1}=\mathbf` 结尾，两块都判 `$` 不成对）
+            first = (cuts[-1] + 1) if cuts else 1
+            anywhere = sorted(range(first, length), key=lambda c: abs(c - target))
+            best = next((c for c in anywhere if _safe(c, text, spans)), max(low, min(target, high)))
+        cuts.append(best)
+    parts, start = [], 0
+    for cut in cuts + [length]:
+        parts.append(text[start:cut].strip())
+        start = cut
+    return parts
+
+
+def move_leading_punctuation(parts: list[str]) -> list[str]:
+    """后面一段以标点开头（"。然后……"），把标点挪到前一段末尾。"""
+    out = list(parts)
+    for index in range(1, len(out)):
+        moved = ""
+        while out[index] and out[index][0] in LEADING_PUNCT:
+            moved += out[index][0]
+            out[index] = out[index][1:].lstrip()
+        if moved:
+            out[index - 1] = out[index - 1].rstrip() + moved
+    return out
+
+
+def _formula_key(text: str) -> str:
+    return re.sub(r"\s+", "", text.strip().strip("$"))
+
+
+def formula_spans(text: str, gaps: list[str]) -> list[tuple[int, int]] | None:
+    """译文里夹着的那几处独立公式的位置（按顺序；一处夹着几个公式的取整段）。对不上返回 None。
+
+    先按内容找（空白不算，`$$` 写成 `$` 也认）；内容被改过、但译文里独立公式的个数正好对得上，就按位置认。"""
+    spans: list[tuple[int, int]] = []
+    pos = 0
+    for gap in gaps:
+        found: tuple[int, int] | None = None
+        for key in (_formula_key(f) for f in DISPLAY_RE.findall(gap) or [gap]):
+            match = next((m for m in PROTECTED_RE.finditer(text, pos) if m.group(0).startswith("$") and _formula_key(m.group(0)) == key), None)
+            if match is None:
+                found = None
+                break
+            found = (found[0] if found else match.start(), match.end())
+            pos = match.end()
+        if found is None:
+            break
+        spans.append(found)
+    if len(spans) == len(gaps):
+        return spans
+    displays = [m.span() for m in DISPLAY_RE.finditer(text)]
+    return displays if len(displays) == len(gaps) else None
+
+
+def split_at_formulas(text: str, formulas_before: list[str]) -> list[tuple[str, int, int]] | None:
+    """接续组夹着独立公式（`formulas_before[i]` 是第 i 块前面夹着的）：在译文的这些公式处切开、公式删掉。
+    返回 [(这一段译文, 从第几块, 到第几块（不含）)]，每段再按比例切给其中的几块。没有夹公式返回 None；
+    译文里认不出那几个公式，删掉独立公式后整段当一段（交回按比例切）。"""
+    cut_at = [index for index in range(1, len(formulas_before)) if formulas_before[index].strip()]
+    if not cut_at:
+        return None
+    spans = formula_spans(text, [formulas_before[index] for index in cut_at])
+    if spans is None:
+        return [(re.sub(r"\s*\$\$[^$]+\$\$\s*", " ", text).strip(), 0, len(formulas_before))]
+    pieces, start = [], 0
+    for span_start, span_end in spans:
+        pieces.append(text[start:span_start])
+        start = span_end
+    pieces.append(text[start:])
+    bounds = [0, *cut_at, len(formulas_before)]
+    out = []
+    for index, piece in enumerate(pieces):
+        piece = piece.strip()
+        if index > 0:
+            piece = piece.lstrip(AFTER_FORMULA_PUNCT + " ").strip()
+        out.append((piece, bounds[index], bounds[index + 1]))
+    return out

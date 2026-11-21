@@ -7,6 +7,7 @@ from pathlib import Path
 
 from retainpdf_pipeline.render.layout.model.models import RenderPageSpec
 from retainpdf_pipeline.render.contracts import RenderDocumentAnalysis
+from retainpdf_pipeline.render.contracts.prepare_hooks import RenderPrepareHooks
 from retainpdf_pipeline.render.source_cleanup.types import BBoxTextStripCandidates
 
 
@@ -16,9 +17,9 @@ RENDER_PREWARM_SCHEMA = "render_source_prewarm_v1"
 BBOX_TEXT_STRIP_ALGORITHM_ID = "bbox_text_strip"
 HIDDEN_TEXT_STRIP_ALGORITHM_VERSION = "hidden_text_strip_v1"
 IMAGE_COMPRESSION_ALGORITHM_VERSION = "image_only_compress_v1"
-FIRST_LINE_INDENT_ALGORITHM_VERSION = "first_line_indent_v3_pixmap_default"
+FIRST_LINE_INDENT_ALGORITHM_VERSION = "first_line_indent_v5_ink_by_default"
 GEOMETRY_ADJUSTMENT_ALGORITHM_VERSION = "geometry_adjustments_v3_stale_merge_guard"
-PAYLOAD_RENDER_ALGORITHM_VERSION = "payload_render_member_continuation_visual_profile_v20_memory_opt_in"
+PAYLOAD_RENDER_ALGORITHM_VERSION = "payload_render_member_continuation_visual_profile_v23_angstrom_unicode"
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,8 @@ class RenderPrewarmSpec:
     source_cleanup_strategy: str = "pikepdf_text_strip"
     document_analysis: RenderDocumentAnalysis | None = None
     include_source_cleanup: bool = True
+    # 准备步骤的注入点（visual_profile / 渲染源底子 / 按框去文字走缓存）；None 时都现做。
+    prepare_hooks: RenderPrepareHooks | None = None
 
 
 @dataclass(frozen=True)

@@ -15,3 +15,4 @@ export const patchCollection = mockable(_canonPatchCollection, MockCollections.p
 export const deleteCollection = mockable(_canonDeleteCollection, MockCollections.deleteCollection);
 export const addDocumentsToCollection = mockable(_canonAddDocumentsToCollection, MockCollections.addDocumentsToCollection);
 export const removeDocumentFromCollection = mockable(_canonRemoveDocumentFromCollection, MockCollections.removeDocumentFromCollection);
+// mock 里没有终端，也没有翻译好的书可以物化。

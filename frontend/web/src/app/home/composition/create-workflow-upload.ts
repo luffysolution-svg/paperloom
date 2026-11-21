@@ -1,6 +1,8 @@
 // workflow + upload 特性。
 
+import { mountedFeature } from "./feature-registry.js";
 import { API_PREFIX } from "@/platform/config/api-constants.js";
+import type { CredentialGateRequest } from "@/features/ingest/index.js";
 import {
   apiBase,
   defaultModelApiKey,
@@ -13,8 +15,8 @@ import {
 import {
   DEFAULT_FILE_LABEL,
   FRONT_MAX_BYTES,
-  FRONT_MAX_PAGE_COUNT,
 } from "@/platform/config/upload-constants.js";
+import { getOcrProviderDefinition, ocrMaxBytes, ocrMaxPages } from "@/platform/config/providers.js";
 import { savePersistedDeveloperStoredConfig } from "@/platform/config/persisted-config.js";
 import {
   UploadStatePort,
@@ -38,7 +40,7 @@ import {
   workflowConstants,
 } from "@/features/ingest/domain.js";
 import type {
-  AsyncFn,
+  CreateHomeCompositionOptions,
   CredentialsStatePort,
   HomeFeatures,
   UploadFeature,
@@ -47,6 +49,8 @@ import type {
 
 type WorkflowViewPort = {
   selectedGlossaryId: () => string;
+  /** 用户偏好整张表（翻译质量、排版引擎……），由 ingest 给出，这里原样转交。 */
+  preferences?: () => Record<string, string>;
   isOcrOnly?: () => boolean;
   viewPort: unknown;
 };
@@ -65,9 +69,10 @@ type CreateWorkflowAndUploadArgs = {
   uploadStatePort: UploadStatePort;
   bridge: { resetUploadedFile: () => void; resetUploadProgress: () => void };
   legacyState: Record<string, unknown>;
-  setText: (id: string, value?: string) => void;
-  fetchGlossaries: AsyncFn;
-  submitUploadRequest: AsyncFn;
+  /** 值多数是文案；error-box 还可能收到错误诊断对象（见 state/text-store.ts）。 */
+  setText: (id: string, value?: unknown) => void;
+  fetchGlossaries: NonNullable<CreateHomeCompositionOptions["fetchGlossaries"]>;
+  submitUploadRequest: NonNullable<CreateHomeCompositionOptions["submitUploadRequest"]>;
 };
 
 export function createWorkflowAndUpload({
@@ -110,10 +115,13 @@ export function createWorkflowAndUpload({
       translationCredentialRef: credentials?.modelApiKey ? "" : credentials?.translationCredentialRef || "",
       modelApiKey: credentials?.modelApiKey || _modelApiKeyFallback || "",
       selectedGlossaryId: workflowView.selectedGlossaryId(),
+      preferences: workflowView.preferences?.(),
     };
   }
 
-  const isOcrOnly = () => Boolean((workflowView as any).isOcrOnly?.() ?? false);
+  const isOcrOnly = () => Boolean(workflowView.isOcrOnly?.() ?? false);
+  // 设置里选的 OCR：一本能收几页跟着它（PaddleOCR 999、MinerU 600、GLM-OCR 不限）。
+  const currentOcrProvider = () => credentialsStatePort.getCredentials()?.ocrProvider || defaultOcrProvider();
 
   const workflowFeature = mountWorkflowFeature({
     configPort: defaultWorkflowConfigPort,
@@ -134,19 +142,19 @@ export function createWorkflowAndUpload({
     normalizeWorkflow,
     normalizeMathMode,
     constants,
-    currentPageRanges: () => features.uploadFeature.currentPageRanges() || "",
+    currentPageRanges: () => mountedFeature(features, "uploadFeature").currentPageRanges() || "",
     viewPort: workflowView.viewPort as import("@/features/ingest/domain.js").WorkflowViewPortLike,
     readSubmitValues,
-    renderPageRangeSummary: () => features.uploadFeature.renderPageRangeSummary(),
+    renderPageRangeSummary: () => mountedFeature(features, "uploadFeature").renderPageRangeSummary(),
     hasBrowserCredentials: () => {
       if (isOcrOnly()) {
         const credentials = credentialsStatePort.getCredentials();
         const token = credentialsStatePort.getOcrToken({ defaultPaddleToken: () => defaultPaddleToken() }) || "";
         return Boolean(credentials.ocrCredentialRef || token);
       }
-      return Boolean(features.browserCredentialsFeature.hasBrowserCredentials());
+      return Boolean(mountedFeature(features, "browserCredentialsFeature").hasBrowserCredentials());
     },
-    updateCredentialGate: (options?: unknown) => features.browserCredentialsFeature.updateCredentialGate(options as any),
+    updateCredentialGate: (options: CredentialGateRequest) => mountedFeature(features, "browserCredentialsFeature").updateCredentialGate(options),
     fetchGlossaries,
     apiPrefix: API_PREFIX,
     setText,
@@ -159,8 +167,16 @@ export function createWorkflowAndUpload({
     viewPort: uploadView.viewPort as import("@/features/ingest/domain.js").UploadViewPort,
     apiBase: typeof apiBase === "function" ? apiBase() : apiBase,
     apiPrefix: API_PREFIX,
-    frontMaxBytes: FRONT_MAX_BYTES,
-    frontMaxPageCount: FRONT_MAX_PAGE_COUNT,
+    // 大小上限：选的 OCR 整份交（MinerU）就是它的上限，分段交的（PaddleOCR、GLM-OCR）只看后端的。
+    frontMaxBytes: () => {
+      const own = ocrMaxBytes(currentOcrProvider());
+      return own ? Math.min(own, FRONT_MAX_BYTES) : FRONT_MAX_BYTES;
+    },
+    sizeLimitHint: () => (ocrMaxBytes(currentOcrProvider())
+      ? `这是 ${getOcrProviderDefinition(currentOcrProvider()).label} 的上限；PaddleOCR、GLM-OCR 分段识别，可以在设置里换成它们`
+      : ""),
+    frontMaxPageCount: () => ocrMaxPages(currentOcrProvider()),
+    pageLimitHint: () => `这是 ${getOcrProviderDefinition(currentOcrProvider()).label} 的上限；GLM-OCR 不限页数，可以在设置里把 OCR 换成 GLM-OCR`,
     countPdfPages,
     defaultFileLabel: DEFAULT_FILE_LABEL,
     collectUploadFormData,

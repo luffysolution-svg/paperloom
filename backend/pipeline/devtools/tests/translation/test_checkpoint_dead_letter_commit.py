@@ -23,14 +23,12 @@ docstring 自己写着）。一个数干两件事，动它就会掉一件。
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from retainpdf_pipeline.translate.workflow.checkpoint.contract import (  # noqa: E402
+from retainpdf_translation.workflow.checkpoint.contract import (  # noqa: E402
     assert_checkpoint_committable,
     project_progress,
 )
@@ -161,3 +159,73 @@ def test_old_checkpoints_without_the_new_counter_use_the_stricter_rule(
         assert_checkpoint_committable(
             {"phase": "validating", "progress": {"pending_item_count": 2}}
         )
+
+
+def test_completed_page_count_counts_pages_without_pending_items(tmp_path: Path) -> None:
+    """翻译进度文案「已完成 p/P 页」取这个数:只有整页没有待办块才算完成。"""
+    pages = {
+        0: [_item("p1-b1", state="translated"), _item("p1-b2", state="translated")],
+        1: [_item("p2-b1", state="translated"), _item("p2-b2", state="untouched")],
+        2: [],
+    }
+    paths = {}
+    for index, items in pages.items():
+        paths[index] = tmp_path / f"page-{index}.json"
+        paths[index].write_text(json.dumps(items), encoding="utf-8")
+    _, progress = project_progress(
+        output_dir=tmp_path, page_payloads=pages, translation_paths=paths
+    )
+    assert progress["completed_page_count"] == 2
+    assert progress["pending_item_count"] == 1
+
+
+def test_a_group_left_with_one_dead_lettered_member_does_not_block_commit(tmp_path: Path) -> None:
+    """接续组里一块按策略保留原文了、另一块转成死信：待办单元只剩一个成员，单元编号 `__cg__:…` 不是任何一块的编号。
+
+    以前只有一个成员时去看单元自己的状态（单元从来不会被打上最终状态），永远算阻断：导出门禁放行了，提交却报
+    pending（2026-11-03，6574 页的书卡在 p917-b021 一行 `---`，同组另一块是命令行、按策略保留原文）。
+    """
+    from retainpdf_translation.workflow.checkpoint.contract import _is_settled_non_blocking
+
+    dead = _item("p917-b021", state="dead_letter")
+    unit = {
+        "item_id": "__cg__:cg-917-130",
+        "translation_unit_id": "__cg__:cg-917-130",
+        "translation_unit_kind": "group",
+        "translation_unit_member_ids": ["p917-b021"],
+        "should_translate": True,
+    }
+    assert _is_settled_non_blocking(unit, [dead])
+    # 成员还没处理（没有最终状态）时照样算待办
+    assert not _is_settled_non_blocking(unit, [_item("p917-b021", state="untouched")])
+
+
+def test_a_single_member_group_does_not_put_its_member_back_on_the_pending_list(tmp_path: Path) -> None:
+    """阻断判定按成员判，但各页的待办名单照旧：成员不进名单。
+
+    上一版把待办名单也改成了按成员记，旧断点上已完成的 p917-b021 一下子「变回待办」，续跑在
+    advance_checkpoint 报 Translation checkpoint completed items regressed to pending（2026-11-03）。
+    """
+    dead = _item("p917-b021", state="dead_letter") | {
+        "translation_unit_id": "__cg__:cg-917-130",
+        "translation_unit_kind": "group",
+        "translation_unit_member_ids": ["p917-b021", "p918-b003"],
+    }
+    # 同组另一块是命令行，按策略保留原文了，待办单元里只剩 p917-b021
+    kept = _item("p918-b003", state="translated") | {
+        "should_translate": False,
+        "final_status": "kept_origin",
+        "translated_text": "",
+        "skip_reason": "skip_model_keep_origin",
+        "translation_diagnostics": {"final_status": "kept_origin"},
+        "translation_unit_id": "__cg__:cg-917-130",
+        "translation_unit_kind": "group",
+        "translation_unit_member_ids": ["p917-b021", "p918-b003"],
+    }
+    page = tmp_path / "page-1.json"
+    page.write_text(json.dumps([dead, kept]), encoding="utf-8")
+    pages, progress = project_progress(
+        output_dir=tmp_path, page_payloads={0: [dead, kept]}, translation_paths={0: page}
+    )
+    assert progress["blocking_item_count"] == 0
+    assert "p917-b021" not in pages[0]["pending_item_ids"]

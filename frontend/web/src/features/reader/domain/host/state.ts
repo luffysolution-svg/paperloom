@@ -4,7 +4,6 @@ import {
   resolveTranslatedPdfDownloadName,
 } from "@retainpdf/domain/job";
 import * as readerState from "@retainpdf/reader/runtime/state";
-import { createFavorite, deleteFavorite, fetchFavorites } from "@/platform/api/index.js";
 import { fetchDocumentByJobId } from "@/platform/api/index.js";
 import { createReaderDialogRuntimePort } from "../dialog/runtime-port.js";
 import { API_PREFIX } from "@/platform/config/api-constants.js";
@@ -31,20 +30,3 @@ export const resolveReaderDownloadUrls = downloadResolver.resolveReaderDownloadU
 export const resolveReaderDownloadName = downloadResolver.resolveReaderDownloadName;
 export const createReaderDownloadResolver = readerState.createReaderDownloadResolver;
 
-export const normalizeServerFavorite = readerState.normalizeServerFavorite;
-export const dedupeServerFavorites = readerState.dedupeServerFavorites;
-type ReaderServerFavoritesPortOptions = NonNullable<
-  Parameters<typeof readerState.createReaderServerFavoritesPort>[0]
->;
-
-export const createReaderServerFavoritesPort = (
-  options: ReaderServerFavoritesPortOptions = {},
-) =>
-  readerState.createReaderServerFavoritesPort({
-    apiPrefix: API_PREFIX,
-    documentByJobId: fetchDocumentByJobId,
-    submitFavorite: createFavorite,
-    loadFavorites: fetchFavorites,
-    removeFavorite: deleteFavorite,
-    ...options,
-  });

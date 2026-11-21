@@ -47,6 +47,8 @@ export {
   WORKFLOW_TRANSLATE,
 } from "./domain.js";
 export type {
+  BatchSubmitItemResult,
+  BatchSubmitResult,
   ConstrainPageRangesOptions,
   LoadGlossaryOptionsParams,
   MountUploadFeatureOptions,
@@ -71,3 +73,12 @@ export { IngestDialog } from "./ui/IngestDialog.jsx";
 export { WorkflowPanel } from "./ui/WorkflowPanel.jsx";
 export { TranslationOptionsPanel } from "./ui/components/TranslationOptionsPanel.jsx";
 export { UploadTile } from "./ui/components/UploadTile.jsx";
+export {
+  IngestServicesProvider,
+  IngestWorkflowViewProvider,
+  useIngestServices,
+  useIngestWorkflowView,
+} from "./ui/workflow-view-context.jsx";
+export type { IngestFeatures, IngestServices, IngestWorkflowView } from "./ui/workflow-view-context.jsx";
+export type { UploadViewStore } from "./domain/upload-store.js";
+export type { CredentialGateRequest } from "./domain/workflow/workflow-mode.js";

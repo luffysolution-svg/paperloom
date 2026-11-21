@@ -64,14 +64,13 @@ export function getMockJobPayload(jobId = ""): JobLike {
   }
   // 文档中心合成的 active_job_id（如 20260520-att-001）：返回终态完整 payload，
   // 让书籍详情嵌入的 StatusCard 能拉到与真实成功 job 同形的数据（阶段流/产物就绪）。
-  const book = synthesizeMockBook(id);
   return {
     ...buildMockJobPayload("done"),
-    ...book,
+    ...synthesizeMockJobListItem(id),
     job_id: id,
     status: "succeeded",
     stage: "finished",
-    stage_detail: book.stage_detail || "任务完成",
+    stage_detail: "任务完成",
   } as JobLike;
 }
 
@@ -87,25 +86,21 @@ export function getMockJobArtifactsManifest() {
   return buildMockManifest();
 }
 
-// 文档中心网格(F2)会用 library/books?job_ids= 批量取"已翻译 mock 文档"的活态。
+// 文档中心网格(F2)会用 jobs?job_ids= 批量取"已翻译 mock 文档"的活态，形状照 /jobs 列表项：
+// 标题叫 display_name（没有 title），终态任务的 stage_snapshot 是 null。
 // 优先从 mock 文档表取真书名/封面，禁止再用 job_id.pdf 当标题（空封面根因之一）。
-function synthesizeMockBook(jobId: string): LibraryCardItem {
+function synthesizeMockJobListItem(jobId: string): LibraryCardItem {
   const doc = getMockDocumentByJobId(jobId);
-  const title = doc?.title || doc?.source_filename || "已翻译文档";
   return {
-    id: jobId,
     job_id: jobId,
-    document_id: doc?.document_id,
-    title,
-    display_name: title,
+    workflow: "book",
+    display_name: doc?.title || doc?.source_filename || "已翻译文档",
     source_file_name: doc?.source_filename || "",
     page_count: doc?.page_count ?? 12,
     cover_url: doc?.cover_url,
     thumbnail_url: doc?.thumbnail_url,
     status: "succeeded",
-    stage: "finished",
-    stage_detail: "任务完成",
-    progress: { current: 12, total: 12, percent: 100, unit: "none" },
+    stage_snapshot: null,
     output_pdf_ready: true,
     markdown_ready: true,
     bundle_ready: true,
@@ -140,7 +135,7 @@ export function getMockJobList({ jobIds = [], q = "", limit = 20, offset = 0 }: 
       if (live) {
         return enrichJobWithDocument(live, id);
       }
-      return synthesizeMockBook(id);
+      return synthesizeMockJobListItem(id);
     });
     return { items, limit: 20, offset: 0, has_more: false };
   }

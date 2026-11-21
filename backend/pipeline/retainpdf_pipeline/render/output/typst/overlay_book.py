@@ -7,7 +7,7 @@ from typing import Callable
 import fitz
 
 from retainpdf_pipeline.foundation.config import fonts
-from retainpdf_pipeline.foundation.config import paths
+from retainpdf_base import paths
 from retainpdf_pipeline.render.document.pikepdf_overlay import overlay_page_pdfs_with_pikepdf
 from retainpdf_pipeline.render.output.typst.overlay_diagnostics import apply_merge_elapsed
 from retainpdf_pipeline.render.output.typst.overlay_diagnostics import apply_redaction_diagnostics
@@ -15,7 +15,7 @@ from retainpdf_pipeline.render.output.typst.overlay_diagnostics import new_overl
 from retainpdf_pipeline.render.output.typst.page_compile import compile_overlay_page_specs
 from retainpdf_pipeline.render.output.typst.source_page_overlay import apply_source_page_overlay
 from retainpdf_pipeline.render.output.typst.sanitize import sanitize_page_specs_for_typst_book_overlay
-from retainpdf_pipeline.services.pipeline_shared.events import emit_render_page_progress
+from retainpdf_base.events import emit_render_page_progress
 
 TypstRepairRequestFn = Callable[..., str]
 

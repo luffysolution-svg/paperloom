@@ -1,0 +1,173 @@
+/* 状态详情 · 概览：信息栅格、当前阶段、指标、运行细节。（OverviewPanel）
+ *
+ * @owns status-detail, detail, stage-history, events, event, failure, info-list
+ * @uses button-link, info-value, label */
+
+@utility detail-grid {
+  @apply grid gap-3;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+
+  .detail-tab-panel & {
+    padding-right: 2px;
+  }
+
+  @media (max-width: 767px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+
+
+.detail-item {
+  @apply flex items-center gap-2 rounded-[9px] px-2.5 py-2;
+  background: color-mix(in srgb, var(--ink) 2%, transparent);
+  border: 1px solid var(--line);
+  box-shadow: none;
+  align-content: start;
+  min-height: 40px;
+}
+
+.detail-item .detail-item-icon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.detail-item .detail-item-copy {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.detail-item .label {
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.detail-item .info-value {
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--ink);
+  word-break: break-word;
+}
+
+.detail-item.is-compact {
+  min-height: 38px;
+  padding: 7px 9px;
+}
+
+
+
+@utility detail-stage-panel {
+  margin-top: 7px;
+}
+
+@utility status-detail-section {
+  @apply rounded-[14px] border;
+  padding: 10px;
+  border-color: var(--line);
+  background: var(--paper);
+}
+
+@utility status-detail-section-head {
+  @apply flex items-center justify-between gap-3;
+  margin-bottom: 7px;
+
+  & .status-detail-section-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  & .status-detail-section-title > svg {
+    width: 15px;
+    height: 15px;
+    color: var(--muted);
+  }
+
+  & h3 {
+    margin: 0;
+    color: var(--ink);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  & p {
+    margin: 2px 0 0;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  & .button-link {
+    min-height: 30px;
+    padding: 5px 10px;
+    font-size: 12px;
+    gap: 5px;
+  }
+}
+
+@utility status-detail-current-stage {
+  @apply flex min-w-0 items-center gap-2 rounded-[9px] border px-2.5 py-2;
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--ink) 2%, transparent);
+
+  & > svg {
+    width: 15px;
+    height: 15px;
+    flex: 0 0 auto;
+    color: var(--muted);
+  }
+
+  & .label {
+    flex: 0 0 auto;
+    color: var(--muted);
+    font-size: 11.5px;
+  }
+
+  & .info-value {
+    min-width: 0;
+    color: var(--ink);
+    font-size: 14px;
+    font-weight: 550;
+    line-height: 1.4;
+  }
+}
+
+@utility status-detail-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  margin-top: 5px;
+
+  @media (max-width: 640px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@utility status-detail-secondary-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  margin-top: 5px;
+}
+
+@utility status-detail-runtime-details {
+  margin-top: 5px;
+}
+
+@utility status-detail-runtime-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 8px;
+
+  @media (max-width: 640px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

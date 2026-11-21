@@ -1,7 +1,7 @@
 """Render-local protected-token facade (intra-render only).
 
 Stage boundary note: rendering previously reached into
-``retainpdf_pipeline.translate.public`` for these helpers. They are now
+``retainpdf_translation.public`` for these helpers. They are now
 duplicated under
 :mod:`retainpdf_pipeline.render.layout.text_analysis.protected_formula_tokens`
 so render never imports translate at runtime.

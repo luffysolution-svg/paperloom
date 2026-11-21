@@ -2,26 +2,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JobListItemView } from "@retainpdf/contracts/job-status";
 import {
   Activity,
+  Ban,
   CheckCircle2,
   Clock3,
-  FileText,
   LoaderCircle,
   RefreshCw,
-  RotateCcw,
-  Square,
   TriangleAlert,
 } from "lucide-react";
 import { toast } from "sonner";
+import { TaskRow } from "./TaskRow.js";
 import { useTaskCenterAutoRefresh } from "./use-task-center-discovery.js";
-import { formatZhDateTime } from "@/platform/utils/datetime.js";
 import {
   groupTaskCenterJobs,
   taskCenterCounts,
-  taskDocumentLabel,
   taskIdentity,
-  taskProgressPercent,
-  taskStatusLabel,
-  taskWorkflowLabel,
   type TaskCenterGroupKey,
 } from "../domain/model.js";
 import {
@@ -32,107 +26,15 @@ import {
   retryTaskCenterJob,
   TASK_CENTER_MAX_ITEMS,
 } from "../domain/task-center-api.js";
-
-const ACTIVE_STATUSES = new Set(["queued", "running"]);
+import { isActiveJobStatus } from "@retainpdf/domain/job";
 
 const GROUP_ICONS = {
   running: Activity,
   queued: Clock3,
   failed: TriangleAlert,
   completed: CheckCircle2,
+  canceled: Ban,
 } satisfies Record<TaskCenterGroupKey, typeof Activity>;
-
-function shortJobId(jobId: string): string {
-  const value = `${jobId || ""}`.trim();
-  return value.length > 18 ? `${value.slice(0, 9)}…${value.slice(-6)}` : value;
-}
-
-function formatUpdatedAt(value: string): string {
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return "";
-  return formatZhDateTime(date);
-}
-
-function TaskRow({ job, busyAction, onOpen, onCancel, onRetry }: {
-  job: JobListItemView;
-  busyAction: string;
-  onOpen: (job: JobListItemView) => void;
-  onCancel: (job: JobListItemView) => void;
-  onRetry: (job: JobListItemView) => void;
-}) {
-  const status = `${job.status || ""}`.trim().toLowerCase();
-  const isActive = ACTIVE_STATUSES.has(status);
-  const progress = taskProgressPercent(job);
-  const busy = Boolean(busyAction);
-
-  return (
-    <article
-      className="rounded-2xl border border-border/70 bg-background/80 px-4 py-3 shadow-sm transition-shadow hover:shadow-md"
-      data-task-id={taskIdentity(job)}
-    >
-      <div className="flex min-w-0 items-start gap-3">
-        <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-muted text-foreground">
-          <FileText className="size-4" aria-hidden="true" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">文档</span>
-            <h3 className="min-w-0 truncate text-sm font-semibold text-foreground" title={taskDocumentLabel(job)}>
-              {taskDocumentLabel(job)}
-            </h3>
-          </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-            <span>任务 <code title={job.job_id}>{shortJobId(job.job_id)}</code></span>
-            <span>{taskWorkflowLabel(job)}</span>
-            {job.updated_at ? <span>{formatUpdatedAt(job.updated_at)}</span> : null}
-          </div>
-          {isActive && progress !== null ? (
-            <div className="mt-2 flex items-center gap-2" aria-label={`任务进度 ${Math.round(progress)}%`}>
-              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-                <div className="h-full rounded-full bg-foreground transition-[width]" style={{ width: `${progress}%` }} />
-              </div>
-              <span className="w-9 text-right text-[11px] text-muted-foreground">{Math.round(progress)}%</span>
-            </div>
-          ) : null}
-        </div>
-        <span className="shrink-0 rounded-full border border-border bg-background px-2.5 py-1 text-xs font-medium text-foreground">
-          {taskStatusLabel(job)}
-        </span>
-      </div>
-      <div className="mt-3 flex items-center justify-end gap-2 border-t border-border/60 pt-3">
-        <button
-          type="button"
-          className="inline-flex h-8 items-center justify-center rounded-lg border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
-          onClick={() => onOpen(job)}
-        >
-          打开详情
-        </button>
-        {isActive ? (
-          <button
-            type="button"
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
-            disabled={busy}
-            onClick={() => onCancel(job)}
-          >
-            {busyAction === "cancel" ? <LoaderCircle className="size-3.5 animate-spin" /> : <Square className="size-3.5" />}
-            {busyAction === "cancel" ? "取消中" : "取消任务"}
-          </button>
-        ) : null}
-        {status === "failed" ? (
-          <button
-            type="button"
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-foreground px-3 text-xs font-medium text-background hover:opacity-90 disabled:opacity-50"
-            disabled={busy}
-            onClick={() => onRetry(job)}
-          >
-            {busyAction === "retry" ? <LoaderCircle className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}
-            重试
-          </button>
-        ) : null}
-      </div>
-    </article>
-  );
-}
 
 export type TaskCenterOpenBookDetailInput = {
   job_id?: string;
@@ -157,6 +59,8 @@ export function TaskCenter({ onOpenBookDetail }: TaskCenterProps) {
   const [busyByJob, setBusyByJob] = useState<Record<string, string>>({});
   const mountedRef = useRef(true);
   const requestInFlightRef = useRef(false);
+  // 列表请求进行中又要求整页刷新（比如重试建了新任务）时记一笔，等这次请求结束再刷，不能直接丢掉。
+  const reloadQueuedRef = useRef(false);
   const liveInFlightRef = useRef(false);
 
   const itemsRef = useRef<JobListItemView[]>([]);
@@ -183,8 +87,11 @@ export function TaskCenter({ onOpenBookDetail }: TaskCenterProps) {
     }
   }, []);
 
-  const load = useCallback(async ({ append = false }: { append?: boolean } = {}) => {
-    if (requestInFlightRef.current) return;
+  const load = useCallback(async ({ append = false }: { append?: boolean } = {}): Promise<void> => {
+    if (requestInFlightRef.current) {
+      if (!append) reloadQueuedRef.current = true;
+      return;
+    }
     requestInFlightRef.current = true;
     setRefreshing(true);
     generationRef.current += 1;
@@ -208,9 +115,23 @@ export function TaskCenter({ onOpenBookDetail }: TaskCenterProps) {
         setLoading(false);
         setRefreshing(false);
       }
+      if (reloadQueuedRef.current && mountedRef.current) {
+        reloadQueuedRef.current = false;
+        void load();
+      }
     }
   }, [refreshLive]);
 
+  // 只刷新一条任务，已经翻过的页留着。取消之后用它：整页重拉会退回第一页。
+  const refreshJob = useCallback(async (job: JobListItemView) => {
+    const generation = generationRef.current;
+    const [fresh] = await loadTaskCenterLiveJobs([job]);
+    if (!fresh || !mountedRef.current || generation !== generationRef.current) return;
+    if (!itemsRef.current.some((item) => item.job_id === fresh.job_id)) return;
+    const merged = mergeTaskCenterJobs(itemsRef.current, [fresh]);
+    itemsRef.current = merged;
+    setItems(merged);
+  }, []);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -218,7 +139,7 @@ export function TaskCenter({ onOpenBookDetail }: TaskCenterProps) {
     return () => { mountedRef.current = false; generationRef.current += 1; };
   }, [load]);
 
-  const hasActiveTasks = items.some((job) => ACTIVE_STATUSES.has(`${job.status || ""}`.toLowerCase()));
+  const hasActiveTasks = items.some((job) => isActiveJobStatus(job.status));
   useTaskCenterAutoRefresh({
     itemsRef, nextOffsetRef, generationRef, mountedRef, setItems, hasActiveTasks, refreshLive,
     listInFlightRef: requestInFlightRef });
@@ -254,7 +175,7 @@ export function TaskCenter({ onOpenBookDetail }: TaskCenterProps) {
     try {
       await cancelTaskCenterJob(job);
       toast.success("已提交取消请求");
-      await load();
+      await refreshJob(job);
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "取消失败，请稍后重试。");
     } finally {
@@ -299,13 +220,14 @@ export function TaskCenter({ onOpenBookDetail }: TaskCenterProps) {
         </button>
       </header>
 
-      <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-5" aria-label="当前加载范围任务计数">
+      <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-6" aria-label="当前加载范围任务计数">
         {([
           ["全部", counts.total],
           ["运行中", counts.running],
           ["排队中", counts.queued],
           ["失败", counts.failed],
           ["已完成", counts.completed],
+          ["已取消", counts.canceled],
         ] as const).map(([label, count]) => (
           <div key={label} className="rounded-xl border border-border/70 bg-background/70 px-3 py-2.5">
             <div className="text-lg font-semibold text-foreground">{count}</div>

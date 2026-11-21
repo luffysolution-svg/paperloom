@@ -3,31 +3,13 @@
 from __future__ import annotations
 
 from importlib import import_module
-import sys
-from pathlib import Path
-
-
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-if str(REPO_SCRIPTS_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
 
 def _load_continuation_modules():
     return (
-        import_module("retainpdf_pipeline.translate.services.continuation.rules"),
-        import_module("retainpdf_pipeline.translate.services.continuation.state"),
+        import_module("retainpdf_translation.services.continuation.rules"),
+        import_module("retainpdf_translation.services.continuation.state"),
     )
-
-
-def test_continuation_imports_preserve_cached_module_identity() -> None:
-    package = import_module("retainpdf_pipeline.translate.services.continuation")
-    rules, state = _load_continuation_modules()
-    path_before = list(sys.path)
-    loaded_rules, loaded_state = _load_continuation_modules()
-    assert loaded_rules is rules is package.rules
-    assert loaded_state is state is package.state
-    assert sys.modules[package.__name__] is package
-    assert sys.path == path_before
 
 
 def _body(

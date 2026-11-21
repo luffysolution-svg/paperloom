@@ -14,8 +14,8 @@ import sys
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
 SELECTED_TESTS = (
-    ("retain-jobs", "job_runner::process_runner::tests::execute_process_job_injects_provider_and_translation_envs"),
-    ("rust_api", "api_tests::jobs_security::job_detail_and_events_routes_redact_secrets"),
+    ("retainpdf-runner", "job_runner::process_runner::tests::execute_process_job_injects_provider_and_translation_envs"),
+    ("retainpdf-api", "api_tests::jobs_security::job_detail_and_events_routes_redact_secrets"),
 )
 
 

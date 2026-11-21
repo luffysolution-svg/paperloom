@@ -1,25 +1,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 // 消费者契约测试: library / jobs 视图的 Rust 真值 ↔ TS 消费必须一致。
-// 真值: contracts/library-books.v1.schema.json 与 job-status.v1.schema.json
-// 生产侧: backend/packages/retain-core/src/models/view/job_types.rs
-// 消费侧: contracts 生成 DTO + frontend/web src/js/api/library-books.ts
+// 真值: contracts/job-status.v1.schema.json（library-books.v1 只剩删除任务的查询和返回，任务列表的定义都在 job-status.v1）
+// 生产侧: backend/packages/retainpdf-jobs/src/views/job_types.rs
+// 消费侧: contracts 生成 DTO（删除返回 LibraryDeleteResultView 由 @retainpdf/api 的 deleteJob 用）
 // 改契约先改 schema，再让两端测试变绿——与 ai-ask / ai-conversations 同门禁。
 
-const CONTRACT_PATH = join(process.cwd(), "..", "..", "contracts", "library-books.v1.schema.json");
+const CONTRACT_PATH = join(process.cwd(), "..", "..", "contracts", "job-status.v1.schema.json");
 const contract = JSON.parse(readFileSync(CONTRACT_PATH, "utf8"));
 
 function schemaProps(definition) {
   const def = contract.definitions[definition];
   assert.ok(def, `schema 缺少 definition ${definition}`);
   return new Set(Object.keys(def.properties || {}));
-}
-
-function schemaRequired(definition) {
-  return new Set(contract.definitions[definition]?.required || []);
 }
 
 function tsTypeFields(source, typeName) {
@@ -33,28 +29,11 @@ function tsTypeFields(source, typeName) {
   return new Set([...block.matchAll(/^\s*([a-zA-Z_][a-zA-Z0-9_]*)\??:/gm)].map((m) => m[1]));
 }
 
+// 生成的 TS 也读 job-status.ts：library-books 里重复登记的 GET /jobs 删了，library-books.ts 只导出删任务用到的类型。
 const generatedContractsSource = readFileSync(join(
   process.cwd(),
-  "../../contracts/src/library-books.ts",
+  "../../contracts/src/job-status.ts",
 ), "utf8");
-
-test("LibraryBookListItemView: TS 字段 ⊆ 契约，且关键字段齐全", () => {
-  const allowed = schemaProps("LibraryBookListItemView");
-  const tsFields = tsTypeFields(generatedContractsSource, "LibraryBookListItemView");
-  for (const field of ["job_id", "status", "progress", "cover_url", "display_name"]) {
-    assert.ok(allowed.has(field), `契约缺关键字段 ${field}`);
-    // TS 侧至少应消费/声明核心字段（若 TS 用可选，也算存在）
-    // 这里放宽：若 TS 缺少 display_name（title 别名），检查 title 兜底
-    if (field === "display_name") {
-      assert.ok(tsFields.has("display_name") || tsFields.has("title"), "TS 缺少 display_name/title");
-    } else {
-      assert.ok(tsFields.has(field) || field === "progress" || field === "cover_url", `TS 缺少 ${field}（可能可选，需显式声明）`);
-    }
-  }
-  for (const field of tsFields) {
-    assert.ok(allowed.has(field), `生成 DTO 声明了契约外字段 ${field}`);
-  }
-});
 
 test("JobProgressView: TS progress 字段 ⊆ 契约", () => {
   const allowed = schemaProps("JobProgressView");
@@ -67,33 +46,18 @@ test("JobProgressView: TS progress 字段 ⊆ 契约", () => {
   }
 });
 
-test("LibraryBookDetailView: artifacts 与 cover 相关字段存在于契约", () => {
-  const detailProps = schemaProps("LibraryBookDetailView");
-  for (const field of ["job_id", "title", "status", "progress", "cover_url", "thumbnail_url", "artifacts", "source_language", "file_size_bytes"]) {
-    assert.ok(detailProps.has(field), `契约 LibraryBookDetailView 缺字段 ${field}`);
-  }
-  const tsDetail = tsTypeFields(generatedContractsSource, "LibraryBookDetailView");
-  for (const field of ["job_id", "status", "cover_url", "thumbnail_url", "artifacts"]) {
-    assert.ok(tsDetail.has(field), `生成 DTO LibraryBookDetailView 缺 ${field}`);
-  }
-});
-
-test("API 路径: library-books 消费的路径落在契约端点内", () => {
-  const allowedPaths = new Set(contract.endpoints.map((e) => e.path));
-  // 消费侧路径取自 library-api-client + library-books.ts
-  // 消费侧真值是 @retainpdf/api 的 library-books 客户端。
-  // (原先还读 ../web-react/... 那份实验工作区，该目录早已删除，try/catch 把
-  //  失败静默吞掉，clientPaths 恒为空——一并移除，避免哑分支掩盖提取失效。)
-  const clientSrc = readFileSync(
-    join(process.cwd(), "..", "packages", "api", "src", "library-books.ts"),
-    "utf8",
-  );
-  const used = [...clientSrc.matchAll(/library\/books[^"\s`]*/g)].map((m) => m[0]);
-  assert.ok(used.length >= 2, `采集到的 library 路径过少(${used.length})，提取逻辑可能失效`);
-  for (const p of used) {
-    const normalized = p.split("?")[0].replace(/\/\$\{[^}]*\}/g, "/:job_id");
-    const matched = [...allowedPaths].some((allowed) => allowed.includes(normalized) || normalized.includes("library/books"));
-    assert.ok(matched, `消费了契约外的 library 路径 ${p}`);
+test("前端不再调书架接口 library/books：列表走 jobs?job_ids=，删除走 DELETE jobs/:id", () => {
+  // GET /library/books 冻结、GET /library/books/:job_id 已删（405），DELETE /library/books/:job_id 是旧地址。
+  // 这个契约文件只剩删除的返回形状 LibraryDeleteResultView 和共用的枚举、进度类型还在用。
+  const apiSrc = join(process.cwd(), "..", "packages", "api", "src");
+  const files = readdirSync(apiSrc, { recursive: true }).filter((file) => `${file}`.endsWith(".ts"));
+  assert.ok(files.length > 20, `采集到的接口文件过少(${files.length})`);
+  for (const file of files) {
+    const code = readFileSync(join(apiSrc, `${file}`), "utf8")
+      .split("\n")
+      .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line))
+      .join("\n");
+    assert.doesNotMatch(code, /library\/books/, `${file} 还在拼 library/books 地址`);
   }
 });
 

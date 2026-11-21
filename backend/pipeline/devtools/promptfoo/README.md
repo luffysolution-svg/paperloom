@@ -5,10 +5,10 @@
 当前链路分成三层：
 
 - Rust API 调试接口
-  - `GET /api/v1/jobs/{job_id}/translation/diagnostics`
-  - `GET /api/v1/jobs/{job_id}/translation/items`
-  - `GET /api/v1/jobs/{job_id}/translation/items/{item_id}`
-  - `POST /api/v1/jobs/{job_id}/translation/items/{item_id}/replay`
+  - `GET /api/v1/jobs/{job_id}/reports/translation`
+  - `GET /api/v1/jobs/{job_id}/translations`
+  - `GET /api/v1/jobs/{job_id}/translations/{item_id}`
+  - `POST /api/v1/jobs/{job_id}/translations/{item_id}/replay`
 - Python 单 item replay
   - `backend/pipeline/devtools/replay_translation_item.py`
 - Promptfoo fixture/eval
@@ -20,7 +20,7 @@
 
 ```bash
 curl -H 'X-API-Key: retain-pdf-desktop' \
-  'http://127.0.0.1:41000/api/v1/jobs/<job_id>/translation/items?final_status=kept_origin&q=protocol'
+  'http://127.0.0.1:41000/api/v1/jobs/<job_id>/translations?final_status=kept_origin&q=protocol'
 ```
 
 如果不想手写 curl，也可以直接用：
@@ -37,7 +37,7 @@ python backend/pipeline/devtools/translation_debug_api.py \
 
 ```bash
 curl -H 'X-API-Key: retain-pdf-desktop' \
-  'http://127.0.0.1:41000/api/v1/jobs/<job_id>/translation/items/<item_id>'
+  'http://127.0.0.1:41000/api/v1/jobs/<job_id>/translations/<item_id>'
 ```
 
 ```bash

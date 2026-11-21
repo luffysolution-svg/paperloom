@@ -10,20 +10,7 @@ import {
   upsertDocumentJob,
   useDocumentJobs,
 } from "../../src/features/book-detail/ui/use-document-jobs.js";
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitFor(predicate, description) {
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    const value = predicate();
-    if (value) return value;
-    await wait(10);
-  }
-  assert.fail(`等待超时：${description}`);
-}
+import { wait, waitFor } from "../helpers/async.mjs";
 
 test("documentJobs upsert 保留任务身份并合并 runtime 状态", () => {
   const queued = upsertDocumentJob([], {
@@ -264,6 +251,8 @@ test("useDocumentJobs 持续对账 document jobs 并在服务端成功时只发�
       documentId: "doc-polled",
       actions,
       refreshIntervalMs: 15,
+      // 这条测的是「成功只通知一次」，要求跑完后还继续刷新，所以慢速间隔也给 15ms。
+      idleRefreshIntervalMs: 15,
       onJobSucceeded() {
         successCount += 1;
       },
@@ -408,6 +397,74 @@ test("全局加号提交的 runtime 缺少 document_id 时会反查归属并立�
   assert.equal(hookState.latestTranslation.status, "running");
   assert.equal(hookState.latestTranslation.progress.percent, 30);
 
+  root.unmount();
+  dom.window.close();
+});
+
+test("useDocumentJobs：任务都结束后放慢轮询，不再每 2 秒问一次", async () => {
+  const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/index.html" });
+  for (const key of ["window", "document", "HTMLElement", "Node", "MutationObserver"]) {
+    Object.defineProperty(globalThis, key, { value: dom.window[key] ?? dom.window, configurable: true, writable: true });
+  }
+  globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+  const React = await import("react");
+  const { createRoot } = await import("react-dom/client");
+  let requestCount = 0;
+  let hookState = null;
+  const actions = {
+    async getDocumentJobs() {
+      requestCount += 1;
+      return { items: [{ job_id: "job-done", document_id: "doc-done", workflow: "translate", status: "succeeded", created_at: "2026-09-02T11:00:00Z" }] };
+    },
+  };
+  function Harness() {
+    hookState = useDocumentJobs({ open: true, documentId: "doc-done", actions, refreshIntervalMs: 10, idleRefreshIntervalMs: 10_000 });
+    return React.createElement("output", null, hookState.latestTranslation?.status || "idle");
+  }
+  const root = createRoot(dom.window.document.getElementById("root"));
+  root.render(React.createElement(Harness));
+  await waitFor(() => hookState?.latestTranslation?.status === "succeeded", "读到已完成的任务");
+  const afterLoad = requestCount;
+  await wait(80);
+  assert.ok(requestCount - afterLoad <= 1, `都结束了不该每 10ms 再问（多问了 ${requestCount - afterLoad} 次）`);
+  root.unmount();
+  dom.window.close();
+});
+
+test("useDocumentJobs：页面在后台时跳过轮询，切回前台立刻补问一次", async () => {
+  const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/index.html" });
+  for (const key of ["window", "document", "HTMLElement", "Node", "MutationObserver"]) {
+    Object.defineProperty(globalThis, key, { value: dom.window[key] ?? dom.window, configurable: true, writable: true });
+  }
+  globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+  let visibility = "visible";
+  Object.defineProperty(dom.window.document, "visibilityState", { get: () => visibility, configurable: true });
+  const React = await import("react");
+  const { createRoot } = await import("react-dom/client");
+  let requestCount = 0;
+  let hookState = null;
+  const actions = {
+    async getDocumentJobs() {
+      requestCount += 1;
+      return { items: [{ job_id: "job-run", document_id: "doc-run", workflow: "translate", status: "running", created_at: "2026-09-02T11:00:00Z" }] };
+    },
+  };
+  function Harness() {
+    hookState = useDocumentJobs({ open: true, documentId: "doc-run", actions, refreshIntervalMs: 10 });
+    return React.createElement("output", null, hookState.latestTranslation?.status || "idle");
+  }
+  const root = createRoot(dom.window.document.getElementById("root"));
+  root.render(React.createElement(Harness));
+  await waitFor(() => hookState?.latestTranslation?.status === "running", "读到在跑的任务");
+  visibility = "hidden";
+  await wait(20);
+  const hiddenAt = requestCount;
+  await wait(80);
+  assert.ok(requestCount - hiddenAt <= 1, `后台时不该每 10ms 再问（多问了 ${requestCount - hiddenAt} 次）`);
+  visibility = "visible";
+  const beforeVisible = requestCount;
+  dom.window.document.dispatchEvent(new dom.window.Event("visibilitychange"));
+  await waitFor(() => requestCount > beforeVisible, "切回前台立刻补问");
   root.unmount();
   dom.window.close();
 });

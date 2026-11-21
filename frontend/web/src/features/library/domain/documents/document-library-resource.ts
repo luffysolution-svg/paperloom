@@ -4,25 +4,29 @@
 
 import { createResource } from "@/platform/store/resource.js";
 import { RECENT_JOBS_PAGE_SIZE } from "../recent-jobs/pagination.js";
+import { normalizeExistingJobIds, type LibraryPageParams } from "../recent-jobs/library-books-resource.js";
 import { collectDocumentLibraryPage } from "./document-library-source.js";
+import type {
+  DocumentLibraryPreview,
+  DocumentListFetcher,
+} from "./document-library-source.js";
+import type {
+  JobPayloadFetcher,
+  JobsByIdsFetcher,
+} from "./shape-documents-with-books.js";
 
-function normalizeExistingJobIds(value) {
-  if (value instanceof Set) {
-    return value;
-  }
-  return new Set(
-    (Array.isArray(value) ? value : [])
-      .map((item) => `${item || ""}`.trim())
-      .filter(Boolean),
-  );
-}
 
 export function createDocumentLibraryResource({
   fetchDocumentList,
-  fetchLibraryBookList,
+  fetchJobsByIds,
   fetchJobPayload,
   apiPrefix,
-}: any = {}) {
+}: {
+  fetchDocumentList: DocumentListFetcher;
+  fetchJobsByIds?: JobsByIdsFetcher;
+  fetchJobPayload?: JobPayloadFetcher;
+  apiPrefix: string;
+}) {
   return createResource({
     name: "documentLibrary",
     cacheKey: ({
@@ -30,7 +34,7 @@ export function createDocumentLibraryResource({
       pageSize = RECENT_JOBS_PAGE_SIZE,
       query = "",
       existingJobIds = [],
-    } = {}) => JSON.stringify({
+    }: LibraryPageParams = {}) => JSON.stringify({
       startOffset: Number(startOffset) || 0,
       pageSize: Number(pageSize) || RECENT_JOBS_PAGE_SIZE,
       query: `${query || ""}`.trim(),
@@ -39,12 +43,12 @@ export function createDocumentLibraryResource({
     loader: ({
       startOffset = 0,
       pageSize = RECENT_JOBS_PAGE_SIZE,
-      existingJobIds = new Set(),
+      existingJobIds = new Set<string>(),
       query = "",
-      onPreview = undefined as ((page: any) => void) | undefined,
-    } = {}) => collectDocumentLibraryPage({
+      onPreview = undefined,
+    }: LibraryPageParams & { onPreview?: (page: DocumentLibraryPreview) => void } = {}) => collectDocumentLibraryPage({
       fetchDocumentList,
-      fetchLibraryBookList,
+      fetchJobsByIds,
       fetchJobPayload,
       apiPrefix,
       startOffset,

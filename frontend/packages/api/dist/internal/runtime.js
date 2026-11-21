@@ -88,7 +88,7 @@ export function frontendApiKey() {
 // preflighted request，多一轮 OPTIONS 往返；拉二进制产物（PDF / 缩略图）的 GET
 // 也会带上语义错误的 JSON 类型。实测主页一次加载有 30 条 GET 中招。
 //
-// 当前后端是 CorsLayer::permissive() 所以不会失败，但前面一旦加严格反代／WAF
+// 单机后端会照预检请求回显允许的方法和请求头，所以不会失败；但前面一旦加严格反代／WAF
 // （不允许 OPTIONS 或不 allow content-type），所有 GET 会直接挂。
 //
 // 有 body 的请求自行显式传入即可——本包 13 个带 body 的调用点里 12 个本来就
@@ -96,10 +96,38 @@ export function frontendApiKey() {
 // 对齐 web 侧 legacy 实现 `platform/config/runtime.ts` 的同名函数。
 export function buildApiHeaders(headers = {}) {
     const out = { ...headers };
-    const apiKey = frontendApiKey();
+    // 多用户模式靠登录 Cookie 认证，不再带部署密钥。
+    const apiKey = authMode === "multi" ? "" : frontendApiKey();
     if (apiKey)
         out["X-API-Key"] = apiKey;
     return out;
+}
+let authMode = "single";
+let unauthorizedHandler = null;
+export function setApiAuthMode(mode) {
+    authMode = mode === "multi" ? "multi" : "single";
+}
+export function getApiAuthMode() {
+    return authMode;
+}
+/** 多用户模式下任何请求回 401（登录过期、被管理员踢下线）时调用；登录接口自己的 401 不算。 */
+export function setApiUnauthorizedHandler(handler) {
+    unauthorizedHandler = handler;
+}
+function requestUrl(input) {
+    if (typeof input === "string")
+        return input;
+    if (input instanceof URL)
+        return input.href;
+    return input.url || "";
+}
+/** 本包所有请求都走这里：按当前模式补上 credentials，统一接住 401。 */
+export async function apiFetch(input, init = {}) {
+    const response = await fetch(input, authMode === "multi" ? { ...init, credentials: "include" } : init);
+    if (response.status === 401 && authMode === "multi" && !/\/auth\/(login|session)(\?|$)/.test(requestUrl(input))) {
+        unauthorizedHandler?.();
+    }
+    return response;
 }
 // 与 `@retainpdf/domain` 的同名实现对齐（packages/domain/src/job/core.ts）。
 //

@@ -1,5 +1,5 @@
+import type { DocumentJobsView } from "@retainpdf/api/documents";
 import {
-  clearMockFavoritesForDocument,
   deleteMockDocument,
   getMockDocument,
   getMockDocumentByJobId,
@@ -24,20 +24,18 @@ export async function fetchDocumentList(
     limit = 50,
     offset = 0,
     readingStatus = "",
-    tag = "",
     collectionId = "",
     q = "",
   }: {
     limit?: number;
     offset?: number;
     readingStatus?: string;
-    tag?: string;
     collectionId?: string;
     q?: string;
   } = {},
 ): Promise<MockDocumentListResult> {
   void apiPrefix;
-  return getMockDocumentList({ limit, offset, readingStatus, tag, collectionId, q });
+  return getMockDocumentList({ limit, offset, readingStatus, collectionId, q });
 }
 
 // 按任意 job_id(含历史 run)直查其所属文档,后端负责解析——前端不再扫列表反查。
@@ -66,7 +64,7 @@ export async function fetchDocument(
   return getMockDocument(normalized);
 }
 
-// body 支持 { title?, reading_status?, tags? };tags 是整体替换语义(传 [] 即清空)
+// body 支持 { title?, reading_status? }(标签 2026-09-26 已删)
 export async function patchDocument(
   apiPrefix: string,
   documentId: string,
@@ -81,8 +79,8 @@ export async function patchDocument(
 }
 
 // 文档级删除:删掉 document + 名下所有 job/upload/文件(后端 DELETE /documents/:id)。
-// 被收藏引用时后端返回 409(force 可覆盖运行中的 job,不覆盖收藏保护)。
-export async function deleteDocument(apiPrefix, documentId, { force = false } = {}) {
+// 文档下还有排队或运行中的任务时后端返回 409(force=true 才删);mock 不模拟这一条。
+export async function deleteDocument(apiPrefix: string, documentId: string, { force = false }: { force?: boolean } = {}) {
   void apiPrefix;
   void force;
   const normalized = `${documentId || ""}`.trim();
@@ -90,17 +88,6 @@ export async function deleteDocument(apiPrefix, documentId, { force = false } = 
     throw new Error("缺少 document_id。");
   }
   return deleteMockDocument(normalized);
-}
-
-// DELETE clear_favorites_path（后端在 DELETE_BLOCKED_BY_FAVORITES.details 里给的
-// 路径；文档级/run 级共用）。返回实际删除的收藏条数。
-export async function clearFavorites(apiPrefix, clearFavoritesPath) {
-  void apiPrefix;
-  const raw = `${clearFavoritesPath || ""}`.trim();
-  if (!raw) return 0;
-  // mock 只实现了文档级清空；run 级路径同样解析到所属文档。
-  const match = raw.match(/\/documents\/([^/]+)\/favorites$/);
-  return match ? clearMockFavoritesForDocument(decodeURIComponent(match[1])) : 0;
 }
 
 // 对馆藏文档发起"以后再翻":复用文档已存的 upload 起 book 翻译 job。
@@ -136,7 +123,7 @@ export async function fetchDocumentJobs(
   apiPrefix: string,
   documentId: string,
   { limit = 50, offset = 0 }: { limit?: number; offset?: number } = {},
-): Promise<any> {
+): Promise<DocumentJobsView> {
   void apiPrefix;
   const normalized = `${documentId || ""}`.trim();
   if (!normalized) return { items: [] };

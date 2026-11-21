@@ -38,8 +38,8 @@ async fn diagnostics_route_exposes_stable_failure_summary() {
         raw_error_excerpt: None,
         raw_diagnostic: None,
         ai_diagnostic: None,
-        resume_from: None,
-        recovery_hint: None,
+            resume_from: None,
+            recovery_hint: None,
     });
     state.db.save_job(&job).expect("save job");
 
@@ -47,7 +47,7 @@ async fn diagnostics_route_exposes_stable_failure_summary() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/api/v1/jobs/job-diagnostics-route/diagnostics")
+                .uri("/api/v1/jobs/job-diagnostics-route/reports/failure")
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("diagnostics request"),
@@ -117,7 +117,7 @@ async fn diagnostics_route_exposes_render_diagnostics_from_pipeline_summary() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/api/v1/jobs/job-render-diagnostics-route/diagnostics")
+                .uri("/api/v1/jobs/job-render-diagnostics-route/reports/failure")
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("diagnostics request"),

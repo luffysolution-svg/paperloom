@@ -1,47 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { JSDOM } from "jsdom";
+import { wait, waitFor } from "../helpers/async.mjs";
+import { makeDom } from "../helpers/dom.mjs";
 
 // 已有书再翻译链(B4):selectJob 有 document_id 时只开详情不开上传框;
 // 详情翻译提交后进度接在 #book-detail-status-section,网格静默不闪 loading。
 //
 // 风格沿用 book-detail-dialog-component.test.mjs:每条用例一份全新 JSDOM
 // (同一 jsdom 第二次 createRoot 会停摆),click 补 mousedown 贴近 Radix。
-
-function makeDom(search = "") {
-  const dom = new JSDOM("<!doctype html><html><body></body></html>", {
-    url: `http://localhost/index.html${search}`,
-  });
-  for (const key of ["window", "document", "DocumentFragment", "HTMLElement", "HTMLButtonElement", "HTMLFormElement", "HTMLInputElement", "CustomEvent", "Event", "KeyboardEvent", "MouseEvent", "Node", "MutationObserver", "NodeFilter"]) {
-    Object.defineProperty(globalThis, key, {
-      value: dom.window[key] ?? dom.window,
-      writable: true,
-      configurable: true,
-    });
-  }
-  globalThis.window = dom.window;
-  globalThis.requestAnimationFrame = (callback) => setTimeout(() => callback(0), 0);
-  globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
-  globalThis.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
-  globalThis.IS_REACT_ACT_ENVIRONMENT = false;
-  return dom;
-}
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitFor(predicate, description) {
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    const value = predicate();
-    if (value) {
-      return value;
-    }
-    await wait(15);
-  }
-  assert.fail(`等待超时：${description}`);
-}
 
 test("有 document_id 点卡开详情,不开上传框", async () => {
   const dom = makeDom();
@@ -129,11 +95,10 @@ test("详情翻译提交接进度:静默 attach + 状态区占位,不弹上传�
   // 迁移期留的，本文件曾是全仓唯一还靠它活着的地方。窄口下只需给出组件真正
   // 用到的那几个域（TranslateProgress 要 library.actions / statusCard.store /
   // statusDetail.controller），其余域缺席即可——没被调用的 hook 不会取上下文。
-  const { HomeShellProviders } = await import(
-    "../../src/ui/context/home-services-context.js"
-  );
-  const { BookTranslationWorkflowPanel } = await import(
-    "../../src/features/book-detail/ui/panels/translate/WorkflowPanel.jsx"
+  const { withHomeProviders } = await import("../helpers/home-providers.mjs");
+  // 进度页改版后，任务进度（#book-detail-status-section）挂在状态行的按钮组里。
+  const { ProcessingHeadTools } = await import(
+    "../../src/features/book-detail/ui/panels/processing/ProcessingHeadTools.jsx"
   );
 
   const fakeServices = {
@@ -144,6 +109,18 @@ test("详情翻译提交接进度:静默 attach + 状态区占位,不弹上传�
     statusDetail: { controller: { openStatusDetailDialog: () => {} } },
   };
   const noop = () => {};
+  const toolsProps = (translation) => ({
+    ocr: { job: null, pending: false, cancelling: false, error: "", rangeOn: false, pageSpec: "", onRangeOnChange: noop, onPageSpecChange: noop, onOcr: noop, onCancel: noop },
+    translation,
+    bootstrapping: false,
+    stationMode: false,
+    ocrActive: false,
+    ocrCancelable: false,
+    ocrJobId: "",
+    translationStopped: false,
+    translationCancelled: false,
+    primary: null,
+  });
   const baseProps = {
     item: {},
     status: { label: "未翻译", tone: "muted" },
@@ -167,13 +144,7 @@ test("详情翻译提交接进度:静默 attach + 状态区占位,不弹上传�
   const host = dom.window.document.createElement("div");
   dom.window.document.body.appendChild(host);
   const root = createRoot(host);
-  root.render(
-    React.createElement(
-      HomeShellProviders,
-      { services: fakeServices },
-      React.createElement(BookTranslationWorkflowPanel, baseProps),
-    ),
-  );
+  root.render(await withHomeProviders(React, fakeServices, React.createElement(ProcessingHeadTools, toolsProps(baseProps))));
   await waitFor(
     () => dom.window.document.getElementById("book-detail-status-section"),
     "提交中详情状态区占位",
@@ -190,13 +161,11 @@ test("详情翻译提交接进度:静默 attach + 状态区占位,不弹上传�
   const idleHost = dom.window.document.createElement("div");
   dom.window.document.body.appendChild(idleHost);
   const idleRoot = createRoot(idleHost);
-  idleRoot.render(
-    React.createElement(
-      HomeShellProviders,
-      { services: fakeServices },
-      React.createElement(BookTranslationWorkflowPanel, { ...baseProps, busy: "" }),
-    ),
-  );
+  idleRoot.render(await withHomeProviders(
+    React,
+    fakeServices,
+    React.createElement(ProcessingHeadTools, toolsProps({ ...baseProps, busy: "" })),
+  ));
   await wait(50);
   assert.equal(
     dom.window.document.getElementById("book-detail-status-section"),

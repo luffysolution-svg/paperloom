@@ -1,0 +1,57 @@
+/* 管理后台（admin.html）· 邀请码：生成表单四栏、邀请码等宽显示、复制按钮、展开的注册账号列表。配色只用主题变量。
+ *
+ * @owns admin
+ */
+
+.admin-fields.admin-fields-4 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.admin-invite-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  user-select: all;
+}
+
+.admin-invite-copy {
+  display: inline-flex;
+  gap: 8px;
+  margin-left: 10px;
+}
+
+.admin-invite-note {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-row-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.admin-detail-row > td {
+  padding: 10px 14px 14px;
+  background: color-mix(in srgb, var(--line) 25%, transparent);
+  white-space: normal;
+}
+
+.admin-invite-users {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.admin-create-hint {
+  flex-basis: 100%;
+}
+
+@media (max-width: 760px) {
+  .admin-fields.admin-fields-4 {
+    grid-template-columns: 1fr;
+  }
+}

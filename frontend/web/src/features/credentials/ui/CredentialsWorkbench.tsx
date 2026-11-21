@@ -9,14 +9,12 @@ import { useEffect, useRef, useState } from "react";
 import { CREDENTIAL_DOM_IDS } from "./credentials-dom-ids.js";
 import { useCredentialsController } from "./useCredentialsController.js";
 import { OcrPanels, TranslationPanel } from "./ProviderPanels.jsx";
-import { Button as ButtonBase } from "@/ui/Button.jsx";
-import { DialogFooter } from "@/ui/components/dialog.js";
-import { FormStatusLine } from "@/ui/components/form-status-line.js";
+import { Button } from "@retainpdf/ui";
+import { DialogFooter } from "@retainpdf/ui";
+import { FormStatusLine } from "@retainpdf/ui";
 import { Check, Pickaxe, Save, ScanLine, ScanText } from "lucide-react";
 import { OCR_PROVIDER_DEFINITIONS } from "@/platform/config/providers.js";
 import { ChoiceTiles } from "./ChoiceTiles.jsx";
-
-const Button = ButtonBase as any;
 
 const { browser: BROWSER_IDS } = CREDENTIAL_DOM_IDS;
 

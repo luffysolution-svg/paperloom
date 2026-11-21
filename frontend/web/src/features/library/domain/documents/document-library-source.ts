@@ -4,24 +4,31 @@
 // recent-jobs 的 loader.js/commit.js/store 引擎可以一行不改地消费它。
 //
 // 每篇文档产出一张卡:先拉一页 /documents,收集该页 active_job_id,批量向
-// library/books?job_ids= 取这些 job 的实时活态,再按 job_id 合并
+// jobs?job_ids= 取这些 job 的实时活态,再按 job_id 合并
 // (shapeDocumentCardItem)。馆藏文档(无 active_job_id)拿合成 job_id 穿过引擎。
 //
 // 搜索：query 经 `q` 透传给后端（标题/原始文件名 LIKE，total 已是过滤后计数），
 // 分页照常走 limit/offset，不做客户端过滤或首屏多拉。
 
-import { shapeDocumentsWithBooks } from "./shape-documents-with-books.js";
+import {
+  shapeDocumentsWithBooks,
+} from "./shape-documents-with-books.js";
+import type {
+  JobPayloadFetcher,
+  JobsByIdsFetcher,
+} from "./shape-documents-with-books.js";
 import { shapeDocumentCardItem } from "./document-card-item.js";
+import type { LibraryDocumentRecord } from "./document-card-item.js";
 import {
   libraryCardIdentity,
   libraryCardIdentityAliases,
 } from "../recent-jobs/library-card-identity.js";
 
-function normalizedJobId(value) {
+function normalizedJobId(value: unknown) {
   return `${value || ""}`.trim();
 }
 
-function normalizedExistingCardIdentity(value) {
+function normalizedExistingCardIdentity(value: unknown) {
   const normalized = normalizedJobId(value);
   if (!normalized) return "";
   return normalized.startsWith("document:") || normalized.startsWith("job:")
@@ -29,9 +36,26 @@ function normalizedExistingCardIdentity(value) {
     : `job:${normalized}`;
 }
 
+export type DocumentListPayload = {
+  documents?: LibraryDocumentRecord[];
+  total?: number;
+};
+
+export type DocumentListFetcher = (
+  apiPrefix: string,
+  opts: { limit: number; offset: number; q?: string },
+) => Promise<DocumentListPayload>;
+
+export type DocumentLibraryPreview = {
+  collected: ReturnType<typeof shapeDocumentCardItem>[];
+  hasMore: boolean;
+  nextOffset: number;
+  latestInvocationSummary: null;
+};
+
 export async function collectDocumentLibraryPage({
   fetchDocumentList,
-  fetchLibraryBookList,
+  fetchJobsByIds,
   fetchJobPayload,
   apiPrefix,
   startOffset = 0,
@@ -39,7 +63,17 @@ export async function collectDocumentLibraryPage({
   existingJobIds = new Set(),
   query = "",
   onPreview,
-}: any) {
+}: {
+  fetchDocumentList: DocumentListFetcher;
+  fetchJobsByIds?: JobsByIdsFetcher;
+  fetchJobPayload?: JobPayloadFetcher;
+  apiPrefix: string;
+  startOffset?: number;
+  pageSize: number;
+  existingJobIds?: Set<string> | string[];
+  query?: string;
+  onPreview?: (page: DocumentLibraryPreview) => void;
+}) {
   const trimmedQuery = `${query || ""}`.trim();
   const seenCardIdentities = new Set(
     Array.from(existingJobIds instanceof Set
@@ -83,7 +117,7 @@ export async function collectDocumentLibraryPage({
   let shaped;
   try {
     shaped = await shapeDocumentsWithBooks(documents, {
-      fetchLibraryBookList, fetchJobPayload, apiPrefix,
+      fetchJobsByIds, fetchJobPayload, apiPrefix,
     });
     if (typeof onPreview === "function") {
       shaped = shaped.map((item) => ({

@@ -22,15 +22,16 @@ export function mountAppUpdateFeature({
 }: any = {}) {
   if (desktopUpdater) {
     let disposed = false, events = 0, status = "idle";
-    const apply = (state) => { if (!disposed) { status = state.status; viewPort.setDesktopState(state); } };
-    const unsubscribe = desktopUpdater.subscribe((state) => { events += 1; apply(state); });
-    async function invoke(command) {
+    const apply = (state: { status: string; error?: string; [key: string]: unknown }) => { if (!disposed) { status = state.status; viewPort.setDesktopState(state); } };
+    const unsubscribe = desktopUpdater.subscribe((state: { status: string; error?: string; [key: string]: unknown }) => { events += 1; apply(state); });
+    async function invoke(command: string) {
       const before = events;
       try {
         const state = await desktopUpdater.invoke(command);
         if (events === before) apply(state);
-      } catch (error) {
-        if (events === before) apply({ status: "error", error: error.message });
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error || "");
+        if (events === before) apply({ status: "error", error: message });
       }
     }
     viewPort.bindButton({
@@ -48,7 +49,7 @@ export function mountAppUpdateFeature({
       dispose: () => { disposed = true; if (timer !== null) window.clearTimeout(timer); unsubscribe(); },
     };
   }
-  function applyUpdateInfo(info) {
+  function applyUpdateInfo(info: { hasUpdate?: boolean; [key: string]: unknown } | null | undefined) {
     if (!info) {
       viewPort.setReady();
       return;

@@ -7,16 +7,14 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-import fitz
-
 
 REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
 from retainpdf_pipeline.foundation.shared.job_dirs import ensure_job_dirs
 from retainpdf_pipeline.foundation.shared.job_dirs import resolve_job_dirs
 from retainpdf_pipeline.ocr.document_schema import validate_saved_document_path
 from retainpdf_pipeline.ocr.ocr_provider.paddle_runner import run_paddle_to_job_dir
+from devtools.tests.pdf_fixtures import write_pdf
 
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "paddle_complex_ocr.golden.json"
@@ -34,10 +32,7 @@ EXPECTED_ASSETS = {
 
 
 def _write_source_pdf(path: Path) -> None:
-    document = fitz.open()
-    document.new_page(width=600, height=800)
-    document.save(path)
-    document.close()
+    write_pdf(path, width=600, height=800)
 
 
 def _runner_args(*, job_root: Path, source_pdf: Path) -> SimpleNamespace:

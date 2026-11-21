@@ -8,6 +8,7 @@ from devtools.architecture_checks.document_semantics import check_document_seman
 from devtools.architecture_checks.entrypoints import check_entrypoint_stable_imports
 from devtools.architecture_checks.entrypoints import check_stage_spec_contract_checker
 from devtools.architecture_checks.entrypoints import check_top_level_shim_freeze
+from devtools.architecture_checks.ocr_layers import check_ocr_normalization_layers
 from devtools.architecture_checks.providers import check_ocr_provider_boundaries
 from devtools.architecture_checks.providers import check_pipeline_provider_leaks
 from devtools.architecture_checks.providers import check_service_provider_raw_leaks
@@ -16,6 +17,7 @@ from devtools.architecture_checks.stage_contract_duplicates import check_stage_c
 from devtools.architecture_checks.rendering import check_rendering_internal_boundaries
 from devtools.architecture_checks.translation import check_devtools_translation_internal_usage
 from devtools.architecture_checks.translation import check_translation_internal_boundaries
+from devtools.architecture_checks.translation import check_translation_library_self_contained
 from devtools.architecture_checks.translation import check_translation_pipeline_facade_boundary
 from devtools.architecture_checks.translation import check_translation_public_surface_usage
 from devtools.architecture_checks.translation import check_translation_rendering_separation
@@ -34,6 +36,7 @@ def main() -> int:
         check_entrypoint_stable_imports(errors)
         check_top_level_shim_freeze(errors)
         check_ocr_provider_boundaries(errors)
+        check_ocr_normalization_layers(errors)
         check_translation_worker_protocol(errors)
         check_stage_spec_contract_checker(errors)
         check_translation_pipeline_facade_boundary(errors)
@@ -44,6 +47,7 @@ def main() -> int:
         check_rendering_internal_boundaries(errors)
         check_translation_rendering_separation(errors)
         check_translation_internal_boundaries(errors)
+        check_translation_library_self_contained(errors)
         check_translation_payload_field_writers(errors)
         check_translation_source_text_readers(errors)
         check_stage_contract_duplicates(errors)

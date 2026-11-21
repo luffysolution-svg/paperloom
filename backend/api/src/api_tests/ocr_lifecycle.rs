@@ -55,7 +55,7 @@ normalized.write_text(json.dumps({
     }]
 }), encoding="utf-8")
 report.write_text(json.dumps({"validation": {"valid": True}}), encoding="utf-8")
-markdown.write_text("# OCR lifecycle\n\nOCR lifecycle source text\n", encoding="utf-8")
+markdown.write_text("# OCR lifecycle\n\nOCR lifecycle source text\n", encoding="utf-8", newline="\n")
 
 print(f"job root: {job_root}", flush=True)
 print(f"source pdf: {source_pdf}", flush=True)
@@ -64,21 +64,8 @@ print(f"normalization report json: {report}", flush=True)
 print("schema version: 1.1", flush=True)
 "##;
 
-fn multipart_ocr_request(boundary: &str, pdf_bytes: &[u8]) -> Vec<u8> {
+fn multipart_upload_request(boundary: &str, pdf_bytes: &[u8]) -> Vec<u8> {
     let mut body = Vec::new();
-    for (name, value) in [
-        ("workflow", "ocr"),
-        ("provider", "local"),
-        ("ocr_options", r#"{"command":"fake-local-ocr"}"#),
-        ("timeout_seconds", "10"),
-    ] {
-        body.extend_from_slice(
-            format!(
-                "--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n"
-            )
-            .as_bytes(),
-        );
-    }
     body.extend_from_slice(
         format!(
             "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"ocr-only.pdf\"\r\nContent-Type: application/pdf\r\n\r\n"
@@ -122,42 +109,89 @@ async fn ocr_only_submission_reaches_reader_and_document_outputs() {
         .expect("write fake package init");
     fs::write(fake_stage.join("__init__.py"), b"").expect("write fake stage init");
     fs::write(fake_stage.join("__main__.py"), FAKE_OCR_WORKER).expect("write fake stage worker");
-    let python_stub = bin_dir.join("python3");
-    fs::write(
-        &python_stub,
-        format!(
-            "#!/bin/sh\nexport PYTHONPATH=\"{}:$PYTHONPATH\"\nexec python3 \"$@\"\n",
-            fake_lib.to_string_lossy()
-        ),
-    )
-    .expect("write fake python wrapper");
     #[cfg(unix)]
-    {
+    let python_stub = {
+        let stub = bin_dir.join("python3");
+        fs::write(
+            &stub,
+            format!(
+                "#!/bin/sh\nexport PYTHONPATH=\"{}:$PYTHONPATH\"\nexec python3 \"$@\"\n",
+                fake_lib.to_string_lossy()
+            ),
+        )
+        .expect("write fake python wrapper");
         use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&python_stub, fs::Permissions::from_mode(0o700))
+        fs::set_permissions(&stub, fs::Permissions::from_mode(0o700))
             .expect("make stub executable");
-    }
+        stub
+    };
+    #[cfg(windows)]
+    let python_stub = {
+        let stub = bin_dir.join("python3.cmd");
+        let real_python = crate::test_support::python::project_venv_bin("python");
+        fs::write(
+            &stub,
+            format!(
+                "@echo off\r\nset \"PYTHONPATH={};%PYTHONPATH%\"\r\n\"{}\" %*\r\n",
+                fake_lib.to_string_lossy(),
+                real_python.to_string_lossy(),
+            ),
+        )
+        .expect("write fake python wrapper");
+        stub
+    };
     let mut config = (*state.config).clone();
     config.python_bin = python_stub.to_string_lossy().to_string();
     state.config = std::sync::Arc::new(config);
     let app = build_app(state.clone());
     let boundary = "retainpdf-ocr-lifecycle-boundary";
 
-    let create_response = app
+    // 只做 OCR 的任务：先 POST /uploads 上传 PDF，再 POST /jobs 用 JSON 建任务。
+    let upload_response = app
         .clone()
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/ocr/jobs")
+                .uri("/api/v1/uploads")
                 .header("X-API-Key", "test-key")
                 .header(
                     header::CONTENT_TYPE,
                     format!("multipart/form-data; boundary={boundary}"),
                 )
-                .body(Body::from(multipart_ocr_request(
+                .body(Body::from(multipart_upload_request(
                     boundary,
                     &minimal_pdf_bytes(595, 842),
                 )))
+                .expect("upload request"),
+        )
+        .await
+        .expect("upload response");
+    assert_eq!(upload_response.status(), StatusCode::OK);
+    let upload_payload = read_json(upload_response).await;
+    let upload_id = upload_payload["data"]["upload_id"]
+        .as_str()
+        .expect("upload id")
+        .to_string();
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/jobs")
+                .header("X-API-Key", "test-key")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "workflow": "ocr",
+                        "source": { "upload_id": upload_id },
+                        // 本地 OCR 的命令只能服务器定（2026-10-22），请求带 options.command 会 400；
+                        // 这里的假 worker 本来也不跑命令。
+                        "ocr": { "provider": "local" },
+                        "runtime": { "timeout_seconds": 10 }
+                    })
+                    .to_string(),
+                ))
                 .expect("OCR create request"),
         )
         .await
@@ -221,7 +255,7 @@ async fn ocr_only_submission_reaches_reader_and_document_outputs() {
         .clone()
         .oneshot(
             Request::builder()
-                .uri(format!("/api/v1/jobs/{job_id}/normalized-document"))
+                .uri(format!("/api/v1/jobs/{job_id}/files/internal/normalized-document.json"))
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("normalized document request"),
@@ -263,7 +297,7 @@ async fn ocr_only_submission_reaches_reader_and_document_outputs() {
     let markdown_response = app
         .oneshot(
             Request::builder()
-                .uri(format!("/api/v1/jobs/{job_id}/markdown?raw=true"))
+                .uri(format!("/api/v1/jobs/{job_id}/files/output/ocr.md"))
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("markdown request"),
@@ -298,9 +332,19 @@ async fn canceling_a_normalizing_ocr_job_kills_the_worker_process() {
     let state = test_state("ocr-cancel-normalizing");
     let job_id = "job-cancel-normalizing";
 
-    let mut command = tokio::process::Command::new("sleep");
-    command.arg("300");
-    retain_proc::configure_child_process(&mut command);
+    #[cfg(unix)]
+    let mut command = {
+        let mut command = tokio::process::Command::new("sleep");
+        command.arg("300");
+        command
+    };
+    #[cfg(windows)]
+    let mut command = {
+        let mut command = tokio::process::Command::new("cmd");
+        command.args(["/C", "ping -n 300 127.0.0.1 > NUL"]);
+        command
+    };
+    retainpdf_proc::configure_child_process(&mut command);
     let mut child = command.spawn().expect("spawn stand-in worker");
     let pid = child.id().expect("worker pid");
 
@@ -329,7 +373,7 @@ async fn canceling_a_normalizing_ocr_job_kills_the_worker_process() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(format!("/api/v1/ocr/jobs/{job_id}/cancel"))
+                .uri(format!("/api/v1/jobs/{job_id}/actions/cancel"))
                 .header("X-API-Key", "test-key")
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::empty())

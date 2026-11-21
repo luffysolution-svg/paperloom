@@ -15,8 +15,8 @@ REPO_ROOT = SCRIPTS_ROOT.parents[1]
 if str(SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_ROOT))
 
-from retainpdf_pipeline.translate.core.payload import load_translation_manifest_file
-from retainpdf_pipeline.translate.core.payload import load_translations
+from retainpdf_translation.core.payload import load_translation_manifest_file
+from retainpdf_translation.core.payload import load_translations
 
 
 LIST_SEPARATOR = "||"

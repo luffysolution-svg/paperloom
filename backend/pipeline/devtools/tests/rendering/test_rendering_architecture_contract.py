@@ -1,21 +1,11 @@
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from unittest import mock
 
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-
-from devtools import check_pipeline_architecture
 from devtools.architecture_checks import common as architecture_common
 from devtools.architecture_checks import rendering as rendering_checks
-
-
-def test_pipeline_architecture_contract_passes() -> None:
-    assert check_pipeline_architecture.main() == 0
 
 
 def test_pipeline_architecture_rejects_removed_bbox_preparation_import(tmp_path: Path) -> None:

@@ -14,7 +14,7 @@ from retainpdf_pipeline.render.document.metadata import copy_toc
 from retainpdf_pipeline.render.source.items import iter_valid_translated_items
 from retainpdf_pipeline.render.source.redaction import redact_source_text_areas
 from retainpdf_pipeline.render.source.vector_text import collect_vector_text_rects
-from retainpdf_pipeline.services.pipeline_shared.events import emit_render_page_progress
+from retainpdf_base.events import emit_render_page_progress
 from retainpdf_pipeline.render.visual_profile import VisualProfileRuntime
 
 

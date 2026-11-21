@@ -1,18 +1,13 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 
 import pytest
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
-
-from retainpdf_pipeline.translate.core.payload.parts.policy_state import mark_policy_skip
-from retainpdf_pipeline.translate.core.payload.parts.policy_state import mark_translation_required
-from retainpdf_pipeline.translate.core.payload.parts.common import seed_orchestration_metadata
-from retainpdf_pipeline.translate.services.policy.payload_rules.policy_mutations import reset_policy_state
+from retainpdf_translation.core.payload.parts.policy_state import mark_policy_skip
+from retainpdf_translation.core.payload.parts.policy_state import mark_translation_required
+from retainpdf_translation.core.payload.parts.common import seed_orchestration_metadata
+from retainpdf_translation.services.policy.payload_rules.policy_mutations import reset_policy_state
 
 
 def test_reset_policy_preserves_completed_keep_origin_result() -> None:

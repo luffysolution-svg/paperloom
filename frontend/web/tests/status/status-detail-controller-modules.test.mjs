@@ -46,12 +46,12 @@ test("resume actions:syncRerunAction 经 store 驱动按钮状态", () => {
     },
     store,
     dialogStore: createStatusDetailDialogStore(),
-    rerunJob: async () => ({ job_id: "job-2" }),
-    resolveActions: () => ({ rerunEnabled: true, rerun: "rerun-url" }),
+    resumeJob: async () => ({ job_id: "job-2" }),
+    resolveActions: () => ({ resumeEnabled: true }),
   });
 
-  const actionUrl = resume.syncRerunAction();
-  assert.equal(actionUrl, "rerun-url");
+  // 返回的是续跑目标：POST /jobs/<它>/actions/resume。
+  assert.equal(resume.syncRerunAction(), "job-1");
   assert.equal(store.getSnapshot().overview.rerun.enabled, true);
   assert.match(store.getSnapshot().overview.rerun.status, /可从 ocr 恢复/);
 });

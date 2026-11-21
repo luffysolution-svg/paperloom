@@ -2,16 +2,10 @@ from __future__ import annotations
 
 import json
 import subprocess
-import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-import fitz
 import pytest
-
-
-PIPELINE_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(PIPELINE_ROOT))
 
 
 from retainpdf_pipeline.ocr.ocr_provider import paddle_cli
@@ -21,14 +15,11 @@ from retainpdf_pipeline.ocr.ocr_provider.paddle_cli import PaddleCliArtifacts
 from retainpdf_pipeline.ocr.ocr_provider.paddle_cli import paddle_cli_payload_for_document_schema
 from retainpdf_pipeline.ocr.ocr_provider.paddle_cli import run_paddle_cli
 from retainpdf_pipeline.ocr.ocr_provider.paddle_runner import run_paddle_to_job_dir
+from devtools.tests.pdf_fixtures import write_pdf
 
 
 def _write_pdf(path: Path) -> None:
-    doc = fitz.open()
-    page = doc.new_page(width=320, height=480)
-    page.insert_text((32, 48), "Paddle CLI smoke")
-    doc.save(path)
-    doc.close()
+    write_pdf(path, width=320, height=480, text="Paddle CLI smoke", at=(32, 48))
 
 
 def _job_args(tmp_path: Path, source_pdf: Path, **overrides: object) -> SimpleNamespace:

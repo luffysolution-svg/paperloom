@@ -24,10 +24,9 @@
   --z-ambient: 1;
   --z-chrome: 35;
   --z-hud: 36;
-  --z-dialog: 40;
-  --z-notes-float: 48;
   --z-selection-pop: 55;
-  --z-fab: 70;
   --z-region-popover: 80;
+  /* 告知层压住所有浮层 —— 理由写在 reader 那份里（致命错误被浮窗盖住过） */
+  --z-dialog: 95;
   --reader-topbar-offset: 48px;
 }

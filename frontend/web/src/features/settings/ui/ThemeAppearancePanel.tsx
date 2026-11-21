@@ -3,6 +3,7 @@
 // 字体：渲染字体族（request.render.typst_font_family），持久化至 localStorage 并在创建任务时注入
 
 import { useEffect, useState } from "react";
+import { Select } from "@retainpdf/ui";
 import { cn } from "@/ui/lib/utils";
 import {
   getTheme,
@@ -22,6 +23,14 @@ const FALLBACK_FONTS: FontInfo[] = [
   { family: "Source Han Serif SC", files: [], available: true },
   { family: "Source Han Sans SC", files: [], available: true },
 ];
+
+// 和后端 render/workflow/engine_dispatch.py 的 RPR_SUPPORTED_FONT_FAMILIES 一致：新排版引擎只有思源宋体的
+// 字宽表，选别的字体会悄悄退回 Typst。
+const RPR_ENGINE_FONTS: readonly string[] = ["source han serif sc", "noto serif cjk sc"];
+
+export function usesRprEngine(family: string): boolean {
+  return RPR_ENGINE_FONTS.includes(`${family || ""}`.trim().toLowerCase());
+}
 
 function FontSelector() {
   const [fonts, setFonts] = useState<FontInfo[]>(FALLBACK_FONTS);
@@ -97,21 +106,22 @@ function FontSelector() {
   }
 
   return (
-    <div className="font-selector" id="font-selector" data-testid="font-selector">
+    <div className="app-settings-font" id="font-selector" data-testid="font-selector">
       <h3 className="theme-appearance-group-title">渲染字体</h3>
-      <p className="text-xs text-neutral-500" style={{ margin: "4px 0 8px" }}>
-        用于 Typst 渲染的正文字体族（request.render.typst_font_family），随下次新建任务生效。
+      <p className="app-settings-font-hint">
+        译文正文用的字体，随下次新建任务生效。目前只有思源宋体能用新的排版引擎；选其它字体会改用旧的
+        Typst 排版，版面效果差一些。
       </p>
       <label htmlFor="typst-font-family-select" className="sr-only">
         渲染字体
       </label>
-      <select
+      <Select
+        className="app-settings-font-select"
         id="typst-font-family-select"
         data-testid="typst-font-family-select"
         name="typst_font_family"
         value={selected}
         onChange={(e) => handleChange(e.target.value)}
-        className="w-full rounded-xl border border-border bg-paper px-3 py-2 text-sm text-ink shadow-sm focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink"
         disabled={loading && fonts.length === 0}
       >
         {fonts.map((f) => (
@@ -120,10 +130,15 @@ function FontSelector() {
             {f.available ? "" : " (不可用)"}
           </option>
         ))}
-      </select>
-      {loading ? <span className="text-xs text-neutral-400">加载字体列表…</span> : null}
-      {error ? <span className="text-xs text-amber-600">字体列表加载失败，已显示本地备选：{error}</span> : null}
-      <span className="text-xs text-neutral-400">已选：{selected}</span>
+      </Select>
+      {loading ? <p className="app-settings-font-hint">加载字体列表…</p> : null}
+      {error ? <p className="app-settings-font-hint is-warn">字体列表加载失败，已显示本地备选：{error}</p> : null}
+      <p className="app-settings-font-hint">已选：{selected}</p>
+      {usesRprEngine(selected) ? null : (
+        <p className="app-settings-font-hint is-warn" data-testid="font-legacy-engine-warning">
+          这个字体会让排版退回旧的 Typst 引擎。想用新引擎，请选思源宋体（Source Han Serif SC）。
+        </p>
+      )}
     </div>
   );
 }

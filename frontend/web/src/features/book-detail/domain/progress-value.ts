@@ -41,3 +41,32 @@ export function countFromProgress(progress: unknown): { current: number; total: 
   const total = finiteNumberOrNull(record.total);
   return current !== null && total !== null && total > 0 ? { current, total } : null;
 }
+
+const UNIT_LABELS: Record<string, string> = {
+  page: "页", pages: "页",
+  batch: "批", batches: "批",
+  block: "块", blocks: "块",
+};
+
+/** 进度的单位：「32/48」到底是页还是批。后端没给或认不出就是空串（不猜）。 */
+export function unitLabelFromProgress(progress: unknown): string {
+  const record = progress && typeof progress === "object"
+    ? progress as Record<string, unknown>
+    : {};
+  return UNIT_LABELS[`${record.unit || ""}`.trim().toLowerCase()] || "";
+}
+
+/**
+ * 当前阶段的说明（stage_detail），去掉和状态行重复的「第 51/88 页」。
+ *
+ * 只认带「页」字的那种：以前的正则把「页」当可选，于是「4s 后重试（第 2/5 次）」里的
+ * 「第 2/5」也被当成页码删了，剩下「（次）」。
+ */
+export function stageDetailWithoutPageCount(detail: string, stripPageCount: boolean): string {
+  const text = `${detail || ""}`.trim();
+  if (!stripPageCount || !text) return text;
+  return text
+    .replace(/[,，、\s]*第?\s*\d+\s*\/\s*\d+\s*页/g, "")
+    .replace(/^[,，:：、\s]+|[,，:：、\s]+$/g, "")
+    .trim();
+}

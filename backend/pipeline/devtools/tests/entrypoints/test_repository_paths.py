@@ -25,7 +25,7 @@ def test_repository_paths_from_unrelated_working_directory(tmp_path, explicit_ro
     result = subprocess.run(
         [sys.executable, "-c", """
 import json
-from retainpdf_pipeline.foundation.config.paths import ROOT_DIR, BACKEND_ROOT, OUTPUT_DIR
+from retainpdf_base.paths import ROOT_DIR, BACKEND_ROOT, OUTPUT_DIR
 from retainpdf_pipeline.foundation.config.fonts import _default_fonts_dir
 from retainpdf_pipeline.ocr.ocr_provider_config import _config_path
 print(json.dumps(list(map(str, [ROOT_DIR, BACKEND_ROOT, OUTPUT_DIR, _default_fonts_dir(), _config_path()]))))

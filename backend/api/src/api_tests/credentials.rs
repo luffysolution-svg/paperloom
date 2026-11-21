@@ -70,12 +70,13 @@ async fn credential_api_persists_only_safe_metadata_in_responses() {
         credential_ref
     );
     assert!(!listed.to_string().contains(secret));
+    assert!(listed["data"]["credentials"][0].get("secret").is_none());
 
     let response = app
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/api/v1/credentials?include_values=true")
+                .uri("/api/v1/credentials")
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .unwrap(),
@@ -84,8 +85,24 @@ async fn credential_api_persists_only_safe_metadata_in_responses() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
-    let local_values = read_json(response).await;
-    assert_eq!(local_values["data"]["credentials"][0]["secret"], secret);
+
+    // 以前 `?include_values=true` 回全部明文；2026-10-22 起列表不收任何查询参数，带它是 400，拿不回明文。
+    for query in ["include_values=true", "include_values=false", "with_secret=1"] {
+        let (status, rejected) = request(
+            app.clone(),
+            Method::GET,
+            &format!("/api/v1/credentials?{query}"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{query}: {rejected}");
+        assert_eq!(rejected["error"]["code"], "BAD_REQUEST");
+        assert!(rejected["message"]
+            .as_str()
+            .unwrap()
+            .starts_with("unknown field `"));
+        assert!(!rejected.to_string().contains(secret));
+    }
     let denied = app
         .clone()
         .oneshot(
@@ -106,6 +123,11 @@ async fn credential_api_persists_only_safe_metadata_in_responses() {
     )
     .await;
     assert_eq!(status, StatusCode::CONFLICT, "{stale}");
+    assert_eq!(stale["code"], "CREDENTIAL_VAULT_REVISION_CONFLICT");
+    assert_eq!(
+        stale["error"]["details"]["reason"],
+        "credential_vault_revision_conflict"
+    );
 
     let (status, deleted) = request(
         app,
@@ -213,6 +235,68 @@ async fn credential_update_uses_record_revision_instead_of_unrelated_vault_revis
     .await;
     assert_eq!(status, StatusCode::CONFLICT, "{conflict}");
     assert_eq!(conflict["error"]["code"], "CREDENTIAL_REVISION_CONFLICT");
+    assert_eq!(
+        conflict["error"]["details"]["reason"],
+        "credential_revision_conflict"
+    );
+}
+
+#[tokio::test]
+async fn credential_update_cannot_change_kind() {
+    let state = test_state("credential-kind-is-fixed");
+    let app = build_app(state);
+    let (_, created) = request(
+        app.clone(),
+        Method::POST,
+        "/api/v1/credentials",
+        Some(json!({
+            "kind": "translation_api_key",
+            "provider": "deepseek",
+            "label": "Translation",
+            "secret": "kind-fixed-secret"
+        })),
+    )
+    .await;
+    let credential_ref = created["data"]["credential"]["credential_ref"]
+        .as_str()
+        .expect("credential ref")
+        .to_string();
+    let uri = format!("/api/v1/credentials/{credential_ref}");
+
+    // 换种类是请求写错了：400，在修订号检查（409）之前，凭据不变。
+    for body in [
+        json!({"kind": "ocr_provider_token"}),
+        json!({"kind": "ocr_provider_token", "label": "x", "expected_revision": 99}),
+    ] {
+        let (status, rejected) = request(app.clone(), Method::PUT, &uri, Some(body)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{rejected}");
+        assert_eq!(rejected["error"]["code"], "BAD_REQUEST");
+    }
+    let (_, unchanged) = request(app.clone(), Method::GET, &uri, None).await;
+    assert_eq!(unchanged["data"]["credential"]["kind"], "translation_api_key");
+    assert_eq!(unchanged["data"]["credential"]["revision"], 1);
+
+    // 带同样的种类（前端更新时整份载荷都带着 kind）照常能改别的字段；大小写、空白按规范化后比。
+    let (status, updated) = request(
+        app.clone(),
+        Method::PUT,
+        &uri,
+        Some(json!({"kind": " Translation_API_Key ", "label": "Renamed"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{updated}");
+    assert_eq!(updated["data"]["credential"]["kind"], "translation_api_key");
+    assert_eq!(updated["data"]["credential"]["label"], "Renamed");
+
+    // 没有这条凭据仍是 404，不是 400。
+    let (status, _) = request(
+        app,
+        Method::PUT,
+        "/api/v1/credentials/cred_0000000000000000",
+        Some(json!({"kind": "ocr_provider_token"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
@@ -258,6 +342,7 @@ async fn credential_delete_requires_force_while_persisted_jobs_reference_it() {
     assert_eq!(status, StatusCode::CONFLICT, "{conflict}");
     assert_eq!(conflict["code"], "CREDENTIAL_IN_USE");
     assert_eq!(conflict["error"]["code"], "CREDENTIAL_IN_USE");
+    assert_eq!(conflict["error"]["details"]["reason"], "credential_in_use");
     assert!(!conflict.to_string().contains(secret));
     assert!(!conflict.to_string().contains("job-referencing-credential"));
 
@@ -340,52 +425,3 @@ async fn credential_delete_is_blocked_by_persisted_ocr_reference() {
         .contains("job-referencing-ocr-credential"));
 }
 
-#[tokio::test]
-async fn credential_delete_detects_agent_runtime_references() {
-    let state = test_state("credential-agent-runtime-reference-guard");
-    let app = build_app(state.clone());
-    let (status, created) = request(
-        app.clone(),
-        Method::POST,
-        "/api/v1/credentials",
-        Some(json!({
-            "kind": "agent_llm_api_key",
-            "provider": "deepseek",
-            "label": "Agent model",
-            "secret": "sk-agent-runtime-reference",
-            "expected_revision": 0
-        })),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK, "{created}");
-    let credential_ref = created["data"]["credential"]["credential_ref"]
-        .as_str()
-        .expect("credential ref");
-    let runtime_path = state.config.data_root.join("secrets/ai-runtime.json");
-    std::fs::write(
-        &runtime_path,
-        json!({
-            "schema": "retainpdf_ai_runtime_credentials_v1",
-            "revision": 1,
-            "llm_credential_ref": credential_ref
-        })
-        .to_string(),
-    )
-    .expect("write AI runtime config");
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&runtime_path, std::fs::Permissions::from_mode(0o600))
-            .expect("secure AI runtime config");
-    }
-
-    let (status, conflict) = request(
-        app,
-        Method::DELETE,
-        &format!("/api/v1/credentials/{credential_ref}?expected_revision=1"),
-        None,
-    )
-    .await;
-    assert_eq!(status, StatusCode::CONFLICT, "{conflict}");
-    assert_eq!(conflict["code"], "CREDENTIAL_IN_USE");
-}

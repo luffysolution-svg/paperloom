@@ -7,8 +7,8 @@ from pathlib import Path
 from PIL import Image
 
 from retainpdf_pipeline.foundation.config.external_tools import resolve_typst_bin
-from retainpdf_pipeline.foundation.config import paths
-from retainpdf_pipeline.render.layout.inline_content.fallback.latex_normalizer import normalize_formula_for_latex_math
+from retainpdf_base import paths
+from retainpdf_math.normalize import normalize_formula_for_latex_math
 
 
 def formula_cache_dir() -> Path:

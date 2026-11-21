@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 
 from retainpdf_pipeline.render.layout.inline_content.core.markdown import build_markdown_from_direct_text
-from retainpdf_pipeline.render.layout.inline_content.fallback.latex_normalizer import normalize_formula_for_latex_math
+from retainpdf_math.normalize import normalize_formula_for_latex_math
 from retainpdf_pipeline.render.layout.protected_tokens import re_protect_restored_formulas
 
 

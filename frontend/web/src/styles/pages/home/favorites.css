@@ -1,0 +1,156 @@
+/* 收藏 tab 与它的空状态（旧类名 favorites-empty）。
+ * 现在代码里已没有组件挂这些类（收藏接口未注册），@utility 未被使用时 Tailwind 不输出。留待收藏功能恢复或确认删除。 */
+
+/* 收藏 tab：与合集同宽同滚动壳 */
+@utility favorites-view {
+  width: min(720px, 100%);
+  flex: 1 1 auto;
+  min-height: 0;
+  order: 1;
+  overflow-y: auto;
+  scrollbar-width: none;
+  padding-bottom: 116px;
+
+  &::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+
+  /* 同 categories-view：防 .library-view 的 overflow:hidden 层叠覆盖。 */
+  &.library-view {
+    overflow-y: auto;
+  }
+}
+
+@utility favorites-head {
+  padding: 4px 0 18px;
+}
+
+@utility favorites-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+@utility favorites-subtitle {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+@utility favorites-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+@utility favorites-card {
+  appearance: none;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--paper);
+  padding: 14px 16px;
+  cursor: pointer;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 4%, transparent);
+  transition: transform 0.12s var(--ease-out), box-shadow 0.15s ease, border-color 0.15s ease;
+
+  &:hover {
+    border-color: color-mix(in srgb, var(--ink) 18%, var(--line));
+    box-shadow: 0 4px 14px color-mix(in srgb, var(--shadow-color) 7%, transparent);
+  }
+
+  &:active {
+    transform: scale(0.995);
+  }
+}
+
+@utility favorites-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+@utility favorites-card-kind {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+
+@utility favorites-card-page {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+@utility favorites-card-quote {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+@utility favorites-card-note {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+/* 兼容旧 class 名（FavoritesView 仍挂 favorites-empty） */
+@utility favorites-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 36px 20px !important;
+}
+
+@utility favorites-empty-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  margin-bottom: 4px;
+
+  & svg {
+    width: 24px;
+    height: 24px;
+  }
+}
+
+@utility favorites-empty-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+@utility favorites-empty-hint {
+  margin: 0;
+  max-width: 28em;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+

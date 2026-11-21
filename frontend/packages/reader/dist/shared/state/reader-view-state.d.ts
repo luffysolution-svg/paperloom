@@ -1,17 +1,18 @@
 import type { PageScrollProgress } from "../types/reader-scroll.js";
-export type StoredReaderPaneContent = "source" | "translated" | "markdown";
+export type StoredReaderPaneContent = "source" | "translated" | "markdown" | "ai";
 export type StoredReaderSplitLayout = {
     left: StoredReaderPaneContent;
     right: StoredReaderPaneContent;
 };
 export type StoredReaderMode = "source" | "compare" | "translated";
+import { type ReaderAssistantPanel } from "../types/reader-assistant-panels.js";
 export type ReaderViewState = {
     schema: "retainpdf_reader_view_v1";
     anchor?: PageScrollProgress;
     zoom?: number;
     mode?: StoredReaderMode;
     splitLayout?: StoredReaderSplitLayout | null;
-    assistantPanel?: "markdown" | null;
+    assistantPanel?: ReaderAssistantPanel | null;
     updatedAt: number;
 };
 type ReaderViewStatePatch = Partial<Pick<ReaderViewState, "anchor" | "zoom" | "mode" | "splitLayout" | "assistantPanel">>;

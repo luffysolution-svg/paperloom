@@ -1,6 +1,6 @@
 """LaTeX 命令登记表的三道闸门。
 
-表本身在 foundation/shared/latex_commands.json，派生逻辑在同目录的 .py。这里负责
+表本身在 backend/math/retainpdf_math/latex_commands.json，派生逻辑在同目录的 registry.py。这里负责
 不让它跑偏——一张没人验证的表比没有表更危险，因为它看起来权威。
 
 一致性闸（纯逻辑，秒级）抓的是表**内部**的自相矛盾，也就是当初把规则拆散在八个
@@ -19,25 +19,31 @@ Typst 符号名时，报错长得像「不支持这个命令」，于是长出�
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 
 import pytest
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
 from devtools.tests.rendering.mitex_probe import TYPST_BIN  # noqa: E402
 from devtools.tests.rendering.mitex_probe import compile_native  # noqa: E402
 from devtools.tests.rendering.mitex_probe import compile_pipeline  # noqa: E402
+from devtools.tests.rendering.mitex_probe import compile_pipeline_together  # noqa: E402
 from devtools.tests.rendering.mitex_probe import png_digest  # noqa: E402
-from retainpdf_pipeline.foundation.shared.latex_commands import command_by_name  # noqa: E402
-from retainpdf_pipeline.foundation.shared.latex_commands import latex_commands  # noqa: E402
-from retainpdf_pipeline.foundation.shared.latex_commands import supported_commands  # noqa: E402
-from retainpdf_pipeline.foundation.shared.latex_commands import unsupported_commands  # noqa: E402
+from retainpdf_math.registry import command_by_name  # noqa: E402
+from retainpdf_math.registry import latex_commands  # noqa: E402
+from retainpdf_math.registry import supported_commands  # noqa: E402
+from retainpdf_math.registry import unsupported_commands  # noqa: E402
 
 STATES = {"supported", "unsupported"}
-needs_typst = pytest.mark.skipif(not TYPST_BIN, reason="没有可用的 typst 二进制")
+_skip_without_typst = pytest.mark.skipif(not TYPST_BIN, reason="没有可用的 typst 二进制")
+
+
+def needs_typst(test):
+    """真编译的用例：打登记过的 needs_typst marker，再叠一层 skipif。
+
+    以前这里只有一个同名的 skipif，`-m "not needs_typst"` 根本选不中它们；marker
+    让 CI 那一步能按约定挑掉，skipif 让本机没装 typst 时跳过而不是红。
+    """
+    return pytest.mark.needs_typst(_skip_without_typst(test))
 
 
 # ---------------------------------------------------------------- 一致性闸
@@ -127,9 +133,18 @@ def test_fold_targets_exist_and_render() -> None:
 
 # ---------------------------------------------------------------- 真编译闸
 
+@pytest.fixture(scope="module")
+def supported_samples_compile_together() -> bool:
+    """52 个能渲染的样本合在一个文档里编译一次（以前每个各起一次 Typst）。整批过了，每条就不用再单独编译。"""
+    return compile_pipeline_together([command.sample for command in supported_commands()])
+
+
 @needs_typst
 @pytest.mark.parametrize("command", supported_commands(), ids=lambda c: c.name)
-def test_supported_commands_really_compile(command) -> None:
+def test_supported_commands_really_compile(command, supported_samples_compile_together) -> None:
+    if supported_samples_compile_together:
+        return
+    # 整批失败：逐个编译，报出是哪一个
     ok, error = compile_pipeline(command.sample)
     assert ok, (
         f"登记表说 \\{command.name} 能渲染，实际失败了：\n{command.sample}\n{error}\n\n"

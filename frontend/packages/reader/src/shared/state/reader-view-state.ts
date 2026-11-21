@@ -2,7 +2,7 @@
 
 import type { PageScrollProgress } from "../types/reader-scroll.js";
 
-export type StoredReaderPaneContent = "source" | "translated" | "markdown";
+export type StoredReaderPaneContent = "source" | "translated" | "markdown" | "ai";
 
 export type StoredReaderSplitLayout = {
   left: StoredReaderPaneContent;
@@ -11,13 +11,18 @@ export type StoredReaderSplitLayout = {
 
 export type StoredReaderMode = "source" | "compare" | "translated";
 
+import {
+  type ReaderAssistantPanel,
+  isReaderAssistantPanel,
+} from "../types/reader-assistant-panels.js";
+
 export type ReaderViewState = {
   schema: "retainpdf_reader_view_v1";
   anchor?: PageScrollProgress;
   zoom?: number;
   mode?: StoredReaderMode;
   splitLayout?: StoredReaderSplitLayout | null;
-  assistantPanel?: "markdown" | null;
+  assistantPanel?: ReaderAssistantPanel | null;
   updatedAt: number;
 };
 
@@ -30,6 +35,7 @@ const VALID_PANE_CONTENT = new Set<StoredReaderPaneContent>([
   "source",
   "translated",
   "markdown",
+  "ai",
 ]);
 const VALID_READER_MODE = new Set<StoredReaderMode>([
   "source",
@@ -89,9 +95,13 @@ function normalizeSplitLayout(value: unknown): StoredReaderSplitLayout | null | 
   return { left, right };
 }
 
-function normalizeAssistantPanel(value: unknown): "markdown" | null | undefined {
+function normalizeAssistantPanel(
+  value: unknown,
+): ReaderAssistantPanel | null | undefined {
   if (value === null) return null;
-  return value === "markdown" ? value : undefined;
+  // 认哪些 id 由 READER_ASSISTANT_PANEL_IDS 决定。原来在这儿抄了一份清单，
+  // 加面板忘了补的表现是「存了但不恢复」—— 不报错，也没有测试会红。
+  return isReaderAssistantPanel(value) ? value : undefined;
 }
 
 function normalizeReaderMode(value: unknown): StoredReaderMode | undefined {

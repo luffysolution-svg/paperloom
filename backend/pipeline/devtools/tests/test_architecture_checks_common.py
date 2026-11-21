@@ -1,11 +1,6 @@
 from __future__ import annotations
 
-import sys
 from pathlib import Path
-
-
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
 
 from devtools.architecture_checks import common as architecture_common
@@ -17,33 +12,33 @@ def test_imported_modules_reports_import_and_from_modules(tmp_path: Path) -> Non
     source.write_text(
         "import os\n"
         "import retainpdf_pipeline.render.source_cleanup as cleanup\n"
-        "from retainpdf_pipeline.translate.public import TranslationExecutionRequest\n",
+        "from retainpdf_translation.public import TranslationExecutionRequest\n",
         encoding="utf-8",
     )
 
     assert architecture_common.imported_modules(source) == [
         "os",
         "retainpdf_pipeline.render.source_cleanup",
-        "retainpdf_pipeline.translate.public",
+        "retainpdf_translation.public",
     ]
 
 
 def test_imported_from_symbols_reports_symbols(tmp_path: Path) -> None:
     source = tmp_path / "from_imports.py"
     source.write_text(
-        "from retainpdf_pipeline.translate.public import TranslationExecutionRequest, execute_translation_request as execute\n",
+        "from retainpdf_translation.public import TranslationExecutionRequest, execute_translation_request as execute\n",
         encoding="utf-8",
     )
 
     assert architecture_common.imported_from_symbols(source) == [
-        ("retainpdf_pipeline.translate.public", "TranslationExecutionRequest"),
-        ("retainpdf_pipeline.translate.public", "execute_translation_request"),
+        ("retainpdf_translation.public", "TranslationExecutionRequest"),
+        ("retainpdf_translation.public", "execute_translation_request"),
     ]
 
 
 def test_imported_modules_raises_on_syntax_error(tmp_path: Path) -> None:
     source = tmp_path / "broken.py"
-    source.write_text("from retainpdf_pipeline.translate.public import\n", encoding="utf-8")
+    source.write_text("from retainpdf_translation.public import\n", encoding="utf-8")
 
     try:
         architecture_common.imported_modules(source)
@@ -61,7 +56,7 @@ def test_pipeline_main_fails_and_reports_syntax_error(
     capsys,
 ) -> None:
     source = tmp_path / "broken.py"
-    source.write_text("from retainpdf_pipeline.translate.public import\n", encoding="utf-8")
+    source.write_text("from retainpdf_translation.public import\n", encoding="utf-8")
 
     def check_syntax_error(errors: list[str]) -> None:
         architecture_common.imported_modules(source)

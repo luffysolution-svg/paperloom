@@ -25,6 +25,7 @@ def assert_complete_artifacts(root, expected_pages):
     assert checkpoint["progress"] == {
         "item_count": total, "completed_item_count": total, "pending_item_count": 0,
         "blocking_item_count": 0, "translated_item_count": translated,
+        "completed_page_count": len(expected_pages),
     }
     by_id = {}
     for page_index, expected_ids in expected_pages.items():

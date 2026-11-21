@@ -1,0 +1,137 @@
+/* 上传工作流面板外壳：卡片、模式切换。（WorkflowPanel）
+ *
+ * @owns upload, translation-workflow-card, translation-budget-note, result-panel, form, math-mode-inline, page-range, credential-gate, progress-track, progress-bar */
+
+@utility result-panel {
+  box-shadow: 0 12px 34px color-mix(in srgb, var(--shadow-color) 5%, transparent);
+  @apply mx-auto w-full;
+  max-width: min(620px, calc(100vw - 2rem));
+  max-width: min(620px, calc(100dvw - 2rem));
+}
+
+@utility translation-workflow-card {
+  display: grid;
+  width: 100%;
+  max-width: none;
+  min-height: 0;
+  overflow: auto;
+  padding: 20px 24px 24px;
+  justify-items: center;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+
+  & .form {
+    display: grid;
+    gap: 12px;
+    width: 100%;
+  }
+
+  & .upload-tile {
+    min-height: 168px;
+    aspect-ratio: auto;
+    padding: 16px 14px;
+    border: 1.5px dashed color-mix(in srgb, var(--muted) 40%, var(--line));
+    border-radius: 18px;
+    background: var(--paper);
+    box-shadow: none;
+    gap: 8px;
+    transition:
+      border-color 180ms var(--ease-out),
+      background 180ms var(--ease-out),
+      transform 180ms var(--ease-out);
+  }
+
+  & .upload-tile:hover {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 3%, var(--paper));
+    box-shadow: none;
+    transform: translateY(-1px);
+  }
+
+  & .upload-glyph {
+    width: 44px;
+    height: 44px;
+  }
+
+  & #file-label {
+    font-size: 0.92rem;
+    /* 长文件名单行省略，避免撑高卡片出现纵向滚动条 */
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  & #upload-help {
+    display: flex;
+    font-size: 12px;
+  }
+
+  & .upload-meta {
+    display: flex;
+    font-size: 11px;
+    gap: 8px;
+  }
+}
+
+@utility form {
+  .translation-workflow-card & {
+    display: grid;
+    gap: 12px;
+    width: 100%;
+  }
+}
+
+@utility upload-workflow {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  min-height: 0;
+}
+
+@utility upload-workflow-mode-tabs {
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+@utility upload-workflow-mode-tabs-list {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--bg);
+}
+
+@utility upload-workflow-mode-tab {
+  display: inline-flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: none;
+
+  &[data-state='active'] {
+    background: var(--paper);
+    color: var(--ink);
+    box-shadow: 0 2px 6px color-mix(in srgb, var(--shadow-color) 10%, transparent);
+  }
+
+  & > svg {
+    width: 17px;
+    height: 17px;
+  }
+}

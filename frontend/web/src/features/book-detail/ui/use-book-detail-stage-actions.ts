@@ -4,9 +4,16 @@ import type {
   JobStageActionsView,
   JobStageRetryActionView,
 } from "@/platform/api/index.js";
-import { resumeJob as resumeJobRequest } from "@/platform/api/index.js";
+import { describeActionError, fetchJobPayload } from "@/platform/api/index.js";
+import { API_PREFIX } from "@/platform/config/api-constants.js";
 import type { DocumentJobSummary } from "@/features/library/domain.js";
+import { resolveTranslationOwnerId, type TranslationSourceView } from "../domain/translation-owner.js";
+import type { LibraryController } from "@/features/library/index.js";
 import { isDocumentJobActive } from "./use-document-jobs.js";
+
+type RetryBody = Record<string, unknown> & {
+  overrides?: Record<string, unknown> & { render?: Record<string, unknown> };
+};
 
 // job_id -> stage-actions 视图。跨文档/跨弹窗复用，但必须有上限，避免长会话无限增长。
 const STAGE_ACTIONS_CACHE_LIMIT = 200;
@@ -22,22 +29,6 @@ function rememberStageActions(jobId: string, view: JobStageActionsView) {
   }
 }
 
-// 失败恢复走 POST /resume（服务端按 resume-plan 自动续跑）：
-// render 原地同 job_id，其余新建任务。只有已完成任务的显式重做、
-// 用户二次确认接受重复风险、或 resume 不可用时，才走 retry-stage。
-const RESUME_CANDIDATE_STATUSES = new Set([
-  "failed",
-  "error",
-  "timeout",
-  "dead",
-  "cancelled",
-  "canceled",
-]);
-
-function isResumeCandidate(job?: DocumentJobSummary | null) {
-  return RESUME_CANDIDATE_STATUSES.has(`${job?.status || ""}`.trim().toLowerCase());
-}
-
 function jobIdOf(job?: DocumentJobSummary | null) {
   const id = `${job?.job_id || job?.id || ""}`.trim();
   return id.startsWith("doc:") ? "" : id;
@@ -49,23 +40,37 @@ export function useBookDetailStageActions({
   actions,
   onJobSubmitted,
   refreshKey = "",
+  readJob = (id: string) => fetchJobPayload(id, { apiPrefix: API_PREFIX }) as Promise<TranslationSourceView>,
 }: {
   open: boolean;
   job?: DocumentJobSummary | null;
-  actions: {
-    getJobStageActions?: (jobId: string) => Promise<unknown>;
-    retryJobStage?: (
-      jobId: string,
-      stage: JobRetryStage,
-      payload?: Record<string, unknown>,
-    ) => Promise<any>;
-    resumeJob?: (jobId: string) => Promise<any>;
-  };
+  actions: Pick<LibraryController, "getJobStageActions" | "retryJobStage">;
   onJobSubmitted?: (job: Partial<DocumentJobSummary>) => unknown;
   /** OCR/document authority changed while the translation job stayed the same. */
   refreshKey?: string;
+  /** 读任务详情（找译文持有者用）；测试替身用，默认走平台接口。 */
+  readJob?: (jobId: string) => Promise<TranslationSourceView | null | undefined>;
 }) {
-  const jobId = jobIdOf(job);
+  const baseJobId = jobIdOf(job);
+  // 底是渲染任务时，先顺着 source_artifact_job_id 找到真正持有译文的任务，重新处理都发给它
+  // （见 domain/translation-owner.ts）。找到之前不读阶段动作，免得先闪出一句「不能精修」。
+  const needsOwner = Boolean(
+    open && baseJobId && !isDocumentJobActive(job) && `${job?.workflow || ""}`.trim().toLowerCase() === "render",
+  );
+  const [owner, setOwner] = useState<{ base: string; owner: string } | null>(null);
+  useEffect(() => {
+    if (!needsOwner) return undefined;
+    let cancelled = false;
+    resolveTranslationOwnerId(baseJobId, readJob)
+      .then((ownerId) => { if (!cancelled) setOwner({ base: baseJobId, owner: ownerId }); })
+      // 找不到就退回原任务：后端会给出不可用原因，不至于整块消失。
+      .catch(() => { if (!cancelled) setOwner({ base: baseJobId, owner: baseJobId }); });
+    return () => { cancelled = true; };
+    // readJob 是可替换的依赖，每次渲染新建引用不应重跑。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needsOwner, baseJobId]);
+  const resolvingOwner = needsOwner && owner?.base !== baseJobId;
+  const jobId = needsOwner ? (owner?.base === baseJobId ? owner.owner : "") : baseJobId;
   const [view, setView] = useState<JobStageActionsView | null>(null);
   const [loading, setLoading] = useState(false);
   const [pendingStage, setPendingStage] = useState<JobRetryStage | "">("");
@@ -117,54 +122,61 @@ export function useBookDetailStageActions({
 
   const currentView = view?.job_id === jobId ? view : stageActionsCache.get(jobId) || null;
   const stageActions = useMemo(() => {
-    const supported = new Set(["translation", "render"]);
+    const supported = new Set(["translation", "render", "refine"]);
     return (currentView?.stages || []).filter(
       (action): action is JobStageRetryActionView => supported.has(`${action?.stage || ""}`),
     );
   }, [currentView]);
-  const effectiveLoading = eligible && !currentView && resolvedJobId !== jobId
+  const effectiveLoading = resolvingOwner || (eligible && !currentView && resolvedJobId !== jobId)
     ? true
     : loading;
 
   const retry = useCallback(async (
     stage: JobRetryStage,
-    { acceptDuplicateRisk = false } = {},
+    { acceptDuplicateRisk = false, renderEngine = "", refineStartPage }: {
+      acceptDuplicateRisk?: boolean;
+      renderEngine?: string;
+      /** 接着精修：从这一页开始（上次精修没审到的第一页）。 */
+      refineStartPage?: number;
+    } = {},
   ) => {
     const descriptor = stageActions.find((action) => action.stage === stage);
     if (!descriptor?.can_retry || !actions.retryJobStage || pendingStage) return null;
     setPendingStage(stage);
     setError("");
     try {
-      // 一键断点恢复优先：失败任务先调 POST /resume，服务端按 resume-plan
-      // 自动续跑（render 原地同 id，其余新建）。显式二次确认风险后、
-      // 已完成任务重做、或 resume 不可用时，才走 retry-stage(显式 stage)。
-      if (!acceptDuplicateRisk && isResumeCandidate(job)) {
-        try {
-          const resume = actions.resumeJob
-            ? await actions.resumeJob(jobId)
-            : await resumeJobRequest(jobId);
-          const resumedId = `${(resume as any)?.job_id || (resume as any)?.id || ""}`.trim();
-          if (resumedId || resume) {
-            const nextId = resumedId || jobId;
-            onJobSubmitted?.({
-              ...(resume as object),
-              job_id: nextId,
-              active_job_id: nextId,
-              source_job_id: jobId,
-              document_id: (resume as any)?.document_id || (job as any)?.document_id,
-              workflow: (resume as any)?.workflow
-                || (nextId === jobId ? (job as any)?.workflow : undefined)
-                || (stage === "render" ? "render" : "book"),
-              library_only: false,
-            });
-            return resume;
-          }
-        } catch {
-          // resume 不可用（404/不可恢复等）→ 兜底显式 retry-stage。
-        }
-      }
+      // 清单里的每个按钮只做它写的那件事（显式 retry-stage）。「从断点继续」由失败卡片上的
+      // 主按钮负责（use-book-detail-resume.ts）。以前这里失败任务一律先试 POST /resume：
+      // 那条请求少了接口前缀、一直 404 才被降级成显式重跑；前缀修好之后，点「重新渲染」
+      // 会按续跑计划去重新翻译，和按钮说的不是一回事。
+      const engineOverride = stage === "render" && (renderEngine === "rpr_fit" || renderEngine === "typst")
+        ? renderEngine
+        : "";
+      const body = (descriptor.action?.body || {}) as RetryBody;
       const result = await actions.retryJobStage(jobId, stage, {
-        ...(descriptor.action?.body || {}),
+        ...body,
+        // 不指定引擎时沿用任务原来的引擎（后端保留 render.engine）。
+        ...(engineOverride
+          ? {
+            overrides: {
+              ...(body.overrides || {}),
+              render: { ...(body.overrides?.render || {}), engine: engineOverride },
+            },
+          }
+          : {}),
+        // 精修在原任务上原地跑（不新建任务、不重翻），走编辑部模式：模型挑错后分派局部修改或整段
+        // 重写，最多两轮，改不好的保留原译并列进「留给你确认」。后端 stage-actions 给的默认 body
+        // 仍是 review_and_fix，所以这里显式带 mode；从第 N 页接着精修时 start_page 一并保留。
+        ...(stage === "refine"
+          ? {
+            create_new_job: false,
+            refine: {
+              ...((body.refine as Record<string, unknown>) || {}),
+              mode: "editorial",
+              ...(refineStartPage ? { start_page: refineStartPage } : {}),
+            },
+          }
+          : {}),
         ...(acceptDuplicateRisk
           ? { ambiguous_request_policy: "accept_duplicate_risk" }
           : {}),
@@ -174,12 +186,12 @@ export function useBookDetailStageActions({
         onJobSubmitted?.({
           ...result,
           document_id: result.document_id || job?.document_id,
-          workflow: result.workflow || (stage === "render" ? "render" : "book"),
+          workflow: result.workflow || (stage === "render" || stage === "refine" ? "render" : "book"),
         });
       }
       return result;
     } catch (cause) {
-      setError(`${(cause as Error)?.message || cause || "重新处理失败"}`);
+      setError(describeActionError(cause, "重新处理失败"));
       throw cause;
     } finally {
       setPendingStage("");

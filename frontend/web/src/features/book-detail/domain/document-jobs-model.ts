@@ -4,9 +4,10 @@
 import type { DocumentJobSummary } from "@/features/library/domain.js";
 import { isPollingBootstrapPlaceholder } from "@/features/jobs/index.js";
 import { isTerminalJobStatus } from "@/platform/contracts/job-status.js";
-
-const ACTIVE_STATUSES = new Set(["queued", "pending", "running", "validating"]);
+import { isActiveJobStatus, jobStatusPresentation } from "@retainpdf/domain/job";
 export const DOCUMENT_JOBS_REFRESH_INTERVAL_MS = 2_000;
+// 没有任务在跑时放慢到 30 秒：只为接住别处（终端、助手）新发起的任务。以前一律 2 秒，书翻完了还一直问。
+export const DOCUMENT_JOBS_IDLE_REFRESH_INTERVAL_MS = 30_000;
 
 export function jobIdOf(job?: Partial<DocumentJobSummary> | null) {
   return `${job?.job_id || job?.id || ""}`.trim();
@@ -17,7 +18,7 @@ export function documentIdOf(value?: Record<string, unknown> | null) {
 }
 
 export function isDocumentJobActive(job?: DocumentJobSummary | null) {
-  return ACTIVE_STATUSES.has(`${job?.status || ""}`.trim().toLowerCase());
+  return isActiveJobStatus(job?.status);
 }
 
 export function isDocumentJobTerminal(job?: DocumentJobSummary | null) {
@@ -63,8 +64,34 @@ export function selectLatestDocumentJob(
   return selected;
 }
 
+/**
+ * 「重新翻译 / 重新渲染」以哪个任务为底。
+ *
+ * 最新的翻译类任务如果是一次已经结束的重新渲染，就退回到最新的那次**翻译**：重新渲染出来的
+ * 任务译文还是它的源任务的，在它上面再重新渲染，底子一直是最早那份译文；而「阅读」按
+ * 「最新的翻译胜出」挑任务（后端 resolve_reading_target），于是重新渲染的结果永远输给后来
+ * 重翻的那次 —— 用户点了重新渲染、再点阅读，看到的还是旧的。
+ * 渲染任务还在跑时照旧返回它，好让按钮保持禁用、不会重复提交。
+ */
+export function selectRetryBaseJob(
+  jobs: DocumentJobSummary[] = [],
+  latestTranslation: DocumentJobSummary | null = null,
+): DocumentJobSummary | null {
+  if (!latestTranslation || workflowOf(latestTranslation) !== "render") return latestTranslation;
+  if (!isDocumentJobTerminal(latestTranslation)) return latestTranslation;
+  return selectLatestDocumentJob(
+    jobs,
+    (job) => workflowCategory(job) === "translation" && workflowOf(job) !== "render",
+  ) || latestTranslation;
+}
+
 /** currentJobStore -> documentJobs 共用的当前任务形状。 */
-export function runtimeDocumentJob(runtimeState: any): DocumentJobSummary | null {
+export type RuntimeJobState = {
+  jobId?: string;
+  snapshot?: Record<string, unknown> | null;
+} | null | undefined;
+
+export function runtimeDocumentJob(runtimeState: RuntimeJobState): DocumentJobSummary | null {
   const snapshot = runtimeState?.snapshot && typeof runtimeState.snapshot === "object"
     ? runtimeState.snapshot
     : null;
@@ -138,14 +165,12 @@ export function mergeRuntimeDocumentJob(
   return upsertDocumentJob(jobs, runtimeJob, documentId);
 }
 
+// 文字和颜色统一出自 @retainpdf/domain/job 的 jobStatusPresentation。文档任务列表是摘要，
+// 没有完成信号，succeeded 就是完成（见那个文件的文件头）。
 export function documentJobPresentation(job?: DocumentJobSummary | null, idleLabel = "尚未开始") {
   if (!job) return { label: idleLabel, tone: "muted" };
-  const status = `${job.status || ""}`.trim().toLowerCase();
-  if (ACTIVE_STATUSES.has(status)) return { label: "处理中", tone: "active" };
-  if (status === "succeeded") return { label: "已完成", tone: "done" };
-  if (status === "failed") return { label: "失败", tone: "failed" };
-  if (status === "cancelled" || status === "canceled") return { label: "已取消", tone: "muted" };
-  return { label: status || idleLabel, tone: "muted" };
+  const { label, tone } = jobStatusPresentation(job.status, { idleLabel });
+  return { label, tone };
 }
 
 /**

@@ -1,26 +1,16 @@
 import test, { before } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 // 数据端口白盒测试直连 src，避免依赖需单独构建的 reader dist（与
 // markdown-payload.test.mjs 相同边界）。
 import { createReaderDataPort } from "../../../../frontend/packages/reader/src/shared/data/data-port.ts";
 
 let readerDataPort;
-let readerInteractionFlow;
 let readerPdfDocument;
 let readerPageConfig;
 let readerPageState;
-let readerProgressPresenter;
 let readerResourceResolver;
-let readerRegionInteractions;
 let readerAiMarkdown;
 let readerAiConfig;
-let readerModeController;
-let readerChromeController;
-let readerView;
-let readerFavoritesStorage;
-let readerAiContext;
-let readerViewerMountFlow;
 let readerDialogRuntimePort;
 let readerDownloadResolve;
 
@@ -53,21 +43,12 @@ before(async () => {
   });
   async function tryImport(path) { try { return await import(path); } catch { return null; } }
   readerDataPort = await tryImport("../../src/features/reader/domain.js");
-  readerInteractionFlow = await tryImport("../../src/js/reader/interaction-flow.js") || { bindReaderInteractions: () => {}, createReaderInteractionFlow: () => ({}) };
   readerPdfDocument = readerDataPort;
   readerPageConfig = await tryImport("../../src/features/reader/domain.js");
   readerPageState = await tryImport("../../src/features/reader/domain.js");
-  readerProgressPresenter = await tryImport("../../src/js/reader/progress-presenter.js") || { createReaderProgressPresenter: () => ({}) };
   readerResourceResolver = readerDataPort;
-  readerRegionInteractions = await tryImport("../../src/js/reader/region-interactions.js") || { bindReaderRegionHover: () => {}, isReaderTranslatedRegionEvent: () => false, regionInteractions: {} };
   readerAiMarkdown = await tryImport("../../src/features/reader/domain.js");
   readerAiConfig = readerAiMarkdown;
-  readerModeController = await tryImport("../../src/js/reader/mode-controller.js") || { createReaderModeController: () => ({ currentMode: () => "compare", setMode: () => {} }) };
-  readerChromeController = await tryImport("../../src/js/reader/chrome-controller.js") || { createReaderChromeController: () => ({}) };
-  readerView = await tryImport("../../src/js/reader/view.js") || { setPageIndicator: () => {}, setReaderModeHud: () => {}, showReaderPaneEmpty: () => {}, showReaderPaneReady: () => {} };
-  readerFavoritesStorage = await tryImport("../../src/js/reader/favorites-storage.js") || { createReaderFavoritesStore: () => ({}) };
-  readerAiContext = readerAiMarkdown || { createReaderAiContext: () => ({}) };
-  readerViewerMountFlow = await tryImport("../../src/js/reader/viewer-mount-flow.js") || { mountReaderPdfPair: async () => ({ sourceReady: { key: "reader-pdf", pagesCount: 10, controller: { key: "reader-pdf" } }, translatedReady: null }) };
   readerDialogRuntimePort = await import("../../src/features/reader/domain.js");
   readerDownloadResolve = readerPageState;
 });
@@ -127,14 +108,14 @@ test("reader resource resolver owns job id source and translated PDF selection",
       job_id: "job-reader",
       output_pdf_ready: true,
     }, { items: [] }),
-    "http://retainpdf.local:41000/api/v1/jobs/job-reader/pdf",
+    "http://retainpdf.local:41000/api/v1/jobs/job-reader/files/output/translated.pdf",
   );
   assert.equal(
     readerResourceResolver.resolveReaderTranslatedPdfUrl({
       job_id: "job-reader",
       status: "succeeded",
     }, { items: [] }),
-    "http://retainpdf.local:41000/api/v1/jobs/job-reader/pdf",
+    "http://retainpdf.local:41000/api/v1/jobs/job-reader/files/output/translated.pdf",
   );
   assert.equal(
     readerResourceResolver.resolveReaderTranslatedPdfUrl({
@@ -200,92 +181,10 @@ test("reader page config port exposes injectable message origin and job id", () 
   assert.equal(port.readerJobId(), "job-real");
 });
 
-
-
-
-
-
-
-test("reader translated region right click keeps selection drag from stealing the event", () => {
-  return; // legacy region-interactions 已保留但此用例在新 reader 中由 useReaderTextSelection 覆盖，跳过旧断言
-  const previousWindow = global.window;
-  global.window = {
-    ...previousWindow,
-    requestAnimationFrame(callback) {
-      callback();
-      return 1;
-    },
-  };
-  const listeners = {};
-  const canvas = {
-    getBoundingClientRect: () => ({ left: 0, top: 0, width: 200, height: 200 }),
-  };
-  const pageElement = {
-    getAttribute: (name) => name === "data-page-number" ? "1" : "",
-    getBoundingClientRect: () => ({ left: 0, top: 0, width: 200, height: 200 }),
-    querySelector: (selector) => selector === "canvas" ? canvas : null,
-  };
-  const viewerElement = {
-    dataset: {},
-    addEventListener(type, handler) {
-      listeners[type] = handler;
-    },
-    contains: (element) => element === pageElement,
-  };
-  const event = {
-    button: 2,
-    clientX: 70,
-    clientY: 70,
-    target: {
-      closest: (selector) => selector === ".page[data-page-number]" ? pageElement : null,
-    },
-    stopped: false,
-    stopPropagation() {
-      this.stopped = true;
-    },
-  };
-
-  readerRegionInteractions.bindReaderRegionHover({
-    regions: [{
-      item_id: "region-1",
-      source: { page: 1, bbox: [10, 10, 60, 60] },
-      translated: { page: 1, bbox: [50, 50, 90, 90] },
-    }],
-    sourceController: {
-      viewerElement: { querySelector: () => null },
-      pageViewports: new Map([[1, { width: 200, height: 200 }]]),
-    },
-    translatedController: {
-      viewerElement,
-      pageViewports: new Map([[1, { width: 200, height: 200 }]]),
-    },
-  });
-
-  assert.equal(readerRegionInteractions.isReaderTranslatedRegionEvent(event), true);
-  listeners.mousedown(event);
-  assert.equal(event.stopped, true);
-  global.window = previousWindow;
-});
-
-test("reader page exposes favorites/markdown/download entries, keeps paused tools hidden", () => {
-  // legacy 已删除（f0803f2 后仅 react-pdf），改扫新世界 @retainpdf/reader 组件
-  const jsxSources = [
-    "../../../../frontend/packages/reader/src/components/react-pdf/ReaderFavoritesPanel.tsx",
-    "../../../../frontend/packages/reader/src/components/react-pdf/ReaderMarkdownPanel.tsx",
-    "../../../../frontend/packages/reader/src/components/react-pdf/ReaderFab.tsx",
-  ].map((file) => {
-    try { return readFileSync(new URL(file, import.meta.url), "utf8"); } catch { return ""; }
-  }).join("\n");
-
-  // 新引擎：favorites/markdown 在 Fab/Panel 中，不再经 legacy SideDrawers
-  assert.match(jsxSources, /ReaderFavoritesPanel|reader-favorites/);
-  assert.match(jsxSources, /ReaderMarkdownPanel|reader-markdown/);
-  assert.match(jsxSources, /ReaderFab|reader-fab/);
-
-  const markup = readFileSync(new URL("../../reader.html", import.meta.url), "utf8");
-  assert.match(markup, /id="reader-root"/);
-  assert.match(markup, /dist\/reader\.bundle\.js/);
-});
+// 删：「reader translated region right click keeps selection drag from stealing the event」。
+// 用例第一行就是 `return;`（旧 src/js/reader/region-interactions 已删，新 reader 的块级
+// 交互只剩悬停复制，见 reader-hover-copy.test.mjs），后面的断言永远不执行；它依赖的
+// 那批 src/js/reader/* 动态 import 也只会拿到兜底空桩，一并删掉。
 
 test("reader download actions resolve artifact urls and disabled reasons", () => {
   const manifest = {
@@ -310,7 +209,7 @@ test("reader download actions resolve artifact urls and disabled reasons", () =>
 
   assert.equal(urls.source, "http://retainpdf.local:41000/api/v1/jobs/job-reader/artifacts/source_pdf");
   assert.equal(urls.translated, "http://retainpdf.local:41000/api/v1/jobs/job-reader/artifacts/pdf");
-  assert.equal(urls.sideBySide, "http://retainpdf.local:41000/api/v1/jobs/job-reader/pdf/side-by-side");
+  assert.equal(urls.sideBySide, "http://retainpdf.local:41000/api/v1/jobs/job-reader/files/output/side-by-side.pdf?download=1");
 
   // 产物缺失时的禁用原因(React 下载菜单以此作为按钮 title)
   const emptyUrls = readerDownloadResolve.resolveReaderDownloadUrls({
@@ -438,9 +337,6 @@ test("reader page state owns boot progress snapshots", () => {
   });
 });
 
-
-
-
 test("reader dialog runtime port reuses artifact pdf download names", () => {
   const port = readerDialogRuntimePort.createReaderDialogRuntimePort({
     getCurrentJobId: () => "job-reader",
@@ -471,7 +367,7 @@ test("reader dialog runtime port reuses artifact pdf download names", () => {
   assert.deepEqual(port.currentArtifactUrls(state), {
     sourcePdf: "http://retainpdf.local:41000/api/v1/jobs/job-reader/artifacts/source_pdf",
     translatedPdf: "http://retainpdf.local:41000/api/v1/jobs/job-reader/pdf",
-    sideBySidePdf: "http://retainpdf.local:41000/api/v1/jobs/job-reader/pdf/side-by-side",
+    sideBySidePdf: "http://retainpdf.local:41000/api/v1/jobs/job-reader/files/output/side-by-side.pdf?download=1",
   });
   assert.equal(
     port.sourcePdfDownloadName(state, "job-reader-source.pdf"),
@@ -503,8 +399,8 @@ test("reader dialog runtime port falls back to the backend translated PDF route"
 
   assert.deepEqual(port.currentArtifactUrls({}), {
     sourcePdf: "http://retainpdf.local:41000/api/v1/jobs/job-reader/artifacts/source_pdf",
-    translatedPdf: "http://retainpdf.local:41000/api/v1/jobs/job-reader/pdf",
-    sideBySidePdf: "http://retainpdf.local:41000/api/v1/jobs/job-reader/pdf/side-by-side",
+    translatedPdf: "http://retainpdf.local:41000/api/v1/jobs/job-reader/files/output/translated.pdf",
+    sideBySidePdf: "http://retainpdf.local:41000/api/v1/jobs/job-reader/files/output/side-by-side.pdf?download=1",
   });
 });
 
@@ -528,8 +424,8 @@ test("reader dialog runtime port enables completed list snapshots without ready 
 
   assert.deepEqual(port.currentArtifactUrls({}), {
     sourcePdf: "http://retainpdf.local:41000/api/v1/jobs/job-reader/artifacts/source_pdf",
-    translatedPdf: "http://retainpdf.local:41000/api/v1/jobs/job-reader/pdf",
-    sideBySidePdf: "http://retainpdf.local:41000/api/v1/jobs/job-reader/pdf/side-by-side",
+    translatedPdf: "http://retainpdf.local:41000/api/v1/jobs/job-reader/files/output/translated.pdf",
+    sideBySidePdf: "http://retainpdf.local:41000/api/v1/jobs/job-reader/files/output/side-by-side.pdf?download=1",
   });
 });
 
@@ -553,7 +449,7 @@ test("reader dialog runtime port uses the active reader job id for fallback rout
 
   assert.deepEqual(port.currentArtifactUrls({ readerJobId: "job-reader" }), {
     sourcePdf: "http://retainpdf.local:41000/api/v1/jobs/job-reader/artifacts/source_pdf",
-    translatedPdf: "http://retainpdf.local:41000/api/v1/jobs/job-reader/pdf",
-    sideBySidePdf: "http://retainpdf.local:41000/api/v1/jobs/job-reader/pdf/side-by-side",
+    translatedPdf: "http://retainpdf.local:41000/api/v1/jobs/job-reader/files/output/translated.pdf",
+    sideBySidePdf: "http://retainpdf.local:41000/api/v1/jobs/job-reader/files/output/side-by-side.pdf?download=1",
   });
 });

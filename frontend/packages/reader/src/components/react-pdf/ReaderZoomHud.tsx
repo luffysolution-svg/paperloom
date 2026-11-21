@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import {
+  readerViewportWidth,
   READER_ZOOM_DEFAULT,
   READER_ZOOM_MAX,
   READER_ZOOM_MIN,
@@ -12,6 +13,7 @@ import {
 } from "../../pdf/reader-zoom.js";
 import { clampPageNumber } from "../../pdf/scroll-to-page.js";
 import { ReaderShortcutsHelp } from "./ReaderShortcutsHelp.js";
+import { ReaderBookmarkControl } from "./ReaderBookmarkControl.js";
 import { useReaderContext, useReaderHudContext } from "./reader-context.js";
 
 export type ReaderZoomHudProps = {
@@ -24,6 +26,8 @@ export type ReaderZoomHudProps = {
   /** 点百分比时重置到该模式默认缩放 */
   mode?: ReaderZoomMode | string;
   modeControls?: ReactNode;
+  /** 书签按这本书存（和阅读位置同一个 scope）；不给就不显示书签。 */
+  bookmarkScope?: string;
 };
 
 export function ReaderZoomHud(props: ReaderZoomHudProps) {
@@ -39,8 +43,9 @@ export function ReaderZoomHud(props: ReaderZoomHudProps) {
   const percent = zoomToDisplayPercent(userZoom);
   const canZoomOut = userZoom > READER_ZOOM_MIN + 0.001;
   const canZoomIn = userZoom < READER_ZOOM_MAX - 0.001;
-  const resetZoom = defaultZoomForMode(mode);
-  const resetLabel = "50%（半屏，对照铺满）";
+  const resetZoom = defaultZoomForMode(mode, readerViewportWidth());
+  // 窄屏单栏的默认是铺满（见 reader-zoom.ts 的 READER_NARROW_VIEWPORT_PX）。
+  const resetLabel = resetZoom >= READER_ZOOM_MAX ? "100%（铺满阅读区）" : "50%（半屏，对照铺满）";
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(`${currentPage}`);
@@ -111,6 +116,15 @@ export function ReaderZoomHud(props: ReaderZoomHudProps) {
           </button>
         )}
       </div>
+      {props.bookmarkScope ? (
+        <ReaderBookmarkControl
+          scope={props.bookmarkScope}
+          currentPage={currentPage}
+          numPages={numPages}
+          regions={ctx?.regions}
+          onGoToPage={onGoToPage}
+        />
+      ) : null}
       <div className="reader-react-hud-group" aria-label="缩放">
         <button
           type="button"

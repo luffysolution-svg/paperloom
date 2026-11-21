@@ -26,17 +26,24 @@ import {
   DialogHeader,
   DialogShell,
   DialogTitle,
-} from "@/ui/components/dialog.js";
+} from "@retainpdf/ui";
 import { useStoreSnapshot } from "@/ui/hooks/use-store.js";
 import {
   useHomeBridge,
   useHomeDialogStore,
-  useHomeLibrary,
   useHomeUploadStatePort,
   useHomeWorkflowDialog,
 } from "@/ui/context/home-services-context.js";
 import { useDialogReturnFocus } from "@/ui/hooks/use-dialog-return-focus.js";
 import { WorkflowPanel } from "./WorkflowPanel.jsx";
+import { useLibraryServices } from "@/features/library/index.js";
+
+/** 提交表单的结果：status 为 submitted / blocked / 其它失败态。 */
+type SubmitFormResult = {
+  status?: string;
+  readiness?: { reason?: string } | null;
+  payload?: { job_id?: string; document_id?: string } | null;
+} | null;
 
 // statusCardSlot 已移除：进度不再进本弹窗。
 export function IngestDialog({
@@ -46,7 +53,7 @@ export function IngestDialog({
 } = {}) {
   const dialogStore = useHomeDialogStore();
   const uploadStatePort = useHomeUploadStatePort();
-  const library = useHomeLibrary();
+  const library = useLibraryServices();
   const workflowDialog = useHomeWorkflowDialog();
   const bridge = useHomeBridge();
   const dialog = useStoreSnapshot(dialogStore);
@@ -80,7 +87,7 @@ export function IngestDialog({
     });
   }
 
-  function handleOpenChange(nextOpen) {
+  function handleOpenChange(nextOpen: boolean) {
     if (!nextOpen) {
       workflowDialog.requestClose();
     }
@@ -122,11 +129,12 @@ export function IngestDialog({
     if (submittingRef.current) return;
     submittingRef.current = true;
     void (async () => {
-      let result: any = null;
+      let result: SubmitFormResult = null;
       try {
+        // bridge.submitForm 返回 unknown（home-services-context），这里按 submit-flow 的结果形状收窄。
         result = await bridge.submitForm(
           event as unknown as { preventDefault?: () => void },
-        );
+        ) as SubmitFormResult;
       } catch {
         // submit-flow 已落 error-box 行内错误，这里只保对话框不关。
       }
@@ -167,7 +175,7 @@ export function IngestDialog({
           >
             <DialogHeader className="translation-workflow-head is-upload-head">
               <DialogTitle asChild>
-                <h2 id={TRANSLATION_WORKFLOW_DIALOG.ids.title}>
+                <h2 id={TRANSLATION_WORKFLOW_DIALOG.ids.title} className="sr-only">
                   {TRANSLATION_WORKFLOW_DIALOG.copy.uploadTitle}
                 </h2>
               </DialogTitle>

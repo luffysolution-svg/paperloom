@@ -1,21 +1,7 @@
-import sys
-from pathlib import Path
-
-
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
 from retainpdf_pipeline.ocr.document_schema.provider_adapters.paddle.column_signals import (
     analyze_page_column_signals,
 )
 from retainpdf_pipeline.ocr.document_schema.provider_adapters.paddle.body_repair import repair_body_cross_column_blocks
-from devtools.tests.document_schema.fixtures.registry import PADDLE_FIXTURES_ROOT
-
-
-PADDLE_FIXTURE_JSON = PADDLE_FIXTURES_ROOT / "json_full.json"
-PADDLE_SCI_FIXTURE_JSON = PADDLE_FIXTURES_ROOT / "json_sci.json"
-PADDLE_FIXTURE_PDF = PADDLE_FIXTURES_ROOT / "paddle_ocr_json_split.pdf"
-NORMALIZE_ENTRYPOINT = REPO_SCRIPTS_ROOT / "retainpdf_pipeline" / "entrypoints" / "run_normalize_ocr.py"
 
 
 def test_paddle_body_repair_requires_raw_label_text_even_if_kind_is_body() -> None:

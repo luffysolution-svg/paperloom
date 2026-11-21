@@ -1,23 +1,29 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStoreSnapshot } from "@/ui/hooks/use-store.js";
+import { isPageHidden } from "@/platform/utils/page-visibility.js";
 import type { DocumentJobSummary } from "@/features/library/domain.js";
+import type { LibraryController } from "@/features/library/index.js";
 import {
   selectDocumentOcrStatusJob,
   selectReusableOcrJob,
 } from "@/features/library/domain.js";
 import {
+  DOCUMENT_JOBS_IDLE_REFRESH_INTERVAL_MS,
   DOCUMENT_JOBS_REFRESH_INTERVAL_MS,
   documentIdOf,
+  isDocumentJobActive as isJobActive,
   isDocumentJobTerminal,
   jobIdOf,
   mergeRuntimeDocumentJob,
   runtimeDocumentJob,
   selectLatestDocumentJob,
   selectNewlySucceededJobs,
+  selectRetryBaseJob,
   upsertDocumentJob,
   workflowCategory,
   workflowOf,
 } from "../domain/document-jobs-model.js";
+import type { RuntimeJobState } from "../domain/document-jobs-model.js";
 import { useDocumentJobRuntimeOwner } from "./use-document-job-runtime-owner.js";
 
 // 保持既有 import 路径可用：纯模型/选择器转发自 domain。
@@ -32,6 +38,11 @@ export {
   upsertDocumentJob,
 } from "../domain/document-jobs-model.js";
 
+type RuntimeJobStore = {
+  getSnapshot: () => RuntimeJobState;
+  subscribe: (listener: () => void) => () => void;
+};
+
 const EMPTY_RUNTIME_STORE = {
   getSnapshot: () => ({ jobId: "", snapshot: null }),
   subscribe: () => () => {},
@@ -44,8 +55,18 @@ export function useDocumentJobs({
   initialJob,
   runtimeStore,
   refreshIntervalMs = DOCUMENT_JOBS_REFRESH_INTERVAL_MS,
+  idleRefreshIntervalMs = DOCUMENT_JOBS_IDLE_REFRESH_INTERVAL_MS,
   onJobSucceeded,
-}: any) {
+}: {
+  open: boolean;
+  documentId: string;
+  actions: Pick<LibraryController, "getDocumentJobs" | "getDocumentByJobId">;
+  initialJob?: Partial<DocumentJobSummary> | null;
+  runtimeStore?: RuntimeJobStore | null;
+  refreshIntervalMs?: number;
+  idleRefreshIntervalMs?: number;
+  onJobSucceeded?: (job: DocumentJobSummary) => unknown;
+}) {
   const [jobs, setJobs] = useState<DocumentJobSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadedDocumentId, setLoadedDocumentId] = useState("");
@@ -113,7 +134,7 @@ export function useDocumentJobs({
       return next;
     } catch (cause) {
       if (generation === generationRef.current) {
-        setError(`${cause?.message || cause || "读取任务状态失败"}`);
+        setError(`${(cause as { message?: string } | null)?.message || cause || "读取任务状态失败"}`);
         setLoadedDocumentId(documentId);
       }
       return [];
@@ -138,15 +159,33 @@ export function useDocumentJobs({
       return undefined;
     }
     void refresh();
-    const interval = Number(refreshIntervalMs) > 0
-      ? globalThis.setInterval(() => void refresh({ quiet: true }), Number(refreshIntervalMs))
-      : null;
     return () => {
-      if (interval !== null) globalThis.clearInterval(interval);
       // 让关闭/切文档前发出的 GET 结果失效，不能回写下一本书。
       generationRef.current += 1;
     };
-  }, [documentId, open, refresh, refreshIntervalMs]);
+  }, [documentId, open, refresh]);
+
+  // 轮询单独一个 effect：有任务在跑时快、没有时慢；切换快慢不重新做首次加载（不闪「读取中」）。
+  // 首次加载还没回来时也按快的来：慢速首请求要靠静默轮询接管，不能一等 30 秒。
+  const anyJobActive = jobs.some((job) => isJobActive(job))
+    || Boolean(initialJob && isJobActive(initialJob as DocumentJobSummary) && !jobs.length);
+  const firstLoadPending = loadedDocumentId !== documentId;
+  const pollMs = anyJobActive || firstLoadPending ? Number(refreshIntervalMs) : Number(idleRefreshIntervalMs);
+  useEffect(() => {
+    if (!open || !documentId || !(pollMs > 0)) return undefined;
+    // 页面在后台时跳过这一轮；切回来立刻补问一次，不用等下一轮。
+    const interval = globalThis.setInterval(() => {
+      if (!isPageHidden()) void refresh({ quiet: true });
+    }, pollMs);
+    const onVisible = () => {
+      if (!isPageHidden()) void refresh({ quiet: true });
+    };
+    globalThis.document?.addEventListener?.("visibilitychange", onVisible);
+    return () => {
+      globalThis.clearInterval(interval);
+      globalThis.document?.removeEventListener?.("visibilitychange", onVisible);
+    };
+  }, [documentId, open, refresh, pollMs]);
 
   const effectiveJobs = useMemo(() => {
     let next = jobs;
@@ -225,6 +264,7 @@ export function useDocumentJobs({
     ocrStatusJob: selectDocumentOcrStatusJob(effectiveJobs),
     reusableOcr: selectReusableOcrJob(effectiveJobs),
     latestTranslation,
+    retryBaseTranslation: selectRetryBaseJob(effectiveJobs, latestTranslation),
   }), [
     effectiveJobs,
     error,

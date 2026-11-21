@@ -1,4 +1,5 @@
 import { getDesktopHost, isDesktopHostAvailable } from "@/platform/desktop/host.js";
+import type { DesktopHost, DesktopInvokeArgs } from "@/platform/desktop/host.js";
 import { runtimeConfig, setRuntimeConfig } from "./runtime.js";
 import {
   buildRuntimeConfig,
@@ -11,10 +12,39 @@ import {
   writeBrowserStoredConfig,
   writeDeveloperStoredConfig,
 } from "./storage.js";
+import type {
+  BrowserStoredConfig,
+  DeveloperStoredConfig,
+  RuntimeConfig,
+} from "./storage.js";
 
-let desktopPersistedSnapshot = null;
+/** 归一化后的桌面持久化配置（desktopPersistedSnapshot 的形状）。 */
+export type DesktopPersistedConfig = {
+  firstRunCompleted: boolean;
+  closeToTrayHintShown: boolean;
+  browserConfig: BrowserStoredConfig;
+  developerConfig: DeveloperStoredConfig;
+  runtimeConfig: RuntimeConfig;
+};
+
+/** 调用方传入的局部配置：各段都可以只带一部分字段。 */
+export type DesktopPersistedConfigPatch = Partial<Omit<DesktopPersistedConfig, "browserConfig" | "developerConfig" | "runtimeConfig">> & {
+  browserConfig?: Partial<BrowserStoredConfig>;
+  developerConfig?: Partial<DeveloperStoredConfig>;
+  runtimeConfig?: Partial<RuntimeConfig>;
+};
+
+let desktopPersistedSnapshot: DesktopPersistedConfig | null = null;
 
 const desktopBridge = getDesktopHost();
+
+/** 只在 isDesktopMode() 为真之后调用；宿主缺失时报与 desktopInvoke 相同的错误。 */
+function requireDesktopBridge(): DesktopHost {
+  if (!desktopBridge) {
+    throw new Error("桌面接口不可用");
+  }
+  return desktopBridge;
+}
 
 export function isDesktopMode() {
   return isDesktopHostAvailable();
@@ -24,39 +54,46 @@ export function persistedDesktopSnapshot() {
   return desktopPersistedSnapshot;
 }
 
-function normalizeDesktopPersistedConfig(payload: any = {}, fallback: any = {}) {
-  const source = isObject(payload) ? payload : {};
-  const base = isObject(fallback) ? fallback : {};
+/** isObject 只返回 boolean、不收窄类型，这里统一把对象断言成宽松记录，其余值给空对象。 */
+function asRecord(value: unknown): Record<string, unknown> {
+  return isObject(value) ? (value as Record<string, unknown>) : {};
+}
+
+function normalizeDesktopPersistedConfig(payload: unknown = {}, fallback: unknown = {}): DesktopPersistedConfig {
+  const source = asRecord(payload);
+  const base = asRecord(fallback);
   const runtimeSource = {
-    ...(isObject(base.runtimeConfig) ? base.runtimeConfig : {}),
-    ...(isObject(source.runtimeConfig) ? source.runtimeConfig : {}),
+    ...asRecord(base.runtimeConfig),
+    ...asRecord(source.runtimeConfig),
   };
   const browserConfig = normalizeBrowserStoredConfig({
-    ...(isObject(base.browserConfig) ? base.browserConfig : {}),
+    ...asRecord(base.browserConfig),
     ...desktopRuntimeToBrowserConfig(runtimeSource),
-    ...(isObject(source.browserConfig) ? source.browserConfig : {}),
+    ...asRecord(source.browserConfig),
   });
   const developerConfig = normalizeDeveloperStoredConfig(
-    source.developerConfig
-      ?? runtimeSource.developerConfig
-      ?? base.developerConfig
-      ?? {},
+    asRecord(
+      source.developerConfig
+        ?? runtimeSource.developerConfig
+        ?? base.developerConfig,
+    ),
   );
   return {
-    firstRunCompleted: source.firstRunCompleted ?? base.firstRunCompleted ?? false,
-    closeToTrayHintShown: source.closeToTrayHintShown ?? base.closeToTrayHintShown ?? false,
+    // 持久化 JSON 里的值未经校验，保持原样透传（与历史行为一致）。
+    firstRunCompleted: (source.firstRunCompleted ?? base.firstRunCompleted ?? false) as boolean,
+    closeToTrayHintShown: (source.closeToTrayHintShown ?? base.closeToTrayHintShown ?? false) as boolean,
     browserConfig,
     developerConfig,
     runtimeConfig: buildRuntimeConfig(browserConfig, developerConfig, runtimeSource),
   };
 }
 
-function persistShadowConfig(browserConfig, developerConfig) {
+function persistShadowConfig(browserConfig: BrowserStoredConfig, developerConfig: DeveloperStoredConfig) {
   writeBrowserStoredConfig(browserConfig);
   writeDeveloperStoredConfig(developerConfig);
 }
 
-async function saveDesktopPersistedConfig(partial: any = {}) {
+async function saveDesktopPersistedConfig(partial: DesktopPersistedConfigPatch = {}) {
   const baseline = desktopPersistedSnapshot || normalizeDesktopPersistedConfig({}, {
     browserConfig: readBrowserStoredConfig(),
     developerConfig: readDeveloperStoredConfig(),
@@ -83,19 +120,20 @@ async function saveDesktopPersistedConfig(partial: any = {}) {
     ocrCredentialRef: merged.browserConfig.ocrCredentialRef,
     paddleToken: merged.browserConfig.paddleToken,
     mineruToken: merged.browserConfig.mineruToken,
+    glmOcrToken: merged.browserConfig.glmOcrToken,
     translationCredentialRef: merged.browserConfig.translationCredentialRef,
     modelApiKey: merged.browserConfig.modelApiKey,
     developerConfig: merged.developerConfig,
     runtimeConfig: merged.runtimeConfig,
   };
-  const response = await desktopBridge.saveDesktopConfig(savePayload);
+  const response = await requireDesktopBridge().saveDesktopConfig(savePayload);
   desktopPersistedSnapshot = normalizeDesktopPersistedConfig(response, savePayload);
   setRuntimeConfig(desktopPersistedSnapshot.runtimeConfig);
   persistShadowConfig(desktopPersistedSnapshot.browserConfig, desktopPersistedSnapshot.developerConfig);
   return desktopPersistedSnapshot;
 }
 
-export async function savePersistedDesktopConfig(partial: any = {}) {
+export async function savePersistedDesktopConfig(partial: DesktopPersistedConfigPatch = {}) {
   if (!isDesktopMode()) {
     return {
       browserConfig: normalizeBrowserStoredConfig(partial.browserConfig),
@@ -124,7 +162,7 @@ export async function loadPersistedConfig() {
       closeToTrayHintShown: false,
     };
   }
-  const payload = await desktopBridge.loadDesktopConfig();
+  const payload = await requireDesktopBridge().loadDesktopConfig();
   desktopPersistedSnapshot = normalizeDesktopPersistedConfig(payload, {
     browserConfig: shadowBrowserConfig,
     developerConfig: shadowDeveloperConfig,
@@ -135,7 +173,7 @@ export async function loadPersistedConfig() {
   return desktopPersistedSnapshot;
 }
 
-export async function savePersistedBrowserConfig(nextBrowserConfig) {
+export async function savePersistedBrowserConfig(nextBrowserConfig: BrowserStoredConfig) {
   if (!isDesktopMode()) {
     return {
       browserConfig: nextBrowserConfig,
@@ -148,7 +186,7 @@ export async function savePersistedBrowserConfig(nextBrowserConfig) {
   return saveDesktopPersistedConfig({ browserConfig: nextBrowserConfig });
 }
 
-export async function savePersistedDeveloperConfig(nextDeveloperConfig) {
+export async function savePersistedDeveloperConfig(nextDeveloperConfig: DeveloperStoredConfig) {
   if (!isDesktopMode()) {
     return {
       browserConfig: normalizeBrowserStoredConfig(readBrowserStoredConfig()),
@@ -161,7 +199,7 @@ export async function savePersistedDeveloperConfig(nextDeveloperConfig) {
   return saveDesktopPersistedConfig({ developerConfig: nextDeveloperConfig });
 }
 
-export async function desktopInvoke(command, args = {}) {
+export async function desktopInvoke(command: string, args: DesktopInvokeArgs = {}) {
   if (!desktopBridge) {
     throw new Error("桌面接口不可用");
   }

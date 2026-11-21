@@ -1,0 +1,263 @@
+/* 顶部导航：logo、图书馆 / 合集分栏、仓库链接。（AppTopBar / LibraryTopTabs）
+ *
+ * @owns topbar, app-shell-header, library-view, library-topbar, library-header-actions, library-top-tabs, library-top-tab, library-brand-link, library-source-offer, hero, brand
+ * @uses button-link */
+
+@utility topbar {
+  @apply flex flex-row items-center justify-between gap-3;
+  width: 100%;
+
+  & .hero-actions button {
+    min-height: 32px;
+    padding-inline: 10px;
+    font-size: 12px;
+    border-radius: var(--btn-radius);
+  }
+
+  & .hero-actions .button-link {
+    min-height: 32px;
+    padding-inline: 10px;
+    font-size: 12px;
+    border-radius: var(--btn-radius);
+  }
+
+  @media (max-width: 767px) {
+    gap: 0.75rem;
+  }
+}
+
+/* 顶部导航区——用户要求去掉白色卡片背景:logo 左、图书馆/分类分栏居中,直接
+   浮在灰底页面上,不再是一条独立的白色圆角栏。添加/搜索/设置 三样已下沉到
+   底部一条浮动栏(AppBottomBar.jsx / library-bottom-bar)。 */
+@utility app-shell-header {
+  width: var(--header-width);
+  flex: 0 0 auto;
+  order: 0;
+  margin-top: 6px;
+  margin-bottom: var(--header-gap-bottom);
+}
+
+@utility library-view {
+  width: min(1120px, 100%);
+  flex: 1 1 auto;
+  min-height: 0;
+  order: 1;
+  overflow: hidden;
+}
+
+/* 去白卡:顶栏透明,只做 flex 布局(logo 左 + 两侧 spacer 把分栏挤到正中)。 */
+@utility library-topbar {
+  justify-content: flex-start;
+  gap: 18px;
+  padding: 2px 2px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+
+  @media (max-width: 419px) {
+    gap: 10px;
+  }
+}
+
+@utility library-header-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+/* 顶部"图书馆/分类"分栏——现在是整合导航栏(library-topbar)里的一个 flex
+   子项(和 logo、搜索框、按钮同一行),不再是独立占一整行的顶层元素。 */
+@utility library-top-tabs-root {
+  flex: 0 0 auto;
+}
+
+/* 顶栏去白卡后,分栏 pill 自己需要一个白底(不然灰 pill 贴在同色灰页面上
+   会隐形)——白底 + 细描边 + 轻阴影,成为顶栏中央唯一的浮起小控件。 */
+@utility library-top-tabs {
+  display: inline-flex;
+  gap: 3px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--shadow-color) 6%, transparent);
+}
+
+/* 选中态用和"添加"按钮同一套实底深色(--ink)强对比。图标化:icon + 短文字
+   横排,图标比文字略淡,选中时一起转白。 */
+@utility library-top-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  border-radius: var(--btn-radius);
+  /* 四 tab（图书馆/合集/收藏/AI）略收紧水平 padding，窄屏不易挤换行 */
+  padding: 7px 10px;
+  font-size: 13px;
+
+  @media (max-width: 720px) {
+    gap: 4px;
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+
+  /* 最窄（≤ 359px）连标签图标也放不下：只留文字。 */
+  @media (max-width: 359px) {
+    & svg {
+      display: none;
+    }
+  }
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: transform 0.12s var(--ease-out), background-color 0.15s ease, color 0.15s ease;
+
+  & svg {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+  }
+
+  &.is-active {
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-fg);
+  }
+
+  &:hover:not(.is-active) {
+    color: var(--ink);
+    background: var(--bg);
+  }
+
+  &:active {
+    transform: scale(0.96);
+  }
+}
+
+/*
+  危险区修复(Tailwind v4 迁移):`.library-brand-link` 和 `.hero-repo-link`
+  同时出现在同一个 <a> 元素上(AppShellHeader.jsx),都定义了 font-size——
+  v3 里两者 specificity 相同,靠同文件源码序 tie-break,写在后面的
+  `.hero-repo-link`(2.2rem)胜出;library-brand-link 这份 1.3rem 一直是死
+  代码。v4 下 @utility 生成顺序不再保证跟随源码序(和上面 library-grid/
+  recent-jobs-list 的 gap 冲突同一模式),实测迁移后 1.3rem 反而胜出,导致
+  首页顶栏 "RetainPDF" 标题字号被砍掉近一半。这里去掉冲突的 font-size 声明,
+  字号完全交给 hero-repo-link 一处定义;logo 尺寸的嵌套覆盖两边取值一致
+  (28px),不冲突,保留。
+*/
+@utility library-brand-link {
+  & .hero-repo-logo {
+    width: 22px;
+    height: 22px;
+  }
+
+  /* ≤ 419px（手机竖屏）：logo 文字 + 标签放不下。只留图标（图片 alt 里有名字），标签一个都不少。 */
+  @media (max-width: 419px) {
+    & .library-brand-link-text {
+      display: none;
+    }
+  }
+}
+
+@utility library-source-offer {
+  @apply rounded-full border px-1.5 py-0.5 font-medium;
+  font-size: var(--ui-text-2xs, 10px);
+  border-color: var(--line);
+  color: var(--muted);
+  letter-spacing: 0;
+}
+
+@utility hero-repo-logo {
+  .library-brand-link & {
+    width: 22px;
+    height: 22px;
+  }
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  display: block;
+  flex: 0 0 auto;
+
+  @media (max-width: 767px) {
+    width: 28px;
+    height: 28px;
+  }
+}
+
+/* 导航栏里 logo/分栏 两侧的弹性占位,把分栏挤到正中。 */
+@utility library-topbar-spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+@utility brand-mark {
+  @apply flex items-center;
+}
+
+@utility brand-title {
+  @apply text-[12px] font-medium;
+  color: var(--ink);
+  letter-spacing: 0;
+  opacity: 0.82;
+}
+
+@utility hero {
+  @apply px-2 py-0;
+  width: 100%;
+
+  .app-shell & {
+    margin-bottom: 0.35rem;
+  }
+
+  @media (max-width: 767px) {
+    & h1 {
+      font-size: 1.28rem;
+    }
+  }
+}
+
+@utility hero-single {
+  @apply text-center;
+}
+
+@utility hero-copy {
+  @apply mx-auto max-w-[560px];
+}
+
+/* 只在整合导航栏(AppTopBar.jsx)这一处使用——早期是独立占一整行的大号
+   品牌标题(2.2rem),挤进现在这条和分栏/搜索框/按钮同高的紧凑导航栏后按
+   比例缩小,不然视觉分量会盖过其余元素。 */
+@utility hero-repo-link {
+  @apply inline-flex items-center gap-2 text-[17px] font-semibold no-underline;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  flex: 0 0 auto;
+
+  @media (max-width: 767px) {
+    font-size: 15px;
+    gap: 0.4rem;
+  }
+}
+
+@utility hero-actions {
+  @apply flex flex-wrap items-center gap-1.5;
+
+  .topbar & button {
+    min-height: 32px;
+    padding-inline: 10px;
+    font-size: 12px;
+    border-radius: 999px;
+  }
+
+  .topbar & .button-link {
+    min-height: 32px;
+    padding-inline: 10px;
+    font-size: 12px;
+    border-radius: 999px;
+  }
+}
+

@@ -1,14 +1,9 @@
-import sys
 import tempfile
 from pathlib import Path
 
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-
-from retainpdf_pipeline.translate.workflow.page_policies import finalize_page_payloads
-from retainpdf_pipeline.translate.services.continuation.orchestrator import annotate_layout_zones_by_page
+from retainpdf_translation.workflow.page_policies import finalize_page_payloads
+from retainpdf_translation.services.continuation.orchestrator import annotate_layout_zones_by_page
 
 
 def _page_payload_item(

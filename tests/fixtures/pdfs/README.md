@@ -44,9 +44,16 @@ multi-column-paper.pdf
 
 ## Git 约定
 
-默认不建议把大 PDF 提交进 Git。这个目录主要作为本地/CI 私有样本入口。
+目前清单里登记了文件的 PDF 都已提交进 Git（多数超过 1 MB），并随源码归档
+（`ops/release/build_source_archive.py` 整体打包 `tests/fixtures`）一起发出。
+CI 不读取这里的任何 PDF，它们只服务下面的手动脚本。
 
-如果后续要提交小型公开样本，单个文件建议控制在 1 MB 以内，并确认版权允许。
+新增样本前先想清楚是否值得进仓库：单个文件尽量控制在 1 MB 以内，并确认版权允许。
+没有登记进 `manifest.csv` 的 PDF 不会被任何入口用到，不要放进来。
+
+`manifest.csv` 里 `dark-background`、`programming-manual`、`bookmarks`、
+`multi-column-paper` 四行的 `file` 为空，是待补的样本类型占位，`--list-samples`
+会把它们标成不可用。
 
 ## 本地回归脚本
 

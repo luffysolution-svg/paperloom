@@ -1,7 +1,7 @@
 // job-images — pure (from frontend/web/src/js/api/job-images.ts, mock removed)
-// Builds candidate URLs for thumbnail/cover fallbacks and fetches image blobs.
+// Builds candidate URLs for thumbnail/cover fallbacks.
 
-import { API_PREFIX, buildApiHeaders, buildApiUrl } from "./internal/runtime.js";
+import { API_PREFIX, buildApiUrl } from "./internal/runtime.js";
 
 function isFileProtocolRuntime(): boolean {
   return typeof window !== "undefined" && (window as any).location?.protocol === "file:";
@@ -16,29 +16,13 @@ function dedupe(values: (string | null | undefined)[]): string[] {
   return urls;
 }
 
-function apiPath(apiPrefix: string | undefined, relativePath: string): string {
-  const prefix = `${apiPrefix || API_PREFIX}`.trim().replace(/\/+$/, "");
-  const path = `${relativePath || ""}`.trim().replace(/^\/+/, "");
-  return `${prefix}/${path}`;
-}
 
-function artifactReady(item: any, ...keys: string[]): boolean {
-  const artifacts = item?.artifacts && typeof item.artifacts === "object" ? item.artifacts : {};
-  const displayItems: any[] = Array.isArray(item?.artifacts_display) ? item.artifacts_display : [];
-  return keys.some((key) => Boolean(
-    item?.[`${key}_ready`] || artifacts?.[key]?.ready || artifacts?.[`${key}_ready`] || displayItems.some((d) => d?.ready && (d?.key === key || d?.kind === key)),
-  ));
-}
 
-export function buildJobImageCandidateUrls(item: any = {}, { apiPrefix = API_PREFIX }: { apiPrefix?: string } = {}): string[] {
-  const jobId = `${item?.job_id || item?.id || ""}`.trim();
-  const urls: (string | null | undefined)[] = [item?.thumbnail_url, item?.cover_url];
-  if (jobId) {
-    const encodedJobId = encodeURIComponent(jobId);
-    if (artifactReady(item, "thumbnail")) urls.push(apiPath(apiPrefix, `jobs/${encodedJobId}/thumbnail`), apiPath(apiPrefix, `library/books/${encodedJobId}/thumbnail`));
-    if (artifactReady(item, "cover")) urls.push(apiPath(apiPrefix, `jobs/${encodedJobId}/cover`), apiPath(apiPrefix, `library/books/${encodedJobId}/cover`));
-  }
-  return dedupe(urls);
+// 只用后端给的地址：书架和文档列表现在给同一本书同一个地址（/documents/:id/thumbnail|cover），
+// 不再自己拼 jobs/… 和 library/books/… 的备选——以前同一本书两条地址各下一份，首页 41 本书拉了 82 张图。
+// apiPrefix 参数保留给老调用方，不再使用。
+export function buildJobImageCandidateUrls(item: any = {}, _options: { apiPrefix?: string } = {}): string[] {
+  return dedupe([item?.thumbnail_url, item?.cover_url]);
 }
 
 export function normalizeJobImageUrl(value: unknown): string {
@@ -64,10 +48,3 @@ export function normalizeJobImageUrl(value: unknown): string {
   return buildApiUrl("", raw.replace(/^\/+/, ""));
 }
 
-export async function fetchJobImageBlob(rawUrl: string): Promise<Blob | null> {
-  const url = normalizeJobImageUrl(rawUrl);
-  if (!url) return null;
-  const response = await fetch(url, { headers: buildApiHeaders() });
-  if (!response.ok) throw new Error(`image failed: ${response.status}`);
-  return response.blob();
-}

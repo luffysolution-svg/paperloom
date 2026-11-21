@@ -15,26 +15,18 @@ export type ReaderRegion = {
     status: string;
     assetIds: string[];
     assetUrls: string[];
+    /** 页内阅读顺序（后端已按 (页, 顺序) 排好；老后端没有这几项）。 */
+    readingOrder?: number;
+    /** document.v1 的 sub_type，词表随 provider 不同（见 reader-blocks.ts）。 */
+    subType?: string;
+    /** title = 1，heading = 2；只在标题块上有。 */
+    headingLevel?: number;
+    /** 同一段被拆成几块（跨页 / 跨栏）时共享的组 id。 */
+    continuationGroupId?: string;
+    /** 组内成员各自那一截译文；translated.text 在组内每个成员上都是整段。 */
+    translatedBlockText?: string;
 };
 export type ReaderRegionKind = "formula" | "table" | "figure" | "text" | "region";
-export type ReaderRegionSelection = {
-    selectionType: "region";
-    region: ReaderRegion;
-    kind: ReaderRegionKind;
-    page: number;
-    pane: ReaderPaneId;
-    /** 视口坐标，用于浮条定位。 */
-    rect: ReaderRegionRect;
-};
-export type ReaderTextSelection = {
-    selectionType: "text";
-    quote: string;
-    page: number;
-    pane: ReaderPaneId;
-    /** 视口坐标，用于浮条定位。 */
-    rect: ReaderRegionRect;
-};
-export type ReaderSelection = ReaderRegionSelection | ReaderTextSelection;
 export type ReaderPageMetadata = {
     page: number;
     width: number;
@@ -60,11 +52,25 @@ export type ReaderRegionRect = {
     width: number;
     height: number;
 };
+/**
+ * 接口响应（`{ items: [...] }`，可带 `{ data }` 信封）→ ReaderRegion[]。
+ *
+ * 必须幂等：宿主的 loadSessionSnapshot 已经归一化过一次，session-assets 又会再调一次。
+ * 以前这里只认 `{ items }`，第二次拿到的是数组，直接返回空 —— 阅读器里的内容块数恒为 0，
+ * 悬停红框、整块复制、点块浮条全部失效（接口明明返回了 875 块）。
+ */
 export declare function normalizeReaderRegions(payload: unknown): ReaderRegion[];
 export declare function readerRegionKind(regionType: string): ReaderRegionKind;
 export declare function readerRegionKindForRegion(region: ReaderRegion): ReaderRegionKind;
 export declare function isStructuredReaderRegion(region: ReaderRegion): boolean;
 export declare function readerRegionContent(region: ReaderRegion, pane: ReaderPaneId): string;
+/**
+ * 悬停「复制」写进剪贴板的内容。
+ * - 译文栏没有译文（公式、保留原文的块）时退回原文 —— 右栏这时显示的就是原文；
+ * - 行间公式给 LaTeX（去掉 `$$` 包裹），和浮条里「复制 LaTeX」一致；
+ * - 正文里的行内公式本来就是 `$m$` 这种写法，原样保留。
+ */
+export declare function readerRegionCopyText(region: ReaderRegion, pane: ReaderPaneId): string;
 export declare function extractReaderFormulaLatex(value: string): string;
 export declare function normalizeReaderMetadata(payload: unknown): ReaderMetadata;
 export declare function findReaderRegion(regions: readonly ReaderRegion[], blockId: string | null | undefined): ReaderRegion | null;

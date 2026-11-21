@@ -5,10 +5,16 @@ import {
 export function createRecentJobsRefreshEnvironment({
   now = () => Date.now(),
   setTimeoutFn = (callback, delay) => window.setTimeout(callback, delay),
-  clearTimeoutFn = (timer) => window.clearTimeout(timer),
+  clearTimeoutFn = (timer) => window.clearTimeout(timer ?? undefined),
   workflowOpenPort = defaultRecentJobsWorkflowOpenPort,
   isWorkflowOpen = () => workflowOpenPort.isWorkflowOpen(),
-}: any = {}) {
+}: {
+  now?: () => number;
+  setTimeoutFn?: (callback: () => void, delay: number) => number;
+  clearTimeoutFn?: (timer: number | null | undefined) => void;
+  workflowOpenPort?: typeof defaultRecentJobsWorkflowOpenPort;
+  isWorkflowOpen?: () => boolean;
+} = {}) {
   return Object.freeze({
     now,
     setTimeout: setTimeoutFn,

@@ -60,12 +60,16 @@ def test_release_base_version_accepts_delivery_labels(tag: str) -> None:
 def test_wheel_data_files_covered() -> None:
     """Non-code data (prompts, schemas) must be declared in package-data,
     or the installed wheel silently misses them at runtime."""
-    pyproject = tomllib.loads(
+    pipeline = tomllib.loads(
         (SERVICES_ROOT / "pipeline" / "pyproject.toml").read_text(encoding="utf-8")
     )
-    package_data = pyproject["tool"]["setuptools"]["package-data"]
+    package_data = pipeline["tool"]["setuptools"]["package-data"]
     flat = ["/".join(key.split(".")[-2:]) for key in package_data]
-    assert any("translate/prompts" in entry for entry in flat)
     assert any("document_schema" in entry for entry in flat)
-    prompts_dir = SERVICES_ROOT / "pipeline" / "retainpdf_pipeline" / "translate" / "prompts"
+    # 提示词跟着翻译包 retainpdf-translation 走。
+    translation = tomllib.loads(
+        (SERVICES_ROOT / "translation" / "pyproject.toml").read_text(encoding="utf-8")
+    )
+    assert "retainpdf_translation.prompts" in translation["tool"]["setuptools"]["package-data"]
+    prompts_dir = SERVICES_ROOT / "translation" / "retainpdf_translation" / "prompts"
     assert any(prompts_dir.glob("*.txt")), "prompts dir has no txt to ship"

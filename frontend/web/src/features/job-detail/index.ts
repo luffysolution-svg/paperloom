@@ -70,9 +70,6 @@ export {
   createStatusDetailTranslationTabCoordinator,
 } from "./domain/dialog/translation-tab-coordinator.js";
 export {
-  resetStatusDetailRuntimeView,
-} from "./domain/runtime-view-reset.js";
-export {
   buildOcrAmbiguityRequest,
   ocrRecoveryJobId,
   readOcrAmbiguityView,
@@ -128,15 +125,18 @@ export {
 export {
   createStatusDetailController,
 } from "./domain/status-detail-controller.js";
+export type { StatusDetailController } from "./domain/status-detail-controller.js";
 export {
   createStatusDetailDialogStore,
 } from "./domain/status-detail-dialog-store.js";
+export type { StatusDetailDialogStore } from "./domain/status-detail-dialog-store.js";
 export {
   createStatusDetailRuntimePort,
 } from "./domain/status-detail-runtime-port.js";
 export {
   createStatusDetailStore,
 } from "./domain/status-detail-store.js";
+export type { StatusDetailStore } from "./domain/status-detail-store.js";
 export {
   StatusDetailDialog,
 } from "./ui/StatusDetailDialog.jsx";
@@ -144,6 +144,7 @@ export {
 // detail.html 整页的展示组件（C1 从 app/detail/components 迁入）。
 // 逐个显式列出，不用 export * —— barrel 无差别转出会连带触发模块级副作用。
 export { DetailHeader } from "./ui/page/DetailHeader.js";
+export type { DetailActionLinkState, ProtectedDownloadFactory } from "./ui/page/DetailHeader.js";
 export {
   ErrorNoticeCard,
   JobSummaryCard,
@@ -160,3 +161,4 @@ export {
   StageHistoryModal,
   StageHistoryTriggerCard,
 } from "./ui/page/EventsTimeline.js";
+export type { JobDetailPageState } from "./domain/page/page-state.js";

@@ -1,0 +1,772 @@
+"""翻译 agent：一次送一整页，模型用纯文本逐块交回译文（每块 `@@ 块号` 开头，不用 JSON）；也能按重排 agent 的改稿要求改写某几块。
+
+调用直接走 Anthropic Messages 接口：开发和测试用 `http_transport`（密钥从环境变量 `ANTHROPIC_API_KEY` 读，模型 `ANTHROPIC_MODEL`），
+正式流程用 `make_http_transport(密钥, url=…)`，密钥和地址由任务给，不读服务器的环境变量。
+每个请求连同回答缓存在 `cache_dir`，同样的输入再跑不重复花钱，结果可复现。测试用 `transport` 注入假模型。
+输入输出的格式见 `contract.py`；整篇按页顺序翻、带术语记忆和上下文包的调度在 `runner.py`。
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import random
+import re
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable
+
+from retainpdf_translation_agent.checks import check_block
+from retainpdf_translation_agent.checks import check_terms
+from retainpdf_translation_agent.checks import restore_formulas
+from retainpdf_translation_agent.checks import status_of
+from retainpdf_translation_agent.checks import style_signals
+from retainpdf_translation_agent.checks import visible_length
+from retainpdf_translation_agent.context import context_terms
+from retainpdf_translation_agent.contract import CONTRACT_VERSION
+from retainpdf_translation_agent.contract import STATUS_ERROR
+from retainpdf_translation_agent.contract import STATUS_FALLBACK_SOURCE
+from retainpdf_translation_agent.contract import STATUS_OK
+from retainpdf_translation_agent.contract import STATUS_WARN
+from retainpdf_translation_agent.contract import BlockResult
+from retainpdf_translation_agent.contract import PageInput
+from retainpdf_translation_agent.contract import RevisionRequest
+from retainpdf_translation_agent.memory import find_terms
+from retainpdf_translation_agent.units import merge_groups
+from retainpdf_translation_agent.units import split_units
+
+API_URL = "https://api.anthropic.com/v1/messages"
+# 以前接续组的原文里用它标出原来在哪里断开、要模型在译文里照放；2026-10-30 起模型只翻整段，不再放。
+# 留着这个记号只为删掉模型照老习惯写进来的（审校改稿里也不许出现）
+BREAK = "[[BREAK]]"
+BREAK_RE = re.compile(r"\s*\[\[BREAK\]\]\s*")
+DEFAULT_MODEL = "claude-haiku-5-5"
+PROMPT_VERSION = "translation-agent-16"
+# 角色：现在有译者（初译、重翻）和修订（按改稿要求改写）；没在 `models` 里指定的角色用默认模型
+ROLE_TRANSLATOR = "translator"
+ROLE_REVISER = "reviser"
+ROLE_READER = "reader"  # 翻译前通读（reader.py）
+ROLE_REVIEWER = "reviewer"  # 审校（review.py）
+
+SYSTEM_PROMPT = """你是学术文档的翻译 agent，把英文 PDF 翻成简体中文，译文会放回原文每个块的位置显示。
+你会收到一整页的全部块（JSON），每块有类别（class）、大概位置（where）、原文（text）、要不要翻（translate）。
+像人一样先通读整页，弄清每块在版面上的作用和上下文，再逐块翻译。
+
+规则：
+1. 只翻 translate=true 的块；translate=false 的块（页眉页脚、关键词、参考文献、行间公式、代码块、算法块、已经是中文的段落……）只是上下文，不要交回。
+2. 每个要翻的块交回且只交回一条，id 原样照抄，不要合并、拆分或增删块。
+   请求里的 required_ids 列出了这一页必须交回的全部 id，交卷前逐个核对，一个都不能少（图注、短标题最容易漏）。
+3. 公式一律用 LaTeX 写在 `$…$` 里（排版靠 `$` 认公式，去掉了就排不成公式）：原文 `$…$` 里的内容照抄，放在译文对应位置；
+   LaTeX 命令用一个反斜杠，不要换成 Unicode 字符或近似命令（`\\delta` 不写成 δ，`\\mathrm{max}` 不写成 `\\max`，`\\hbar` 不写成 ℏ），
+   也不要写成普通文字（`$ n_{\\mathrm{L}}^{\\mathrm{max}} $` 不写成 n_L^max）；只有 OCR 明显弄坏了公式本身（括号缺失、上下标脱落、命令截断）才做最小修复。
+   单个字母的变量、带上下标的符号、单位里的公式写法也要带 `$`；不要把裸露的 LaTeX 片段留在正文里，普通正文不要放进 `$…$`。
+   `{{fn:1}}` 这类脚注标记、`[1, 2]` 这类引用标记原样保留；反引号包着的行内代码（命令、路径、参数名，如 `--json`）连同反引号原样保留。
+4. 数字、章节编号（如 2.1）、代码和代码里的变量名、URL、DOI 原样保留。
+5. 被分栏或分页拆开的同一段话已经合成一条记录（有 members 字段），text 是接起来的整段原文。当成一段话翻通顺，
+   用这条记录的 id 交回一整段译文；不要按 members 分开交，也不用管原来在哪里断开——分回各块由程序做。
+   text 里单独成行的 `$$ … $$` 是这段话中间的独立公式（版面上单独排）：译文里在对应位置原样保留，不要改写、挪动、删掉，
+   也不要改成行内公式；公式前后的文字照原文顺序译。
+6. 按类别把握语气：标题简洁；图注、表题保留"图 1""表 1"这样的编号；目录条目只翻标题，编号和页码不动；
+   列表项保留 (1) 这类序号；脚注开头的编号原样保留（原文 "11 On the …" 就写 "11 关于……"，不要写成"注1"）；作者、机构一般不在要翻的块里。有 translation 字段的块是已经定好的译文（标题、目录），只作参考，不要交回。
+7. 术语前后一致。专名：context 的 names 给了中文译名的照用（first_use=true 时写"中文译名（原文）"），keep 里的原样保留；
+   都没登记的：软件、数据集、期刊、机构名保留原文，人名按 style 里的人名规则（没有规则就保留原文）。
+8. 译文要通顺、简练，长度和原文相当，不要加解释、注释或括号里的原文（第一次出现的缩写、人名按第 10 条括注原文）。
+   贴着作者的写法和语气：作者用"we"就译"我们"；作者说得有保留（may、might、suggest、appear to）就保留这份保留，
+   不要译得更肯定或更含糊；作者口语就口语、严谨就严谨，不要统一改成教科书腔，也不要自己加强调或删掉强调。
+9. 请求里有 revise 时（排版发现放不下等），只改 revise 列出的块，其余块只是上下文，不要交回。
+   在 current_translation 的基础上改写：current_chars 是现在的字数，max_chars 是**硬上限**，must_cut 是至少要删掉的字数
+   （字数按显示算：`{{fn:1}}` 算 1 个字，公式按一半算）。
+   只许精简措辞（去掉可有可无的虚字、换更短的同义说法、把句子改紧凑）；**意思一点都不能少**：修饰语、举例、限定词、
+   表示保留的词（可能、或许）都不许删，公式、标记、编号必须保留，作者的语气不变。
+   交卷前数一下字数，尽量不超过 max_chars；不删内容就做不到时，交回能做到的最短版本（程序会标出还超，交给排版缩字号或给人看）。
+10. 请求里的 context 是这一页的上下文包，只用来帮你翻准，里面的东西都不要交回：
+   - terms：术语表。status 是 approved 或 locked 的**必须照用**；candidate 是前面几页或别的章的译法，
+     意思相同就沿用，意思不同（同一个词在这里是另一个意思）就按这里的意思译；有 scope 的只管那几章。
+   - keep：要原样保留的专名（人名、机构、期刊、软件）。
+   - abbreviations：缩写和全称。first_use=true 表示全书第一次用到，译成"中文全称（缩写）"；之后直接写缩写。
+   - names：人名等专名的中文译名，必须照用；first_use=true 时写"中文译名（原文）"，之后只写中文译名。
+   - previous / next：上一页结尾、下一页开头（previous 带已定的译文），用来接上文、对齐译法。
+   - style：作者文风和编号格式；summary：本章摘要，只作参考，数字和术语以原文和术语表为准。
+11. 交卷时在「@@ 术语」里报上这一页你定下的译法：专业术语（报原文和译法）、要保留原文的专名（行末写"保留"）。
+   只报真正的术语和专名，不报普通词、标题、书名、缩写；source 写词的原形（单数、不带括号里的缩写），target 只写译法本身；
+   context 里已有、你也照用了的不用再报。
+   context 给了译法、但这一处意思确实不同（同一个词在这里是另一个意思）而没照用的，在「@@ 例外」里写明块、原词、
+   你用的译法和理由。没理由不要声明例外。
+12. 中文体例：引用公式写"式 (3)"，子图写"图 3.1(a)"（Fig. 也译"图"）；pt / points 表示长度时译"磅"，percentage points 译"百分点"；
+   "N times as much / as many" 译"是……的 N 倍"，不要写"多 N 倍"；suggest、indicate 译"提示、意味着"，不要加强成"表明、证明"；
+   编号体例沿用原文并全文统一（原文 IV. 就写 IV.，不要一会儿"四"一会儿 IV.）；双关、俏皮话用中文里等效的说法，不加英文括注；
+   称呼读者用"你"还是"您"按 style，没写就用"你"；不要在中文句子里夹没翻的英文单词。
+
+交卷格式：纯文本，不要 JSON，不要代码块，不要别的说明。每块一节：第一行是 "@@ " 加块的 id（原样照抄），下面是这一块的译文。
+译文就是要显示的样子，按第 3 条写公式，反斜杠写一个、不要转义（请求是 JSON，原文的 `\\delta` 在里面写成 `\\\\delta`，交回时写 `\\delta`）。
+后面可以跟三节：术语（每行"原文 | 译法 | 块的 id"，要保留原文的专名行末再加"| 保留"）、例外（每行"块的 id | 原词 | 这里用的译法 | 理由"）、
+备注（拿不准的地方）；没有就不写。尖括号的地方换成实际内容：
+
+@@ <块的 id>
+<这一块的译文>
+
+@@ <接续组的 id，如 __cg__:…>
+<这一组的一整段译文>
+
+@@ 术语
+<原文> | <译法> | <块的 id>
+
+@@ 例外
+<块的 id> | <原词> | <这里用的译法> | <理由>
+
+@@ 备注
+<拿不准的地方>
+"""
+
+# 交卷格式（2026-10-31 起不用 JSON 工具调用：用户定。公式里的反斜杠在 JSON 里要写两个，交回纯文本照抄原文就行）
+ANSWER_HEADER_RE = re.compile(r"^@@[ \t]*(.+?)[ \t@]*$", re.M)
+TERMS_SECTION, EXCEPTIONS_SECTION, NOTES_SECTION = "术语", "例外", "备注"
+KEEP_MARK = "保留"
+
+Transport = Callable[[dict], dict]
+
+
+class StopRun(RuntimeError):
+    """继续请求也没用（额度用完、密钥不对、一直限流）：调度保存进度后停下，修好再接着跑。"""
+
+    reason = "stop"
+
+
+class QuotaExhausted(StopRun):
+    reason = "quota_exhausted"
+
+
+class AuthFailed(StopRun):
+    reason = "auth_failed"
+
+
+class RateLimited(StopRun):
+    reason = "rate_limited"
+
+
+@dataclass
+class Usage:
+    requests: int = 0
+    cached: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    latency_ms: int = 0
+
+    def add(self, response: dict, latency_ms: int, cached: bool) -> None:
+        self.requests += 1
+        self.cached += int(cached)
+        usage = response.get("usage") or {}
+        self.input_tokens += int(usage.get("input_tokens") or 0) + int(usage.get("cache_read_input_tokens") or 0)
+        self.output_tokens += int(usage.get("output_tokens") or 0)
+        self.latency_ms += latency_ms
+
+
+RETRY_STATUSES = {429, 500, 502, 503, 504, 529}
+MAX_ATTEMPTS = 6
+MAX_WAIT_SECONDS = 120.0
+
+
+def classify_http_error(status: int, body: str) -> str:
+    """retry（等一会再试）、quota（额度用完）、auth（密钥不对、没权限）、fatal（请求本身有错）。"""
+    if status in RETRY_STATUSES:
+        return "retry"
+    if status in {401, 403}:
+        return "auth"
+    if status in {400, 402} and ("credit balance" in body.lower() or "billing" in body.lower() or "quota" in body.lower()):
+        return "quota"
+    return "fatal"
+
+
+def retry_wait(attempt: int, retry_after: str | None) -> float:
+    """第 `attempt` 次失败后等多久：有 Retry-After 照它，没有就指数退避（1、2、4……秒）加最多 1 秒的抖动。"""
+    if retry_after:
+        try:
+            return min(MAX_WAIT_SECONDS, max(0.0, float(retry_after)))
+        except ValueError:
+            pass
+    return min(MAX_WAIT_SECONDS, 2.0**attempt) + random.random()
+
+
+def http_transport(body: dict, *, sleep: Callable[[float], None] = time.sleep) -> dict:
+    """开发和测试用：密钥从环境变量 `ANTHROPIC_API_KEY` 读。"""
+    key = os.environ.get("ANTHROPIC_API_KEY")
+    if not key:
+        raise AuthFailed("ANTHROPIC_API_KEY is not set (load ~/.config/retainpdf/test.env)")
+    return _post(body, key=key, url=API_URL, sleep=sleep)
+
+
+def make_http_transport(api_key: str, *, url: str = API_URL, sleep: Callable[[float], None] = time.sleep) -> Transport:
+    """正式流程用：密钥和地址由调用方给（任务的凭据和 base_url），不读环境变量。"""
+    if not api_key:
+        raise AuthFailed("model API key is empty")
+
+    def transport(body: dict) -> dict:
+        return _post(body, key=api_key, url=url or API_URL, sleep=sleep)
+
+    return transport
+
+
+def _post(body: dict, *, key: str, url: str, sleep: Callable[[float], None]) -> dict:
+    """用标准库发请求（不给流水线添依赖）。429、5xx 和网络错误退避重试；额度、密钥问题抛 `StopRun`。"""
+    import http.client
+    import urllib.error
+    import urllib.request
+
+    headers = {"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
+    data = json.dumps(body, ensure_ascii=False).encode("utf-8")
+    last_error = ""
+    for attempt in range(MAX_ATTEMPTS):
+        request = urllib.request.Request(url, data=data, headers=headers, method="POST")
+        retry_after = None
+        try:
+            with urllib.request.urlopen(request, timeout=300) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as error:
+            text = error.read()[:300].decode("utf-8", "replace")
+            kind = classify_http_error(error.code, text)
+            if kind == "quota":
+                raise QuotaExhausted(f"model API HTTP {error.code}: {text}") from None
+            if kind == "auth":
+                raise AuthFailed(f"model API HTTP {error.code}: {text}") from None
+            if kind == "fatal":
+                raise RuntimeError(f"model API HTTP {error.code}: {text}") from None
+            retry_after = error.headers.get("retry-after") if error.headers else None
+            last_error = f"HTTP {error.code}"
+        except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.HTTPException) as error:
+            # 网络层的错（对方没回应就断开、连接被重置……）也退避重试：真实文档实测碰到过 RemoteDisconnected
+            last_error = f"{type(error).__name__}: {error}"
+        sleep(retry_wait(attempt, retry_after))
+    raise RateLimited(f"model API still failing after {MAX_ATTEMPTS} attempts: {last_error}")
+
+
+class TranslationAgent:
+    def __init__(
+        self,
+        *,
+        model: str | None = None,
+        models: dict[str, str] | None = None,
+        transport: Transport | None = None,
+        cache_dir: Path | None = None,
+        use_cache: bool = True,
+        effort: str | None = None,
+    ):
+        """`model` 是默认模型（所有角色都用它）；`models` 按角色另指定，例如 {"reviser": "claude-sonnet-5-5"}。
+        `effort`：初译、重翻、改稿的思考档位（`output_config.effort`，如 "low"）；None 不发字段，按模型默认（Haiku 5.5 是 medium）。"""
+        self.model = model or os.environ.get("ANTHROPIC_MODEL") or DEFAULT_MODEL
+        self.models = dict(models or {})
+        self.transport = transport or http_transport
+        self.cache_dir = cache_dir
+        self.use_cache = use_cache
+        self.effort = effort
+        self.usage = Usage()
+        self.calls: list[dict] = []
+        # 编辑部事件（editorial.v1）的出口：调度（`DocumentRun`）接上，补上页号写进 events.jsonl；没接就不产出
+        self.on_event: Callable[[str, dict], None] | None = None
+        self._restored: dict[str, list[dict]] = {}  # 这一轮被换回原文写法的公式（块 id → 警告）
+        # 这一页合成的接续组（组号 → 原来的各块 id）：编辑部事件里照旧报各块的 id，前端不用知道合过
+        self._members: dict[str, list[str]] = {}
+
+    def model_for(self, role: str) -> str:
+        return self.models.get(role) or self.model
+
+    def _emit(self, event_type: str, **fields) -> None:
+        if self.on_event is None:
+            return
+        if "blocks" in fields:
+            fields["blocks"] = [m for b in fields["blocks"] for m in self._members.get(b, [b])]
+        if fields.get("block") in self._members:
+            for member in self._members[fields["block"]]:
+                self.on_event(event_type, dict(fields, block=member))
+            return
+        self.on_event(event_type, fields)
+
+    def _emit_check(self, attempt: int, results) -> None:
+        """一次质检的结果：这一页每块现在的状态（ok / warn / error 各几块）和问题代码各出现几次。"""
+        counts = {STATUS_OK: 0, STATUS_WARN: 0, STATUS_ERROR: 0}
+        codes: dict[str, int] = {}
+        for result in results:
+            weight = len(self._members.get(result.id, [result.id]))  # 合成的接续组按原来几块算
+            if result.status in counts:
+                counts[result.status] += weight
+            for issue in result.issues:
+                code = str(issue.get("code", ""))
+                codes[code] = codes.get(code, 0) + weight
+        self._emit("check_result", attempt=attempt, ok=counts[STATUS_OK], warn=counts[STATUS_WARN], error=counts[STATUS_ERROR], codes=codes)
+
+    # ---- 请求 ----
+    def _body(self, payload: dict, role: str = ROLE_TRANSLATOR, *, system: str = SYSTEM_PROMPT, tool: dict | None = None) -> dict:
+        """不给 `tool`（初译、重翻、改稿）：模型按交卷格式交回纯文本；给了（通读、审校）：强制用这个工具交回。
+
+        不强制用工具时 Haiku 5.5 默认会思考（medium），强制用工具时不会。2026-10-31 论文 16 页各两遍实测，公式原样保住
+        纯文本 + 思考 97.1%、纯文本关掉思考 88.1%、JSON 工具 90.4%——帮上忙的是思考，不要传 `{"type": "disabled"}` 关掉。
+        同一天再测 medium 对 low（`self.effort`）：公式外露、`$` 不成对、漏交都是 0，low 输出少 32%、每页快 30%。"""
+        # 系统提示打提示词缓存断点：各角色的系统提示（连同前面的工具定义）一本书里逐字不变，缓存读按一折计费、不计入
+        # 每分钟输入限额（2026-10-31）。太短的（不到 512 token）服务端不缓存也不报错。
+        body = {"model": self.model_for(role), "max_tokens": 16000, "system": [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]}
+        if tool is not None:
+            body.update(tools=[strict_tool(tool)], tool_choice={"type": "tool", "name": tool["name"]})
+        elif self.effort:
+            body.update(thinking={"type": "adaptive"}, output_config={"effort": self.effort})
+        body["messages"] = [{"role": "user", "content": json.dumps(payload, ensure_ascii=False, indent=1)}]
+        return body
+
+    def call_tool(self, payload: dict, *, system: str, tool: dict, role: str, label: str, blocks: list[str] | None = None) -> dict:
+        """别的角色（通读、审校）用：发一次请求，强制用 `tool` 交回，返回工具的输入；没交回就抛 ValueError。
+        `blocks`：这次请求处理的块，只用于编辑部事件。"""
+        response = self._call(self._body(payload, role, system=system, tool=tool), label=label, role=role, event={"attempt": 1, "blocks": list(blocks or [])})
+        for part in response.get("content") or []:
+            if part.get("type") == "tool_use" and part.get("name") == tool["name"]:
+                return _tool_input(part)
+        raise ValueError(f"model response has no {tool['name']} tool call")
+
+    def _call(self, body: dict, *, label: str, role: str = ROLE_TRANSLATOR, event: dict | None = None) -> dict:
+        """`event`（attempt、blocks）：发一条 translate_call 编辑部事件；缓存命中的也发，回放和实跑看到的一样。"""
+        if event is not None:
+            self._emit("translate_call", role=role, **event)
+        key = hashlib.sha256(json.dumps(body, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()[:24]
+        path = self.cache_dir / f"{key}.json" if self.cache_dir else None
+        call = {"label": label, "key": key, "role": role, "model": body["model"]}
+        if self.use_cache and path and path.exists():
+            cached = json.loads(path.read_text(encoding="utf-8"))
+            self.usage.add(cached["response"], 0, True)
+            self.calls.append(dict(call, cached=True, latency_ms=cached.get("latency_ms", 0), usage=cached["response"].get("usage")))
+            return cached["response"]
+        start = time.monotonic()
+        response = self.transport(body)
+        latency = int((time.monotonic() - start) * 1000)
+        self.usage.add(response, latency, False)
+        self.calls.append(dict(call, cached=False, latency_ms=latency, usage=response.get("usage")))
+        if path:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps({"request": body, "response": response, "latency_ms": latency}, ensure_ascii=False, indent=1), encoding="utf-8")
+        return response
+
+    @staticmethod
+    def _parse(response: dict) -> dict:
+        """按交卷格式取出译文、报上的术语、声明的例外；同一个 id 交了多次的记下来。
+        回答被 max_tokens 截断时，最后一块可能只写了一半，当没交（走漏交重翻）。"""
+        return parse_answer(
+            "".join(part.get("text") or "" for part in response.get("content") or [] if part.get("type") == "text"),
+            truncated=response.get("stop_reason") == "max_tokens",
+        )
+
+    def _payload(self, page: PageInput, records: list[dict], **extra) -> dict:
+        payload = {"document": page.document, "page": page.page_label, "section_path": page.section_path}
+        if page.context:
+            payload["context"] = {k: v for k, v in page.context.items() if k not in {"hash", "estimated_tokens", "truncated", "glossary_version"}}
+        payload.update(extra)
+        payload["blocks"] = records
+        return payload
+
+    def _meta(self, page: PageInput, block, *, role: str, attempt: int) -> dict:
+        """这一块是谁、用哪个版本翻的；`used_terms` 记原文里出现的、上下文包给了的术语（含候选）和表的版本，术语改了能反查。"""
+        version = page.context.get("glossary_version") if page.context else None
+        used = [[t["id"], version] for t in find_terms(block.text, context_terms(page.context))] if page.context else []
+        return {
+            "model": self.model_for(role),
+            "prompt_version": PROMPT_VERSION,
+            "contract_version": CONTRACT_VERSION,
+            "role": role,
+            "round": 1,
+            "attempt": attempt,
+            "glossary_version": version,
+            "used_terms": used,
+            "context_hash": page.context.get("hash") if page.context else None,
+        }
+
+    def _check(self, page: PageInput, block, text: str | None, exceptions: dict[str, set[str]]) -> list[dict]:
+        issues = check_block(block.text, text) + self._restored.pop(block.id, [])
+        number = re.match(r"\s*(\d+)\b", block.text) if block.cls == "footnote" else None
+        if number and text and not re.match(rf"\s*(?:注\s*)?{number.group(1)}(?!\d)", text):
+            issues.append({"code": "footnote_number_changed", "severity": "error", "message": f"脚注开头的编号 {number.group(1)} 要原样保留在最前面"})
+        if page.context:
+            keep = {t["source"] for t in context_terms(page.context) if t["category"] in ("keep", "abbr")}
+            if block.text.strip() in keep:
+                # 原文整个就是要保留原文的专名（封面上的产品名）：原样交回是对的
+                issues = [i for i in issues if i["code"] != "untranslated"]
+            issues += check_terms(block.text, text, context_terms(page.context), exceptions.get(block.id))
+            for item in _first_uses(page).get(block.id, []):
+                if not text:
+                    continue
+                if item["kind"] == "abbr" and not re.search(rf"[\u4e00-\u9fff]\s*[（(][^（()）]*{re.escape(item['source'])}[^（()）]*[)）]", text):
+                    issues.append(
+                        {"code": "abbr_first_use", "severity": "error", "message": f"全书第一次用到缩写 {item['source']}，要写成“中文全称（{item['source']}）”"}
+                    )
+                elif item["kind"] == "name" and not re.search(rf"{re.escape(item['target'])}\s*[（(]\s*{re.escape(item['source'])}", text):
+                    # 只记警告：译名用对了就行，第一次没括注原文不值得重翻（实测地名、书名都要求括注，重翻太多）
+                    issues.append(
+                        {"code": "name_first_use", "severity": "warn", "message": f"全书第一次出现 {item['source']}，最好写成“{item['target']}（{item['source']}）”"}
+                    )
+        if block.cls == "footnote":
+            # 书目性质的脚注（"Ashby, Daughters of the Parsonage, 40-61"）按惯例保留原文：人名没用中文译名、整条没翻只记警告
+            issues = [dict(i, severity="warn") if i["code"] in ("name_mismatch", "untranslated") else i for i in issues]
+        return issues + style_signals(block.text, text)
+
+    # ---- 一页 ----
+    def translate_page(self, page: PageInput) -> tuple[dict[str, BlockResult], dict]:
+        """翻一页，结果按原来的各块交回。接续组合成一块翻（`units.merge_groups`），翻完切回各块；
+        要在切开以前审校的（调度 `DocumentRun`），分开调 `merge_groups`、`translate_units`、`split_units`。"""
+        units, groups = merge_groups(page)
+        results, info = self.translate_units(units)
+        return split_units(results, groups), info
+
+    def translate_units(self, page: PageInput) -> tuple[dict[str, BlockResult], dict]:
+        """翻一页合好接续组的块（`merge_groups` 的结果）：合成的那块就是普通的一块，按整段校验、重翻、退回原文。"""
+        self._members = {b.id: b.members for b in page.blocks if b.members}
+        wanted = {b.id for b in page.to_translate()}
+        if not wanted:
+            # 这一页没有要翻的（都不翻，或者都是已定好的译文）：不发请求
+            return self._fixed_results(page, {}), {"notes": "", "extra_ids": [], "duplicates": [], "terms": [], "term_exceptions": []}
+        records = request_records(page.blocks, wanted)
+        payload = self._payload(page, records, required_ids=[r["id"] for r in records if r["translate"]])
+        response = self._call(self._body(payload), label=f"page {page.page_label}", event={"attempt": 1, "blocks": [b.id for b in page.to_translate()]})
+        parsed = self._parse(response)
+        raw, duplicates = parsed["translations"], parsed["duplicates"]
+        exceptions = _exceptions_by_block(parsed["term_exceptions"])
+        per_block = clean_translations(raw)
+        self._restore_formulas(page, per_block)
+        record_ids = {r["id"] for r in records if r["translate"]}
+        extra = sorted(set(raw) - record_ids)
+        results: dict[str, BlockResult] = {}
+        for block in page.to_translate():
+            issues = self._check(page, block, per_block.get(block.id), exceptions)
+            if block.id in duplicates:
+                issues.append({"code": "duplicate", "severity": "warn", "message": "同一块交了不止一次，取最后一条"})
+            meta = self._meta(page, block, role=ROLE_TRANSLATOR, attempt=1)
+            results[block.id] = BlockResult(block.id, per_block.get(block.id), issues, 1, status_of(issues), meta=meta)
+        self._emit_check(1, results.values())
+        missing_first = {b.id for b in page.to_translate() if any(i["code"] == "missing" for i in results[b.id].issues)}
+        retry_terms, retry_exceptions = self._retry_failed(page, results, page.to_translate(), attempt=2)
+        # 第一次根本没交的块，那次不算一次尝试：重翻后还不合格的再翻一次。2026-10-30 论文第 5 页：页末的跨页组
+        # 第一次被整个漏掉，重翻时又漏了前一句，直接退回原文；第 1 页右栏最底下那组也是第一次被漏掉
+        again = [b for b in page.to_translate() if b.id in missing_first and results[b.id].status == STATUS_ERROR]
+        if again:
+            terms, exceptions_ = self._retry_failed(page, results, again, attempt=3)
+            retry_terms += terms
+            retry_exceptions += exceptions_
+        # 重翻以后还不合格：先看能不能保住译文（只是术语没照用），保不住才退回原文、待人看
+        _salvage(page, results)
+        self._fixed_results(page, results)
+        for block_id, result in list(results.items()):
+            if result.status == STATUS_ERROR:
+                results[block_id] = _fallback_to_source(result)
+                reason = next((str(i.get("code", "")) for i in result.issues if i.get("severity") == "error"), "")
+                self._emit("fallback", block=block_id, reason=reason)
+        info = {
+            "notes": parsed["notes"],
+            "extra_ids": extra,
+            "duplicates": duplicates,
+            "terms": parsed["terms"] + retry_terms,
+            "term_exceptions": parsed["term_exceptions"] + retry_exceptions,
+        }
+        return results, info
+
+    def _retry_failed(self, page: PageInput, results: dict[str, BlockResult], candidates: list, *, attempt: int) -> tuple[list[dict], list[dict]]:
+        """`candidates` 里不合格的合成一次请求一起重翻（接续组已经合成一块，和别的块一样）。返回重翻时报上的术语和例外。"""
+        failed = [b for b in candidates if results[b.id].status == STATUS_ERROR]
+        if not failed:
+            return [], []
+        self._emit("retry", blocks=[b.id for b in failed])
+        fixed, parsed = self._retry_unit(page, failed, results)
+        results.update(fixed)
+        self._emit_check(attempt, [results[b.id] for b in page.to_translate()])
+        return parsed.get("terms", []), parsed.get("term_exceptions", [])
+
+    def _restore_formulas(self, page: PageInput, per_block: dict[str, str]) -> None:
+        """模型顺手改了一点点的公式换回原文写法，换了的记一条 info（检查时并进 issues，不算警告：公式不判对错）。"""
+        sources = {b.id: b.text for b in page.blocks}
+        for block_id, text in list(per_block.items()):
+            fixed, restored = restore_formulas(sources.get(block_id, ""), text)
+            per_block[block_id] = fixed  # 并掉的双反斜杠不记，换回的公式记一笔
+            if restored:
+                self._restored[block_id] = [
+                    {"code": "formula_restored", "severity": "info", "message": f"模型改动了公式，已换回原文写法：{restored}"}
+                ]
+
+    def _fixed_results(self, page: PageInput, results: dict[str, BlockResult]) -> dict[str, BlockResult]:
+        """已定好的译文（通读定的标题、目录）原样交回。"""
+        for block in page.fixed():
+            meta = dict(self._meta(page, block, role=ROLE_READER, attempt=0), model=None)
+            results[block.id] = BlockResult(block.id, block.fixed_translation, [], 0, STATUS_OK, meta=meta)
+        return results
+
+    # ---- 按重排 agent 的要求改稿 ----
+    def revise(self, page: PageInput, requests: list[RevisionRequest]) -> dict[str, BlockResult]:
+        """只改 `requests` 列出的块（同一页的其它块作上下文）。改完还不合格（含超出 max_chars）就再改一次。
+
+        改稿不许删内容，所以两次都缩不到 max_chars 是正常结果：交回改过的版本里最短的、没有别的错的那版，
+        `still_too_long` 降成警告，由排版缩字号或给人看。
+        """
+        by_id = {b.id: b for b in page.blocks}
+        unknown = [r.id for r in requests if r.id not in by_id or not by_id[r.id].translate]
+        if unknown:
+            raise ValueError(f"revision requested for blocks that are not translated on this page: {unknown}")
+        results: dict[str, BlockResult] = {}
+        pending = list(requests)
+        previous: dict[str, list[dict]] = {r.id: [{"translation": r.current_translation, "issues": [_revision_issue(r)]}] for r in requests}
+        for attempt in (1, 2):
+            if not pending:
+                break
+            ids = {r.id for r in pending}
+            payload = self._payload(
+                page,
+                request_records(page.blocks, ids),
+                revise=[_revision_record(r, results.get(r.id)) for r in pending],
+                required_ids=sorted(ids),
+            )
+            response = self._call(
+                self._body(payload, ROLE_REVISER), label="revise " + ",".join(sorted(ids)), role=ROLE_REVISER, event={"attempt": attempt, "blocks": sorted(ids)}
+            )
+            try:
+                parsed = self._parse(response)
+            except ValueError:
+                parsed = {"translations": {}, "term_exceptions": []}
+            per_block = clean_translations(parsed["translations"])
+            self._restore_formulas(page, per_block)
+            exceptions = _exceptions_by_block(parsed["term_exceptions"])
+            next_round: list[RevisionRequest] = []
+            for request in pending:
+                text = per_block.get(request.id)
+                issues = self._check(page, by_id[request.id], text, exceptions)
+                if request.max_chars and text is not None and visible_length(text) >= request.max_chars * 0.4:
+                    # 缩短是我们要的：和原文比"太短"不算错，只要别短得离谱（不到要求字数的 40%）
+                    issues = [i for i in issues if i["code"] != "too_short"]
+                if text is not None and request.max_chars and visible_length(text) > request.max_chars:
+                    issues.append(
+                        {
+                            "code": "still_too_long",
+                            "severity": "error",
+                            "message": f"改完 {visible_length(text)} 字，要求不超过 {request.max_chars} 字",
+                        }
+                    )
+                history = previous[request.id] + ([results[request.id].to_dict()] if request.id in results else [])
+                meta = self._meta(page, by_id[request.id], role=ROLE_REVISER, attempt=attempt)
+                results[request.id] = BlockResult(request.id, text, issues, attempt, status_of(issues), history, meta)
+                if results[request.id].status == STATUS_ERROR:
+                    next_round.append(request)
+            pending = next_round
+        for request in pending:
+            results[request.id] = _shortest_over_limit(results[request.id])
+        return results
+
+    def _retry_unit(self, page: PageInput, unit: list, results: dict) -> tuple[dict[str, BlockResult], dict]:
+        """不合格的几块重翻一次：同一页其它块作为上下文，并告诉模型上次哪里不对。"""
+        ids = {b.id for b in unit}
+        records = request_records(page.blocks, ids)
+        retry = [
+            {
+                "id": b.id,
+                "previous_translation": results[b.id].translation,
+                "problems": sorted({i["message"] for i in results[b.id].issues if i["severity"] != "info"}),
+            }
+            for b in unit
+        ]
+        payload = self._payload(page, records, retry=retry, required_ids=[r["id"] for r in retry])
+        response = self._call(
+            self._body(payload),
+            label="retry " + ",".join(r["id"] for r in retry),
+            event={"attempt": max(results[b.id].attempts for b in unit) + 1, "blocks": [b.id for b in unit]},
+        )
+        try:
+            parsed = self._parse(response)
+        except ValueError:
+            parsed = {"translations": {}, "terms": [], "term_exceptions": []}
+        per_block = clean_translations(parsed["translations"])
+        self._restore_formulas(page, per_block)
+        exceptions = _exceptions_by_block(parsed["term_exceptions"])
+        fixed: dict[str, BlockResult] = {}
+        for block in unit:
+            first = results[block.id]
+            issues = self._check(page, block, per_block.get(block.id), exceptions)
+            history = first.history + [{"translation": first.translation, "issues": first.issues}]
+            meta = self._meta(page, block, role=ROLE_TRANSLATOR, attempt=first.attempts + 1)
+            fixed[block.id] = BlockResult(block.id, per_block.get(block.id), issues, first.attempts + 1, status_of(issues), history, meta)
+        return fixed, parsed
+
+
+def strict_tool(tool: dict) -> dict:
+    """工具定义加上 `strict: true`（每层对象 `additionalProperties: false`）：接口保证交回的参数符合 schema。
+    没加以前论文实跑碰到模型把 translations 数组写成一段坏掉的 JSON 字符串，同一页重翻又坏一次，7 块退回原文。"""
+    schema = json.loads(json.dumps(tool["input_schema"]))
+
+    def close(node) -> None:
+        if isinstance(node, dict):
+            if node.get("type") == "object":
+                node.setdefault("additionalProperties", False)
+            for value in node.values():
+                close(value)
+        elif isinstance(node, list):
+            for value in node:
+                close(value)
+
+    close(schema)
+    return {**tool, "strict": True, "input_schema": schema}
+
+
+def _tool_input(part: dict) -> dict:
+    """工具调用的输入。模型偶尔把数组字段写成一段 JSON 字符串（真实文档实测碰到过，那段 JSON 本身还是坏的）：
+    能解析就换回数组，解析不了就当空——对应的块算没交，由漏交重翻补上，不让整页崩掉。"""
+    data = part.get("input")
+    if not isinstance(data, dict):
+        return {}
+    fixed = dict(data)
+    for key, value in data.items():
+        if isinstance(value, str) and value.lstrip().startswith("["):
+            try:
+                decoded = json.loads(value)
+            except ValueError:
+                decoded = []
+            fixed[key] = decoded if isinstance(decoded, list) else []
+    return fixed
+
+
+def _first_uses(page: PageInput) -> dict[str, list[dict]]:
+    """上下文包里标了 first_use 的缩写和人名，落在这一页第一个用到它的块上：{块 id: [条目, …]}。"""
+    out: dict[str, list[dict]] = {}
+    items = [dict(i, kind="abbr", source=i["abbr"]) for i in (page.context or {}).get("abbreviations") or []]
+    items += [dict(i, kind="name") for i in (page.context or {}).get("names") or []]
+    for item in items:
+        if not item.get("first_use"):
+            continue
+        pattern = re.compile(rf"(?<![\w-]){re.escape(item['source'])}(?![\w-])")
+        block = next((b for b in page.to_translate() if pattern.search(b.text)), None)
+        if block is not None:
+            out.setdefault(block.id, []).append(item)
+    return out
+
+
+def _exceptions_by_block(exceptions: list[dict]) -> dict[str, set[str]]:
+    out: dict[str, set[str]] = {}
+    for item in exceptions:
+        out.setdefault(str(item.get("block_id", "")), set()).add(str(item.get("source", "")).lower())
+    return out
+
+
+# 重翻后只剩这些错，译文本身没坏：降成警告保留译文（术语交给术语专员或人）
+TERM_ONLY = {"term_mismatch", "keep_original_lost", "abbr_first_use", "name_mismatch", "name_first_use"}
+
+
+def _salvage(page: PageInput, results: dict[str, BlockResult]) -> None:
+    for block in page.to_translate():
+        result = results.get(block.id)
+        if result is None or result.status != STATUS_ERROR:
+            continue
+        errors = {i["code"] for i in result.issues if i["severity"] == "error"}
+        if errors <= TERM_ONLY:
+            result.issues = [
+                dict(i, severity="warn", message=i["message"] + "（重翻后仍没照用，保留译文，交给术语专员或人看）") if i["code"] in TERM_ONLY else i
+                for i in result.issues
+            ]
+            result.status = status_of(result.issues)
+
+
+def _fallback_to_source(result: BlockResult) -> BlockResult:
+    """重翻后还不合格：译文置空（显示原文），没过校验的那版进 history，状态 fallback_source。"""
+    history = result.history + [{"translation": result.translation, "issues": result.issues}]
+    issues = result.issues + [{"code": "fallback_source", "severity": "error", "message": "重翻后仍不合格，保留原文、待人看"}]
+    return BlockResult(result.id, None, issues, result.attempts, STATUS_FALLBACK_SOURCE, history, result.meta)
+
+
+def request_records(blocks: list, wanted: set[str]) -> list[dict]:
+    """一页的请求记录：不在 wanted 里的只作上下文。接续组在这之前已经合成一块（`units.merge_groups`），这里不用管。"""
+    records: list[dict] = []
+    for block in blocks:
+        record = block.request_record()
+        if block.id not in wanted:
+            record["translate"] = False
+        records.append(record)
+    return records
+
+
+def clean_translations(raw: dict[str, str]) -> dict[str, str]:
+    """模型交回的各块译文去掉首尾空白，以及照老习惯写进来的 [[BREAK]]（接续组现在整段翻、程序切，不再要模型放断点）。"""
+    return {block_id: BREAK_RE.sub("", text).strip() for block_id, text in raw.items()}
+
+
+def _revision_record(request: RevisionRequest, previous: BlockResult | None) -> dict:
+    """改稿请求里的一块：替模型算好现在多少字、至少要删多少（模型自己数字数不准）。"""
+    current = (previous.translation if previous and previous.translation else None) or request.current_translation
+    chars = visible_length(current)
+    record = {"id": request.id, "current_translation": current, "current_chars": chars, "reason": request.reason, "note": request.note}
+    if request.max_chars:
+        record.update(max_chars=request.max_chars, must_cut=max(0, chars - request.max_chars))
+    if previous:
+        record["problems"] = [i["message"] for i in previous.issues if i["severity"] != "info"]
+    return record
+
+
+def _revision_issue(request: RevisionRequest) -> dict:
+    target = f"，要求不超过 {request.max_chars} 字" if request.max_chars else ""
+    return {"code": f"revision_{request.reason}", "severity": "info", "message": f"重排要求改稿：{request.reason}{target}"}
+
+
+def _shortest_over_limit(result: BlockResult) -> BlockResult:
+    """两次改稿都超长：在除了超长没有别的错的版本里取最短的，超长降成警告；有别的错就原样留着（状态仍是错误）。"""
+
+    def only_too_long(issues: list[dict]) -> bool:
+        return all(i["code"] == "still_too_long" or i["severity"] != "error" for i in issues)
+
+    tries = [(result.translation, result.issues)] + [(h["translation"], h["issues"]) for h in result.history if "attempts" in h]
+    usable = [(text, issues) for text, issues in tries if text and only_too_long(issues)]
+    if not usable:
+        return result
+    text, issues = min(usable, key=lambda t: visible_length(t[0]))
+    issues = [
+        dict(i, severity="warn", message=i["message"] + "；不删内容缩不到，交回最短的一版，请排版缩字号")
+        if i["code"] == "still_too_long"
+        else i
+        for i in issues
+    ]
+    return BlockResult(result.id, text, issues, result.attempts, status_of(issues), result.history)
+
+
+def parse_answer(text: str, *, truncated: bool = False) -> dict:
+    """交卷格式（见 SYSTEM_PROMPT 末尾）→ {translations, notes, duplicates, terms, term_exceptions}。
+    第一个 `@@` 之前的话（模型偶尔先说一句）不要；整段包在代码块里的，去掉 ``` 那几行。"""
+    text = re.sub(r"^\s*```[A-Za-z]*\s*$", "", text, flags=re.M)
+    heads = list(ANSWER_HEADER_RE.finditer(text))
+    sections = [(m.group(1).strip(), text[m.end() : heads[i + 1].start() if i + 1 < len(heads) else len(text)].strip()) for i, m in enumerate(heads)]
+    if truncated and sections and sections[-1][0] not in (TERMS_SECTION, EXCEPTIONS_SECTION, NOTES_SECTION):
+        sections.pop()
+    out: dict[str, str] = {}
+    duplicates: list[str] = []
+    terms: list[dict] = []
+    exceptions: list[dict] = []
+    notes = ""
+    for name, body in sections:
+        if name == TERMS_SECTION:
+            for cells in _rows(body):
+                if len(cells) >= 3:
+                    keep = len(cells) >= 4 and cells[3] == KEEP_MARK
+                    terms.append({"block_id": cells[2], "source": cells[0], "target": cells[1], "category": "keep" if keep else "term"})
+        elif name == EXCEPTIONS_SECTION:
+            for cells in _rows(body):
+                if len(cells) >= 4:
+                    exceptions.append({"block_id": cells[0], "source": cells[1], "used": cells[2], "reason": " | ".join(cells[3:])})
+        elif name == NOTES_SECTION:
+            notes = body
+        else:
+            if name in out:
+                duplicates.append(name)
+            out[name] = body
+    return {"translations": out, "notes": notes, "duplicates": duplicates, "terms": terms, "term_exceptions": exceptions}
+
+
+def _rows(body: str) -> list[list[str]]:
+    return [[c.strip() for c in line.strip().strip("|").split("|")] for line in body.splitlines() if "|" in line]
+
+
+def format_answer(translations: dict[str, str], *, terms: list[dict] | None = None, exceptions: list[dict] | None = None, notes: str = "") -> str:
+    """`parse_answer` 反过来：按交卷格式写出一份回答。测试里的假模型和测试系统用。"""
+    parts = [f"@@ {block_id}\n{text}" for block_id, text in translations.items()]
+    if terms:
+        rows = [" | ".join([t["source"], t["target"], t["block_id"]] + ([KEEP_MARK] if t.get("category") == "keep" else [])) for t in terms]
+        parts.append(f"@@ {TERMS_SECTION}\n" + "\n".join(rows))
+    if exceptions:
+        rows = [" | ".join([e["block_id"], e["source"], e["used"], e["reason"]]) for e in exceptions]
+        parts.append(f"@@ {EXCEPTIONS_SECTION}\n" + "\n".join(rows))
+    if notes:
+        parts.append(f"@@ {NOTES_SECTION}\n{notes}")
+    return "\n\n".join(parts) + "\n"

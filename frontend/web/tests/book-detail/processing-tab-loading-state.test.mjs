@@ -5,7 +5,7 @@
 //
 // 曾经的样子：BookDetailProcessingTab 里 loading 只控制一行
 // 「正在读取文档任务…」的提示文案，它下面整张 .book-detail-processing-card
-// （含 ProcessingPipelineRail 那条 OCR→翻译→渲染→完成 的轨道、以及「开始 OCR」
+// （含 ProcessingPipelineRail 那条 OCR→翻译→渲染 的轨道、以及「开始 OCR」
 // 按钮）是**无条件渲染**的。于是 GET /documents/:id/jobs 还在路上的那几百毫秒，
 // 界面同时喊出两句互相矛盾的话：
 //     正在读取文档任务…            （还不知道）
@@ -25,41 +25,8 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { JSDOM } from "jsdom";
-
-// 每个 test 一份全新 JSDOM（同一个 jsdom 第二次 createRoot 会停摆）。
-function makeDom() {
-  const dom = new JSDOM("<!doctype html><html><body></body></html>", {
-    url: "http://localhost/index.html",
-  });
-  for (const key of ["window", "document", "DocumentFragment", "HTMLElement", "HTMLButtonElement", "HTMLFormElement", "HTMLInputElement", "CustomEvent", "Event", "KeyboardEvent", "MouseEvent", "Node", "MutationObserver", "NodeFilter"]) {
-    Object.defineProperty(globalThis, key, {
-      value: dom.window[key] ?? dom.window,
-      writable: true,
-      configurable: true,
-    });
-  }
-  globalThis.window = dom.window;
-  globalThis.requestAnimationFrame = (callback) => setTimeout(() => callback(0), 0);
-  globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
-  globalThis.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
-  globalThis.IS_REACT_ACT_ENVIRONMENT = false;
-  return dom;
-}
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitFor(predicate, description) {
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    const value = predicate();
-    if (value) return value;
-    await wait(15);
-  }
-  assert.fail(`等待超时：${description}`);
-}
+import { wait, waitFor } from "../helpers/async.mjs";
+import { makeDom } from "../helpers/dom.mjs";
 
 const idleTranslation = {
   item: {},
@@ -254,18 +221,16 @@ test("进度 Tab：已有翻译任务时的刷新同样不回占位", async () =
     ocr: idleOcr,
     translation: translated,
   });
-  await waitFor(() => rail(dom), "流水线轨道渲染");
-  const before = rail(dom).getAttribute("data-current-stage");
+  const headline = () => dom.window.document.querySelector("[data-processing-unified-status]")?.textContent;
+  await waitFor(() => headline() === "已完成", "完成态摘要渲染");
+  assert.ok(rail(dom), "翻译完成后流水线照样画");
+  assert.ok(dom.window.document.getElementById("book-detail-station-translate-btn"), "完成态翻译站有「重译 / 精修」");
 
   render({ loading: true, ocr: idleOcr, translation: translated });
   await wait(30);
 
-  assert.equal(rail(dom).getAttribute("data-loading"), null, "翻译任务在手时刷新不回占位");
-  assert.equal(
-    rail(dom).getAttribute("data-current-stage"),
-    before,
-    "刷新不应抹掉已知的当前阶段",
-  );
+  assert.equal(headline(), "已完成", "翻译任务在手时刷新不回占位");
+  assert.ok(dom.window.document.getElementById("book-detail-station-translate-btn"), "刷新不应收掉各站的动作");
   assert.ok(
     !(host.textContent || "").includes("读取中"),
     "已有数据的刷新不该出现「读取中」占位文案",

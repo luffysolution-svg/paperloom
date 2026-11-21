@@ -4,16 +4,13 @@ from pathlib import Path
 
 import fitz
 
+from devtools.tests.pdf_fixtures import write_pdf
 from retainpdf_pipeline.render.analysis.document import build_render_document_analysis
 from retainpdf_pipeline.render.contracts import RenderDocumentAnalysis
 
 
 def write_source_pdf(path: Path) -> None:
-    doc = fitz.open()
-    page = doc.new_page(width=200, height=200)
-    page.insert_text((20, 40), "inside source", fontsize=12)
-    doc.save(path)
-    doc.close()
+    write_pdf(path, width=200, height=200, text="inside source", at=(20, 40), fontsize=12)
 
 
 def write_pseudo_editable_scan_pdf(path: Path) -> None:

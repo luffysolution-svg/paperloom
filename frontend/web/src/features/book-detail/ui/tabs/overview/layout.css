@@ -1,0 +1,60 @@
+/* 书籍详情 · 概览页签（BookDetailOverviewTab）：页签根布局、通用卡片底、卡片标题、文字按钮、错误提示。
+ * 本目录 5 个文件全是普通规则，entries/home.css 按 layout → info → activity → danger → responsive 引入，别调换。
+ *
+ * @owns book-detail */
+
+.book-detail-tab-overview {
+  display: grid;
+  gap: 12px;
+  padding-bottom: 4px;
+}
+
+/* 信息区和最近活动共用的浅底卡片。 */
+.book-detail-overview-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--bg) 55%, var(--paper));
+}
+
+.book-detail-overview-card-heading {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.book-detail-overview-card-heading h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--ui-text-md);
+  font-weight: 640;
+  letter-spacing: -0.015em;
+}
+
+.book-detail-overview-card-heading h3 svg {
+  width: 15px;
+  height: 15px;
+  color: var(--muted);
+  stroke-width: 1.7;
+}
+
+/* 「编辑信息」是 @retainpdf/ui 的 Button（ghost、sm），平时淡一点，悬停变墨色。 */
+.book-detail-overview-text-btn {
+  color: var(--muted);
+}
+
+.book-detail-overview-text-btn:hover {
+  color: var(--ink);
+}
+
+.book-detail-overview-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--ui-text-sm);
+}

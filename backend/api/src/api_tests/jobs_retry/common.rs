@@ -4,7 +4,7 @@ use crate::api_tests::jobs_common::minimal_pdf_bytes;
 use crate::db::{PipelineDispatchBegin, PipelineDispatchIntent};
 use crate::models::{now_iso, CreateJobInput, JobArtifacts, JobSnapshot, UploadRecord};
 
-pub(super) fn source_job_with_artifacts(job_id: &str, mut artifacts: JobArtifacts) -> JobSnapshot {
+pub(crate) fn source_job_with_artifacts(job_id: &str, mut artifacts: JobArtifacts) -> JobSnapshot {
     if artifacts.source_pdf.is_some() && artifacts.normalized_document_json.is_some() {
         artifacts
             .layout_json
@@ -23,7 +23,7 @@ pub(super) fn source_job_with_artifacts(job_id: &str, mut artifacts: JobArtifact
     job
 }
 
-pub(super) fn seed_ocr_upload(state: &crate::AppState, upload_id: &str) -> UploadRecord {
+pub(crate) fn seed_ocr_upload(state: &crate::AppState, upload_id: &str) -> UploadRecord {
     let upload_dir = state.config.uploads_dir.join(upload_id);
     fs::create_dir_all(&upload_dir).expect("upload dir");
     let upload_path = upload_dir.join("input.pdf");
@@ -42,7 +42,7 @@ pub(super) fn seed_ocr_upload(state: &crate::AppState, upload_id: &str) -> Uploa
     upload
 }
 
-pub(super) fn seed_ambiguous_ocr_dispatch(
+pub(crate) fn seed_ambiguous_ocr_dispatch(
     state: &crate::AppState,
     job_id: &str,
     provider: &str,
@@ -82,7 +82,7 @@ pub(super) fn seed_ambiguous_ocr_dispatch(
         .expect("close source attempt");
 }
 
-pub(super) fn seed_ocr_checkpoint_files(state: &crate::AppState, job: &JobSnapshot) {
+pub(crate) fn seed_ocr_checkpoint_files(state: &crate::AppState, job: &JobSnapshot) {
     let artifacts = job.artifacts.as_ref().expect("job artifacts");
     if let Some(path) = artifacts.source_pdf.as_deref() {
         let path = state.config.data_root.join(path);
@@ -101,7 +101,7 @@ pub(super) fn seed_ocr_checkpoint_files(state: &crate::AppState, job: &JobSnapsh
     }
 }
 
-pub(super) fn seed_translation_result_files(state: &crate::AppState, job: &JobSnapshot) {
+pub(crate) fn seed_translation_result_files(state: &crate::AppState, job: &JobSnapshot) {
     seed_ocr_checkpoint_files(state, job);
     let artifacts = job.artifacts.as_ref().expect("job artifacts");
     let translated_dir = artifacts
@@ -117,7 +117,7 @@ pub(super) fn seed_translation_result_files(state: &crate::AppState, job: &JobSn
     .expect("translation manifest");
 }
 
-pub(super) fn seed_partial_translation_checkpoint(state: &crate::AppState, job: &JobSnapshot) {
+pub(crate) fn seed_partial_translation_checkpoint(state: &crate::AppState, job: &JobSnapshot) {
     seed_ocr_checkpoint_files(state, job);
     let artifacts = job.artifacts.as_ref().expect("job artifacts");
     let checkpoint = artifacts
@@ -135,7 +135,7 @@ pub(super) fn seed_partial_translation_checkpoint(state: &crate::AppState, job: 
     .expect("translation checkpoint");
 }
 
-pub(super) fn seed_ambiguous_translation_request_journal(
+pub(crate) fn seed_ambiguous_translation_request_journal(
     state: &crate::AppState,
     job: &JobSnapshot,
 ) {
@@ -153,4 +153,12 @@ pub(super) fn seed_ambiguous_translation_request_journal(
 "#,
     )
     .expect("request journal");
+}
+
+/// 不给执行名额，发射出去的 driver 停在排队：这些测试只看提交写了什么（工作流、状态、代次、产物）。
+///
+/// 提交在阻塞线程里做（`run_state_blocking`），处理函数等它的时候单线程的测试运行时会接着跑刚发射的
+/// driver，任务马上变成 running、再往后走；以前提交在处理函数里同步做完，测试读库时 driver 还没机会动。
+pub(crate) fn hold_job_drivers(state: &mut crate::AppState) {
+    state.job_slots = std::sync::Arc::new(tokio::sync::Semaphore::new(0));
 }

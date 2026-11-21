@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
+import { waitFor } from "../helpers/async.mjs";
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", {
   url: "http://localhost/reader.html?job_id=job-reset&document_id=doc-a",
@@ -20,19 +21,6 @@ const React = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { setReaderAdapters } = await import("../../../../frontend/packages/reader/src/adapters.ts");
 const { useReaderSession } = await import("../../../../frontend/packages/reader/src/hooks/use-reader-session.ts");
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitFor(predicate, description) {
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    if (predicate()) return;
-    await wait(10);
-  }
-  assert.fail(`等待超时：${description}`);
-}
 
 test("switching session on the same jobId re-arms the terminal artifact refresh", async () => {
   const currentParam = (name) => new URLSearchParams(dom.window.location.search).get(name) || "";

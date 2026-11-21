@@ -2,20 +2,15 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
 import requests
 
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-
-from retainpdf_pipeline.translate.core.ocr import json_extractor as _json_extractor
-from retainpdf_pipeline.translate.llm.providers.deepseek import transport as _transport
-from retainpdf_pipeline.translate.services.continuation import review as _review
+from retainpdf_translation.core.ocr import json_extractor as _json_extractor
+from retainpdf_translation.llm.providers.deepseek import transport as _transport
+from retainpdf_translation.services.continuation import review as _review
 
 
 def _http_error(status: int, *, retry_after: str = "") -> requests.HTTPError:

@@ -8,7 +8,7 @@
 //
 // 【测试契约，改版不许破】（credentials/glossaries/app-update component tests）：
 // - #app-settings-dialog / #app-settings-close-btn
-// - [data-settings-tab="api|glossary|appearance|update"] 可点击
+// - [data-settings-tab="api|glossary|sync|backup|appearance|update"] 可点击
 // - [data-settings-panel=…] forceMount + hidden 属性切换（测试断言 .hidden）
 // - #credentials-btn / #glossary-btn 打开对应子对话框
 // - 外观面板 #theme-appearance-panel 与 #theme-option-<id>
@@ -21,6 +21,7 @@
 // 与本组件是否挂载无关。
 
 import { useEffect, useState } from "react";
+import { IconKey, IconBook, IconSync, IconChart, IconArchive, IconBell, IconPalette, IconUpdate, IconUser, IconUsers } from "./settings-icons.jsx";
 import { Tabs as TabsPrimitive } from "radix-ui";
 import {
   Dialog,
@@ -28,16 +29,15 @@ import {
   DialogContent,
   DialogShell,
   DialogTitle,
-} from "@/ui/components/dialog.js";
+} from "@retainpdf/ui";
 import { useDialogState } from "@/ui/hooks/use-dialog-state.js";
 // TODO(feature-layout 批次 5): dialog-store 是通用状态工具，随批次 5 迁入 platform 后改指。
 import type { DialogStore } from "@/platform/store/dialog-store.js";
 import { useDialogReturnFocus } from "@/ui/hooks/use-dialog-return-focus.js";
 import { APP_SETTINGS_DIALOG_IDS } from "./settings-dialog-ids.js";
+import { CommandLinePanel } from "./CommandLinePanel.jsx";
 import { ThemeAppearancePanel } from "./ThemeAppearancePanel.jsx";
-import { BackupPanel } from "./BackupPanel.jsx";
-import { DatabaseBackup } from "lucide-react";
-import { Button as ButtonBase } from "@/ui/Button.jsx";
+import { Button } from "@retainpdf/ui";
 
 // Decoupled: settings → credentials / app-update 横向依赖改为经 HomeApp 注入(slot)。
 // - credentialsWorkbenchSlot: 由 HomeApp 传入 <CredentialsWorkbench />
@@ -45,58 +45,31 @@ import { Button as ButtonBase } from "@/ui/Button.jsx";
 // 原先直接 import CredentialsWorkbench / AppUpdateBanner / credentials-dom-ids 导致
 // settings 域强耦合 credentials 域；现仅依赖 shared/settings-dialog-ids (无状态常量)。
 
-// Button.size 在未注解源文件里被推断为必填;unstyled 路径运行时不用 size。
-const Button = ButtonBase as any;
-
-function IconKey(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
-      <path d="M14.5 9.5a4 4 0 1 1-1.2 2.86L5 20.65 3.35 19 11.6 10.7A4 4 0 0 1 14.5 9.5Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M18 6.5h.01" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
-    </svg>
-  );
-}
-function IconBook(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
-      <path d="M5.5 5.2A2.2 2.2 0 0 1 7.7 3H19v15.5H7.7a2.2 2.2 0 0 0-2.2 2.2V5.2Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-      <path d="M5.5 5.2A2.2 2.2 0 0 0 3.3 3H3v15.5h.3a2.2 2.2 0 0 1 2.2 2.2" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function IconPalette(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
-      <path d="M12 3a9 9 0 1 0 9 9c0-.5-.04-1-.12-1.48a5 5 0 0 1-6.4-6.4A9 9 0 0 0 12 3Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-      <circle cx="8.5" cy="10" r="1.1" fill="currentColor" />
-      <circle cx="11.5" cy="7.2" r="1.1" fill="currentColor" />
-      <circle cx="15.2" cy="9" r="1.1" fill="currentColor" />
-    </svg>
-  );
-}
-function IconUpdate(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
-      <path d="M12 5v2.1M12 16.9V19M5 12h2.1M16.9 12H19M7.05 7.05l1.5 1.5M15.45 15.45l1.5 1.5M16.95 7.05l-1.5 1.5M8.55 15.45l-1.5 1.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      <circle cx="12" cy="12" r="3.2" stroke="currentColor" strokeWidth="1.7" />
-    </svg>
-  );
-}
 
 const TABS = [
+  { id: "account", label: "账户", Icon: IconUser },
+  { id: "admin", label: "账号管理", Icon: IconUsers },
   { id: "api", label: "接口设置", Icon: IconKey },
   { id: "glossary", label: "术语表", Icon: IconBook },
+  { id: "usage", label: "总用量", Icon: IconChart },
+  { id: "sync", label: "同步", Icon: IconSync },
+  { id: "backup", label: "备份", Icon: IconArchive },
+  { id: "notify", label: "通知", Icon: IconBell },
   { id: "appearance", label: "外观", Icon: IconPalette },
-  { id: "data", label: "数据与备份", Icon: DatabaseBackup },
   { id: "update", label: "更新", Icon: IconUpdate },
 ];
 
 const PANE_HEADS = {
+  account: { title: "账户", desc: "当前登录的账号。" },
+  admin: { title: "账号管理", desc: "账号由管理员创建，初始密码交给用户，用户首次登录时改成自己的密码。" },
   api: { title: "接口设置", desc: "" },
   glossary: { title: "术语表", desc: "维护术语偏好，翻译时优先使用你的术语。" },
+  usage: { title: "总用量", desc: "全部书花掉的模型 token，按月、按模型、按环节。" },
+  sync: { title: "同步", desc: "通过一个网盘文件夹，在几台电脑之间同步书库、译文和阅读进度。" },
+  backup: { title: "备份", desc: "书库数据库每天自动备份，出问题时可以恢复到之前的某一天。" },
+  notify: { title: "通知", desc: "翻译、识别跑完（成功或失败）时提醒你，不用一直盯着页面。只对这台电脑、这个浏览器有效。" },
   appearance: { title: "外观", desc: "选择界面配色，立即生效并记住本机选择。" },
-  data: { title: "数据与备份", desc: "导出迁移包，或从本地文件和 WebDAV 恢复资料库。" },
-  update: { title: "更新", desc: "查看当前版本、检查更新，并在桌面版中下载和安装新版。" },
+  update: { title: "更新", desc: "查看当前版本，并从 GitHub Releases 重新检查更新。" },
 };
 
 function PaneHead({ tab, subtitle = null }: { tab: keyof typeof PANE_HEADS; subtitle?: React.ReactNode }) {
@@ -128,6 +101,19 @@ export type SettingsDialogProps = {
    */
   apiPaneSetupHintSlot?: React.ReactNode | null;
   appUpdateBannerSlot?: React.ReactNode | null;
+  /** 「同步」分栏的内容（由 HomeApp 注入 SyncSettingsPanel）。 */
+  syncPanelSlot?: React.ReactNode | null;
+  /** 「备份」分栏的内容（由 HomeApp 注入 BackupPanel）。 */
+  backupPanelSlot?: React.ReactNode | null;
+  /** 「总用量」分栏的内容（由 HomeApp 注入 UsageSettingsPanel）。 */
+  usagePanelSlot?: React.ReactNode | null;
+  /** 「通知」分栏的内容（由 HomeApp 注入 NotifySettingsPanel；不给就不出现）。 */
+  notifyPanelSlot?: React.ReactNode | null;
+  /** 多用户模式的「账户」「账号管理」分栏（不给就不出现，单机模式不给）。 */
+  accountPanelSlot?: React.ReactNode | null;
+  adminPanelSlot?: React.ReactNode | null;
+  /** 不显示的分栏：多用户模式下普通用户看不到接口设置、同步、备份等单机才有的东西。 */
+  hiddenTabs?: readonly string[];
 };
 
 export function SettingsDialog({
@@ -137,17 +123,35 @@ export function SettingsDialog({
   credentialsWorkbenchSlot = null,
   apiPaneSetupHintSlot = null,
   appUpdateBannerSlot = null,
+  syncPanelSlot = null,
+  backupPanelSlot = null,
+  usagePanelSlot = null,
+  notifyPanelSlot = null,
+  accountPanelSlot = null,
+  adminPanelSlot = null,
+  hiddenTabs = [],
 }: SettingsDialogProps) {
+  const visibleTabs = TABS.filter(({ id }) => (
+    !hiddenTabs.includes(id)
+    && (id !== "account" || accountPanelSlot)
+    && (id !== "admin" || adminPanelSlot)
+    && (id !== "notify" || notifyPanelSlot)
+  ));
+  // 要打开的分栏被藏了（比如普通用户点到「接口设置」），就落到第一个能看的分栏。
+  const pickTab = (requested?: string) => {
+    const normalized = requested === "data" ? "backup" : requested;
+    return visibleTabs.some(({ id }) => id === normalized) ? `${normalized}` : visibleTabs[0]?.id || "appearance";
+  };
 
   const dialogState = useDialogState(dialogStore);
   const open = Boolean(dialogState.open);
   const { onCloseAutoFocus } = useDialogReturnFocus(open);
-  const [activeTab, setActiveTab] = useState(dialogState.payload?.tab || "api");
+  const [activeTab, setActiveTab] = useState(() => pickTab(dialogState.payload?.tab || "api"));
   const setupMode = Boolean(dialogState.payload?.setupMode);
 
   useEffect(() => {
     if (open) {
-      setActiveTab(dialogState.payload?.tab || "api");
+      setActiveTab(pickTab(dialogState.payload?.tab || "api"));
     }
   }, [open]);
 
@@ -165,7 +169,7 @@ export function SettingsDialog({
     return () => cancelAnimationFrame(raf);
   }, [open, activeTab, onPrepareCredentialPanels, setupMode]);
 
-  function handleOpenChange(nextOpen) {
+  function handleOpenChange(nextOpen: boolean) {
     if (!nextOpen) {
       dialogStore.close();
     }
@@ -201,7 +205,7 @@ export function SettingsDialog({
                   <h2>设置</h2>
                 </DialogTitle>
                 <TabsPrimitive.List className="app-settings-nav" aria-label="设置分类">
-                  {TABS.map(({ id, label, Icon }) => (
+                  {visibleTabs.map(({ id, label, Icon }) => (
                     <TabsPrimitive.Trigger
                       key={id}
                       value={id}
@@ -221,6 +225,19 @@ export function SettingsDialog({
                   className="app-settings-close"
                 />
 
+                {accountPanelSlot ? (
+                  <TabsPrimitive.Content value="account" forceMount hidden={activeTab !== "account"} className={panelClass("account")} data-settings-panel="account">
+                    <PaneHead tab="account" />
+                    {activeTab === "account" ? accountPanelSlot : null}
+                  </TabsPrimitive.Content>
+                ) : null}
+                {adminPanelSlot ? (
+                  <TabsPrimitive.Content value="admin" forceMount hidden={activeTab !== "admin"} className={panelClass("admin")} data-settings-panel="admin">
+                    <PaneHead tab="admin" />
+                    {activeTab === "admin" ? adminPanelSlot : null}
+                  </TabsPrimitive.Content>
+                ) : null}
+
                 <TabsPrimitive.Content
                   value="api"
                   forceMount
@@ -229,7 +246,8 @@ export function SettingsDialog({
                   data-settings-panel="api"
                 >
                   <PaneHead tab="api" subtitle={setupMode ? apiPaneSetupHintSlot : null} />
-                  {credentialsWorkbenchSlot}
+                  {/* 被藏时不放内容：多用户的普通用户不该去读管理员专用的凭据、AI 设置接口。 */}
+                  {hiddenTabs.includes("api") ? null : credentialsWorkbenchSlot}
                 </TabsPrimitive.Content>
 
                 <TabsPrimitive.Content
@@ -245,11 +263,51 @@ export function SettingsDialog({
                       术语表决定翻译时的优先译法。可维护多张术语表并
                       按需启用，翻译任务发起时生效。
                     </p>
-                    <Button id={APP_SETTINGS_DIALOG_IDS.glossaryButton} className="app-settings-action" onClick={openGlossaries}>
+                    <Button variant="primary" id={APP_SETTINGS_DIALOG_IDS.glossaryButton} onClick={openGlossaries}>
                       打开术语表
                     </Button>
                   </div>
                 </TabsPrimitive.Content>
+
+                <TabsPrimitive.Content
+                  value="sync"
+                  forceMount
+                  hidden={activeTab !== "sync"}
+                  className={panelClass("sync")}
+                  data-settings-panel="sync"
+                >
+                  <PaneHead tab="sync" />
+                  {activeTab === "sync" ? syncPanelSlot : null}
+                </TabsPrimitive.Content>
+
+                <TabsPrimitive.Content
+                  value="backup"
+                  forceMount
+                  hidden={activeTab !== "backup"}
+                  className={panelClass("backup")}
+                  data-settings-panel="backup"
+                >
+                  <PaneHead tab="backup" />
+                  {activeTab === "backup" ? backupPanelSlot : null}
+                </TabsPrimitive.Content>
+
+                <TabsPrimitive.Content
+                  value="usage"
+                  forceMount
+                  hidden={activeTab !== "usage"}
+                  className={panelClass("usage")}
+                  data-settings-panel="usage"
+                >
+                  <PaneHead tab="usage" />
+                  {activeTab === "usage" ? usagePanelSlot : null}
+                </TabsPrimitive.Content>
+
+                {notifyPanelSlot ? (
+                  <TabsPrimitive.Content value="notify" forceMount hidden={activeTab !== "notify"} className={panelClass("notify")} data-settings-panel="notify">
+                    <PaneHead tab="notify" />
+                    {activeTab === "notify" ? notifyPanelSlot : null}
+                  </TabsPrimitive.Content>
+                ) : null}
 
                 <TabsPrimitive.Content
                   value="appearance"
@@ -263,17 +321,6 @@ export function SettingsDialog({
                 </TabsPrimitive.Content>
 
                 <TabsPrimitive.Content
-                  value="data"
-                  forceMount
-                  hidden={activeTab !== "data"}
-                  className={panelClass("data")}
-                  data-settings-panel="data"
-                >
-                  <PaneHead tab="data" />
-                  <BackupPanel active={open && activeTab === "data"} />
-                </TabsPrimitive.Content>
-
-                <TabsPrimitive.Content
                   value="update"
                   forceMount
                   hidden={activeTab !== "update"}
@@ -282,6 +329,7 @@ export function SettingsDialog({
                 >
                   <PaneHead tab="update" />
                   {appUpdateBannerSlot}
+                  {activeTab === "update" ? <CommandLinePanel /> : null}
                 </TabsPrimitive.Content>
               </div>
             </TabsPrimitive.Root>

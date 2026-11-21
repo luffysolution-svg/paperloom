@@ -1,16 +1,19 @@
 // BookDetailDialog —— 容器：组合 hooks + shell/tabs。
 // 业务状态见 use-book-detail-*.js；UI 见 shell / tabs / panels。
 
+import { useEffect, useState } from "react";
+import { createBookDetailCaches } from "../domain/book-detail-caches.js";
 import {
   useHomeBookDetail,
   useHomeCollections,
   useHomeJobRuntime,
-  useHomeLibrary,
   useHomeStatusCard,
 } from "@/ui/context/home-services-context.js";
 import { useDialogState } from "@/ui/hooks/use-dialog-state.js";
 import { useDialogReturnFocus } from "@/ui/hooks/use-dialog-return-focus.js";
-import { useRecentJobCover } from "@/features/library/index.js";
+import { useRecentJobCover, useLibraryServices } from "@/features/library/index.js";
+import type { LibraryCardItem } from "@/features/library/index.js";
+import { QualityPanel } from "./panels/overview/QualityPanel.jsx";
 import { BookDetailShell } from "./shell/BookDetailShell.jsx";
 import { CoverActionsPanel } from "./panels/CoverActionsPanel.jsx";
 import { ArtifactQuickDownloads } from "./panels/ArtifactQuickDownloads.js";
@@ -18,62 +21,53 @@ import { ProcessingResultActions } from "./panels/processing/ProcessingResultAct
 import {
   BookDetailRightTabs,
   BookDetailOverviewTab,
-  BookDetailProcessingTab,
   BookDetailArtifactsTab,
-  BookDetailManageTab,
 } from "./tabs/index.js";
+import { ProcessingTabWithUsage } from "./ProcessingTabWithUsage.jsx";
+import { BookDetailHistoryTab } from "./tabs/BookDetailHistoryTab.jsx";
+import { BookDetailTermsTab } from "./tabs/BookDetailTermsTab.jsx";
+import { ReadingStatusPanel } from "./panels/more/ReadingStatusPanel.jsx";
+import { CollectionsPanel } from "./panels/more/CollectionsPanel.jsx";
+import { DeleteFooterPanel } from "./panels/more/DeleteFooterPanel.jsx";
+import { useTranslationCoverage } from "./use-translation-coverage.js";
 import { useBookDetailLiveItem } from "./use-book-detail-live-item.js";
 import { useBookDetailDocument } from "./use-book-detail-document.js";
 import { useBookDetailTranslate } from "./use-book-detail-translate.js";
 import { useBookDetailOcr } from "./use-book-detail-ocr.js";
 import { useBookDetailStageActions } from "./use-book-detail-stage-actions.js";
+import { useBookDetailResume } from "./use-book-detail-resume.js";
 import {
   documentJobPresentation,
   isDocumentJobActive,
   useDocumentJobs,
 } from "./use-document-jobs.js";
-import { canStartTranslation, useBookDetailCover } from "./use-book-detail-cover.js";
+import { jobIdOf } from "../domain/document-jobs-model.js";
+import { bookDetailHasTranslation, useBookDetailCover } from "./use-book-detail-cover.js";
+import { buildProcessingTabProps } from "./processing-tab-props.js";
 import { useBookDetailTab } from "./use-book-detail-tab.js";
 import { useBookDetailArtifactCenter } from "./use-book-detail-artifact-center.js";
 import { useStoreSnapshot } from "@/ui/hooks/use-store.js";
 
 export function BookDetailDialog() {
   const { dialogStore } = useHomeBookDetail();
-  const library = useHomeLibrary();
+  const library = useLibraryServices();
   const actions = library.actions;
   const collections = useHomeCollections();
   const collectionsCtl = collections?.controller;
   const collectionsReload = collections?.reloadSignal;
   const { store: statusCardStore } = useHomeStatusCard();
   const { store: jobRuntimeStore } = useHomeJobRuntime();
-  const dialogState: any = useDialogState(dialogStore);
+  const dialogState = useDialogState<LibraryCardItem | null>(dialogStore);
   const open = Boolean(dialogState.open);
-  const payloadItem: any = dialogState.payload || {};
+  const payloadItem: LibraryCardItem = dialogState.payload || {};
   const { onCloseAutoFocus } = useDialogReturnFocus(open);
 
   const item = useBookDetailLiveItem(payloadItem);
   const statusCardState = useStoreSnapshot(statusCardStore);
   const documentId = `${item.document_id || ""}`.trim();
-  const {
-    coverProcessing,
-    readPresentation,
-    readerAvailable,
-    canTranslate,
-    isActive,
-    cardJobId,
-  } =
-    useBookDetailCover({ item, statusCardState });
-  const jobId = `${item.job_id || item.active_job_id || cardJobId || ""}`.trim();
+  // 弹窗第一次打开后一直挂着：会话缓存跟着它，关掉再打开同一本书直接用。
+  const [caches] = useState(createBookDetailCaches);
   const coverUrl = useRecentJobCover(item);
-
-  // 点「翻译整本」/ 网格选中活跃任务：强制处理 Tab，进度在 bd-job-status-inner
-  const { preferTranslateTab, defaultTab, setPreferTranslateTab } = useBookDetailTab({
-    open,
-    payloadItem,
-    item,
-    readerAvailable,
-    isActive,
-  });
 
   const close = () => dialogStore.close();
 
@@ -97,6 +91,41 @@ export function BookDetailDialog() {
       void docState.refreshDocument?.();
     },
   });
+  const coverage = useTranslationCoverage({
+    open,
+    documentId,
+    jobs: documentJobs.jobs,
+    ready: !documentJobs.loading,
+    cache: caches.coverage,
+  });
+  // 能不能对照阅读看「有没有任何成功的带译文任务」，不看当前任务：重新翻译 / 重新渲染在跑
+  // 或失败时旧译文照样能读（阅读器按全部成功任务合并）。coverage 已经拉了，直接用。
+  const {
+    coverProcessing,
+    readPresentation,
+    readerAvailable,
+    canTranslate,
+    isActive,
+    cardJobId,
+  } =
+    useBookDetailCover({ item, statusCardState, hasTranslation: bookDetailHasTranslation({ item, coverage }) });
+  const jobId = `${item.job_id || item.active_job_id || cardJobId || ""}`.trim();
+
+  // 点「翻译整本」/ 网格选中活跃任务：强制处理 Tab，进度在 bd-job-status-inner
+  const { preferTranslateTab, defaultTab, setPreferTranslateTab } = useBookDetailTab({
+    open,
+    payloadItem,
+    item,
+    readerAvailable,
+    isActive,
+  });
+  // 「重新处理」清单（stage-actions，后端要算 0.6 秒）只在「进度」页用：第一次打开那一页才请求。
+  const [processingSeenFor, setProcessingSeenFor] = useState("");
+  const processingSeen = defaultTab === "processing" || processingSeenFor === documentId;
+  // 关掉就清零：下次打开停在概览时不去拉，点进「进度」再拉（拉的是那时最新的）。
+  useEffect(() => {
+    if (!open) setProcessingSeenFor("");
+  }, [open]);
   const translateState = useBookDetailTranslate({
     open,
     documentId,
@@ -117,25 +146,15 @@ export function BookDetailDialog() {
     onStarted: documentJobs.upsert,
     onCancelled: () => documentJobs.refresh(),
   });
-  const latestTranslation: any = documentJobs.latestTranslation;
+  const latestTranslation = documentJobs.latestTranslation;
   const overviewOcrStatus = documentJobPresentation(documentJobs.ocrStatusJob, "尚未执行");
   const translationActive = isDocumentJobActive(latestTranslation);
   const translationStatus = documentJobPresentation(latestTranslation, "尚未翻译");
   const translationSucceeded = `${latestTranslation?.status || ""}`.toLowerCase() === "succeeded";
-  const translationItem = latestTranslation
-    ? { ...item, ...latestTranslation, library_only: false }
-    : {
-        ...item,
-        job_id: "",
-        active_job_id: "",
-        workflow: "",
-        job_type: "",
-        status: "",
-        library_only: true,
-      };
   const stageActionState = useBookDetailStageActions({
-    open,
-    job: latestTranslation,
+    open: open && processingSeen,
+    // 不是 latestTranslation：最新的是一次重新渲染时，以最新的翻译为底，见 selectRetryBaseJob。
+    job: documentJobs.retryBaseTranslation || latestTranslation,
     actions,
     onJobSubmitted: documentJobs.upsert,
     // OCR 完成可能发生在失败翻译任务之后；此时 translation job_id 不变，
@@ -146,12 +165,24 @@ export function BookDetailDialog() {
       documentJobs.reusableOcr?.updated_at || "",
     ].join(":"),
   });
+  // 失败 / 取消的最新翻译任务：从断点继续。
+  const resumeState = useBookDetailResume({
+    open,
+    job: latestTranslation,
+    onJobSubmitted: documentJobs.upsert,
+    // 走书库动作：回执会 promote 到详情 payload，左栏和进度区跟上新任务。
+    resumeJob: actions?.resumeJob,
+  });
   const artifactCenter = useBookDetailArtifactCenter({
     active: open,
+    ready: !documentJobs.loading,
+    cache: caches.manifests,
     documentId,
     refreshRevision: documentJobs.succeededRevision,
+    title: docState.doc?.title || item.title || "",
     source: {
-      filename: docState.doc?.source_filename || item.source_filename || item.title,
+      // 书架卡片上的字段叫 source_file_name（书的 DocumentRecord 才叫 source_filename）。
+      filename: docState.doc?.source_filename || item.source_file_name || item.book_summary?.source_file_name || item.title,
       url: docState.doc?.source_pdf_url || item.source_pdf_url,
       sizeBytes: docState.doc?.bytes ?? item.bytes,
       generatedAt: docState.doc?.added_at || item.added_at || item.created_at,
@@ -159,7 +190,7 @@ export function BookDetailDialog() {
     jobs: documentJobs.jobs,
   });
 
-  const handleOpenChange = (next) => {
+  const handleOpenChange = (next: boolean) => {
     if (!next) close();
   };
 
@@ -167,6 +198,18 @@ export function BookDetailDialog() {
     actions.openSourceReader(documentId);
     close();
   };
+
+  // 「点名看某个任务」：产物「查看」、进度页「查看实时译文」。带 pinJob，阅读器原样打开
+  // 这个任务，不按整本挑（后端只挑成功的翻译任务——OCR 会被换成翻译、在跑的重翻会被换成
+  // 旧译文）。封面「对照阅读」是「看这本书」，不走这里。
+  const openPinnedJob = (pinnedJobId: string) => {
+    actions.openJobReader(pinnedJobId, documentId, { pinJob: true });
+    close();
+  };
+
+  // 本书的任务 id。全局 statusCard 只有一张、可能在播另一本书的任务，读它的地方
+  // （结果操作行、实时译文入口）只认这里面的。
+  const documentJobIds = documentJobs.jobs.map(jobIdOf).filter(Boolean);
 
   return (
     <BookDetailShell
@@ -179,7 +222,7 @@ export function BookDetailDialog() {
           coverUrl={coverUrl}
           title={docState.doc?.title || docState.titleText || item.title}
           authors={docState.authors}
-          year={docState.doc?.year || item.year}
+          year={docState.doc?.year ?? undefined}
           pageCount={docState.pageCount}
           readingStatus={docState.readingStatus}
           readerAvailable={readerAvailable}
@@ -199,6 +242,7 @@ export function BookDetailDialog() {
               loading={artifactCenter.loading}
               downloadingId={artifactCenter.downloadingId}
               onDownload={(artifact) => void artifactCenter.download(artifact)}
+              onDownloadMarkdown={(artifact, readingJobId) => void artifactCenter.downloadMarkdownBundle(artifact, readingJobId)}
             />
           )}
         />
@@ -208,120 +252,91 @@ export function BookDetailDialog() {
           open={open}
           resetKey={documentId}
           defaultTab={defaultTab}
+          onTabChange={(tab) => {
+            if (tab === "processing") setProcessingSeenFor(documentId);
+          }}
           overviewTab={({ selectTab }) => (
             <BookDetailOverviewTab
               pageCount={docState.pageCount}
               bytes={docState.doc?.bytes}
               addedAt={docState.doc?.added_at}
-              memberCollections={docState.memberCollections}
               editing={docState.editing}
               titleText={docState.titleText}
-              tagsText={docState.tagsText}
-              tags={docState.tags}
-              authors={docState.authors}
-              year={docState.doc?.year}
-              displayTitle={docState.doc?.title || docState.titleText}
               busy={docState.busy}
+              error={docState.error}
               ocrStatus={overviewOcrStatus}
               translationStatus={translationStatus}
-              jobs={documentJobs.jobs}
               onOpenProcessing={() => selectTab("processing")}
-              onOpenArtifacts={() => selectTab("artifacts")}
               onStartEdit={docState.startEdit}
               onCancelEdit={() => docState.setEditing(false)}
               onSave={docState.handleSaveEdit}
               onTitleChange={docState.setTitleText}
-              onTagsTextChange={docState.setTagsText}
-              management={(
-                <BookDetailManageTab
-                  readingStatus={docState.readingStatus}
+              readingSlot={(
+                <ReadingStatusPanel
+                  value={docState.readingStatus}
                   busy={docState.busy}
-                  onReadingStatusChange={docState.handleReadingStatus}
+                  onChange={docState.handleReadingStatus}
+                />
+              )}
+              collectionsSlot={(
+                <CollectionsPanel
                   collections={docState.collections}
                   collectionsBusy={docState.collectionsBusy}
-                  onToggleCollection={docState.toggleCollection}
-                  error={docState.error}
+                  onToggle={docState.toggleCollection}
+                />
+              )}
+              dangerSlot={(
+                <DeleteFooterPanel
+                  busy={docState.busy}
                   onDelete={docState.handleDelete}
-                  deleteTitle={docState.doc?.title || docState.titleText || item.title}
-                  deleteBlockedFavoriteCount={docState.deleteBlocked?.favoriteCount || 0}
-                  onClearFavoritesAndDelete={docState.clearFavoritesAndDelete}
-                  onDismissDeleteBlocked={docState.dismissDeleteBlocked}
+                  title={docState.doc?.title || docState.titleText || item.title}
                 />
               )}
             />
           )}
           processingTab={({ activeTab }) => (
-            <BookDetailProcessingTab
+            <ProcessingTabWithUsage
+              documentId={documentId}
+              visible={open && activeTab === "processing"}
               loading={documentJobs.loading}
               error={documentJobs.error}
               // 结果操作行读全局 statusCard store，注入点放在这里（对话框本身
               // 长在 HomeShellProviders 内），让「进度」Tab 组件保持纯展示。
-              resultActionsSlot={<ProcessingResultActions />}
-              ocr={{
-                job: documentJobs.ocrStatusJob,
-                rangeOn: ocrState.rangeOn,
-                startPage: ocrState.startPage,
-                endPage: ocrState.endPage,
-                pageCount: docState.pageCount,
-                pending: ocrState.pending,
-                cancelling: ocrState.cancelling,
-                error: ocrState.error,
-                onRangeOnChange: ocrState.setRangeOn,
-                onStartPageChange: ocrState.setStartPage,
-                onEndPageChange: ocrState.setEndPage,
-                onOcr: ocrState.handleOcr,
-                onCancel: ocrState.handleCancel,
-              }}
-              translation={{
-                item: translationItem,
-                status: translationStatus,
-                isActive: translationActive,
-                // OCR 提交待定期间不能同时发起翻译，避免两份任务并发。
-                canTranslate: canStartTranslation({
-                  latestTranslation,
-                  translationActive,
-                  baseCanTranslate: canTranslate,
-                }) && !ocrState.pending,
-                readerAvailable: translationSucceeded || readerAvailable,
-                dialogOpen: open,
-                tabActive: activeTab === "processing",
-                rangeOn: translateState.rangeOn,
-                startPage: translateState.startPage,
-                endPage: translateState.endPage,
+              resultActionsSlot={<ProcessingResultActions documentJobIds={documentJobIds} />}
+              coverage={coverage}
+              editorialFlowCache={caches.settledFlows}
+              {...buildProcessingTabProps({
+                open,
+                activeTab,
+                item,
                 pageCount: docState.pageCount,
                 busy: docState.busy,
                 error: docState.error,
-                stageActions: stageActionState.stageActions,
-                stageActionsLoading: stageActionState.loading,
-                stageActionPending: stageActionState.pendingStage,
-                stageActionError: stageActionState.error,
-                ocrReuse: documentJobs.reusableOcr
-                  ? { jobId: `${documentJobs.reusableOcr.job_id || documentJobs.reusableOcr.id || ""}` }
-                  : null,
-                onRangeOnChange: translateState.setRangeOn,
-                onStartPageChange: translateState.setStartPage,
-                onEndPageChange: translateState.setEndPage,
-                onTranslate: async () => {
-                  await translateState.handleTranslate();
-                },
-                onOpenLiveReader: (activeJobId) => {
-                  actions.openJobReader(activeJobId, documentId);
-                  close();
-                },
-                onRetryStage: stageActionState.retry,
-              }}
+                documentJobs,
+                ocrState,
+                translateState,
+                stageActionState,
+                resumeState,
+                translationStatus,
+                translationActive,
+                translationSucceeded,
+                canTranslate,
+                readerAvailable,
+                documentJobIds,
+                onOpenLiveReader: openPinnedJob,
+              })}
             />
           )}
           artifactsTab={() => (
             <BookDetailArtifactsTab
               onOpenSource={openSource}
               artifactCenter={artifactCenter}
-              onOpenJob={(artifactJobId) => {
-                actions.openJobReader(artifactJobId, documentId);
-                close();
-              }}
+              onOpenJob={openPinnedJob}
             />
           )}
+          qualityTab={jobId ? <QualityPanel jobId={jobId} documentId={documentId} /> : null}
+          termsTab={jobId ? <BookDetailTermsTab jobId={jobId} /> : null}
+          historyTab={<BookDetailHistoryTab coverage={coverage} addedAt={docState.doc?.added_at} />}
         />
       )}
     />

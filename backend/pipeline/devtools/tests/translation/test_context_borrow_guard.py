@@ -11,22 +11,9 @@
 
 from __future__ import annotations
 
-import json
-import sys
-from pathlib import Path
-
-
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-
-from retainpdf_pipeline.translate.prompt_loader import load_prompt
-from retainpdf_pipeline.translate.llm.shared.prompt_protocols import (
-    HALF_SENTENCE_NO_BORROW_GUARD,
-    group_member_json_user_prompt,
-)
-from retainpdf_pipeline.translate.core.context import build_item_context
-from retainpdf_pipeline.translate.llm.validation.quality import review_translation_item
+from retainpdf_translation.prompt_loader import load_prompt
+from retainpdf_translation.llm.shared.prompt_protocols import HALF_SENTENCE_NO_BORROW_GUARD
+from retainpdf_translation.llm.validation.quality import review_translation_item
 
 
 HALF_SENTENCE_SOURCE = "there have been no examples of"
@@ -50,12 +37,11 @@ def test_prompt_templates_forbid_borrowing_for_half_sentence() -> None:
     for name in (
         "translation_task.txt",
         "translation_system.txt",
-        "translation_system_plain_text.txt",
     ):
         assert HALF_SENTENCE_NO_BORROW_GUARD in load_prompt(name), name
 
     # The compact user task relies on the system guard instead of duplicating it.
-    from retainpdf_pipeline.translate.llm.shared.prompt_building import build_single_item_fallback_messages
+    from retainpdf_translation.llm.shared.prompt_building import build_single_item_fallback_messages
 
     for math_mode in ("placeholder", "direct_typst"):
         for style in ("plain_text", "json"):
@@ -66,7 +52,7 @@ def test_prompt_templates_forbid_borrowing_for_half_sentence() -> None:
 
 
 def test_plain_text_prompt_adds_no_borrow_guard_for_half_sentence() -> None:
-    from retainpdf_pipeline.translate.llm.providers.deepseek import client as deepseek_client
+    from retainpdf_translation.llm.providers.deepseek import client as deepseek_client
 
     messages = deepseek_client.build_single_item_fallback_messages(
         _nickel_item(),
@@ -76,28 +62,7 @@ def test_plain_text_prompt_adds_no_borrow_guard_for_half_sentence() -> None:
     user_prompt = messages[1]["content"]
     assert "当前原文是不完整片段；译文必须保持同等不完整，不要用后文上下文补全。" in user_prompt
     assert HALF_SENTENCE_NO_BORROW_GUARD in user_prompt
-    assert "后文上下文（仅供理解，禁止翻译进输出）" in user_prompt
-
-
-def test_group_member_prompt_forbids_borrowing_for_incomplete_fragment() -> None:
-    item_context = build_item_context(
-        {
-            "item_id": "__cg__:cg-023-001",
-            "translation_unit_member_ids": ["p023-b006", "p023-b007"],
-            "translation_unit_members": [
-                {"item_id": "p023-b006", "protected_source_text": HALF_SENTENCE_SOURCE},
-                {"item_id": "p023-b007", "protected_source_text": "for this transformation."},
-            ],
-            "continuation_group": "cg-023-001",
-            "translation_unit_protected_source_text": f"{HALF_SENTENCE_SOURCE} for this transformation.",
-            "protected_source_text": f"{HALF_SENTENCE_SOURCE} for this transformation.",
-            "translation_context_after": CAPTION_CONTEXT,
-            "metadata": {"structure_role": "body"},
-        }
-    )
-    payload = json.loads(group_member_json_user_prompt(item_context))
-    assert "never borrow words from neighboring context" in payload["task"]
-    assert "equally incomplete" in payload["task"]
+    assert "【后文开始（仅供理解，禁止翻译进输出）】" in user_prompt
 
 
 def test_quality_flags_scheme_number_borrowed_from_caption() -> None:
@@ -157,7 +122,7 @@ def test_quality_allows_label_present_in_source() -> None:
 
 
 def test_quality_exempts_glossary_terms() -> None:
-    from retainpdf_pipeline.translate.core.terms import GlossaryEntry
+    from retainpdf_translation.core.terms import GlossaryEntry
 
     item = {
         "item_id": "p023-b009",

@@ -50,11 +50,12 @@ test("task center:按 job_id 保留同一文档的独立任务并分组", () => 
     ["running", ["job-running"]],
     ["queued", ["job-queued"]],
     ["failed", ["job-failed"]],
-    ["completed", ["job-done", "job-cancelled"]],
+    ["completed", ["job-done"]],
+    ["canceled", ["job-cancelled"]],
   ]);
   assert.equal(taskIdentity(items[0]), "job:job-running");
   assert.equal(taskIdentity(items[1]), "job:job-queued");
-  assert.deepEqual(taskCenterCounts(items), { total: 5, running: 1, queued: 1, failed: 1, completed: 2 });
+  assert.deepEqual(taskCenterCounts(items), { total: 5, running: 1, queued: 1, failed: 1, completed: 1, canceled: 1 });
 });
 
 test("task center:文档名称和进度只读取 jobs 契约字段", () => {
@@ -158,21 +159,21 @@ test("task center:晚到旧更新时间不能覆盖新的任务状态", () => {
   assert.deepEqual(mergeTaskCenterJobs([current], [old]), [current]);
 });
 
-test("task center:重试只提交详情中启用的后端 rerun URL", async () => {
+test("task center:重试只在详情里续跑可用时提交 POST /jobs/:id/actions/resume", async () => {
   const calls = [];
   const result = await retryTaskCenterJob("failed-1", {
     fetchDetail: async (jobId) => ({ job_id: jobId, status: "failed" }),
-    resolveActions: () => ({ rerunEnabled: true, rerun: "/api/v1/jobs/failed-1/rerun" }),
-    rerun: async (url) => { calls.push(url); return { job_id: "retry-1" }; },
+    resolveActions: () => ({ resumeEnabled: true }),
+    resume: async (jobId) => { calls.push(jobId); return { job_id: "retry-1" }; },
   });
   assert.deepEqual(result, { job_id: "retry-1" });
-  assert.deepEqual(calls, ["/api/v1/jobs/failed-1/rerun"]);
+  assert.deepEqual(calls, ["failed-1"]);
 
   await assert.rejects(
     retryTaskCenterJob("failed-2", {
       fetchDetail: async () => ({ job_id: "failed-2", status: "failed" }),
-      resolveActions: () => ({ rerunEnabled: false, rerun: "" }),
-      rerun: async () => assert.fail("不可重试时不得构造或提交 URL"),
+      resolveActions: () => ({ resumeEnabled: false }),
+      resume: async () => assert.fail("不可重试时不得提交"),
     }),
     /后端未提供可用的重试操作/,
   );

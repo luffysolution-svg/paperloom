@@ -1,0 +1,44 @@
+/* 统一空状态：图标 + 标题 + 说明 + 动作。（ui/icons/EmptyState）
+ *
+ * @owns empty-state */
+
+/* 统一空状态：科学仪器图标 + 标题 + 说明（EmptyState 组件） */
+@utility empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 36px 20px !important;
+}
+
+@utility empty-state-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--bg) 72%, var(--paper));
+  border: 1px solid var(--line);
+  margin-bottom: 6px;
+  opacity: 0.92;
+}
+
+@utility empty-state-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+@utility empty-state-hint {
+  margin: 0;
+  max-width: 28em;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+@utility empty-state-action {
+  margin-top: 12px;
+}

@@ -17,7 +17,7 @@ from pathlib import Path
 from retainpdf_pipeline.ocr.document_schema.adapters import (
     adapt_path_to_document_v1_with_report,
 )
-from retainpdf_pipeline.translate.public import prepare_relocated_translation_copy
+from retainpdf_translation.public import prepare_relocated_translation_copy
 
 
 def build_block_mapping(old: dict, new: dict) -> dict[str, dict]:

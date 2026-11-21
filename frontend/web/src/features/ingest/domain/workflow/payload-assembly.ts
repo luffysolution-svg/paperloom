@@ -11,10 +11,11 @@ import {
   type WorkflowDeveloperConfig,
 } from "./payload.js";
 import type { WorkflowConstants, WorkflowRunPayload, WorkflowSubmitValues } from "./contracts.js";
+import { isZhipuBaseUrl, normalizeOcrProvider } from "@/platform/config/providers.js";
 
 export interface CreateWorkflowPayloadAssemblyOptions {
   constants: WorkflowConstants;
-  developerConfigWithDefaults: () => WorkflowDeveloperConfig;
+  developerConfigWithDefaults: () => WorkflowDeveloperConfig & { workflow: string };
   isOcrOnlyMode: () => boolean;
   currentPageRanges: () => string;
   getUploadState: () => { uploadId?: string; uploadedPageCount?: number };
@@ -56,6 +57,15 @@ export function createWorkflowPayloadAssembly({
     }) || {};
   }
 
+  // GLM-OCR 没填自己的 key、翻译又是智谱时，用翻译的 key（同一个智谱 key）。后端整本任务也会借，
+  // 但只做 OCR 的任务建任务时清掉了翻译凭据、借不到，所以这里显式带上。别家的翻译 key 不带。
+  function glmOcrTokenOrBorrowed(submitValues: WorkflowSubmitValues): string | undefined {
+    const own = submitValues.ocrToken;
+    if (own || normalizeOcrProvider(submitValues.ocrProvider) !== "glm_ocr" || submitValues.ocrCredentialRef) return own;
+    const translationKey = `${submitValues.modelApiKey || ""}`.trim();
+    return translationKey && isZhipuBaseUrl(developerConfigWithDefaults().baseUrl) ? translationKey : own;
+  }
+
   function buildOcrPayload(
     pageRanges: string | undefined,
     submitValues: WorkflowSubmitValues = currentWorkflowSubmitValues(),
@@ -64,7 +74,7 @@ export function createWorkflowPayloadAssembly({
       pageRanges,
       ocrProvider: submitValues.ocrProvider,
       ocrCredentialRef: submitValues.ocrCredentialRef,
-      ocrToken: submitValues.ocrToken,
+      ocrToken: glmOcrTokenOrBorrowed(submitValues),
       defaultPaddleApiUrl,
       constants,
     });
@@ -79,13 +89,18 @@ export function createWorkflowPayloadAssembly({
       translationCredentialRef: submitValues.translationCredentialRef,
       modelApiKey: submitValues.modelApiKey,
       selectedGlossaryId: submitValues.selectedGlossaryId,
+      preferences: submitValues.preferences,
       constants,
     });
   }
 
-  function buildRenderPayload(developerConfig: WorkflowDeveloperConfig) {
+  function buildRenderPayload(
+    developerConfig: WorkflowDeveloperConfig,
+    submitValues: WorkflowSubmitValues = currentWorkflowSubmitValues(),
+  ) {
     return buildRenderPayloadRequest({
       developerConfig,
+      preferences: submitValues.preferences,
       constants,
     });
   }
@@ -125,12 +140,14 @@ export function createWorkflowPayloadAssembly({
     };
   }
 
-  function collectRunPayload(): WorkflowRunPayload {
-    const pageRanges = currentPageRanges();
+  // overrides 给一次上传多本用：每本用自己的 upload_id、整本处理（页码范围只对单本有意义）。
+  // 不给就和以前一样读当前上传和页码输入框。
+  function collectRunPayload(overrides: { uploadId?: string; pageRanges?: string } = {}): WorkflowRunPayload {
+    const pageRanges = overrides.pageRanges ?? currentPageRanges();
     const developerConfig = developerConfigWithDefaults();
     const ocrOnly = isOcrOnlyMode();
     const workflow = ocrOnly ? WORKFLOW_OCR : developerConfig.workflow;
-    const uploadState = getUploadState();
+    const uploadState = overrides.uploadId ? { uploadId: overrides.uploadId } : getUploadState();
     const submitValues = currentWorkflowSubmitValues();
     const effectiveNeedsUpload = ocrOnly ? () => true : workflowNeedsUpload;
     const payload: WorkflowRunPayload = {
@@ -156,7 +173,7 @@ export function createWorkflowPayloadAssembly({
       payload.translation = buildTranslationPayload(developerConfig, submitValues);
     }
     if (workflowUsesRenderStage(workflow)) {
-      payload.render = buildRenderPayload(developerConfig);
+      payload.render = buildRenderPayload(developerConfig, submitValues);
     }
     return payload;
   }

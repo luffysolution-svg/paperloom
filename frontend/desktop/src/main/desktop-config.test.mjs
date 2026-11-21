@@ -34,6 +34,7 @@ test("builds the complete runtime config for the active backend port", () => {
     ocrCredentialRef: "cred_ocr",
     translationCredentialRef: "cred_translation",
     mineruToken: "mineru-token",
+    glmOcrToken: "",
     paddleToken: "paddle-token",
     modelApiKey: "model-key",
     model: "model-name",
@@ -48,6 +49,7 @@ test("builds the complete runtime config for the active backend port", () => {
     ocrCredentialRef: "cred_ocr",
     translationCredentialRef: "cred_translation",
     mineruToken: "mineru-token",
+    glmOcrToken: "",
     paddleToken: "paddle-token",
     modelApiKey: "model-key",
     model: "model-name",
@@ -148,4 +150,25 @@ test("MinerU remains independently saved locally and restores only matching lega
   assert.equal(store.buildDesktopConfigResponse({
     ...saved, ocrCredentialRef: "cred_mineru",
   }).browserConfig.mineruToken, "local-mineru", "local edits win over legacy values");
+});
+
+test("GLM-OCR remains independently saved locally and restores matching legacy tokens", (t) => {
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), "retainpdf-desktop-glm-"));
+  t.after(() => fs.rmSync(userData, { recursive: true, force: true }));
+  const secretsDir = path.join(userData, "data", "secrets");
+  fs.mkdirSync(secretsDir, { recursive: true });
+  fs.writeFileSync(path.join(secretsDir, "credentials.json"), JSON.stringify({
+    credentials: {
+      cred_glm: { kind: "ocr_provider_token", provider: "glm_ocr", secret: "legacy-glm" },
+    },
+  }));
+  const store = createDesktopConfigStore({ getPath: () => userData });
+  const saved = store.saveDesktopConfig({
+    ocrProvider: "glm_ocr", glmOcrToken: "local-glm",
+  });
+  assert.equal(saved.ocrProvider, "glm_ocr");
+  assert.equal(store.loadDesktopConfig().glmOcrToken, "local-glm");
+  assert.equal(store.buildDesktopConfigResponse({
+    ...saved, glmOcrToken: "", ocrCredentialRef: "cred_glm",
+  }).browserConfig.glmOcrToken, "legacy-glm");
 });

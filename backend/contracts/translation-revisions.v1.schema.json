@@ -1,0 +1,420 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "retainpdf/contracts/translation-revisions/v1",
+  "title": "Translation Item Revision Contract",
+  "description": "Translation items of a job (list, one item, dry-run replay of one item), single-block translation write-back and its revision history. Successful HTTP responses are wrapped in { code, message, data }; this schema describes the request body, data payloads, the revisions.v1.jsonl record and the structured error details. Validation runs the same Python review_translation_item checks used during translation (placeholders, inline math delimiters, English residue, protocol shells, glossary hints); only error-severity issues block a write. A successful write atomically rewrites the page payload, advances translation-checkpoint.v1.json (page_hash, generation, snapshot) and appends one record to translated/revisions.v1.jsonl. Rust then registers the revised pages in the live-translation read model (pipeline_units) and appends a pipeline_unit_committed event, served as translation_units_committed by live-events; see TranslationRevisionLivePublication.",
+  "base_path": "/api/v1",
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/api/v1/jobs/:job_id/translations",
+      "client_name": "listTranslationItems",
+      "transport": "json",
+      "query": "ListTranslationItemsQuery",
+      "output": "TranslationDebugListView",
+      "rust_view": "TranslationDebugListView",
+      "ts_consumer": "@retainpdf/contracts/translation-revisions :: TranslationDebugListView",
+      "note": "Items in page order, computed from translation-manifest.json and the current page files (so revisions and refine show up); old jobs without a manifest fall back to artifacts/translation_debug_index.json. A job that has not produced its translation manifest yet returns 200 with an empty list, not 404. Filters (page, final_status, error_type, route, q) apply before paging; total counts the filtered items.",
+      "errors": {
+        "400": "BAD_REQUEST: limit outside 1..=500, unknown query parameter",
+        "404": "NOT_FOUND: job does not exist (error.details is {})"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/jobs/:job_id/translations/:item_id",
+      "client_name": "getTranslationItem",
+      "transport": "json",
+      "output": "TranslationDebugItemView",
+      "rust_view": "TranslationDebugItemView",
+      "ts_consumer": "@retainpdf/contracts/translation-revisions :: TranslationDebugItemView",
+      "errors": {
+        "404": "NOT_FOUND: job or item does not exist (error.details is {}); no translation manifest yet: error.details.reason = not_ready, message \"translation manifest not ready\""
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/jobs/:job_id/translations/:item_id",
+      "input": "ReviseTranslationItemRequest",
+      "output": "TranslationRevisionView",
+      "errors": {
+        "400": "BAD_REQUEST: oversized text/reason, malformed item id, unknown field in the request body",
+        "404": "NOT_FOUND: job or item does not exist (error.details is {}); no translation manifest yet: error.details.reason = not_ready, message \"translation manifest not ready\"",
+        "409": "TRANSLATION_REVISION_CONFLICT: see TranslationRevisionErrorDetails.reason",
+        "422": "TRANSLATION_REVISION_REJECTED: see TranslationRevisionErrorDetails.validation; UNPROCESSABLE_ENTITY: request body does not match ReviseTranslationItemRequest (missing or unknown source)"
+      },
+      "rust_view": "TranslationRevisionView",
+      "ts_consumer": "@retainpdf/contracts/translation-revisions :: TranslationRevisionView"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/jobs/:job_id/translations/:item_id/revisions",
+      "output": "TranslationRevisionHistoryView",
+      "rust_view": "TranslationRevisionHistoryView",
+      "ts_consumer": "@retainpdf/contracts/translation-revisions :: TranslationRevisionHistoryView"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/jobs/:job_id/translations/:item_id/replay",
+      "client_name": "replayTranslationItem",
+      "transport": "json",
+      "output": "TranslationReplayView",
+      "rust_view": "TranslationReplayView",
+      "ts_consumer": "@retainpdf/contracts/translation-revisions :: TranslationReplayView",
+      "note": "No request body (there is deliberately no input; send an empty body, any body is ignored). Runs backend/pipeline/devtools/replay_translation_item.py once in dry-run mode: the item is translated again with the job's saved settings and nothing is written back (to keep a replayed text, PATCH it). Synchronous, calls the model; the server gives up after 300 seconds.",
+      "errors": {
+        "400": "BAD_REQUEST: malformed item id (allowed: 1-128 ASCII letters, digits, - _ : .)",
+        "404": "NOT_FOUND: job or item does not exist (error.details is {}); no translation manifest yet: error.details.reason = not_ready",
+        "409": "TRANSLATION_REVISION_CONFLICT: error.details.reason = read_only_job for merged reading results (merged-...); replay the source job instead",
+        "500": "INTERNAL: replay script failed, timed out or printed something that is not JSON; error.details.error_id points at the server log"
+      }
+    }
+  ],
+  "definitions": {
+    "ListTranslationItemsQuery": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "views/common.rs :: ListTranslationItemsQuery (deny_unknown_fields: an unknown parameter is 400). Text filters are trimmed and compared case-insensitively; an empty value means no filter.",
+      "properties": {
+        "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 20, "description": "Out of range is 400, never clamped." },
+        "offset": { "type": "integer", "minimum": 0, "default": 0 },
+        "page": { "type": "integer", "minimum": 1, "description": "1-based page number (matches page_number, not page_idx)." },
+        "final_status": { "type": "string", "description": "Exact final_status, e.g. translated, kept_origin." },
+        "error_type": { "type": "string", "description": "Items whose error_types contain this value." },
+        "route": { "type": "string", "description": "Substring of route_path joined with /." },
+        "q": { "type": "string", "description": "Substring of item_id, source_preview or translated_preview." }
+      }
+    },
+    "TranslationDebugListItemView": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "views/translation.rs :: TranslationDebugListItemView. Every key is always present; missing values are empty strings, empty arrays, -1 (block_idx) or true (should_translate).",
+      "required": [
+        "item_id",
+        "page_idx",
+        "page_number",
+        "block_idx",
+        "block_type",
+        "math_mode",
+        "continuation_group",
+        "classification_label",
+        "should_translate",
+        "skip_reason",
+        "final_status",
+        "source_preview",
+        "translated_preview",
+        "route_path",
+        "fallback_to",
+        "degradation_reason",
+        "error_types"
+      ],
+      "properties": {
+        "item_id": { "type": "string" },
+        "page_idx": { "type": "integer", "minimum": 0, "description": "0-based." },
+        "page_number": { "type": "integer", "minimum": 1, "description": "page_idx + 1." },
+        "block_idx": { "type": "integer", "description": "-1 when the page payload has none." },
+        "block_type": { "type": "string" },
+        "math_mode": { "type": "string" },
+        "continuation_group": { "type": "string" },
+        "classification_label": { "type": "string" },
+        "should_translate": { "type": "boolean" },
+        "skip_reason": { "type": "string" },
+        "final_status": { "type": "string", "description": "From the item, else translation_diagnostics.final_status." },
+        "source_preview": { "type": "string", "description": "Whitespace collapsed, at most 220 characters (cut with …)." },
+        "translated_preview": { "type": "string", "description": "Same rule as source_preview." },
+        "route_path": { "type": "array", "items": { "type": "string" } },
+        "fallback_to": { "type": "string" },
+        "degradation_reason": { "type": "string" },
+        "error_types": { "type": "array", "items": { "type": "string" }, "description": "translation_diagnostics.error_trace[].type." }
+      }
+    },
+    "TranslationDebugListView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items", "total", "limit", "offset", "has_more"],
+      "properties": {
+        "items": { "type": "array", "items": { "$ref": "#/definitions/TranslationDebugListItemView" } },
+        "total": { "type": "integer", "minimum": 0, "description": "Items after filtering, before paging." },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 500, "description": "The effective limit (20 when omitted)." },
+        "offset": { "type": "integer", "minimum": 0 },
+        "has_more": { "type": "boolean" }
+      }
+    },
+    "TranslationDebugItemView": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "views/translation.rs :: TranslationDebugItemView.",
+      "required": ["job_id", "item_id", "page_idx", "page_number", "page_path", "item"],
+      "properties": {
+        "job_id": { "type": "string" },
+        "item_id": { "type": "string" },
+        "page_idx": { "type": "integer", "minimum": 0 },
+        "page_number": { "type": "integer", "minimum": 1 },
+        "page_path": { "type": "string", "description": "The page file path as written in translation-manifest.json (normally relative to translated/, e.g. page-1.json)." },
+        "item": { "type": "object", "additionalProperties": true, "description": "The item exactly as stored in the page payload (source_text, translated_text, protected_translated_text, translation_diagnostics, ...), with secrets from the job request redacted. Not a stable schema." }
+      }
+    },
+    "TranslationReplayView": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "views/translation.rs :: TranslationReplayView.",
+      "required": ["job_id", "item_id", "payload"],
+      "properties": {
+        "job_id": { "type": "string" },
+        "item_id": { "type": "string" },
+        "payload": { "type": "object", "additionalProperties": true, "description": "What replay_translation_item.py printed, with secrets redacted. Today: job_root, job_id, item_id, page_idx, page_path, source_preview, saved_item, policy_before, policy_after, replay_result (null when the item is not translated or the model call failed), replay_error ({type, message} when the model call failed, else null; a failed model call is still 200). A devtools payload, not a stable schema." }
+      }
+    },
+    "TranslationRevisionSource": {
+      "type": "string",
+      "enum": ["user", "agent", "refine"],
+      "description": "Who produced the revision. Recorded only; it does not change validation."
+    },
+    "ReviseTranslationItemRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["translated_text", "source"],
+      "properties": {
+        "translated_text": {
+          "type": "string",
+          "maxLength": 20000,
+          "description": "New translation in the same form as the item's protected_translated_text. In direct_typst math mode this is the display text with inline math as $...$; in placeholder mode formulas may be written back verbatim and are re-protected before validation."
+        },
+        "source": { "$ref": "#/definitions/TranslationRevisionSource" },
+        "reason": { "type": "string", "maxLength": 2000, "default": "" },
+        "expected_generation": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Optimistic concurrency: the checkpoint generation the caller last saw. A mismatch returns 409 generation_mismatch with current_generation."
+        },
+        "rerender": {
+          "type": "boolean",
+          "default": false,
+          "description": "After a successful write, submit an in-place render retry (same as POST retry-stage {stage: render, create_new_job: false}). When revising several blocks, set it only on the last one or call retry-stage once afterwards."
+        }
+      }
+    },
+    "TranslationRevisionIssue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["item_id", "kind", "severity", "message", "retryable"],
+      "properties": {
+        "item_id": { "type": "string" },
+        "kind": {
+          "type": "string",
+          "description": "review_translation_item issue kind, e.g. empty_translation, math_delimiter_unbalanced, unexpected_placeholder, placeholder_inventory_mismatch, english_residue, mixed_english_residue, protocol_shell_output, truncated_translation, context_bleed, formula_commands_dropped, glossary_term_missing."
+        },
+        "severity": { "type": "string", "enum": ["error", "warning"] },
+        "message": { "type": "string" },
+        "retryable": { "type": "boolean" },
+        "details": { "type": "object" }
+      }
+    },
+    "TranslationRevisionValidation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passed", "error_count", "warning_count", "issues"],
+      "properties": {
+        "passed": { "type": "boolean", "description": "False when any error-severity issue exists; warnings never block." },
+        "error_count": { "type": "integer", "minimum": 0 },
+        "warning_count": { "type": "integer", "minimum": 0 },
+        "issues": { "type": "array", "items": { "$ref": "#/definitions/TranslationRevisionIssue" } }
+      }
+    },
+    "TranslationRevisionValidationSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passed", "error_count", "warning_count", "issue_kinds"],
+      "properties": {
+        "passed": { "type": "boolean" },
+        "error_count": { "type": "integer", "minimum": 0 },
+        "warning_count": { "type": "integer", "minimum": 0 },
+        "issue_kinds": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "TranslationRevisionItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "item_id",
+        "page_idx",
+        "translation_unit_id",
+        "unit_source_text",
+        "translated_text",
+        "protected_translated_text",
+        "final_status"
+      ],
+      "properties": {
+        "item_id": { "type": "string" },
+        "page_idx": { "type": "integer", "minimum": 0 },
+        "translation_unit_id": { "type": "string", "description": "Group units start with __cg__:; revising one member rebuilds the whole unit's text, possibly on other pages." },
+        "unit_source_text": { "type": "string" },
+        "translated_text": { "type": "string", "description": "Display text after restoring protected tokens." },
+        "protected_translated_text": { "type": "string" },
+        "final_status": { "type": "string" }
+      }
+    },
+    "TranslationRevisionRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One line of translated/revisions.v1.jsonl.",
+      "required": [
+        "schema",
+        "schema_version",
+        "revision_id",
+        "item_id",
+        "page_idx",
+        "translation_unit_id",
+        "ts",
+        "source",
+        "reason",
+        "previous_text",
+        "new_text",
+        "previous_final_status",
+        "validation",
+        "previous_generation",
+        "generation",
+        "page_hashes"
+      ],
+      "properties": {
+        "schema": { "type": "string", "const": "translation_revision_v1" },
+        "schema_version": { "type": "integer", "const": 1 },
+        "revision_id": { "type": "string", "pattern": "^rev-[0-9a-f]{32}$" },
+        "item_id": { "type": "string" },
+        "page_idx": { "type": "integer", "minimum": 0 },
+        "translation_unit_id": { "type": "string" },
+        "ts": { "type": "string", "format": "date-time" },
+        "source": { "$ref": "#/definitions/TranslationRevisionSource" },
+        "reason": { "type": "string" },
+        "previous_text": { "type": "string", "description": "Previous protected_translated_text of this block." },
+        "new_text": { "type": "string", "description": "New protected_translated_text of this block." },
+        "previous_final_status": { "type": "string" },
+        "validation": { "$ref": "#/definitions/TranslationRevisionValidationSummary" },
+        "previous_generation": { "type": "integer", "minimum": 0 },
+        "generation": { "type": "integer", "minimum": 1, "description": "Translation checkpoint generation after this revision." },
+        "page_hashes": {
+          "type": "object",
+          "description": "Rewritten page payload file name -> sha256, equal to the checkpoint's page_hash.",
+          "additionalProperties": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        }
+      }
+    },
+    "TranslationRevisionLivePage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["page_idx", "page_hash", "status", "attempt", "generation"],
+      "properties": {
+        "page_idx": { "type": "integer", "minimum": 0 },
+        "page_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "status": {
+          "type": "string",
+          "enum": ["published", "current", "superseded", "running_attempt", "no_durable_attempt"],
+          "description": "published: this request registered the page and appended a commit event; current: already registered; superseded: a newer revision or translation is already registered; running_attempt: the page belongs to a running pipeline attempt whose worker will commit it; no_durable_attempt: the job has no durable translation record."
+        },
+        "attempt": { "type": ["integer", "null"], "minimum": 0 },
+        "generation": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Live-translation generation of the page row (what the live page snapshot and the commit event carry), not the checkpoint generation."
+        }
+      }
+    },
+    "TranslationRevisionLivePublication": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Registration of the revised pages in the live-translation read model (database). The page files and the checkpoint are authoritative and are never rolled back because registration failed.",
+      "required": ["status", "pages", "error"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["published", "current", "pending", "unavailable", "failed"],
+          "description": "published: at least one page was registered with its new page_hash and a translation_units_committed event was appended; current: nothing left to register; pending: a running attempt owns the page; unavailable: the job has no durable translation record, so live translation cannot show it anyway; failed: registration failed (see error). The write-back already took effect; resending the same request (changed=false) or reopening live translation registers it."
+        },
+        "pages": { "type": "array", "items": { "$ref": "#/definitions/TranslationRevisionLivePage" } },
+        "error": { "type": ["string", "null"] }
+      }
+    },
+    "TranslationRevisionView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "job_id",
+        "item_id",
+        "changed",
+        "generation",
+        "item",
+        "validation",
+        "revision",
+        "page_hashes",
+        "live_publication",
+        "rerender",
+        "rerender_error"
+      ],
+      "properties": {
+        "job_id": { "type": "string" },
+        "item_id": { "type": "string" },
+        "changed": { "type": "boolean", "description": "False when text and status were already identical; nothing is written and generation does not move." },
+        "generation": { "type": "integer", "minimum": 0 },
+        "item": { "$ref": "#/definitions/TranslationRevisionItem" },
+        "validation": { "$ref": "#/definitions/TranslationRevisionValidation" },
+        "revision": {
+          "anyOf": [{ "$ref": "#/definitions/TranslationRevisionRecord" }, { "type": "null" }]
+        },
+        "page_hashes": {
+          "type": "object",
+          "additionalProperties": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        },
+        "live_publication": { "$ref": "#/definitions/TranslationRevisionLivePublication" },
+        "rerender": {
+          "type": ["object", "null"],
+          "description": "The retry-stage submission (job_id, source_job_id, status, workflow=render, rerun_from_stage, links, ...) when rerender=true and the render was queued; null otherwise."
+        },
+        "rerender_error": {
+          "type": ["string", "null"],
+          "description": "Why the requested rerender could not be queued. The write-back itself has already been committed."
+        }
+      }
+    },
+    "TranslationRevisionHistoryView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["job_id", "item_id", "revisions", "total"],
+      "properties": {
+        "job_id": { "type": "string" },
+        "item_id": { "type": "string" },
+        "revisions": {
+          "type": "array",
+          "description": "Oldest first.",
+          "items": { "$ref": "#/definitions/TranslationRevisionRecord" }
+        },
+        "total": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "TranslationRevisionErrorDetails": {
+      "type": "object",
+      "description": "error.details of a 409/422 response.",
+      "required": ["reason"],
+      "properties": {
+        "reason": {
+          "type": "string",
+          "enum": [
+            "validation_failed",
+            "item_not_translatable",
+            "job_running",
+            "checkpoint_locked",
+            "generation_mismatch",
+            "translation_not_committed",
+            "publication_inconsistent",
+            "group_members_missing",
+            "translations_owned_by_another_job",
+            "read_only_job"
+          ]
+        },
+        "validation": { "$ref": "#/definitions/TranslationRevisionValidation" },
+        "current_generation": { "type": "integer", "minimum": 0 },
+        "status": { "type": "string" },
+        "source_job_id": { "type": "string" }
+      }
+    }
+  }
+}

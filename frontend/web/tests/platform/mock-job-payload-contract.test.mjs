@@ -12,9 +12,9 @@
 // 整条链的分工(改了这里请一起改 mock 文件顶部那段注释):
 //
 //   1. Rust(serde) <=> schema:字段集合双向一致
-//      backend/packages/retain-core/src/models/input/request.rs
+//      backend/packages/retainpdf-core/src/models/input/request.rs
 //      :: contract_tests::create_job_input_field_sets_match_the_published_schema
-//      => 后端加/删字段而 schema 没跟上 => cargo test -p retain-core 红
+//      => 后端加/删字段而 schema 没跟上 => cargo test -p retainpdf-core 红
 //
 //   2. schema => contracts/src/create-job-fields.ts:生成物不许落后
 //      contracts 的 `npm run generate:check`(npm test 的第一步)

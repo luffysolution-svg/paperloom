@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "retainpdf/contracts/pipeline-stdout/v1",
   "title": "services/api ↔ services/pipeline workers stdout 行协议",
-  "description": "services/api 的 retain-jobs 逐行解析 pipeline 子进程 stdout 来驱动任务状态机。本文件是该行协议的单一真值：生产者（services/pipeline workers）与消费者（services/api/crates/retain-jobs 的 job_runner/stdout_parser）各配一侧契约测试；改协议必须同步上游 schema、后端镜像和两端实现。行分七类：带标签工件行、结构化 artifact_published JSONL 事件、durable stage 观察、durable checkpoint 观察、指标行、provider 状态行、阶段前缀行。",
+  "description": "services/api 的 retainpdf-runner 逐行解析 pipeline 子进程 stdout 来驱动任务状态机。本文件是该行协议的单一真值：生产者（services/pipeline workers）与消费者（services/api/crates/retainpdf-runner 的 job_runner/stdout_parser）各配一侧契约测试；改协议必须同步上游 schema、后端镜像和两端实现。行分七类：带标签工件行、结构化 artifact_published JSONL 事件、durable stage 观察、durable checkpoint 观察、指标行、provider 状态行、阶段前缀行。",
   "labeled_line_format": "<label>: <value>",
   "artifact_labels": {
     "job root": { "artifact_field": "job_root" },
@@ -75,7 +75,7 @@
     ],
     "committed_pages_field": {
       "name": "committed_pages",
-      "description": "可选的多页原子提交数组；翻译页使用稳定身份 unit_key=page:<page_index>、unit_order=page_index，每项还包含 page_hash 和精确的 changed_item_ids。不得与顶层 committed_unit_fields 同时出现。Rust 以一个权威 generation 原子提交整批页面。",
+      "description": "可选的多页原子提交数组；翻译页使用稳定身份 unit_key=page:<page_index>、unit_order=page_index，每项还包含 page_hash 和精确的 changed_item_ids；页文件字节变了而块指纹没变（如译后阶段只写了诊断字段）时，该页仍要上报以推进 page_hash，changed_item_ids 为空数组，Rust 以 unit_key 补位。不得与顶层 committed_unit_fields 同时出现。Rust 以一个权威 generation 原子提交整批页面。",
       "item_fields": [
         "unit_key",
         "unit_order",
@@ -85,13 +85,26 @@
       ]
     },
     "page_hash": "lowercase sha256 of the atomically saved page JSON",
-    "example": "{\"event_type\":\"pipeline_checkpoint\",\"payload\":{\"schema\":\"pipeline_checkpoint_v1\",\"schema_version\":1,\"stage\":\"translate\",\"phase\":\"translating\",\"status\":\"in_progress\",\"producer_generation\":4,\"committed_pages\":[{\"unit_key\":\"page:0\",\"unit_order\":0,\"page_index\":0,\"page_hash\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"changed_item_ids\":[\"p001-b0006\",\"p001-b0007\"]}],\"progress\":{\"completed_item_count\":8,\"item_count\":20}}}"
+    "progress_field": {
+      "name": "progress",
+      "description": "checkpoint 的块级进度投影，仅供 durable 提交与续跑使用；Rust 不再把它投影成公开进度（job.progress_* / stage_detail），公开翻译进度只来自 stage_progress 观察。completed_page_count 为可选新增字段：没有任何待办块的页数，旧 checkpoint 没有它，读方必须容忍缺失。",
+      "fields": [
+        "item_count",
+        "completed_item_count",
+        "pending_item_count",
+        "blocking_item_count",
+        "translated_item_count",
+        "completed_page_count"
+      ],
+      "optional_fields": ["completed_page_count"]
+    },
+    "example": "{\"event_type\":\"pipeline_checkpoint\",\"payload\":{\"schema\":\"pipeline_checkpoint_v1\",\"schema_version\":1,\"stage\":\"translate\",\"phase\":\"translating\",\"status\":\"in_progress\",\"producer_generation\":4,\"committed_pages\":[{\"unit_key\":\"page:0\",\"unit_order\":0,\"page_index\":0,\"page_hash\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"changed_item_ids\":[\"p001-b0006\",\"p001-b0007\"]}],\"progress\":{\"completed_item_count\":8,\"item_count\":20,\"completed_page_count\":1}}}"
   },
   "stage_observation_event": {
     "schema": "pipeline_stage_observation_v1",
     "schema_version": 1,
     "event_types": ["stage_transition", "stage_progress"],
-    "description": "worker 把阶段观察同时写入诊断 JSONL 与 stdout。Rust 在 generation fencing 下先更新 pipeline_stages，再在同一事务派生公开 event；已有 durable attempt 的 JSONL 阶段行不再是公开状态真值。",
+    "description": "worker 把阶段观察同时写入诊断 JSONL 与 stdout。Rust 在 generation fencing 下先更新 pipeline_stages，再在同一事务派生公开 event；已有 durable attempt 的 JSONL 阶段行不再是公开状态真值。substage 与 progress_unit 是自由字符串，Rust 原样透传 pipeline 声明的 progress_unit。翻译批次（substage=translation_batches）按本轮待翻译块计：progress_unit=block，progress_current/progress_total 为块数，分母是进入批量翻译时的待办块数而非全文块数（跟着 OCR 流式翻译分好几轮时，从第一轮开翻算起：前几轮已翻完的块加本轮待翻的块，分母随新到的页变大，分子只增不减、不超过分母）；payload 带 batch_current/batch_total（批次号）、completed_page_count（没有待办块的页数）与 page_count，文案为「已翻译 x/N 块 · 已完成 p/P 页」。",
     "required_fields": [
       "schema",
       "schema_version",
@@ -104,7 +117,7 @@
       "message",
       "payload"
     ],
-    "example": "{\"schema\":\"pipeline_stage_observation_v1\",\"schema_version\":1,\"job_id\":\"job-1\",\"seq\":7,\"ts\":\"2026-08-26T00:00:00Z\",\"level\":\"info\",\"user_stage\":\"translation\",\"stage\":\"translating\",\"substage\":\"translation_batches\",\"stage_detail\":\"completed batch 3/5\",\"provider\":\"\",\"provider_stage\":\"\",\"event_type\":\"stage_progress\",\"semantic_event_type\":\"progress\",\"message\":\"completed batch 3/5\",\"progress_current\":3,\"progress_total\":5,\"progress_unit\":\"batch\",\"payload\":{}}"
+    "example": "{\"schema\":\"pipeline_stage_observation_v1\",\"schema_version\":1,\"job_id\":\"job-1\",\"seq\":7,\"ts\":\"2026-08-26T00:00:00Z\",\"level\":\"info\",\"user_stage\":\"translation\",\"stage\":\"translating\",\"substage\":\"translation_batches\",\"stage_detail\":\"已翻译 96/408 块 · 已完成 9/48 页\",\"provider\":\"\",\"provider_stage\":\"\",\"event_type\":\"stage_progress\",\"semantic_event_type\":\"progress\",\"message\":\"已翻译 96/408 块 · 已完成 9/48 页\",\"progress_current\":96,\"progress_total\":408,\"progress_unit\":\"block\",\"payload\":{\"substage\":\"translation_batches\",\"progress_unit\":\"block\",\"batch_current\":40,\"batch_total\":167,\"completed_page_count\":9,\"page_count\":48}}"
   },
   "metric_lines": [
     {

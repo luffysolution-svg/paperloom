@@ -1,9 +1,11 @@
 import { useRef, useState } from "react";
-import { Button } from "@/ui/components/button.js";
 import {
+  Button,
+  Checkbox,
   Dialog, DialogBody, DialogCloseButton, DialogContent, DialogDescription,
   DialogFooter, DialogHeader, DialogShell, DialogTitle,
-} from "@/ui/components/dialog.js";
+  Select,
+} from "@retainpdf/ui";
 import { batchExportApi, type BatchExportFormat, type BatchExportResult } from "@/platform/api/domains/batch-export.js";
 
 const formats: { value: BatchExportFormat; label: string; description: string }[] = [
@@ -69,12 +71,12 @@ export function BatchExportDialog({ open, onOpenChange, documentIds, client = ba
             <div className="grid gap-4">
               <label className="grid gap-2" htmlFor="batch-export-format">
                 <span>导出内容</span>
-                <select id="batch-export-format" className="w-full rounded-[var(--btn-radius)] border border-border bg-paper p-2 text-foreground" value={format} disabled={Boolean(busy)} onChange={(event) => { setFormat(event.target.value as BatchExportFormat); setResult(null); setError(""); }}>
+                <Select id="batch-export-format" className="w-full" value={format} disabled={Boolean(busy)} onChange={(event) => { setFormat(event.target.value as BatchExportFormat); setResult(null); setError(""); }}>
                   {formats.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-                </select>
+                </Select>
               </label>
               <p className="text-sm text-muted-foreground">{formats.find((item) => item.value === format)?.description}</p>
-              {format === "obsidian" ? <label className="flex items-center gap-2"><input type="checkbox" checked={includeSource} disabled={Boolean(busy)} onChange={(event) => { setIncludeSource(event.target.checked); setResult(null); }} />同时包含原文笔记</label> : null}
+              {format === "obsidian" ? <Checkbox className="flex items-center gap-2" checked={includeSource} disabled={Boolean(busy)} onChange={(event) => { setIncludeSource(event.target.checked); setResult(null); }} label="同时包含原文笔记" /> : null}
               {busy ? <div className="grid gap-2" role="status" aria-live="polite">
                 <p>{busy}{progress ? ` ${(progress.loaded / 1024 / 1024).toFixed(1)}${progress.total ? ` / ${(progress.total / 1024 / 1024).toFixed(1)}` : ""} MiB` : ""}</p>
                 <progress className="w-full" aria-label="文献导出进度" max={progress?.total || 1} value={progress?.total ? progress.loaded : undefined} />
@@ -83,12 +85,12 @@ export function BatchExportDialog({ open, onOpenChange, documentIds, client = ba
               {result ? <div className="grid gap-2">
                 <p role="status">已导出 {result.exported} 篇，{result.failed} 篇未导出。{downloaded ? "导出包已下载。" : ""}</p>
                 {result.failed ? <ul className="grid gap-2 text-sm">{result.items.filter((item) => item.message).map((item) => <li key={item.document_id} className="break-words"><strong>{item.title}</strong>：{item.message}</li>)}</ul> : null}
-                {result.name && !busy ? <Button variant="outline" onClick={() => void run(true)}>重新下载导出包</Button> : null}
+                {result.name && !busy ? <Button variant="secondary" onClick={() => void run(true)}>重新下载导出包</Button> : null}
               </div> : null}
             </div>
           </DialogBody>
           <DialogFooter>
-            <Button variant="outline" disabled={Boolean(busy)} onClick={() => onOpenChange(false)}>关闭</Button>
+            <Button variant="secondary" disabled={Boolean(busy)} onClick={() => onOpenChange(false)}>关闭</Button>
             <Button disabled={Boolean(busy) || !documentIds.length || documentIds.length > 100} onClick={() => void run()}>导出 ZIP</Button>
           </DialogFooter>
         </DialogShell>

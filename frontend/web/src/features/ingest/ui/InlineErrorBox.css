@@ -1,0 +1,58 @@
+/* 错误框：error-box 与内联错误（摘要 / 操作 / 详情 / 复制）。（InlineErrorBox）
+ *
+ * @owns error-box, inline-error */
+
+@utility error-box {
+  color: var(--danger);
+}
+
+
+@utility inline-error-box {
+  width: 100%;
+  margin-top: 12px;
+  border-radius: 16px;
+  background: var(--danger-weak);
+  border-color: color-mix(in srgb, var(--danger) 22%, transparent);
+}
+
+
+@utility inline-error-summary {
+  @apply font-medium;
+}
+
+
+@utility inline-error-actions {
+  @apply mt-3 flex flex-wrap items-center gap-3;
+}
+
+
+@utility inline-error-details {
+  @apply min-w-0 flex-1;
+
+  & summary {
+    @apply cursor-pointer text-xs font-medium;
+    color: var(--danger);
+  }
+
+  & pre {
+    @apply mt-2 max-h-48 overflow-auto rounded-lg border px-3 py-2 text-xs leading-5;
+    border-color: color-mix(in srgb, var(--danger) 20%, transparent);
+    background: color-mix(in srgb, var(--paper) 72%, transparent);
+    color: color-mix(in srgb, var(--danger) 82%, var(--ink));
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+}
+
+
+@utility inline-error-copy-btn {
+  @apply inline-flex h-8 shrink-0 items-center rounded-md border px-3 text-xs font-medium transition;
+  border-color: color-mix(in srgb, var(--danger) 28%, transparent);
+  background: var(--paper);
+  color: var(--danger);
+
+  &:hover {
+    border-color: color-mix(in srgb, var(--danger) 42%, transparent);
+    background: var(--danger-weak);
+  }
+}

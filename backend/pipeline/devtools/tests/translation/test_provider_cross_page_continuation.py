@@ -1,4 +1,4 @@
-from retainpdf_pipeline.translate.services.continuation import state
+from retainpdf_translation.services.continuation import state
 
 from continuation_test_support import payload_item as _payload_item
 

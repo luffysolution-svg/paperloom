@@ -31,7 +31,7 @@ export function AppTopBar({ activeTab, onTabChange }: { activeTab?: string; onTa
           aria-label="PaperLoom 对应源码（AGPL-3.0）"
         >
           <img className="hero-repo-logo" src="src/assets/RetainPDF-logo.svg" alt="PaperLoom logo" />
-          <span>PaperLoom</span>
+          <span className="library-brand-link-text">PaperLoom</span>
           <span className="library-source-offer">源码</span>
         </a>
         <div className="hero-actions hidden" aria-hidden="true">

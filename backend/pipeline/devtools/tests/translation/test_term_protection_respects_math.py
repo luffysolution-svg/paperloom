@@ -17,17 +17,12 @@ term_pattern 的词边界是 `[A-Za-z0-9_]`,`{`/`}`/`(`/`)` 全都算边界。�
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-from retainpdf_pipeline.translate.core.payload.term_protection import (  # noqa: E402
+from retainpdf_translation.core.payload.term_protection import (  # noqa: E402
     collect_term_spans,
     protect_glossary_terms,
 )
-from retainpdf_pipeline.translate.core.payload.token_protection import (  # noqa: E402
+from retainpdf_translation.core.payload.token_protection import (  # noqa: E402
     restore_protected_tokens,
 )
 

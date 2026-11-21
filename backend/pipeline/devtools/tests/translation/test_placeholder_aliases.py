@@ -1,21 +1,15 @@
 from importlib import import_module
 import sys
 import unittest
-from pathlib import Path
-
-
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-if str(REPO_SCRIPTS_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
 
 def load_placeholder_guard():
-    return import_module("retainpdf_pipeline.translate.llm.placeholder_guard")
+    return import_module("retainpdf_translation.llm.placeholder_guard")
 
 
 class PlaceholderAliasTests(unittest.TestCase):
     def test_import_preserves_cached_module_identity(self):
-        package = import_module("retainpdf_pipeline.translate.llm")
+        package = import_module("retainpdf_translation.llm")
         module = load_placeholder_guard()
         path_before = list(sys.path)
         self.assertIs(load_placeholder_guard(), module)

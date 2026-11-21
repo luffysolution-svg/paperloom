@@ -8,8 +8,8 @@
 
 ```text
 routes/library*.rs, collections.rs
-  → services/library_api.rs
-      → services/library/*
+  → 书库包 retainpdf-library 的 api.rs（backend/packages/retainpdf-library/src）
+      → 书库包内部模块
 ```
 
 协作说明见：

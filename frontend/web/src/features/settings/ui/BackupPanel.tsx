@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Button, Checkbox, Input } from "@retainpdf/ui";
 import { backupApi, type BackupClient, type BackupProgress, type BackupStatus, type RemoteBackup } from "@/platform/api/domains/backups.js";
 
 function size(bytes: number): string {
@@ -90,7 +91,7 @@ export function BackupPanel({ active = true, client = backupApi }: { active?: bo
   const feedbackError = error || (!busy && status?.operation?.state === "failed" ? status.operation.message : "");
   const feedbackMessage = message || (status?.operation?.state === "completed" ? "上次备份操作已完成。" : "");
   const progressText = progress
-    ? `${phaseLabels[progress.phase]} · ${progress.unit === "files" ? `${progress.completed}${progress.total ? ` / ${progress.total}` : ""} 个文件` : `${size(progress.completed)}${progress.total ? ` / ${size(progress.total)}` : ""}`}`
+    ? `${phaseLabels[progress.phase]} · ${progress.unit === "files" ? `${progress.completed}${progress.total ? ` / ${progress.total}` : ""} 个文件` : `${size(progress.completed)}${progress.total ? ` / ${progress.total}` : ""}`}`
     : busy;
 
   function restore(name: string, remote: boolean) {
@@ -100,18 +101,18 @@ export function BackupPanel({ active = true, client = backupApi }: { active?: bo
 
   function deleteActions(name: string, remote: boolean) {
     if (deleting?.name !== name || deleting.remote !== remote) {
-      return <button type="button" disabled={locked} onClick={() => setDeleting({ name, remote })}>删除</button>;
+      return <Button type="button" disabled={locked} onClick={() => setDeleting({ name, remote })}>删除</Button>;
     }
     return (
       <div className="app-backup-delete" role="group" aria-label={`确认删除${remote ? "云端" : "本地"}备份`}>
         <p>{remote ? "删除此云端备份，本地副本与资料库会保留。" : "删除此本地备份，云端副本与资料库会保留。"}</p>
         <div className="app-backup-actions">
-          <button type="button" disabled={locked} onClick={() => void run("正在删除备份…", async () => {
+          <Button type="button" disabled={locked} onClick={() => void run("正在删除备份…", async () => {
             await client.delete(name, remote);
             setDeleting(null);
             if (remote) setRemoteItems(await client.listRemote());
-          }, `已删除${remote ? "云端" : "本地"}备份。`)}>确认删除</button>
-          <button type="button" disabled={Boolean(busy)} onClick={() => setDeleting(null)}>取消</button>
+          }, `已删除${remote ? "云端" : "本地"}备份。`)}>确认删除</Button>
+          <Button type="button" disabled={Boolean(busy)} onClick={() => setDeleting(null)}>取消</Button>
         </div>
       </div>
     );
@@ -131,7 +132,7 @@ export function BackupPanel({ active = true, client = backupApi }: { active?: bo
       {status?.pending_restore ? (
         <div className="app-backup-notice">
           <p>恢复已准备好。重启后替换资料库，当前数据会保留在备份目录。</p>
-          <button type="button" disabled={Boolean(busy)} onClick={() => void run("正在取消恢复…", () => client.cancel(), "已取消恢复，可以继续使用当前资料库。")}>取消待恢复操作</button>
+          <Button type="button" disabled={Boolean(busy)} onClick={() => void run("正在取消恢复…", () => client.cancel(), "已取消恢复，可以继续使用当前资料库。")}>取消待恢复操作</Button>
         </div>
       ) : null}
 
@@ -139,31 +140,31 @@ export function BackupPanel({ active = true, client = backupApi }: { active?: bo
         <div className="app-backup-section-head">
           <h4 id="backup-local-title">本地迁移</h4>
           <div className="app-backup-actions">
-            {client.canOpenLocation() ? <button type="button" disabled={Boolean(busy)} onClick={() => void run("正在打开备份文件夹…", () => client.openLocation())}>打开备份文件夹</button> : null}
-            <button type="button" disabled={Boolean(busy)} onClick={() => void run("正在刷新…", async () => {})}>刷新</button>
+            {client.canOpenLocation() ? <Button type="button" disabled={Boolean(busy)} onClick={() => void run("正在打开备份文件夹…", () => client.openLocation())}>打开备份文件夹</Button> : null}
+            <Button type="button" disabled={Boolean(busy)} onClick={() => void run("正在刷新…", async () => {})}>刷新</Button>
           </div>
         </div>
         {status ? <p>本地备份位置：<span className="app-backup-path app-backup-location-path" title={displayPath(status.backup_dir)}>{displayPath(status.backup_dir)}</span></p> : null}
         <p>将书库、原文与译文、合集、收藏批注、问答记录和术语表打包，换机时导入同一份 ZIP。</p>
-        <label className="app-backup-check"><input type="checkbox" checked={includeCredentials} disabled={locked} onChange={(event) => setIncludeCredentials(event.target.checked)} />同时包含 OCR、翻译模型密钥与 Agent 配置</label>
+        <Checkbox className="app-backup-check" checked={includeCredentials} disabled={locked} onChange={(event) => setIncludeCredentials(event.target.checked)} label="同时包含 OCR、翻译模型密钥与 Agent 配置" />
         {includeCredentials ? <p className="app-backup-notice">密钥会以明文随迁移包保存，请只将文件存放在你信任的位置。WebDAV 密码始终留在本机。</p> : <p>未勾选时，迁移后需要重新设置模型接口。</p>}
-        <button type="button" className="app-settings-action" disabled={cannotSnapshot} onClick={() => void run("正在创建迁移包，请稍候…", () => client.create(includeCredentials), "迁移包已创建，可以在下方下载。")}>创建迁移包</button>
+        <Button type="button" className="app-settings-action" disabled={cannotSnapshot} onClick={() => void run("正在创建迁移包，请稍候…", () => client.create(includeCredentials), "迁移包已创建，可以在下方下载。")}>创建迁移包</Button>
         {status && status.active_tasks > 0 ? <p>当前有 {status.active_tasks} 个任务未结束，完成或取消后请点击刷新。</p> : null}
-        <label className="app-backup-check"><input type="checkbox" checked={confirmed} disabled={locked} onChange={(event) => setConfirmed(event.target.checked)} />我确认重启后用备份替换当前资料库，现有数据会保留</label>
+        <Checkbox className="app-backup-check" checked={confirmed} disabled={locked} onChange={(event) => setConfirmed(event.target.checked)} label="我确认重启后用备份替换当前资料库，现有数据会保留" />
         {status?.items.length ? (
           <ul className="app-backup-file-list" aria-label="本地迁移包">
             {status.items.map((item) => (
               <li key={item.id}>
                 <div><time dateTime={item.created_at}>{new Date(item.created_at).toLocaleString()}</time><small>{size(item.bytes)} · {item.file_count} 个文件{item.includes_credentials ? " · 含密钥" : ""}</small><small className="app-backup-path">{item.name}</small></div>
-                <div className="app-backup-actions"><button type="button" disabled={Boolean(busy) || serverBusy} onClick={() => void run("正在下载迁移包…", () => client.download(item.name, setDownloadProgress), "迁移包已下载。")}>下载</button><button type="button" disabled={cannotRestore} onClick={() => restore(item.name, false)}>恢复</button>{client.canOpenLocation() ? <button type="button" disabled={Boolean(busy)} onClick={() => void run("正在定位备份文件…", () => client.openLocation(item.name))}>位置</button> : null}{deleteActions(item.name, false)}</div>
+                <div className="app-backup-actions"><Button type="button" disabled={Boolean(busy) || serverBusy} onClick={() => void run("正在下载迁移包…", () => client.download(item.name, setDownloadProgress), "迁移包已下载。")}>下载</Button><Button type="button" disabled={cannotRestore} onClick={() => restore(item.name, false)}>恢复</Button>{client.canOpenLocation() ? <Button type="button" disabled={Boolean(busy)} onClick={() => void run("正在定位备份文件…", () => client.openLocation(item.name))}>位置</Button> : null}{deleteActions(item.name, false)}</div>
               </li>
             ))}
           </ul>
         ) : <p className="app-backup-empty">还没有本地迁移包。先创建一份，或选择另一台电脑导出的文件。</p>}
-        <label htmlFor="backup-import-file">导入迁移包<input id="backup-import-file" type="file" accept=".zip,application/zip" disabled={locked} onChange={(event) => setFile(event.target.files?.[0] || null)} /></label>
-        <button type="button" disabled={cannotRestore || !file} onClick={() => { if (file && confirmed) void run("正在上传并校验迁移包，请稍候…", () => client.import(file), restoreMessage); }}>校验并暂存恢复</button>
+        <label htmlFor="backup-import-file">导入迁移包<Input id="backup-import-file" type="file" accept=".zip,application/zip" disabled={locked} onChange={(event) => setFile(event.target.files?.[0] || null)} /></label>
+        <Button type="button" disabled={cannotRestore || !file} onClick={() => { if (file && confirmed) void run("正在上传并校验迁移包，请稍候…", () => client.import(file), restoreMessage); }}>校验并暂存恢复</Button>
         {status?.restore_hint ? <p>{status.restore_hint}</p> : null}
-        {status?.last_restore ? <div className="app-backup-location"><p>上次恢复前的数据：<span className="app-backup-path app-backup-location-path" title={displayPath(status.last_restore.previous_data_dir)}>{displayPath(status.last_restore.previous_data_dir)}</span></p>{client.canOpenLocation() ? <button type="button" disabled={Boolean(busy)} onClick={() => void run("正在打开恢复前的数据文件夹…", () => client.openLocation(undefined, true))}>打开原数据文件夹</button> : null}</div> : null}
+        {status?.last_restore ? <div className="app-backup-location"><p>上次恢复前的数据：<span className="app-backup-path app-backup-location-path" title={displayPath(status.last_restore.previous_data_dir)}>{displayPath(status.last_restore.previous_data_dir)}</span></p>{client.canOpenLocation() ? <Button type="button" disabled={Boolean(busy)} onClick={() => void run("正在打开恢复前的数据文件夹…", () => client.openLocation(undefined, true))}>打开原数据文件夹</Button> : null}</div> : null}
       </section>
 
       <section aria-labelledby="backup-webdav-title">
@@ -180,21 +181,21 @@ export function BackupPanel({ active = true, client = backupApi }: { active?: bo
             setRemoteItems(null);
           }, "WebDAV 设置已保存。");
         }}>
-          <label htmlFor="backup-webdav-url">文件夹地址<input id="backup-webdav-url" type="url" placeholder="https://dav.example.com/PaperLoom/" value={url} disabled={locked} required onChange={(event) => setUrl(event.target.value)} /></label>
+          <label htmlFor="backup-webdav-url">文件夹地址<Input id="backup-webdav-url" type="url" placeholder="https://dav.example.com/PaperLoom/" value={url} disabled={locked} required onChange={(event) => setUrl(event.target.value)} /></label>
           <div className="app-backup-fields">
-            <label htmlFor="backup-webdav-username">账号<input id="backup-webdav-username" autoComplete="username" value={username} disabled={locked} onChange={(event) => setUsername(event.target.value)} /></label>
-            <label htmlFor="backup-webdav-password">密码<input id="backup-webdav-password" type="password" autoComplete="new-password" value={password} disabled={locked} placeholder={status?.webdav.password_configured ? "已保存，留空保留原密码" : "WebDAV 密码或应用专用密码"} onChange={(event) => setPassword(event.target.value)} /></label>
+            <label htmlFor="backup-webdav-username">账号<Input id="backup-webdav-username" autoComplete="username" value={username} disabled={locked} onChange={(event) => setUsername(event.target.value)} /></label>
+            <label htmlFor="backup-webdav-password">密码<Input id="backup-webdav-password" type="password" autoComplete="new-password" value={password} disabled={locked} placeholder={status?.webdav.password_configured ? "已保存，留空保留原密码" : "WebDAV 密码或应用专用密码"} onChange={(event) => setPassword(event.target.value)} /></label>
           </div>
-          <div className="app-backup-actions"><button type="submit" disabled={locked || !url.trim()}>保存设置</button><button type="button" disabled={locked || !url.trim()} onClick={() => void run("正在测试 WebDAV 连接…", () => client.test(davInput()), "WebDAV 连接成功，可以读取备份文件夹；上传时会检查文件写入权限。")}>测试连接</button></div>
+          <div className="app-backup-actions"><Button type="submit" disabled={locked || !url.trim()}>保存设置</Button><Button type="button" disabled={locked || !url.trim()} onClick={() => void run("正在测试 WebDAV 连接…", () => client.test(davInput()), "WebDAV 连接成功，可以读取备份文件夹；上传时会检查文件写入权限。")}>测试连接</Button></div>
         </form>
         {dirty && url ? <p>保存设置后，可以备份到此文件夹并查看云端文件。</p> : null}
-        {status?.webdav.url ? <div className="app-backup-location"><p>云端备份位置：<span className="app-backup-path">{status.webdav.url}</span></p><button type="button" disabled={Boolean(busy)} onClick={() => copyAddress()}>复制文件夹地址</button></div> : null}
+        {status?.webdav.url ? <div className="app-backup-location"><p>云端备份位置：<span className="app-backup-path">{status.webdav.url}</span></p><Button type="button" disabled={Boolean(busy)} onClick={() => copyAddress()}>复制文件夹地址</Button></div> : null}
         <div className="app-backup-actions">
-          <button type="button" className="app-settings-action" disabled={cannotSnapshot || dirty || !status?.webdav.url} onClick={() => void run("正在创建并上传 WebDAV 备份…", async () => { await client.backupRemote(includeCredentials); setRemoteItems(await client.listRemote()); }, "备份已上传到 WebDAV，本机副本也已保留。")}>立即备份</button>
-          <button type="button" disabled={locked || dirty || !status?.webdav.url} onClick={() => void run("正在读取云端备份…", async () => setRemoteItems(await client.listRemote()))}>查看云端备份</button>
+          <Button type="button" className="app-settings-action" disabled={cannotSnapshot || dirty || !status?.webdav.url} onClick={() => void run("正在创建并上传 WebDAV 备份…", async () => { await client.backupRemote(includeCredentials); setRemoteItems(await client.listRemote()); }, "备份已上传到 WebDAV，本机副本也已保留。")}>立即备份</Button>
+          <Button type="button" disabled={locked || dirty || !status?.webdav.url} onClick={() => void run("正在读取云端备份…", async () => setRemoteItems(await client.listRemote()))}>查看云端备份</Button>
         </div>
         {remoteItems ? remoteItems.length ? (
-          <ul className="app-backup-file-list" aria-label="WebDAV 迁移包">{remoteItems.map((item) => <li key={item.name}><div><span className="app-backup-path">{item.name}</span><small>{size(item.bytes)}</small></div><div className="app-backup-actions"><button type="button" disabled={locked || status?.items.some((local) => local.name === item.name)} onClick={() => void run("正在同步云端备份到本地…", () => client.syncRemote(item.name), "备份已同步到本地，可在本地列表中下载或恢复。")}>{status?.items.some((local) => local.name === item.name) ? "已在本地" : "同步到本地"}</button><button type="button" disabled={cannotRestore} onClick={() => restore(item.name, true)}>恢复</button><button type="button" disabled={Boolean(busy)} onClick={() => copyAddress(item.name)}>复制地址</button>{deleteActions(item.name, true)}</div></li>)}</ul>
+          <ul className="app-backup-file-list" aria-label="WebDAV 迁移包">{remoteItems.map((item) => <li key={item.name}><div><span className="app-backup-path">{item.name}</span><small>{size(item.bytes)}</small></div><div className="app-backup-actions"><Button type="button" disabled={locked || status?.items.some((local) => local.name === item.name)} onClick={() => void run("正在同步云端备份到本地…", () => client.syncRemote(item.name), "备份已同步到本地，可在本地列表中下载或恢复。")}>{status?.items.some((local) => local.name === item.name) ? "已在本地" : "同步到本地"}</Button><Button type="button" disabled={cannotRestore} onClick={() => restore(item.name, true)}>恢复</Button><Button type="button" disabled={Boolean(busy)} onClick={() => copyAddress(item.name)}>复制地址</Button>{deleteActions(item.name, true)}</div></li>)}</ul>
         ) : <p className="app-backup-empty">此文件夹还没有 PaperLoom 备份。</p> : null}
       </section>
     </div>

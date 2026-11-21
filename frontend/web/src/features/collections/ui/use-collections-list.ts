@@ -1,15 +1,16 @@
 // 合集列表加载：请求序号防竞态 + 版本信号触发软/硬刷新 + 失败静默自动重试一次。
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CollectionsController } from "./types.js";
+import type { CollectionRecord } from "../domain/controller.js";
 
 type UseCollectionsListArgs = {
   controller: CollectionsController;
   version: number;
-  setOpenFolder: (updater: (current: any) => any) => void;
+  setOpenFolder: (updater: (current: CollectionRecord | null) => CollectionRecord | null) => void;
 };
 
 export function useCollectionsList({ controller, version, setOpenFolder }: UseCollectionsListArgs) {
-  const [collections, setCollections] = useState([]);
+  const [collections, setCollections] = useState<CollectionRecord[]>([]);
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState("");
   const listRequestSeqRef = useRef(0);
@@ -19,7 +20,10 @@ export function useCollectionsList({ controller, version, setOpenFolder }: UseCo
   // 被大任务短暂拖住时,一次失败不该直接把用户拍在错误态——列表与文件夹
   // 内容各自动重试一次(1.5s),仍失败才亮错误 + 手动重试入口。
   const listAutoRetriedRef = useRef(false);
-  const reloadRef = useRef(null);
+  const reloadRef = useRef<(() => Promise<void> | void) | null>(null);
+  // 自动重试的定时器：卸载（切走分类 tab）时清掉，不然 1.5 秒后照样发一次请求。
+  const retryTimerRef = useRef(0);
+  useEffect(() => () => window.clearTimeout(retryTimerRef.current), []);
 
   const reload = useCallback((options: { soft?: boolean } = {}) => {
     // soft：version bump / 二次拉取时保留旧列表，不整表切成 loading（分类 tab 闪一下）
@@ -33,7 +37,7 @@ export function useCollectionsList({ controller, version, setOpenFolder }: UseCo
     setListError("");
     return controller
       .listCollections()
-      .then(({ collections: items = [] } = {}) => {
+      .then(({ collections: items = [] }: { collections?: CollectionRecord[] } = {}) => {
         if (requestSeq !== listRequestSeqRef.current) return;
         listAutoRetriedRef.current = false;
         listLoadedRef.current = true;
@@ -43,8 +47,7 @@ export function useCollectionsList({ controller, version, setOpenFolder }: UseCo
           if (!current) {
             return current;
           }
-          const stillExists = items.some((item) => item.collection_id === current.collection_id);
-          return stillExists ? items.find((item) => item.collection_id === current.collection_id) : null;
+          return items.find((item) => item.collection_id === current.collection_id) ?? null;
         });
         setListLoading(false);
       })
@@ -53,7 +56,8 @@ export function useCollectionsList({ controller, version, setOpenFolder }: UseCo
         if (!listAutoRetriedRef.current) {
           // 瞬时故障:静默自动重试一次,保持 loading 不闪错误
           listAutoRetriedRef.current = true;
-          window.setTimeout(() => {
+          window.clearTimeout(retryTimerRef.current);
+          retryTimerRef.current = window.setTimeout(() => {
             void reloadRef.current?.();
           }, 1500);
           return;

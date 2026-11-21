@@ -1,0 +1,297 @@
+/* 处理方式选择：动作区、选项卡、页码范围、公式模式。（ProcessingChoicePanel）
+ *
+ * @owns upload, translation-workflow-card, translation-budget-note, result-panel, form, math-mode-inline, page-range, credential-gate, progress-track, progress-bar, submit-hint */
+
+@utility upload-action-slot {
+  position: relative;
+  z-index: 3;
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  padding: 2px 0 0;
+  pointer-events: auto;
+}
+
+@utility upload-action-stack {
+  display: grid;
+  gap: 20px;
+  width: 100%;
+}
+
+@utility upload-process-choice-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 2px 2px 0;
+
+  & > strong {
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 650;
+  }
+
+  & > span {
+    color: var(--muted);
+    font-size: 11px;
+  }
+}
+
+@utility upload-process-choice-grid {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 38px;
+  width: fit-content;
+  margin: 0 auto;
+}
+
+@utility upload-process-choice-card {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 54px;
+  min-width: 54px;
+  height: 54px;
+  min-height: 54px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--ink);
+  box-shadow: none;
+  transition:
+    border-color 160ms var(--ease-out),
+    background 160ms var(--ease-out),
+    transform 160ms var(--ease-out);
+
+  &:hover:not(:disabled) {
+    border-color: var(--line);
+    background: color-mix(in srgb, var(--ink) 7%, var(--paper));
+    transform: translateY(-1px);
+  }
+
+  &.is-selected {
+    border-color: color-mix(in srgb, var(--ink) 26%, var(--line));
+    background: color-mix(in srgb, var(--ink) 9%, var(--paper));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink) 5%, transparent);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.42;
+  }
+
+  & > svg {
+    width: 22px;
+    height: 22px;
+    stroke-width: 1.8;
+  }
+}
+
+@utility upload-options-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  min-height: 48px;
+  padding: 7px 8px 7px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper);
+
+  & > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  & strong {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  & i {
+    color: var(--line-strong);
+    font-style: normal;
+  }
+
+  & #page-range-btn {
+    flex: 0 0 auto;
+    min-height: 34px;
+    padding: 0 11px;
+    border: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-size: 12px;
+  }
+}
+
+@utility upload-action-group {
+  position: relative;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  pointer-events: auto;
+
+  & > button {
+    display: inline-flex;
+    flex: 1 1 auto;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: auto;
+    min-width: 0;
+    min-height: 36px;
+    padding: 0 12px;
+    border-radius: 10px;
+    font-size: 12.5px;
+    font-weight: 650;
+    box-shadow: none;
+
+    & > svg {
+      width: 16px;
+      height: 16px;
+    }
+  }
+
+  & #page-range-btn {
+    order: 0;
+    flex: 0 0 auto;
+    min-width: 76px;
+    border: 1px solid var(--line);
+    background: var(--paper);
+    color: var(--ink);
+  }
+
+  & #store-only-btn {
+    order: 1;
+    flex: 1 1 0;
+    border: 1px solid var(--line);
+    background: var(--paper);
+    color: var(--ink);
+  }
+
+  & #submit-btn {
+    order: 2;
+    flex: 1 1 0;
+    border: 1px solid var(--ink);
+    background: var(--ink);
+    color: var(--paper);
+  }
+
+  /* 禁用态得看得出不能点：原来 opacity 1、底色和可用时一样。
+   * 提交中（data-busy）也是 disabled，但那是「正在进行」，不该变灰。 */
+  & > button:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+
+  & > button[data-busy]:disabled {
+    cursor: progress;
+    opacity: 1;
+  }
+}
+
+/* 提交被拦时的一行说明（只在文件已就绪、缺凭据时出）：小号灰字 + 链接式动作。 */
+@utility submit-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+@utility submit-hint-action {
+  display: inline;
+  min-height: 0;
+  margin-left: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+
+  &:hover {
+    color: var(--accent);
+  }
+}
+
+@utility upload-primary-action {
+  width: 100%;
+}
+
+@utility math-mode-inline {
+  position: absolute;
+  left: -178px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--paper) 94%, transparent);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--shadow-color) 8%, transparent);
+  color: var(--ink);
+
+  & select {
+    min-width: 96px;
+    border: none;
+    background: transparent;
+    padding: 0;
+    font-size: 12px;
+    color: var(--ink);
+    box-shadow: none;
+  }
+
+  & select:focus {
+    outline: none;
+  }
+
+  @media (max-width: 720px) {
+    position: static;
+    transform: none;
+    margin-right: 10px;
+  }
+}
+
+@utility math-mode-inline-label {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+@utility page-range-mini {
+  position: static;
+  border-radius: 999px;
+}
+
+@utility page-range-summary {
+  @apply text-[12px];
+  color: var(--muted);
+  margin-top: 4px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

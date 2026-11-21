@@ -4,16 +4,15 @@ This does not update the frozen pre-refactor JSON oracle.
 """
 from copy import deepcopy
 import json
-from pathlib import Path
 import sys
 from unittest.mock import patch
 
 from support.paths import PIPELINE
 sys.path.insert(0, str(PIPELINE))
-from retainpdf_pipeline.translate.core.engine_identity import translation_engine_identity
-from retainpdf_pipeline.translate.llm.shared.executor_context import item_ids
-from retainpdf_pipeline.translate.llm.shared.prompt_building import (
-    build_messages, build_single_item_fallback_messages, build_group_member_messages,
+from retainpdf_translation.core.engine_identity import translation_engine_identity
+from retainpdf_translation.llm.shared.executor_context import item_ids
+from retainpdf_translation.llm.shared.prompt_building import (
+    build_messages, build_single_item_fallback_messages,
 )
 
 
@@ -53,7 +52,8 @@ def snapshot(case_id):
             kwargs["response_style"] = "json"
         messages = build_messages(values, **kwargs)
     else:
-        messages = build_group_member_messages(values[0], **kwargs)
+        # 续接组整段交给模型、由程序切回各框，走的就是逐段请求（不再有逐框返回的协议）。
+        messages = build_single_item_fallback_messages(values[0], **kwargs)
     assert values == before
     identities = {}
     for transport in ("legacy", "rust"):

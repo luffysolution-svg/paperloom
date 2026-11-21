@@ -55,6 +55,7 @@ export function createDocumentSubmitActions({
         assembleTranslatePayload(payload, buildTranslateConfig),
       )) as JobSubmissionView;
     } catch (error) {
+      // 页数额度不够、磁盘空间不够：已经是能照着做的中文，原样往上抛（保留错误码、reason）。
       if (isRefusedSubmission(error)) throw error;
       throw new Error(friendlyTranslateError(error as ErrorLike, { reusingOcr }));
     } finally {
@@ -98,7 +99,7 @@ export function createDocumentSubmitActions({
   // 统一提交入口：仅按 workflow 分流，不改载荷组装。
   async function submitDocument(
     documentId?: string | null,
-    payload: TranslateDocumentPayload & OcrDocumentPayload = {},
+    payload: TranslateDocumentPayload | OcrDocumentPayload = {},
   ): Promise<JobSubmissionView | null> {
     const workflow = `${(payload as { workflow?: string })?.workflow || ""}`.trim().toLowerCase();
     if (workflow === "ocr") {

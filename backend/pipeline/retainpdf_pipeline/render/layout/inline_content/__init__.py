@@ -20,7 +20,7 @@ from retainpdf_pipeline.render.layout.inline_content.mode_router import (
     is_direct_typst_math_mode,
     item_render_math_mode,
 )
-from retainpdf_pipeline.render.layout.inline_content.fallback.latex_normalizer import (
+from retainpdf_math.normalize import (
     aggressively_simplify_formula_for_latex_math,
     normalize_formula_for_latex_math,
 )

@@ -4,21 +4,22 @@
 
 import { useMemo } from "react";
 import { useStoreSnapshot } from "@/ui/hooks/use-store.js";
-import { useHomeLibrary } from "@/ui/context/home-services-context.js";
 import { isPollingBootstrapPlaceholder } from "@/features/jobs/index.js";
+import type { LibraryCardItem } from "@/features/library/domain.js";
+import { useLibraryServices } from "@/features/library/index.js";
 
 /**
  * @param {object} payloadItem dialogStore.payload
  */
-export function useBookDetailLiveItem(payloadItem: any = {}) {
-  const library = useHomeLibrary();
+export function useBookDetailLiveItem(payloadItem: LibraryCardItem = {}) {
+  const library = useLibraryServices();
   const recentJobs = useStoreSnapshot(library.recentJobsStore);
 
   return useMemo(() => {
     const documentId = `${payloadItem.document_id || ""}`.trim();
     const jobId = `${payloadItem.job_id || ""}`.trim();
-    const list = Array.isArray(recentJobs?.items) ? recentJobs.items : [];
-    let live = null;
+    const list: LibraryCardItem[] = Array.isArray(recentJobs?.items) ? recentJobs.items : [];
+    let live: LibraryCardItem | null = null;
     if (documentId) {
       live = list.find((row) => `${row.document_id || ""}`.trim() === documentId) || null;
     }

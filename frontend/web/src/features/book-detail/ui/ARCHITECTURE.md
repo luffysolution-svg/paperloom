@@ -8,9 +8,9 @@ OCR、翻译、Agent 操作和文件产物都应挂在文档下面，并保持�
 ```text
 BookDetailDialog                  数据与动作组合层
 ├─ BookDetailShell               Dialog、关闭行为、左右槽位
-├─ CoverActionsPanel             封面、文档身份、阅读状态与当前可用阅读动作
+├─ CoverActionsPanel             封面、文档身份（书名 / 作者只在这里展示）与当前可用阅读动作
 └─ BookDetailRightTabs           三个主 Tab；导航固定、面板独立滚动
-   ├─ BookDetailOverviewTab      标题、元数据、阅读状态、合集和文档管理
+   ├─ BookDetailOverviewTab      信息区（元数据 / 合集 / 阅读状态）、最近活动、危险操作
    ├─ BookDetailProcessingTab    OCR 与翻译两个独立处理能力
    ├─ BookDetailArtifactsTab     源 PDF 与任务产物
 ```
@@ -26,8 +26,11 @@ BookDetailDialog                  数据与动作组合层
 4. 切换 Tab 不得取消共享 runtime 订阅，也不得丢失处理表单状态。
 5. 任务成功后只更新当前文档对应的书架卡，禁止插入重复文档。
 6. 文件产物统一进入 `BookDetailArtifactsTab`，不散落在“更多”或状态卡中。
-7. 删除文档仍由管理 Tab 发起，并保留收藏引用与运行任务保护。
+7. 删除文档由概览底部的危险操作区发起，并保留运行中任务的保护（409，提示先取消）。
 8. 空闲、完成和失败态使用紧凑摘要；只有运行中任务展开阶段进度，失败摘要直接进入诊断 Tab。
+   翻译完成且没有任务在跑时，三步进度收起，所有「再来一次」的动作（重新渲染 / 精修译文 /
+   重新翻译 / 重新 OCR）收进卡片头的「重新处理」，点开是一张按代价从小到大排的清单，
+   每项的设置（引擎、OCR 页码）挨着自己的按钮；覆盖条只在没翻全时出现，任务记录默认收起。
 9. 右栏仅保留“概览 / 处理 / 文件”三个主 Tab；低频管理能力归入概览，不新增顶级 Tab。
 10. Tab 导航固定，活动面板独立滚动；窄屏不得因完整封面导致右栏不可达。
 
@@ -65,7 +68,11 @@ GET  /api/v1/documents/:document_id/jobs
 - `useBookDetailOcr`：只管理 OCR 页码、提交状态和错误。
 - `useDocumentJobs`：首次读取文档任务历史，打开期间每 2 秒对账 document-scoped 列表，
   并订阅共享 `currentJobStore` 获取当前任务的即时状态。
-- `ProcessingJobSummary`：消费单个归一化任务摘要，不发送请求。
+- 「进度」页四层：状态行 `ProcessingHeader`（标题）+ 右边的按钮 `ProcessingHeadTools` + HUD 条 `ProcessingHud`
+  （小进度环、总耗时、模型、token；数和流水线各站的小标签由 `tabs/processing-hud-model.ts` 算）
+  （这一页的按钮只在这里和流水线各站的 ↻ 上：实时译文 / 详情 / 取消、从断点继续、翻译整本 / 只做 OCR / 指定页码）；
+  流水线 `ProcessingPipelineRail`（每站一个带这站图标的徽标，下面小标签写用时、页数、模型、token，整句在悬停和读屏里）；细节区 `ProcessingDetails`（错误 `JobFailureCard`、编辑部、活动 `ProcessingActivity`）；
+  结果操作行。停下的翻译任务的主按钮在 `stopped-translation.tsx` 按续跑计划定。
 
 OCR/翻译提交响应必须立即 `upsert` 到 optimistic map，避免首次文档任务查询尚未看到
 新任务时丢失状态；服务端列表出现同一 `job_id` 后立即删除临时项。最新任务严格按
@@ -74,8 +81,8 @@ OCR/翻译提交响应必须立即 `upsert` 到 optimistic map，避免首次文
 的 workflow 身份不可变，runtime/list 刷新只能推进它的状态。
 
 已有翻译任务的重新处理不再走 `POST /documents/:id/translate` 猜测能力，而是读取
-`GET /jobs/:job_id/stage-actions`：翻译可重试时展示“重新翻译”，译文产物可用时展示
-“重新渲染”。点击后统一调用 `POST /jobs/:job_id/retry-stage`，新 job 立即写入
+`GET /jobs/:job_id/actions`：翻译可重试时展示“重新翻译”，译文产物可用时展示
+“重新渲染”。点击后统一调用 `POST /jobs/:job_id/actions/retry-stage`，新 job 立即写入
 `useDocumentJobs` 并交给共享 runtime。若后端标记 `danger=true`，前端必须二次确认后才可
 提交 `ambiguous_request_policy=accept_duplicate_risk`。
 
@@ -85,7 +92,8 @@ library controller 注入，展示组件不得直接 import API。
 ## 文件与产物中心
 
 `BookDetailArtifactsTab` 是文档级编排壳，只有用户切到“文件”Tab 后才逐个读取已结束
-任务的 `artifacts-manifest`。运行中任务不会抢跑 manifest；任务状态或 `updated_at`
+任务的文件清单 `/jobs/:id/files`（接口包 `fetchJobArtifactsManifest` 把它换成产物清单的形状，
+文件名换回 `artifact_key`）。运行中任务不会抢跑 manifest；任务状态或 `updated_at`
 改变后会重新读取。下载继续使用 `fetchProtected` 和共享保存流程，因而不会把本机
 API Key 拼进 URL。
 
@@ -109,9 +117,9 @@ BookDetailArtifactsTab
 
 ### 后端缺口
 
-1. `LibraryBookDetailView.artifacts` 仍是单个 library job 的展示数组，不是
-   `document_id` 下所有 OCR/翻译任务的聚合视图；前端必须先读取 document jobs，
-   再逐 job 读取 manifest。
+1. 没有 `document_id` 下所有 OCR/翻译任务的聚合产物视图（书架详情
+   `LibraryBookDetailView.artifacts` 只是单个任务的数组，接口 2026-10-19 已删）；
+   前端必须先读取 document jobs，再逐 job 读取 manifest。
 2. manifest 有 `updated_at`、`size_bytes`，但当前 `JobArtifactItemView` 和
    `JobListItemView` 都没有 attempt 字段；前端仅保留前向兼容显示能力。
 3. Agent operation 只能按 `conversation_id` 枚举，缺少 document-scoped list；

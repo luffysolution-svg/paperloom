@@ -1,10 +1,10 @@
-from retainpdf_pipeline.translate.services.continuation import state
+from retainpdf_translation.services.continuation import state
 
 from continuation_test_support import payload_item as _payload_item
 
 
 def test_chunk_source_text_fallback_keeps_inline_math_atomic() -> None:
-    from retainpdf_pipeline.translate.llm.shared.orchestration.common import chunk_source_text_fallback
+    from retainpdf_translation.llm.shared.orchestration.common import chunk_source_text_fallback
 
     text = "h mode i of the excitation spectrum can be characterized by its dispersion relation $\\omega_i(Q)$ and lifetime $\\tau$."
     chunks = chunk_source_text_fallback(text, words_per_chunk=5)
@@ -14,7 +14,7 @@ def test_chunk_source_text_fallback_keeps_inline_math_atomic() -> None:
 
 
 def test_group_translation_split_keeps_inline_math_atomic() -> None:
-    from retainpdf_pipeline.translate.core.payload.parts.apply import _split_group_protected_translation
+    from retainpdf_translation.core.payload.parts.apply import _split_group_protected_translation
 
     items = [
         {"protected_source_text": "prev part"},

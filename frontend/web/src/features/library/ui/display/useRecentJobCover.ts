@@ -20,7 +20,7 @@ import {
 } from "../../domain/card/recent-job-card-presenter.js";
 import { isTerminalJobStatus } from "@/platform/contracts/job-status.js";
 
-// 缓存版本只在"封面可能真的变了"时才变。封面由后端 /jobs/{id}/cover 渲染
+// 缓存版本只在"封面可能真的变了"时才变。封面是后端给的书的地址 /documents/{书}/files/cover.jpg
 // (运行中 = 原始 PDF 首页,任务完成后才可能换成成品封面),运行过程中封面
 // 内容并不变。原实现把 updated_at + progress.current/percent 等"每一拍轮询都在
 // 变"的字段计入缓存版本 → 每秒都命中一次缓存 miss → 重新 fetch 封面 blob、

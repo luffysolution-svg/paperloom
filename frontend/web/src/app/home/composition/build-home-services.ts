@@ -4,6 +4,7 @@
 // 装配位：末端只读features/domains/views/ports→HomeServices，不写features；
 // 写者见create-home-composition顺序图；敏感读：statusCard.cancel晚绑features.jobRuntime，library.selectJob读libraryController。
 
+import { mountedFeature } from "./feature-registry.js";
 import type {
   HomeBridge,
   HomeFeatures,
@@ -45,7 +46,7 @@ export function buildHomeServices({
     homeState: ports.homeStatePort.store as unknown as HomeServices["stores"]["homeState"],
     statusArea: views.statusArea.store as unknown as HomeServices["stores"]["statusArea"],
     text: views.textStore.store as unknown as HomeServices["stores"]["text"],
-    uploadView: views.uploadView.store as unknown as HomeServices["stores"]["uploadView"],
+    uploadView: views.uploadView.store,
     workflowView: views.workflowView.store as unknown as HomeServices["stores"]["workflowView"],
     credentialsView: credentials.credentialsView.store as unknown as HomeServices["stores"]["credentialsView"],
   };
@@ -61,7 +62,7 @@ export function buildHomeServices({
 
   const libraryPort: LibraryPort = {
     viewPort: library.recentJobsViewPort,
-    recentJobsStore: library.recentJobsStatePort.store as unknown as LibraryPort["recentJobsStore"],
+    recentJobsStore: library.recentJobsStatePort.store,
     actions: {
       ...library.recentJobActions,
       // selectJob 业务已内聚到 LibraryController（findItem 不再由 composition 拼）
@@ -73,14 +74,14 @@ export function buildHomeServices({
       translateDocument: library.libraryController.translateDocument,
       ocrDocument: library.libraryController.ocrDocument,
       // submitDocument 运行时由 controller 拼入，但 LibraryController 类型尚未暴露（见报告）。
-      submitDocument: (library.libraryController as any).submitDocument,
+      submitDocument: library.libraryController.submitDocument,
       getDocumentJobs: library.libraryController.getDocumentJobs,
       getDocumentByJobId: library.libraryController.getDocumentByJobId,
       getJobStageActions: library.libraryController.getJobStageActions,
       retryJobStage: library.libraryController.retryJobStage,
+      resumeJob: library.libraryController.resumeJob,
       cancelJob: library.libraryController.cancelJob,
       deleteDocument: library.libraryController.deleteDocument,
-      clearFavorites: library.libraryController.clearFavorites,
       deleteDocuments: library.libraryController.deleteDocuments,
       deleteCard: library.libraryController.deleteCard,
       openBookDetail: library.libraryController.openBookDetail,
@@ -99,7 +100,7 @@ export function buildHomeServices({
     stores: stores as HomeServices["stores"],
     statusArea: views.statusArea,
     credentials: {
-      feature: features.browserCredentialsFeature,
+      feature: mountedFeature(features, "browserCredentialsFeature"),
       view: credentials.credentialsView,
     },
     settingsHub: {
@@ -141,11 +142,8 @@ export function buildHomeServices({
     },
     // 视图帮助别名
     uploadDomRefs: views.uploadView.domRefs,
-    workflowViewActions: {
-      setSelectedGlossaryId: views.workflowView.setSelectedGlossaryId,
-      setOcrOnly: views.workflowView.setOcrOnly,
-      isOcrOnly: views.workflowView.isOcrOnly,
-    },
+    // 整个对象交给 ingest 自带的 context（HomeApp 里提供），不再逐个方法对接。
+    workflowView: views.workflowView,
     workflowDialog: views.workflowDialog,
   };
 }

@@ -14,13 +14,6 @@ export * from "./domain/translation-ocr-reuse.js";
 // 卡片状态判定与文案：book-detail 等功能需要，且与 recent-jobs 运行时无关。
 export { isLibraryOnlyItem } from "./domain/documents/document-card-item.js";
 export {
-  DELETE_BLOCKED_BY_FAVORITES,
-  blockedClearFavoritesPath,
-  blockedFavoriteCount,
-  isDeleteBlockedByFavorites,
-} from "./domain/documents/delete-blocked-favorites.js";
-export type { DeleteBlockedByFavoritesError } from "./domain/documents/delete-blocked-favorites.js";
-export {
   isRecentJobActive,
   recentJobProgressPercent,
   recentJobRawImageUrls,

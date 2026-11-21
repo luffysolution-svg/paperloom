@@ -85,10 +85,15 @@ test("pane composition matrix collapses to a single discriminated union", () => 
       name: "live overlay requires user intent (liveVisible false falls back)",
       input: { mode: "compare", sourceViewOnly: true, hasTranslated: false, liveAvailable: true, liveVisible: false },
       expected: {
-        // 保留既有行为：mode 仍为 compare（左源单栏，右栏无最终译文不挂载）。
+        // 这条原来的期望是 `compareMode: true, showTranslated: true`，注释写着
+        // 「保留既有行为：右栏无最终译文不挂载」—— 那句话自己描述的就是 bug：
+        // 栅格按 compareMode 排两列，右栏却没东西挂，用户看到的是**半屏纯白**。
+        // 而这是翻译期间点「对照」的默认路径。
+        //
+        // 现在 showTranslated 要看有没有最终译文；没有就退成单栏原文。
         kind: "final-compare",
         sourceViewOnly: true,
-        panes: { compareMode: true, showSource: true, showTranslated: true, overlayOnSource: false, visibleMode: "compare" },
+        panes: { compareMode: false, showSource: true, showTranslated: false, overlayOnSource: false, visibleMode: "compare" },
       },
     },
     {

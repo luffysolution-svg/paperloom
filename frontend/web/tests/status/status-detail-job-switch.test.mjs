@@ -12,17 +12,9 @@ import {
 } from "../../src/features/job-detail/domain/dialog/translation-state.js";
 import { createStatusDetailTranslationDataPort } from "../../src/features/job-detail/domain/dialog/translation-data-port.js";
 import { createStatusDetailOverviewCoordinator } from "../../src/features/job-detail/domain/dialog/overview-coordinator.js";
+import { deferred } from "../helpers/async.mjs";
 
 // 切任务回归：A 加载中切 B，A 的迟到响应不得覆盖 B（token 丢弃）。
-function deferred() {
-  let resolve;
-  let reject;
-  const promise = new Promise((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
 
 function makeTranslationPort({ state, current, fetch }) {
   return createStatusDetailTranslationDataPort({

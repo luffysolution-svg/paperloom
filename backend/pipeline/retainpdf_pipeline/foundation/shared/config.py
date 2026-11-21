@@ -12,13 +12,13 @@ from retainpdf_pipeline.foundation.config.layout import INNER_BBOX_SHRINK_Y
 from retainpdf_pipeline.foundation.config.layout import FONT_UNIFY_MODE
 from retainpdf_pipeline.foundation.config.layout import SOURCE_CLEANUP_STRATEGY
 from retainpdf_pipeline.foundation.config.layout import apply_layout_tuning as _apply_layout_tuning
-from retainpdf_pipeline.foundation.config.paths import DATA_DIR
-from retainpdf_pipeline.foundation.config.paths import OUTPUT_DIR
-from retainpdf_pipeline.foundation.config.paths import ROOT_DIR
-from retainpdf_pipeline.foundation.config.paths import SOURCE_JSON
-from retainpdf_pipeline.foundation.config.paths import SOURCE_PDF
-from retainpdf_pipeline.foundation.config.paths import TRANSLATION_UNIT_CACHE_DIR
-from retainpdf_pipeline.foundation.config.paths import TRANSLATIONS_DIR
+from retainpdf_base.paths import DATA_DIR
+from retainpdf_base.paths import OUTPUT_DIR
+from retainpdf_base.paths import ROOT_DIR
+from retainpdf_base.paths import SOURCE_JSON
+from retainpdf_base.paths import SOURCE_PDF
+from retainpdf_base.paths import TRANSLATION_UNIT_CACHE_DIR
+from retainpdf_base.paths import TRANSLATIONS_DIR
 from retainpdf_pipeline.foundation.config.runtime import DEFAULT_OUTPUT_NAME
 from retainpdf_pipeline.foundation.config.runtime import DEFAULT_PAGE_INDEX
 from retainpdf_pipeline.foundation.config.runtime import DEFAULT_PDF_COMPRESS_DPI

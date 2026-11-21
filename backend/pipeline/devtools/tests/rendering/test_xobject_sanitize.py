@@ -1,15 +1,10 @@
 from __future__ import annotations
 
-import sys
 import tempfile
 from pathlib import Path
 
 import pikepdf
 from pikepdf import Name
-
-
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
 
 from retainpdf_pipeline.render.source.preparation.xobject_sanitize import build_invalid_xobject_sanitized_pdf_copy

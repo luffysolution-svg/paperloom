@@ -1,11 +1,7 @@
-import sys
-from pathlib import Path
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
-from retainpdf_pipeline.translate.core.orchestration.units import finalize_payload_orchestration_metadata
-from retainpdf_pipeline.translate.core.payload.parts.units import pending_translation_items
+from retainpdf_translation.core.orchestration.units import finalize_payload_orchestration_metadata
+from retainpdf_translation.core.payload.parts.units import pending_translation_items
 
 
 def test_heavy_continuation_group_is_split_back_to_single_units() -> None:

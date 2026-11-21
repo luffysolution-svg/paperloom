@@ -113,9 +113,8 @@ Content-Type: application/json
 
 - 这里的 `workflow: "book"` 才是当前完整主链路的正式协议值
 - OCR provider 选择看 `ocr.provider`，而不是看 `workflow`
-- 如果你只想跑 OCR-only，请走 `POST /api/v1/ocr/jobs`，不要向 `/api/v1/jobs` 传 `workflow="ocr"`
+- 如果你只想跑 OCR-only，先 `POST /api/v1/uploads` 拿 `upload_id`，再 `POST /api/v1/jobs` 传 `workflow="ocr"`、`source.upload_id`（原 `POST /api/v1/ocr/jobs` 已于 2026-10-18 删除）
 - 本地人工一次性调试时可以使用 legacy wrapper `retainpdf-pipeline provider-case`（`run_provider_case.py` script-mode，仅桌面兼容）；生产 API 主链由 Rust job_runner 编排
-- 如果输入已经是 OCR JSON + PDF，优先使用 `run_document_flow.py`（script-mode，仅桌面兼容，无 console 等价物）
 - 如果只想跑 OCR-only，优先使用 `retainpdf-pipeline provider-ocr --spec <job_root>/specs/provider.spec.json`（`run_provider_ocr.py` 仅桌面兼容）
 
 ### 4.1 DeepSeek 示例
@@ -333,10 +332,12 @@ async function pollJobUntilDone(jobId: string, backendKey: string) {
 
 常用接口：
 
-- PDF：`GET /api/v1/jobs/{job_id}/pdf`
-- Markdown(JSON)：`GET /api/v1/jobs/{job_id}/markdown`
-- Markdown(raw)：`GET /api/v1/jobs/{job_id}/markdown?raw=true`
-- Bundle(zip)：`GET /api/v1/jobs/{job_id}/download`
+- PDF：`GET /api/v1/jobs/{job_id}/files/output/translated.pdf`
+- Markdown(JSON)：`GET /api/v1/jobs/{job_id}/reader/markdown`
+- Markdown(raw)：`GET /api/v1/jobs/{job_id}/files/output/ocr.md`
+- Bundle(zip)：`GET /api/v1/jobs/{job_id}/files/output/all.zip`
+
+旧地址（`/pdf`、`/markdown`、`/markdown?raw=true`、`/download`）已于 2026-10-18 删除，返回 404；对照见[下载总览](../../docs/api/07-产物下载/01-下载总览.md)。
 
 更推荐前端先取任务详情或产物详情，再使用服务端返回的 `actions`：
 

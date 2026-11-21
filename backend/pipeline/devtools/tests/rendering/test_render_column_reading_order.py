@@ -12,13 +12,6 @@ Covers (render-local only):
    relax the narrow member for len == 2 (same ratios/formula as len >= 3).
 """
 
-import sys
-from pathlib import Path
-
-
-REPO_PIPELINE_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_PIPELINE_ROOT))
-
 from retainpdf_pipeline.render.layout.payload.body_common import same_body_column
 from retainpdf_pipeline.render.layout.payload.prepare import _continuation_adjusted_capacities
 from retainpdf_pipeline.render.layout.payload.prepare import prepare_render_payloads_by_page

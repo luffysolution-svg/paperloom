@@ -55,7 +55,7 @@ async fn job_events_route_merges_pipeline_jsonl_events() {
     let events_response = app
         .oneshot(
             Request::builder()
-                .uri(format!("/api/v1/jobs/{}/events", job.job_id))
+                .uri(format!("/api/v1/jobs/{}/progress/events", job.job_id))
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("events request"),
@@ -161,7 +161,7 @@ async fn durable_stage_event_replaces_matching_jsonl_projection() {
     let response = app
         .oneshot(
             Request::builder()
-                .uri(format!("/api/v1/jobs/{}/events", job.job_id))
+                .uri(format!("/api/v1/jobs/{}/progress/events", job.job_id))
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("events request"),

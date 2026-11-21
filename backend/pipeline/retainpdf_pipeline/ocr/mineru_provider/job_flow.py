@@ -5,8 +5,8 @@ from pathlib import Path
 
 from retainpdf_pipeline.foundation.shared.job_dirs import JobDirs
 from retainpdf_pipeline.foundation.shared.job_dirs import job_dirs_from_explicit_args
-from retainpdf_pipeline.foundation.shared.local_env import get_secret
 from retainpdf_pipeline.ocr.document_schema.adapters import adapt_path_to_document_v1_with_report
+from retainpdf_pipeline.ocr.document_schema.finalize import finalize_normalized_document
 from retainpdf_pipeline.ocr.document_schema.providers import PROVIDER_MINERU
 from retainpdf_pipeline.ocr.document_schema.reporting import build_normalization_summary
 from retainpdf_pipeline.ocr.mineru_provider.artifacts import build_mineru_artifact_paths
@@ -14,21 +14,17 @@ from retainpdf_pipeline.ocr.mineru_provider.artifacts import download_and_unpack
 from retainpdf_pipeline.ocr.mineru_provider.artifacts import ensure_source_pdf_from_bundle
 from retainpdf_pipeline.ocr.mineru_provider.artifacts import resolve_layout_json_path
 from retainpdf_pipeline.ocr.mineru_provider.artifacts import save_json
-from retainpdf_pipeline.ocr.mineru_provider.mineru_api import MINERU_ENV_FILE
-from retainpdf_pipeline.ocr.mineru_provider.mineru_api import MINERU_TOKEN_ENV
+from retainpdf_pipeline.ocr.mineru_provider.mineru_api import missing_mineru_token_message
+from retainpdf_pipeline.ocr.mineru_provider.mineru_api import resolve_mineru_token
 from retainpdf_pipeline.ocr.mineru_provider.mineru_api import parse_extra_formats
 from retainpdf_pipeline.ocr.mineru_provider.submission import run_local_extract_task
 from retainpdf_pipeline.ocr.mineru_provider.submission import run_remote_extract_task
 
 
 def _resolve_mineru_token(args: Namespace) -> str:
-    mineru_token = get_secret(
-        explicit_value=args.mineru_token,
-        env_var=MINERU_TOKEN_ENV,
-        env_file_name=MINERU_ENV_FILE,
-    )
+    mineru_token = resolve_mineru_token(args.mineru_token)
     if not mineru_token:
-        raise RuntimeError(f"Missing MinerU token. Set --mineru-token, scripts/.env/{MINERU_ENV_FILE}, or env {MINERU_TOKEN_ENV}.")
+        raise RuntimeError(missing_mineru_token_message("--mineru-token"))
     return mineru_token
 
 
@@ -39,6 +35,7 @@ def _materialize_normalized_document(
     normalized_report_json_path: Path,
     document_id: str,
     provider_version: str,
+    source_pdf_path: Path,
 ) -> dict:
     # Job flow only orchestrates persistence.
     # Provider-specific raw -> normalized logic lives behind the adapter interface.
@@ -47,6 +44,13 @@ def _materialize_normalized_document(
         document_id=document_id,
         provider=PROVIDER_MINERU,
         provider_version=provider_version,
+    )
+    # 和正式的 normalize worker 同一套：缩放到原文 PDF、重建行、按最终文档刷新报告（以前这条路都不做，同样的输入出来的
+    # 文档和 Rust 那条路不一样）。
+    normalized_document, normalization_report = finalize_normalized_document(
+        normalized_document,
+        normalization_report,
+        source_pdf_path,
     )
     save_json(normalized_json_path, normalized_document, compact=True)
     save_json(normalized_report_json_path, normalization_report)
@@ -157,6 +161,7 @@ def run_mineru_to_job_dir(args: Namespace) -> tuple[JobDirs, Path, Path, Path]:
         normalized_report_json_path=artifact_paths.normalized_report_json_path,
         document_id=job_dirs.root.name,
         provider_version=str(args.model_version or ""),
+        source_pdf_path=source_pdf_path,
     )
 
     print(f"source: {job_dirs.source_dir}")

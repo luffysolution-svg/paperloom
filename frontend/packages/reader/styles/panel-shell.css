@@ -1,0 +1,116 @@
+/* dock 面板的外壳皮肤（容器 + 工具条 + 正文三层），ReaderPanelShell 渲染的
+ * 每个面板共用。Markdown 内容见 float-markdown.css。
+ *
+ * # 类名为什么还叫 reader-notes-*
+ *
+ * 这套外壳最早是批注面板专用的，后来被所有面板共用，名字没跟着改。批注功能
+ * 本身已经删掉了（阅读页收成 Markdown + AI 两个面板），但类名还挂在
+ * ReaderPanelShell 上 —— 改名要同步动组件、样式和门禁，还没做。
+ *
+ * 文件名先正了（notes-float.css → panel-shell.css）：这里装的不是批注、也
+ * 不是浮窗。
+ *
+ * # 删掉的两类东西
+ *
+ * - 「悬浮卡片」和 --docked 两种形态：浮窗拖动是坏的（见 ReaderPanelShell.tsx
+ *   顶部那段：clampPos 估高度估错，1280×800 下垂直行程只剩 56px），--docked
+ *   零调用点。面板只剩贴右栏这一种。
+ * - 批注专属的 24 条规则（列表项 / 编辑框 / 导出按钮 / AI 批注行）。留下的是
+ *   外壳三层加 .reader-notes-count / .reader-notes-empty，后两个 Markdown
+ *   面板还在用。
+ */
+.reader-notes-panel {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* 面板是 Reader 的右侧工作区，不伪装成悬浮对话框。
+ * 面板没有自己的标题栏（dock 顶上的 tab 条已经写着你在哪个面板、并带关闭），
+ * 所以行模板只有「可选的工具条 + 正文」两种。 */
+.reader-notes-panel--workspace {
+  position: fixed;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+  inset: 60px 0 0 auto;
+  z-index: 24;
+  width: 50vw;
+  width: 50dvw;
+  height: auto;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+  background: var(--paper);
+  box-shadow: none;
+  animation: reader-workspace-in 170ms var(--ease-out) both;
+}
+
+.reader-notes-panel--workspace.has-panel-toolbar {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.reader-notes-panel--workspace.is-pane-left {
+  inset-inline: 0 auto;
+}
+
+.reader-notes-panel--workspace.is-pane-right {
+  inset-inline: auto 0;
+}
+
+@keyframes reader-workspace-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 520px) {
+  .reader-notes-panel--workspace {
+    inset: 58px 0 0;
+    width: 100vw;
+    width: 100dvw;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reader-notes-panel--workspace {
+    animation: none;
+  }
+}
+
+/* 工具条：条数 / 导出 / 刷新 / 层级开关都住在这里。
+ *
+ * 这条规则一度**完全看不见** —— float-markdown.css 里有一条
+ * `.reader-notes-panel--workspace .reader-notes-panel-toolbar { display: none }`，
+ * 特异性 (0,2,0) 压过这里的 (0,1,0)。浮窗形态下命不中（当时是 --float），
+ * 三个面板改成贴右栏之后整条工具条被吃掉：批注的「导出 Markdown」是
+ * annotations.exportMarkdown 在整个包里唯一的入口，AI 批注的「显示全部 N 条」
+ * 是 level 3 批注进索引列表的唯一入口，摘录的「刷新」同理 —— 全部渲染到 DOM
+ * 里、永远看不见。和圆钮那次是同一种死法，所以现在有门禁扫这条链上的隐藏规则。
+ *
+ * padding 上沿是 10px 而不是 0：浮窗形态下它上面还有一条标题栏，现在它就是
+ * 面板的第一行，贴着顶边看着像没对齐。 */
+.reader-notes-panel-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 6%, transparent);
+}
+.reader-notes-count {
+  color: var(--muted, var(--muted));
+  font-size: 12px;
+  font-weight: 650;
+}
+.reader-notes-panel-body {
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 12px 14px 16px;
+  min-height: 0;
+}
+.reader-notes-empty {
+  margin: 18px 4px;
+  color: var(--muted, var(--muted));
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  text-align: center;
+}

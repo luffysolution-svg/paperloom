@@ -7,15 +7,15 @@ imports translate; the authoritative knobs remain the translate stage spec
 (``translation.base_url``) and environment/credential refs.
 
 Duplicated from:
-- retainpdf_pipeline.translate.llm.providers.deepseek.client
+- retainpdf_translation.llm.providers.deepseek.client
   (``DEFAULT_BASE_URL``, ``DEFAULT_API_KEY_ENV``, ``get_api_key`` shape)
-- retainpdf_pipeline.translate.llm.providers.deepseek.transport
+- retainpdf_translation.llm.providers.deepseek.transport
   (``normalize_base_url``)
 """
 
 from __future__ import annotations
 
-from retainpdf_pipeline.foundation.shared.local_env import get_secret
+from retainpdf_base.local_env import get_secret
 
 
 DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
@@ -37,7 +37,7 @@ def get_api_key(explicit_api_key: str = "", env_var: str = DEFAULT_API_KEY_ENV, 
         env_file_name=DEFAULT_API_KEY_FILE,
     )
     if required and not api_key:
-        raise RuntimeError(f"Missing API key. Set {env_var}, scripts/.env/{DEFAULT_API_KEY_FILE}, or pass --api-key.")
+        raise RuntimeError(f"Missing API key. Set {env_var}, backend/pipeline/.env/{DEFAULT_API_KEY_FILE}, or pass --api-key.")
     return api_key
 
 

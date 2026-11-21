@@ -20,16 +20,35 @@
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 
-  /* z-index 层级契约（阅读器）：避免硬编码散落 */
+  /* z-index 层级契约（阅读器）：避免硬编码散落。
+   *
+   * 四段，从下往上：氛围底 → 常驻 chrome → 浮层 → 告知层。
+   * 浮层段内部按「谁从谁里长出来」排：选区浮条 < 记号弹窗 < 区域菜单 <
+   * 引用悬停预览（portal 到 body，必须压住前面所有）。
+   *
+   * 批注卡那层（48）和圆钮那层（70）随可拖动浮窗、可拖动圆钮一起删了：面板
+   * 现在都在 dock 里（z-index 24，压在 chrome 之下），圆钮整套不存在了。
+   *
+   * --z-dialog 现在在最顶上，不是原来的 40。它罩的是三样东西：致命错误提示
+   * （.reader-react-error）、产物失败提示（.reader-error-notice）和启动遮罩
+   * （.reader-boot-loading）—— 都属于「出事了」或「还没就绪」。40 的时候任何
+   * 一个开着的浮窗都能把它们盖住（批注卡从 48 起步），用户看到的是界面不动了，
+   * 而不是不动的原因。这一层不常驻，抬到顶上不挡阅读。
+   *
+   * 这几处的 fallback 原本一个写 50（react-pdf.css）一个写 40（chrome.css），
+   * 两个数字互相矛盾且都没生效（token 有定义），正说明没人把这层想清楚过。
+   * 现在 fallback 一律等于 token 值，有门禁对账（见 reader-z-layers.test.mjs）。
+   */
   --z-ambient: 1;
   --z-chrome: 35;
   --z-hud: 36;
-  --z-dialog: 40;
-  --z-notes-float: 48;
   --z-selection-pop: 55;
-  --z-fab: 70;
+  /* 批注记号的弹窗：position: fixed，落在根栈里，所以得进这份契约而不是就地写死 */
+  --z-popover: 60;
   --z-region-popover: 80;
-  /* 引用悬停预览卡：portal 到 body，必须压住浮层 AI 面板与 FAB */
+  /* 引用悬停预览卡：portal 到 body，必须压住其余所有浮层 */
   --z-citation-hover: 90;
+  /* 告知层：致命错误 / 产物失败 / 启动遮罩，压住以上全部。理由见本段开头。 */
+  --z-dialog: 95;
   --reader-topbar-offset: 48px;
 }

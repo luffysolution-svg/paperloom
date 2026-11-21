@@ -33,9 +33,9 @@ from retainpdf_pipeline.ocr.document_schema.normalize_pipeline import build_norm
 from retainpdf_pipeline.ocr.document_schema.normalize_pipeline import normalized_artifact_paths
 from retainpdf_pipeline.ocr.document_schema.normalize_pipeline import write_normalized_artifacts
 from retainpdf_pipeline.ocr.document_schema.reporting import build_normalization_summary
-from retainpdf_pipeline.services.pipeline_shared.io import save_json_atomic
+from retainpdf_base.io import save_json_atomic
 from retainpdf_pipeline.ocr.ocr_provider.paddle_runner import apply_cli_normalization_report_semantics
-from retainpdf_pipeline.translate.public import load_translation_manifest
+from retainpdf_translation.public import load_translation_manifest
 
 
 _URL_RE = re.compile(r"https?://[^\s\"']+", re.IGNORECASE)
@@ -742,7 +742,6 @@ def _payload_sha256(payload: Any, *, compact: bool) -> str:
     encoder = json.JSONEncoder(**kwargs)
     digest = hashlib.sha256()
     for chunk in encoder.iterencode(payload):
-        # Match the text-mode newline encoding used by save_json_atomic.
         digest.update(chunk.replace("\n", os.linesep).encode("utf-8"))
     return digest.hexdigest()
 
@@ -819,7 +818,7 @@ def _table_exists(connection: sqlite3.Connection, table: str) -> bool:
 
 
 def _build_fts_rows(job_dir: Path, document: dict) -> Iterable[tuple[int, str, str, str]]:
-    """Mirror retain-data::build_fts_rows_from_job_dir without provider/LLM calls."""
+    """Mirror retainpdf-data::build_fts_rows_from_job_dir without provider/LLM calls."""
     translated: dict[tuple[int, int], str] = {}
     translated_dir = job_dir / "translated"
     if translated_dir.exists():

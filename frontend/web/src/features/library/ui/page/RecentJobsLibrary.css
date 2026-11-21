@@ -1,0 +1,56 @@
+/* 书架主体：滚动区、摘要、卡片网格、「加载更多」。（RecentJobsLibrary / RecentJobsLibraryGrid）
+ *
+ * @owns library-scroll-body, library-summary, library-grid, recent-jobs
+ * 「加载更多」是 @retainpdf/ui 的 Button（secondary）。 */
+
+@utility library-scroll-body {
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  padding: 18px 0 116px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: transparent;
+  }
+
+  @media (max-width: 767px) {
+    padding-bottom: 124px;
+  }
+}
+
+@utility library-summary {
+  display: none;
+}
+
+/*
+  危险区修复(Tailwind v4 迁移):`.library-grid` 和 `.recent-jobs-list` 这两个
+  类始终成对出现在同一批元素上(见 RecentJobsLibrary.jsx / partials/
+  main-content.html),`grid-template-columns`/`gap` 在两边各写了一份、值还
+  不一样(这里 46px 42px,recent-jobs-list 那份是 34px 32px)——v3 里两者
+  specificity 相同,靠 @import 顺序(library-shell.css 先于 job-dialogs.css)
+  的源码序 tie-break,job-dialogs.css 后写的 34px/32px 胜出,46px/42px 那份
+  其实一直是死代码。v4 把两者都转成同层 `@utility`,不再保证按文件 @import
+  顺序生成,这份"赢面"结果变得不可靠——实测迁移后 46px/42px 反而生效,导致
+  home 视觉基线里卡片网格间距变大、卡片整体变窄(封面图跟着变矮),968414/
+  892 一类差异越过阈值。这里去掉重复声明,只保留 library-grid 独有的
+  `#recent-jobs-list { display: contents }` 行为,网格尺寸/间距完全交给
+  recent-jobs-list 一处定义,消除歧义。
+*/
+@utility library-grid {
+  &#recent-jobs-list {
+    display: contents;
+  }
+}
+

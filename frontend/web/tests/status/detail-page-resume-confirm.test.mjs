@@ -4,7 +4,8 @@ import { JSDOM } from "jsdom";
 
 import { bindRerunButton } from "../../src/features/job-detail/domain/page/resume.js";
 
-// 整页恢复两步确认：409 后不再弹 window.confirm，同一按钮二次点击才显式重跑。
+// 整页恢复两步确认：翻译歧义的 409 后不再弹 window.confirm，同一按钮二次点击才显式重跑。
+const AMBIGUOUS_409 = "translation request outcome is ambiguous; retry with accept_duplicate_risk(409)";
 function setupDom() {
   const dom = new JSDOM(
     '<!doctype html><html><body><button id="detail-rerun-btn">断点恢复/重新运行</button><p id="detail-rerun-status"></p></body></html>',
@@ -22,7 +23,7 @@ function setText(id, text) {
 
 function bind({ submit }) {
   bindRerunButton({
-    detailPageState: { job: { job_id: "job-1" }, rerunActionUrl: "" },
+    detailPageState: { job: { job_id: "job-1" } },
     getJobId: () => "job-1",
     resumePort: { submit },
     setText,
@@ -30,13 +31,13 @@ function bind({ submit }) {
   return globalThis.document.getElementById("detail-rerun-btn");
 }
 
-test("409 首击只提示二次确认，不直接重跑", async () => {
+test("翻译歧义的 409 首击只提示二次确认，不直接重跑", async () => {
   setupDom();
   let submits = 0;
   const button = bind({
     submit: async () => {
       submits += 1;
-      throw new Error("revision stale(409)");
+      throw new Error(AMBIGUOUS_409);
     },
   });
   button.click();
@@ -62,7 +63,7 @@ test("二次点击才调 retry-stage，失败清确认态并可再点", async ()
     const button = bind({
       submit: async () => {
         submits += 1;
-        throw new Error("revision stale(409)");
+        throw new Error(AMBIGUOUS_409);
       },
     });
     button.click();
@@ -78,6 +79,22 @@ test("二次点击才调 retry-stage，失败清确认态并可再点", async ()
     );
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+test("别的 409（任务在跑、版本过期）直接展示，不进入重复风险确认", async () => {
+  for (const text of ["job is running; cancel it first(409)", "revision stale(409)"]) {
+    setupDom();
+    const button = bind({
+      submit: async () => {
+        throw Object.assign(new Error(text), { status: 409 });
+      },
+    });
+    button.click();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(globalThis.document.getElementById("detail-rerun-status").textContent, text);
+    assert.notEqual(button.dataset.confirmRisk, "1", `${text} 不该当成翻译歧义`);
+    assert.equal(button.disabled, false);
   }
 });
 

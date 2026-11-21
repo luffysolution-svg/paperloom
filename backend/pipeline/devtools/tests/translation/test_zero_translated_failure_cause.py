@@ -14,9 +14,9 @@ import json
 import pytest
 
 from retainpdf_pipeline.foundation.shared.structured_errors import classify_exception
-from retainpdf_pipeline.translate.workflow.checkpoint import NothingTranslatedError
-from retainpdf_pipeline.translate.workflow.checkpoint.contract import assert_checkpoint_committable
-from retainpdf_pipeline.translate.workflow.execution_runner import dominant_failure_cause
+from retainpdf_translation.workflow.checkpoint import NothingTranslatedError
+from retainpdf_translation.workflow.checkpoint.contract import assert_checkpoint_committable
+from retainpdf_translation.workflow.execution_runner import dominant_failure_cause
 
 _AUTH = (
     "HTTPError: 401 Client Error: Unauthorized for url: https://example.invalid/v1/responses"

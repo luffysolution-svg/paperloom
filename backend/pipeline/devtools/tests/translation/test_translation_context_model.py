@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from retainpdf_pipeline.translate.services.context import TranslationDocumentContext
-from retainpdf_pipeline.translate.services.context import build_unit_context
-from retainpdf_pipeline.translate.services.context import build_unit_contexts
-from retainpdf_pipeline.translate.services.context.windows import annotate_translation_context_windows
-from retainpdf_pipeline.translate.services.context.windows import build_translation_context_windows
+from retainpdf_translation.services.context import TranslationDocumentContext
+from retainpdf_translation.services.context import build_unit_context
+from retainpdf_translation.services.context import build_unit_contexts
+from retainpdf_translation.services.context.windows import annotate_translation_context_windows
+from retainpdf_translation.services.context.windows import build_translation_context_windows
 
 
 def test_build_unit_context_carries_document_item_and_neighbor_context() -> None:
@@ -74,6 +74,18 @@ def test_build_translation_context_windows_returns_data_without_mutating_payload
     assert windows["b"].after == "Gamma context"
     assert "translation_context_before" not in page_payloads[1][1]
     assert "translation_context_after" not in page_payloads[1][1]
+
+
+def test_context_windows_do_not_reach_across_pages_that_have_not_arrived() -> None:
+    """跟着 OCR 翻时到的页可能不连着：第 1 页末尾不是第 4 页的上文；连着的第 4、5 页之间照常取。"""
+    block = lambda item_id, page_idx, text: {"item_id": item_id, "page_idx": page_idx, "block_idx": 1, "block_type": "text", "source_text": text}
+    page_payloads = {0: [block("a", 0, "Page one tail")], 3: [block("d", 3, "Page four")], 4: [block("e", 4, "Page five")]}
+
+    windows = build_translation_context_windows(page_payloads, neighbors=1, text_limit=100)
+
+    assert (windows["a"].before, windows["a"].after) == ("", "")
+    assert (windows["d"].before, windows["d"].after) == ("", "Page five")
+    assert windows["e"].before == "Page four"
 
 
 def test_translation_context_windows_attach_neighbor_text() -> None:
@@ -204,7 +216,7 @@ def test_translation_context_windows_off_mode_clears_context() -> None:
 
 
 def test_context_mode_off_suppresses_continuation_prompt_context() -> None:
-    from retainpdf_pipeline.translate.core.context import build_item_context
+    from retainpdf_translation.core.context import build_item_context
 
     item = {
         "item_id": "p006-b056",
@@ -223,7 +235,7 @@ def test_context_mode_off_suppresses_continuation_prompt_context() -> None:
 
 
 def test_batch_payload_includes_needed_context_without_continuation_group() -> None:
-    from retainpdf_pipeline.translate.core.context import build_item_context
+    from retainpdf_translation.core.context import build_item_context
 
     item = {
         "item_id": "p005-b002",
@@ -245,7 +257,7 @@ def test_batch_payload_includes_needed_context_without_continuation_group() -> N
 
 
 def test_prompt_building_uses_translation_context_windows() -> None:
-    from retainpdf_pipeline.translate.llm.shared.prompt_building import build_single_item_fallback_messages
+    from retainpdf_translation.llm.shared.prompt_building import build_single_item_fallback_messages
 
     item = {
         "item_id": "p005-b002",
@@ -269,6 +281,6 @@ def test_prompt_building_uses_translation_context_windows() -> None:
     )
 
     user_content = messages[-1]["content"]
-    assert "前文上下文（仅供理解，禁止翻译进输出）：The matrix contains one-electron kinetic" in user_content
+    assert "【前文开始（仅供理解，禁止翻译进输出）】\nThe matrix contains one-electron kinetic\n【前文结束】" in user_content
     assert "当前原文是不完整片段；译文必须保持同等不完整，不要用后文上下文补全。" in user_content
-    assert "后文上下文（仅供理解，禁止翻译进输出）：that are used to build the Fock operator." in user_content
+    assert "【后文开始（仅供理解，禁止翻译进输出）】\nthat are used to build the Fock operator.\n【后文结束】" in user_content

@@ -7,7 +7,7 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from tools.analysis.inspect_capture import load_capture
-from retainpdf_pipeline.translate.llm.shared.request_capture import digest
+from retainpdf_translation.llm.shared.request_capture import digest
 
 
 def batch_identity(batch):

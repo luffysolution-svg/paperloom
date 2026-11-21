@@ -1,6 +1,6 @@
 // 三页导航统一契约（壳 A5）：home / detail / reader。
 //
-// - home:   index.html?tab=library|collections|favorites（?tab=ask 已移除，落回图书馆）
+// - home:   index.html?tab=library|collections|favorites（?tab=ask 是删掉的「AI 问答」，落回图书馆）
 //          （UI 历史键 "categories" == 领域 collections，双向兼容）
 // - detail: detail.html?job_id=<jobId>
 // - reader: reader.html?job_id=<jobId>&page_idx=<n>&block_id=<id>
@@ -9,6 +9,7 @@
 //
 // 跳转统一走 navigateTo()；APP_EVENTS.openReaderRequested 事件保留兼容，
 // 新代码优先用 buildReaderUrl() + navigateToReader()/navigateTo()。
+
 
 export type HomeTab = "library" | "collections" | "favorites";
 /** UI 层历史键：categories == collections（见 LibraryTopTabs COLLECTIONS_TAB_KEY）。 */
@@ -53,6 +54,11 @@ export function toUiTabKey(tab: HomeTab | HomeTabKey | string): HomeTabKey {
 export function buildHomeUrl(tab: HomeTab | HomeTabKey | string = "library"): string {
   const contract = toContractTab(`${tab || "library"}`);
   return `./index.html?tab=${encodeURIComponent(contract)}`;
+}
+
+/** 管理后台（多用户模式、管理员）。view 不给是账号页，"platform" 是平台设置。 */
+export function buildAdminUrl(view: "" | "platform" = ""): string {
+  return view ? `./admin.html?view=${view}` : "./admin.html";
 }
 
 export function parseDetailJobId(search?: string): string {

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
+import { wait } from "../helpers/async.mjs";
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", {
   url: "http://localhost/reader.html?job_id=job-markdown",
@@ -56,10 +57,6 @@ const { parseMarkdownWithMath } = await import(
   "../../../../frontend/packages/reader/src/external.ts"
 );
 
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 async function waitFor(predicate, description) {
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
@@ -112,7 +109,6 @@ test("OCR-only legacy Markdown and its protected image render in the reader pane
     // document_id + active_job_id resolves to a real OCR job before this panel opens.
     jobId: "job-ocr",
     sourceOnly: false,
-    layout: "docked",
     onClose: () => {},
   }));
 
@@ -138,8 +134,9 @@ test("OCR-only legacy Markdown and its protected image render in the reader pane
     dom.window.document.querySelector("#reader-markdown-panel .reader-notes-count")?.textContent,
     "已加载",
   );
+  // 面板贴右栏，不再是可拖动浮窗：--docked / --float 两种形态连同拖动一起删了。
   assert.ok(
-    dom.window.document.querySelector("#reader-markdown-panel")?.classList.contains("reader-notes-panel--docked"),
+    dom.window.document.querySelector("#reader-markdown-panel")?.classList.contains("reader-notes-panel--workspace"),
   );
   assert.equal(
     dom.window.document.querySelector("#reader-markdown-panel .reader-notes-panel-drag"),

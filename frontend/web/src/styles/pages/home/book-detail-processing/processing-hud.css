@@ -1,0 +1,133 @@
+/* 「进度」页的 HUD 条（ProcessingHud）：一行排开——小进度环 + 页数 / 进度、总耗时、模型、token 合计。
+ * 画面上只有图标和数；放不下就折行。各站分开的耗时、模型、token 在流水线各站下面（assembly-line-labels.css）。 */
+
+.book-detail-hud {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+  padding: 6px 14px 6px 6px;
+  border-radius: var(--ui-radius-pill);
+  background: var(--paper);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 6%, transparent);
+}
+
+.book-detail-hud-item {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  cursor: default;
+}
+
+.book-detail-hud-item > svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+
+.book-detail-hud-num {
+  color: var(--ink);
+  font-size: var(--ui-text-base);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* —— 小进度环：中间状态图标 —— */
+
+.book-detail-hud-ring {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+}
+
+/* 只转环本身（从 12 点钟方向开始画），中间的图标不跟着转。 */
+.book-detail-hud-ring > svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.book-detail-hud-ring circle {
+  fill: none;
+  stroke-width: 4;
+}
+
+.book-detail-hud-ring-track {
+  stroke: color-mix(in srgb, var(--ink) 9%, var(--paper));
+}
+
+.book-detail-hud-ring-fill {
+  stroke: var(--ink);
+  stroke-linecap: round;
+  transition: stroke-dasharray 400ms var(--ease-out, ease-out);
+}
+
+.book-detail-hud-ring-icon {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+}
+
+.book-detail-hud-ring-icon svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.6;
+}
+
+.book-detail-hud[data-tone="done"] .book-detail-hud-ring-fill,
+.book-detail-hud[data-tone="done"] .book-detail-hud-ring-icon {
+  stroke: var(--ok);
+  color: var(--ok);
+}
+
+.book-detail-hud[data-tone="warn"] .book-detail-hud-ring-fill,
+.book-detail-hud[data-tone="warn"] .book-detail-hud-ring-icon {
+  stroke: var(--warn);
+  color: var(--warn);
+}
+
+.book-detail-hud[data-tone="failed"] .book-detail-hud-ring-fill,
+.book-detail-hud[data-tone="failed"] .book-detail-hud-ring-icon {
+  stroke: var(--danger);
+  color: var(--danger);
+}
+
+.book-detail-hud[data-tone="stopped"] .book-detail-hud-ring-fill {
+  stroke: color-mix(in srgb, var(--ink) 40%, var(--line));
+}
+
+/* —— 模型：服务商标志 + 名字 —— */
+
+.book-detail-hud-model img {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  border-radius: var(--ui-radius-sm);
+}
+
+.book-detail-hud-model-name {
+  overflow: hidden;
+  max-width: 180px;
+  color: var(--ink);
+  font-size: var(--ui-text-sm);
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.book-detail-hud-badge {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: var(--ui-radius-pill);
+  color: var(--paper);
+  background: var(--ink);
+  font-size: var(--ui-text-2xs);
+  font-weight: 700;
+}

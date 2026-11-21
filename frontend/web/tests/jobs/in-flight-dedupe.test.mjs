@@ -20,17 +20,11 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { deferred } from "../helpers/async.mjs";
 
 const { createInFlightDedupe } = await import(
   "../../src/platform/api/in-flight-dedupe.js"
 );
-
-function deferred() {
-  let resolve;
-  let reject;
-  const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
-  return { promise, resolve, reject };
-}
 
 test("同一 key 在途时，后来者复用而不再发一次", async () => {
   const dedupe = createInFlightDedupe();

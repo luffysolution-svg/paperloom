@@ -1,13 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { SegmentedControl } from "@retainpdf/ui";
 import {
   READING_STATUS_META,
   filterDocuments,
   highlightSegments,
   nextReadingStatus,
 } from "./view-model.js";
+import type {
+  LibrarySearchAnchor,
+  LibrarySearchDocumentRow,
+  LibrarySearchHit,
+  LibrarySearchPorts,
+} from "./index.js";
 
-function Snippet({ text }) {
+function Snippet({ text }: { text?: string }) {
   return (
     <p className="lib-search-snippet">
       {highlightSegments(text).map((segment, index) => (
@@ -19,12 +26,13 @@ function Snippet({ text }) {
   );
 }
 
-function SearchHit({ hit, onOpenReader }) {
+function SearchHit({ hit, onOpenReader }: { hit: LibrarySearchHit; onOpenReader: (anchor: LibrarySearchAnchor) => void }) {
   return (
     <button
       type="button"
       className="lib-search-hit"
-      onClick={() => onOpenReader(hit)}
+      // 契约的 BlockSearchHit 是 interface，没有索引签名；展开成对象字面量才能当锚点传。
+      onClick={() => onOpenReader({ ...hit })}
       title={`第 ${Number(hit.page_idx) + 1} 页 · ${hit.block_id}`}
     >
       <Snippet text={hit.source_snippet} />
@@ -34,8 +42,12 @@ function SearchHit({ hit, onOpenReader }) {
   );
 }
 
-function DocumentRow({ doc, onOpenReader, onCycleStatus }) {
-  const meta = READING_STATUS_META[doc.reading_status] || READING_STATUS_META.unread;
+function DocumentRow({ doc, onOpenReader, onCycleStatus }: {
+  doc: LibrarySearchDocumentRow;
+  onOpenReader: (anchor: { document_id?: string; job_id?: string }) => void;
+  onCycleStatus: (doc: LibrarySearchDocumentRow) => void;
+}) {
+  const meta = READING_STATUS_META[doc.reading_status ?? ""] || READING_STATUS_META.unread;
   return (
     <div className="lib-search-doc">
       <button
@@ -45,7 +57,7 @@ function DocumentRow({ doc, onOpenReader, onCycleStatus }) {
       >
         <span className="lib-search-doc-title">{doc.title || doc.source_filename}</span>
         <span className="lib-search-doc-meta">
-          {doc.page_count} 页{doc.tags.length ? ` · ${doc.tags.join(" / ")}` : ""}
+          {doc.page_count} 页
         </span>
       </button>
       <button
@@ -60,16 +72,23 @@ function DocumentRow({ doc, onOpenReader, onCycleStatus }) {
   );
 }
 
-function LibrarySearchPanel({ ports }) {
+const STATUS_FILTER_OPTIONS = [
+  { value: "", label: "全部" },
+  ...Object.entries(READING_STATUS_META).map(([value, meta]) => ({ value, label: meta.label })),
+];
+
+function LibrarySearchPanel({ ports }: { ports: LibrarySearchPorts }) {
   const [query, setQuery] = useState("");
-  const [hits, setHits] = useState([]);
-  const [documents, setDocuments] = useState([]);
+  const [hits, setHits] = useState<LibrarySearchHit[]>([]);
+  const [documents, setDocuments] = useState<LibrarySearchDocumentRow[]>([]);
   const [statusFilter, setStatusFilter] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | number>(0);
   const requestSeqRef = useRef(0);
-  const documentsRef = useRef<Promise<any[]> | null>(null);
+  // 书目列表在一次检索里只取一次：每敲一个键都把整份书目重拉一遍没有必要。清空查询时作废，
+  // 下次打开面板重新取；取失败也作废，下一次按键再试。
+  const documentsRef = useRef<Promise<LibrarySearchDocumentRow[]> | null>(null);
 
   useEffect(() => ports.subscribeQuery(setQuery), [ports]);
 
@@ -104,11 +123,12 @@ function LibrarySearchPanel({ ports }) {
           return;
         }
         setHits(searchResult?.hits || []);
+        // 同一次检索里已经有书目时留着它：上面带着阅读状态的乐观更新，换成缓存会被冲回去。
         setDocuments((current) => (current.length ? current : documentRows));
         setError("");
       } catch (searchError) {
         if (requestSeqRef.current === seq) {
-          setError(searchError?.message || "检索失败");
+          setError((searchError as { message?: string } | null)?.message || "检索失败");
         }
       } finally {
         if (requestSeqRef.current === seq) {
@@ -118,11 +138,12 @@ function LibrarySearchPanel({ ports }) {
     }, 250);
     return () => {
       clearTimeout(debounceRef.current);
+      // 查询一变就作废还在路上的请求：不然它回来时照样写回结果，新词的防抖期间先显示上一次的命中。
       requestSeqRef.current += 1;
     };
   }, [query, ports]);
 
-  const cycleStatus = useCallback(async (doc) => {
+  const cycleStatus = useCallback(async (doc: LibrarySearchDocumentRow) => {
     const next = nextReadingStatus(doc.reading_status);
     setDocuments((current) => current.map((item) => (
       item.document_id === doc.document_id ? { ...item, reading_status: next } : item
@@ -130,7 +151,8 @@ function LibrarySearchPanel({ ports }) {
     try {
       await ports.patchDocument(doc.document_id, { reading_status: next });
     } catch (_err) {
-      // 回滚乐观更新
+      // 回滚乐观更新，但只在状态还是这次设的值时：连点两下、第一次失败的话，
+      // 不能把第二次的结果也冲掉。
       setDocuments((current) => current.map((item) => (
         item.document_id === doc.document_id && item.reading_status === next
           ? { ...item, reading_status: doc.reading_status }
@@ -150,19 +172,13 @@ function LibrarySearchPanel({ ports }) {
       <div className="lib-search-head">
         <strong>库检索</strong>
         <span className="lib-search-status">{busy ? "检索中…" : error || `${hits.length} 条全文命中 · ${matchedDocuments.length} 篇文档`}</span>
-        <div className="lib-search-filters" role="group" aria-label="按阅读状态过滤">
-          <button type="button" className={statusFilter === "" ? "is-active" : ""} onClick={() => setStatusFilter("")}>全部</button>
-          {Object.entries(READING_STATUS_META).map(([value, meta]) => (
-            <button
-              key={value}
-              type="button"
-              className={statusFilter === value ? "is-active" : ""}
-              onClick={() => setStatusFilter(value)}
-            >
-              {meta.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          size="sm"
+          label="按阅读状态过滤"
+          value={statusFilter}
+          onChange={setStatusFilter}
+          options={STATUS_FILTER_OPTIONS}
+        />
       </div>
       {hits.length > 0 && (
         <section className="lib-search-section">
@@ -190,7 +206,7 @@ function LibrarySearchPanel({ ports }) {
   );
 }
 
-export function mountLibrarySearchApp(host, ports) {
+export function mountLibrarySearchApp(host: HTMLElement, ports: LibrarySearchPorts) {
   const root = createRoot(host);
   root.render(<LibrarySearchPanel ports={ports} />);
   return {

@@ -57,15 +57,16 @@ app  ──►  features  ──►  platform
 | `jobs` | 任务运行中的状态卡、阶段流、进度动画、取消/重试 |
 | `job-detail` | 状态详情弹窗 + `detail.html` 整页 |
 | `reader` | 阅读器宿主接线（实现在 `@retainpdf/reader` 包，不在此） |
-| `ask` | 主页 AI 问答 |
 | `credentials` | 凭据配置与校验 |
 | `glossaries` | 术语表 |
 | `collections` | 合集 |
-| `favorites` | 收藏 |
 | `artifacts` | 受保护产物下载 |
 | `task-center` | 任务中心 |
 | `settings` | 设置外壳、主题外观、开发者选项 |
 | `app-update` | 应用更新 |
+| `admin` | 管理后台 `admin.html`（多用户模式、管理员）：账号、用量、页数、任务 |
+| `notify` | 任务跑完的提醒：页面提示、系统通知、标签页标题记号，设置里的「通知」分栏 |
+| `editorial-room` | 翻译编辑部：翻译 agent 各角色分工、一页稿子怎么流转的动画（`editorial.html` 演示页，见 `docs/core/frontend/editorial-room.md`） |
 
 每个功能内部固定两层，`index.ts` 是唯一出口：
 
@@ -101,14 +102,14 @@ features/<功能>/
 
 ## `ui/` —— 共享 UI
 
-`components/`（shadcn 生成物）、`Button.tsx`、`lib/utils.ts`、`hooks/`、
-`icons/`、`theme/`、`decor/`、`download-toast/`。
+基础组件（Button、IconButton、Field、Input、Textarea、Select、Badge、Menu、Panel、Sheet、Dialog、
+ConfirmDialog、FormStatusLine）**不在这里**，在 `frontend/packages/ui`，一律从 `@retainpdf/ui` 的根引；
+样子在包的 `styles/*.css`，各页面入口经 `@retainpdf/ui/primitives.css` 引入。做法和迁移顺序见
+`docs/ops/planning/frontend-migration/20261031-基础组件与刻度.md`。
 
-`components.json` 的别名指向 `@/ui` 系列，`npx shadcn add` 会生成到
-`ui/components/`。
-
-⚠️ `ui/Button.tsx` 与 `ui/components/button.tsx` **必须保持两级**——
-macOS 文件系统大小写不敏感，压平会冲突。
+这里留下应用自己的：`lib/utils.ts`（转出包里的 `cn`）、`hooks/`、`icons/`（含 EmptyState）、`theme/`、
+`decor/`、`download-toast/`、`context/`。`ui/components/` 已删除，门禁（`ui-primitives-ratchet`）不许它再出现；
+`components.json` 还指着它，`npx shadcn add` 生成的东西要搬进包里再用。
 
 ## 门禁清单
 
@@ -118,6 +119,7 @@ macOS 文件系统大小写不敏感，压平会冲突。
 | `tests/architecture/architecture-boundaries.test.mjs` | 防回弹（不得 import 已删除的旧世界）、DI 容器消费方清单、旧目录不得复活、共享 dialog 边界 |
 | `tests/architecture/page-dom-references.test.mjs` | 三页的 DOM id/class 引用必须有归属，防运行时静默失效 |
 | `tests/architecture/tsx-color-literals.test.mjs` | 主题盲颜色只减不增 |
+| `tests/architecture/ui-primitives-ratchet.test.mjs` | 手写控件、写死的字号圆角、新造按钮类名只减不增；基础组件只有 `@retainpdf/ui` 一份 |
 | `tests/architecture/shell-smoke.test.mjs` | 三页挂载顺序与入口链路 |
 
 改动这些门禁时，**必须注入一个已知违规确认它仍能报错，再移除**。

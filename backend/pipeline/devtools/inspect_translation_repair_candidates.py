@@ -12,12 +12,12 @@ REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
-from retainpdf_pipeline.translate.core.item_reader import item_policy_translate
-from retainpdf_pipeline.translate.core.payload import load_translation_manifest_file
-from retainpdf_pipeline.translate.core.payload import load_translations
-from retainpdf_pipeline.translate.services.agents import TranslationAgentCoordinator
-from retainpdf_pipeline.translate.services.agents.repair_pipeline import _has_blocking_issue
-from retainpdf_pipeline.translate.services.agents.repair_pipeline import _repairable_review_issues
+from retainpdf_translation.core.item_reader import item_policy_translate
+from retainpdf_translation.core.payload import load_translation_manifest_file
+from retainpdf_translation.core.payload import load_translations
+from retainpdf_translation.services.agents import TranslationAgentCoordinator
+from retainpdf_translation.services.agents.repair_pipeline import _has_blocking_issue
+from retainpdf_translation.services.agents.repair_pipeline import _repairable_review_issues
 
 
 def _job_root_from_arg(value: str) -> Path:
@@ -46,7 +46,7 @@ def _load_payload_paths(*, job_root: Path | None, translated_dir: Path | None) -
     manifest_path = translated_dir / "translation-manifest.json"
     if manifest_path.exists():
         return load_translation_manifest_file(manifest_path, translations_dir=translated_dir)
-    paths = sorted(translated_dir.glob("page-*-deepseek.json"))
+    paths = sorted(translated_dir.glob("page-*.json"))  # 新任务 page-001.json，旧任务 page-001-deepseek.json
     return {index: path for index, path in enumerate(paths)}
 
 

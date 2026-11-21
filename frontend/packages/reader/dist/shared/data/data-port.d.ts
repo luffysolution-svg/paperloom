@@ -1,4 +1,5 @@
 import type { ReaderLiveTranslationPort } from "../../contracts/live-translation.js";
+/** 没注入 = 宿主没有这个端点。返回 null 表示「还没有」，不是失败。 */
 /** Markdown 原文的来源描述（来自 job detail artifacts.markdown）。 */
 export type MarkdownSourceDescriptor = {
     rawUrl: string;
@@ -25,6 +26,9 @@ export declare function createReaderDataPort({ apiPrefix, loadJob, loadManifest,
     fetchMarkdownRange?: ((rawUrl: string, start: number, endInclusive: number, etag?: string, signal?: AbortSignal) => Promise<MarkdownRangeResult>) | null;
     loadRegions?: (jobId: string, apiPrefix: string) => Promise<unknown>;
     loadMetadata?: (jobId: string, apiPrefix: string) => Promise<unknown>;
+    /** agent 写的页面批注。**不跟着 loadReaderPayload 一起加载** —— 它会在阅读过程中
+     * 被 agent 重写，需要轮询，而 payload 是一次性的。所以单独一个方法。
+     * 文件不存在时返回 null（正常状态，不是错误）。 */
     fetchProtectedResource?: typeof fetch;
     liveTranslation?: ReaderLiveTranslationPort | null;
 }): Readonly<{
@@ -37,8 +41,18 @@ export declare function createReaderDataPort({ apiPrefix, loadJob, loadManifest,
     loadReaderPayload: (jobId: string, options?: {
         includeOptionalArtifacts?: boolean;
     }) => Promise<{
+        readerMetadata: any;
+        regionsPayload: {
+            items: any[];
+        };
+        readerErrors: {
+            regions: unknown;
+            metadata: unknown;
+        };
         jobPayload: unknown;
         manifestPayload: unknown;
+    }>;
+    loadReaderOptionalArtifacts: (jobId: string) => Promise<{
         readerMetadata: any;
         regionsPayload: {
             items: any[];
@@ -60,8 +74,18 @@ export declare const defaultReaderDataPort: Readonly<{
     loadReaderPayload: (jobId: string, options?: {
         includeOptionalArtifacts?: boolean;
     }) => Promise<{
+        readerMetadata: any;
+        regionsPayload: {
+            items: any[];
+        };
+        readerErrors: {
+            regions: unknown;
+            metadata: unknown;
+        };
         jobPayload: unknown;
         manifestPayload: unknown;
+    }>;
+    loadReaderOptionalArtifacts: (jobId: string) => Promise<{
         readerMetadata: any;
         regionsPayload: {
             items: any[];

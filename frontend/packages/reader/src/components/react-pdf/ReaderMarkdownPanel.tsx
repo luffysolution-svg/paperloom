@@ -1,10 +1,16 @@
-// Markdown 悬浮预览：任务识别/译文 Markdown 产物
+// Markdown 面板：任务识别 / 译文 Markdown 产物。dock 里的一个 tab。
+//
+// reader/regions 带阅读顺序时（新后端）走按块视图：每块和 PDF 上的一块互相定位、可切原文 /
+// 译文 / 双语；老任务或老后端没有顺序字段，退回整篇 full.md。
 
-import { useRef, useState, type CSSProperties, type RefObject } from "react";
-import { ChevronDown, ChevronUp, FileCode2, ListTree, Search } from "lucide-react";
+import { useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { ChevronDown, ChevronUp, ListTree, Search } from "lucide-react";
 import { findMarkdownSearchTargets } from "../../shared/content/markdown-search.js";
-import { ReaderFloatShell } from "./ReaderFloatShell.js";
+import { ReaderPanelShell } from "./ReaderPanelShell.js";
 import { useReaderMarkdownDocument } from "./useReaderMarkdownDocument.js";
+import { buildReaderMdBlocks } from "../../shared/content/reader-blocks.js";
+import { ReaderBlockMarkdownPanel } from "./ReaderBlockMarkdownPanel.js";
+import { useReaderContext } from "./reader-context.js";
 
 export type { MarkdownOutlineItem } from "../../shared/content/markdown-outline.js";
 export { buildMarkdownOutline } from "../../shared/content/markdown-outline.js";
@@ -21,16 +27,33 @@ export type ReaderMarkdownPanelProps = {
   open: boolean;
   jobId: string;
   sourceOnly: boolean;
-  layout?: "floating" | "docked" | "workspace";
   side?: "left" | "right";
   onClose: () => void;
 };
 
-export function ReaderMarkdownPanel({
+export function ReaderMarkdownPanel(props: ReaderMarkdownPanelProps) {
+  const ctx = useReaderContext();
+  const regions = ctx?.regions;
+  const blocks = useMemo(() => (regions ? buildReaderMdBlocks(regions) : null), [regions]);
+  if (blocks && blocks.length > 0) {
+    return (
+      <ReaderBlockMarkdownPanel
+        open={props.open}
+        blocks={blocks}
+        side={props.side}
+        regionHover={ctx?.regionHover}
+        jumpToBlock={ctx?.jumpToBlock}
+        onClose={props.onClose}
+      />
+    );
+  }
+  return <ReaderFullMarkdownPanel {...props} />;
+}
+
+function ReaderFullMarkdownPanel({
   open,
   jobId,
   sourceOnly,
-  layout = "floating",
   side = "right",
   onClose,
 }: ReaderMarkdownPanelProps) {
@@ -95,18 +118,11 @@ export function ReaderMarkdownPanel({
   reapplySearchRef.current = () => applySearch(searchQueryRef.current);
 
   return (
-    <ReaderFloatShell
+    <ReaderPanelShell
       id="reader-markdown-panel"
       open={open}
-      title="Markdown"
-      subtitle={layout === "docked" ? "识别与翻译产出 · PDF / Markdown 分栏" : "识别与翻译产出 · 拖动可移动"}
-      titleIcon={<FileCode2 size={14} strokeWidth={2.25} aria-hidden />}
-      storageKey="retainpdf.reader.markdown-float.pos.v1"
       ariaLabel="Markdown 预览"
-      width={420}
-      placement={layout === "workspace" ? "workspace" : layout === "docked" ? "dock-right" : "floating"}
-      showHeader={layout !== "workspace"}
-      className={layout === "workspace" ? `is-pane-${side}` : undefined}
+      className={`is-pane-${side}`}
       onClose={onClose}
       toolbar={(
         <span className="reader-notes-count">{status || "已加载"}</span>
@@ -216,6 +232,6 @@ export function ReaderMarkdownPanel({
         id="reader-markdown-content"
         className="reader-markdown-content reader-float-markdown-content"
       />
-    </ReaderFloatShell>
+    </ReaderPanelShell>
   );
 }

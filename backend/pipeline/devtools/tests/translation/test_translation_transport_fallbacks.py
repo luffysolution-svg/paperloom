@@ -7,10 +7,10 @@ from unittest import mock
 class TranslationTransportFallbackTests(unittest.TestCase):
     def test_single_item_transport_failure_marks_failed(self):
         module = import_module(
-            "retainpdf_pipeline.translate.llm.shared.orchestration.fallbacks",
+            "retainpdf_translation.llm.shared.orchestration.fallbacks",
         )
         control_module = import_module(
-            "retainpdf_pipeline.translate.llm.shared.control_context",
+            "retainpdf_translation.llm.shared.control_context",
         )
         context = control_module.build_translation_control_context()
         item = {
@@ -45,10 +45,10 @@ class TranslationTransportFallbackTests(unittest.TestCase):
 
     def test_direct_typst_body_transport_failure_marks_failed_without_inline_sentence_fallback(self):
         module = import_module(
-            "retainpdf_pipeline.translate.llm.shared.orchestration.fallbacks",
+            "retainpdf_translation.llm.shared.orchestration.fallbacks",
         )
         control_module = import_module(
-            "retainpdf_pipeline.translate.llm.shared.control_context",
+            "retainpdf_translation.llm.shared.control_context",
         )
         context = control_module.build_translation_control_context()
         item = {
@@ -87,10 +87,10 @@ class TranslationTransportFallbackTests(unittest.TestCase):
 
     def test_direct_typst_transport_failure_does_not_run_sentence_level_degrade_path(self):
         module = import_module(
-            "retainpdf_pipeline.translate.llm.shared.orchestration.fallbacks",
+            "retainpdf_translation.llm.shared.orchestration.fallbacks",
         )
         control_module = import_module(
-            "retainpdf_pipeline.translate.llm.shared.control_context",
+            "retainpdf_translation.llm.shared.control_context",
         )
         context = control_module.build_translation_control_context()
         item = {
@@ -143,10 +143,10 @@ class TranslationTransportFallbackTests(unittest.TestCase):
 
     def test_batched_transport_failure_queues_single_item_tail_retry(self):
         module = import_module(
-            "retainpdf_pipeline.translate.llm.shared.orchestration.fallbacks",
+            "retainpdf_translation.llm.shared.orchestration.fallbacks",
         )
         control_module = import_module(
-            "retainpdf_pipeline.translate.llm.shared.control_context",
+            "retainpdf_translation.llm.shared.control_context",
         )
         context = control_module.build_translation_control_context()
         batch = [
@@ -199,13 +199,13 @@ class TranslationTransportFallbackTests(unittest.TestCase):
 
     def test_batched_plain_suspicious_keep_origin_only_retries_flagged_items(self):
         module = import_module(
-            "retainpdf_pipeline.translate.llm.shared.orchestration.fallbacks",
+            "retainpdf_translation.llm.shared.orchestration.fallbacks",
         )
         control_module = import_module(
-            "retainpdf_pipeline.translate.llm.shared.control_context",
+            "retainpdf_translation.llm.shared.control_context",
         )
         placeholder_module = import_module(
-            "retainpdf_pipeline.translate.llm.placeholder_guard",
+            "retainpdf_translation.llm.placeholder_guard",
         )
         context = control_module.build_translation_control_context()
         batch = [

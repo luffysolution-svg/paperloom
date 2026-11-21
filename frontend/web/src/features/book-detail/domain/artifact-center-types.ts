@@ -64,6 +64,9 @@ export type ArtifactCenterItem = {
   jobId: string;
   workflow: string;
   previewable: boolean;
+  preview?: "pdf" | "markdown" | "markdown-zip" | "json" | null;
+  /** 排查用的文件（事件流、请求日志、OCR 原始返回、诊断报告等）：文件页收进默认折叠的「调试文件」。 */
+  debug?: boolean;
 };
 
 export type ArtifactCenterJob = {
@@ -92,6 +95,8 @@ export type ArtifactCenterSection = {
   description: string;
   items: ArtifactCenterItem[];
   jobs: ArtifactCenterJob[];
+  /** 文件页去重后用：这一组的文件和「翻译与阅读」里的相同，已在那里显示。 */
+  mergedIntoTranslation?: boolean;
 };
 
 export type ArtifactQuickDownloadId = "source" | "markdown" | "translated" | "comparison" | "word";
@@ -99,6 +104,8 @@ export type ArtifactQuickDownloads = Record<ArtifactQuickDownloadId, ArtifactCen
 
 export type BuildArtifactCenterInput = {
   documentId: string;
+  /** 书名（详情页显示的那个）：文件页列表据此写出下载文件名。没有就显示存储时的原名。 */
+  title?: string;
   source?: {
     filename?: string;
     url?: string;

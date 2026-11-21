@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { JSDOM } from "jsdom";
+import { wait, waitFor } from "../helpers/async.mjs";
+import { byId, clickWithMouseDown, makeDom } from "../helpers/dom.mjs";
+import { bootHomeApp } from "../helpers/home-app.mjs";
 
 // StatusCard(Phase 3b job-runtime 域)组件级测试。覆盖蓝图 §6 新增测试⑤⑥:
 // ⑤ StatusCard 契约(stage flow/substage/retry/data-status/进度条 ids);
@@ -30,58 +32,13 @@ import { JSDOM } from "jsdom";
 const BD = "book-detail-";
 const CARD_ID = `${BD}job-status-card`;
 
-function makeDom(search) {
-  const dom = new JSDOM("<!doctype html><html><body></body></html>", {
-    url: `http://localhost/index.html${search}`,
-  });
-  for (const key of ["window", "document", "DocumentFragment", "HTMLElement", "HTMLButtonElement", "HTMLFormElement", "HTMLInputElement", "CustomEvent", "Event", "KeyboardEvent", "MouseEvent", "Node", "MutationObserver", "NodeFilter"]) {
-    Object.defineProperty(globalThis, key, {
-      value: dom.window[key] ?? dom.window,
-      writable: true,
-      configurable: true,
-    });
-  }
-  globalThis.window = dom.window;
-  globalThis.requestAnimationFrame = (callback) => setTimeout(() => callback(0), 0);
-  // Radix Presence/Tabs(阶段 B 引入)在 jsdom 下需要 cancelAnimationFrame
-  // (TabsContent 的 mount 动画计时器清理)和 getComputedStyle(Presence 读取
-  // animation-name 判断退场动画是否结束)——jsdom 的 window 上有实现,只是没有
-  // 像 requestAnimationFrame 一样被复制到裸 global 上,这里一并补上。NodeFilter
-  // 是阶段 C(TranslationWorkflowDialog 换 Radix Dialog)新增的需要——
-  // Dialog.Content 的 FocusScope 用它做可聚焦元素树遍历。
-  globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
-  globalThis.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
-  globalThis.IS_REACT_ACT_ENVIRONMENT = false;
-  return dom;
-}
+// 书籍详情的 Tab 切换要 mousedown（Radix Tabs）；cancelable 沿用原写法。
+const click = (dom, element) => clickWithMouseDown(dom, element, { cancelable: true });
 
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitFor(predicate, description) {
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    if (predicate()) {
-      return;
-    }
-    await wait(15);
-  }
-  assert.fail(`等待超时：${description}`);
-}
-
-function click(dom, element) {
-  // Radix Tabs 的 Trigger 激活逻辑挂在 onMouseDown(不是 onClick)上——书籍详情
-  // 弹窗的 Tab 切换只 dispatch "click" 不生效。真实浏览器点击本来就是
-  // mousedown→mouseup→click 全套,这里补上 mousedown 让模拟点击更贴近真实交互,
-  // 而不是放宽任何断言(镜像 tests/jobs/artifact-downloads-react.test.mjs)。
-  element.dispatchEvent(new dom.window.MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
-  element.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
-}
-
-function byId(dom, id) {
-  return dom.window.document.getElementById(id);
-}
+// StatusCard 的唯一渲染点是书籍详情「进度」Tab 里的 TranslateProgress
+// （#book-detail-job-status-card）。boot 时还没有任何任务，所以只把 HomeApp 挂起来，
+// 宿主由各用例 startPolling 之后调 openProcessingTab 打开。
+const bootHome = (dom) => bootHomeApp(dom, { readyId: "library-add-pdf-btn" });
 
 function card(dom) {
   return byId(dom, CARD_ID);
@@ -91,43 +48,12 @@ function stageStep(dom, stageKey) {
   return card(dom)?.querySelector(`.status-stage-step[data-stage-key="${stageKey}"]`);
 }
 
-async function bootHomeApp(dom) {
-  const { createRoot } = await import("react-dom/client");
-  const React = await import("react");
-  const { createHomeComposition } = await import("../../src/app/home/create-home-composition.js");
-  const { HomeApp } = await import("../../src/app/home/HomeApp.jsx");
-
-  const host = dom.window.document.createElement("div");
-  host.id = "home-root";
-  dom.window.document.body.appendChild(host);
-
-  const services = createHomeComposition({
-    fetchGlossaries: async () => ({ items: [] }),
-    loadPersistedDeveloperConfig: () => ({}),
-    loadPersistedBrowserConfig: () => ({}),
-  });
-  services.initialize();
-
-  const root = createRoot(host);
-  root.render(React.createElement(HomeApp, { services }));
-  await waitFor(() => byId(dom, "library-add-pdf-btn"), "HomeApp 首帧渲染");
-  // StatusCard 的唯一渲染点是书籍详情「进度」Tab 里的
-  // TranslateProgress(#book-detail-job-status-card)。boot 阶段还没有任何任务,
-  // 所以这里只把 HomeApp 挂起来;宿主由各用例 startPolling 之后调
-  // openProcessingTab 打开。
-  // （旧写法在这里调 services.workflowDialog.openUpload() 再等 #job-status-card
-  //   挂载——那是主页页面级状态卡曾经寄生在上传对话框里的年代的做法，卡已下线。）
-  await wait(0);
-
-  return { services, root, host };
-}
-
 // 把嵌入卡的宿主打开：书籍详情弹窗的「进度」Tab。
 // 做法照 tests/jobs/artifact-downloads-react.test.mjs 的同名 helper：走
 // services.library.actions.openBookDetail(...)（RecentJobsLibraryGrid 卡片
 // onOpenDetail 调的就是它，等价入口），程序化调用不依赖网格排序与渲染时序，
 // 而且能精确打开「正在被轮询的这个 job 所属的那份文档」。
-// 注意：本文件的 waitFor 只等条件成立、不回传值，所以命中后要重新取一次。
+// 谓词只返回 Boolean，命中后要重新取一次那张卡。
 async function openProcessingTab(dom, services, jobId) {
   const findCard = () => (services.library.recentJobsStore.getSnapshot?.().items || []).find(
     (row) => `${row?.job_id || ""}`.trim() === jobId,
@@ -142,7 +68,7 @@ async function openProcessingTab(dom, services, jobId) {
 
 test("StatusCard：真实轮询(mock=translate)驱动 ring/进度/阶段流(首帧不闪空卡)", async () => {
   const dom = makeDom("?mock=translate");
-  const { services, root, host } = await bootHomeApp(dom);
+  const { services, root, host } = await bootHome(dom);
   const { getMockJobId } = await import("@/platform/mock/index.js");
   const jobId = getMockJobId();
 
@@ -174,10 +100,11 @@ test("StatusCard：真实轮询(mock=translate)驱动 ring/进度/阶段流(首�
   // 现在卡只负责「取消 / 详情 / 耗时 / 选阶段 / 重试」，进度只有轨道一处。
   //
   // 契约 id 仍在（保留成隐藏节点，setText 可能写），但必须是隐藏的——它要是又
-  // 显示出来，就是重复回来了。
+  // 显示出来，就是重复回来了。进度页改版后这张卡只剩详情、取消两个图标，其余契约节点
+  // 都收在一个隐藏容器里。
   const progressBar = byId(dom, `${BD}status-progress-bar`);
   assert.ok(progressBar, "契约 id 应保留");
-  assert.equal(progressBar.classList.contains("hidden"), true, "卡内不得再画进度条，进度归流水线轨道");
+  assert.ok(progressBar.closest(".hidden"), "卡内不得再画进度条，进度归状态行和流水线");
 
   // 旧断言等的是隐藏区 #job-status 摘要更新（那批隐藏 id 无 DOM 读者，已随主卡
   // 下线）。同一份真值在嵌入卡根节点上就有：data-status 直接写 snapshot.status。
@@ -193,7 +120,7 @@ test("StatusCard：真实轮询(mock=translate)驱动 ring/进度/阶段流(首�
 
 test("StatusCard：阶段选择语义 + 重试 + 取消", async () => {
   const dom = makeDom("?mock=translate");
-  const { services, root, host } = await bootHomeApp(dom);
+  const { services, root, host } = await bootHome(dom);
   const { getMockJobId } = await import("@/platform/mock/index.js");
   const jobId = getMockJobId();
 
@@ -232,14 +159,18 @@ test("StatusCard：阶段选择语义 + 重试 + 取消", async () => {
   await wait(30);
   assert.equal(ocrStep.getAttribute("aria-selected"), "true", "无关的 store 通知不应重置手动选择");
 
-  // ---- 取消:点击后按钮应立即置灰(shellViewPort.setCancelDisabled 同步生效) ----
+  // ---- 取消:先弹确认;确认后按钮应立即置灰(shellViewPort.setCancelDisabled 同步生效) ----
   const cancelButton = byId(dom, `${BD}cancel-btn`);
   assert.ok(cancelButton, "嵌入卡必须提供取消入口");
   assert.equal(cancelButton.getAttribute("aria-label"), "取消任务");
   if (!cancelButton.disabled) {
     click(dom, cancelButton);
-    await waitFor(() => cancelButton.disabled === true, "取消按钮点击后立即禁用");
-    assert.match(cancelButton.textContent, /取消中/, "取消请求中必须反馈状态");
+    // 取消要重新跑才能补回来:点下去先问,不直接取消。
+    const confirmButton = await waitFor(() => byId(dom, `${BD}cancel-confirm-confirm`), "点取消先弹确认框");
+    assert.equal(cancelButton.disabled, false, "还没确认就已经在取消了");
+    click(dom, confirmButton);
+    await waitFor(() => cancelButton.disabled === true, "确认取消后按钮立即禁用");
+    assert.equal(cancelButton.getAttribute("title"), "正在取消任务", "取消请求中必须反馈状态（悬停说明，图标换成转圈）");
   }
 
   root.unmount();
@@ -249,7 +180,7 @@ test("StatusCard：阶段选择语义 + 重试 + 取消", async () => {
 
 test("StatusCard：重试按钮(mock stage-actions 数据到达后可点击并触发新一轮轮询)", async () => {
   const dom = makeDom("?mock=translate");
-  const { services, root, host } = await bootHomeApp(dom);
+  const { services, root, host } = await bootHome(dom);
   const { getMockJobId } = await import("@/platform/mock/index.js");
   const { APP_EVENTS } = await import("@/platform/contracts/app-contract.js");
   const jobId = getMockJobId();

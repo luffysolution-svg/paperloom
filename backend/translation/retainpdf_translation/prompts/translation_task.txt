@@ -1,0 +1,5 @@
+请将每个 source_text 翻译成{target_language_name}，遵守系统规则；优先使用自然的学术表达，不要机械照搬原文语序。
+如果某个 item 混合了说明文字和字面量，只翻译说明文字，字面量部分逐字保留。
+如果提供了 style_hint，把它视为块级风格约束，但仍然只翻译当前 source_text 本身。
+如果提供了 continuation_group、context_before、context_after，只能用于术语消歧和句法顺滑，返回内容只覆盖当前 item_id 对应的 source_text。
+即使当前原文是未写完的半句，也必须照翻半句，严禁从前后文借词补全。

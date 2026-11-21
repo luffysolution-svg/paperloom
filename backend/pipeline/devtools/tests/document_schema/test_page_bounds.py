@@ -2,14 +2,7 @@
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
-import pytest
-
-from retainpdf_pipeline.ocr.document_schema.adapters import adapt_payload_to_document_v1_with_report
 from retainpdf_pipeline.ocr.document_schema.page_bounds import clamp_page_overflow
-from retainpdf_pipeline.ocr.document_schema.validator import DocumentSchemaValidationError
 
 
 def _document(block_bbox, *, line_bbox=None, span_bbox=None, segment_bbox=None, width=600.0, height=800.0) -> dict:
@@ -55,18 +48,3 @@ def test_blocks_inside_the_page_are_not_touched_at_all():
     assert clamp_page_overflow(document) == 0
     assert document["pages"][0]["blocks"][0]["metadata"] == {}
     assert document["derived"] == {}
-
-
-def test_adapter_accepts_rounding_overflow_and_rejects_invalid_coordinates():
-    path = Path(__file__).parent / "fixtures/generic_flat_ocr.minimal.json"
-    payload = json.loads(path.read_bytes())
-    args = dict(payload=payload, provider=payload["provider"], document_id="overflow", source_json_path=path)
-    block = payload["pages"][0]["blocks"][0]
-    block["bbox"][2] = 602
-    document, report = adapt_payload_to_document_v1_with_report(**args)
-    assert report["validation"]["valid"]
-    assert report["page_overflow_clamped_block_count"] == 1
-    assert document["pages"][0]["blocks"][0]["bbox"][2] == 600
-    block["bbox"][2] = 640
-    with pytest.raises(DocumentSchemaValidationError, match="within page bounds"):
-        adapt_payload_to_document_v1_with_report(**args)

@@ -1,8 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { JSDOM } from "jsdom";
 import { buildTranslateBookCardAction } from "../../src/features/library/domain/actions/translate.js";
 import { canStartTranslation, deriveBookDetailCoverState } from "../../src/features/book-detail/ui/use-book-detail-cover.js";
+import { waitFor } from "../helpers/async.mjs";
+import { clickWithMouseDown, makeDom } from "../helpers/dom.mjs";
+
+// 书籍详情的 Tab 切换要 mousedown（Radix Tabs）；cancelable 沿用原写法。
+const click = (dom, element) => clickWithMouseDown(dom, element, { cancelable: true });
 
 const OCR_DONE_ITEM = {
   job_id: "job-ocr-detail",
@@ -16,66 +20,6 @@ const OCR_DONE_ITEM = {
   title: "OCR 详情文档",
   page_count: 42,
 };
-
-function makeDom() {
-  const dom = new JSDOM("<!doctype html><html><body></body></html>", {
-    url: "http://localhost/index.html?mock=parallel",
-  });
-  for (const key of [
-    "window",
-    "document",
-    "DocumentFragment",
-    "HTMLElement",
-    "HTMLButtonElement",
-    "HTMLFormElement",
-    "HTMLInputElement",
-    "CustomEvent",
-    "Event",
-    "KeyboardEvent",
-    "MouseEvent",
-    "Node",
-    "MutationObserver",
-    "NodeFilter",
-  ]) {
-    Object.defineProperty(globalThis, key, {
-      value: dom.window[key] ?? dom.window,
-      writable: true,
-      configurable: true,
-    });
-  }
-  globalThis.window = dom.window;
-  globalThis.requestAnimationFrame = (callback) => setTimeout(() => callback(0), 0);
-  globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
-  globalThis.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
-  globalThis.IS_REACT_ACT_ENVIRONMENT = false;
-  return dom;
-}
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitFor(predicate, description) {
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    const value = predicate();
-    if (value) return value;
-    await wait(15);
-  }
-  assert.fail(`等待超时：${description}`);
-}
-
-function click(dom, element) {
-  element.dispatchEvent(new dom.window.MouseEvent("mousedown", {
-    bubbles: true,
-    cancelable: true,
-    button: 0,
-  }));
-  element.dispatchEvent(new dom.window.MouseEvent("click", {
-    bubbles: true,
-    cancelable: true,
-  }));
-}
 
 test("详情派生区分 OCR、翻译成功和馆藏，OCR 翻译 action 仍可用", () => {
   const ocr = deriveBookDetailCoverState({ item: OCR_DONE_ITEM });
@@ -145,7 +89,7 @@ test("canStartTranslation：失败/取消/超时可重发，运行中与成功�
 });
 
 test("OCR-only 成功详情：OCR 状态、job reader 主操作和继续翻译闭环一致", async () => {
-  const dom = makeDom();
+  const dom = makeDom("?mock=parallel");
   const { createRoot } = await import("react-dom/client");
   const React = await import("react");
   const { createHomeComposition } = await import("../../src/app/home/create-home-composition.js");

@@ -78,7 +78,7 @@ async fn job_detail_and_events_routes_redact_secrets() {
     let events_response = app
         .oneshot(
             Request::builder()
-                .uri(format!("/api/v1/jobs/{}/events", job.job_id))
+                .uri(format!("/api/v1/jobs/{}/progress/events", job.job_id))
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("events request"),

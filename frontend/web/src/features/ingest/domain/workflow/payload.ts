@@ -3,6 +3,7 @@ import type {
   RenderInput,
   TranslationInput,
 } from "@retainpdf/contracts/create-job";
+import type { WorkflowPreferences } from "../workflow-preferences.js";
 
 import { getOcrProviderDefinition, normalizeOcrProvider } from "@/platform/config/providers.js";
 import { RENDER_FONT_STORAGE_KEY } from "@/platform/config/storage-keys.js";
@@ -71,11 +72,15 @@ export interface BuildTranslationPayloadOptions {
   modelApiKey?: string;
   translationCredentialRef?: string;
   selectedGlossaryId?: string;
+  /** 用户偏好（workflow-preferences.ts）。这里用 translationQuality；缺省按 standard。 */
+  preferences?: Partial<WorkflowPreferences>;
   constants: WorkflowPayloadConstants;
 }
 
 export interface BuildRenderPayloadOptions {
   developerConfig: Pick<WorkflowDeveloperConfig, "compileWorkers"> | WorkflowDeveloperConfig;
+  /** 用户偏好（workflow-preferences.ts）。这里用 renderEngine；缺省 / auto 不发 engine。 */
+  preferences?: Partial<WorkflowPreferences>;
   constants: WorkflowPayloadConstants;
 }
 
@@ -108,7 +113,12 @@ export function buildOcrPayload({
     page_ranges: pageRanges,
   };
   if (!payload.credential_ref) {
-    payload[definition.tokenField] = ocrToken || "";
+    if (definition.tokenField) {
+      payload[definition.tokenField] = ocrToken || "";
+    } else if ("inlineOption" in definition && definition.inlineOption && ocrToken) {
+      // GLM-OCR 没有专用字段，内联 key 放进 options；不填时后端借智谱翻译的 key。
+      payload.options = { [definition.inlineOption]: ocrToken };
+    }
   }
   if (definition.id === "paddle") {
     payload.paddle_api_url = defaultPaddleApiUrl() || "https://paddleocr.aistudio-app.com";
@@ -124,9 +134,13 @@ export function buildTranslationPayload({
   translationCredentialRef,
   modelApiKey,
   selectedGlossaryId,
+  preferences,
   constants,
 }: BuildTranslationPayloadOptions): TranslationInput {
+  const engine = translationEngineFields(preferences?.translationEngine, developerConfig.apiProtocol);
   return {
+    // agent 自带通读和审校，再发 preparation / refine 后端会照跑一遍，重复花钱。
+    ...(engine.engine === "agent" ? engine : translationQualityFields(preferences?.translationQuality)),
     mode: constants.DEFAULT_MODE,
     math_mode: developerConfig.mathMode,
     model: developerConfig.model,
@@ -158,6 +172,26 @@ export function buildTranslationPayload({
   };
 }
 
+/**
+ * 下拉档位 → 后端字段。standard 一个字段都不加：后端缺省就是 preparation=off，
+ * 这样「普通」档发出去的请求和以前逐字相同。
+ */
+export function translationQualityFields(quality: unknown): Pick<TranslationInput, "preparation" | "refine"> {
+  if (quality === "terms") return { preparation: "terms+style" };
+  // 精翻 = 编辑部：术语专员审定术语表，翻完由审校挑错、主编分派局部改或整块重写，最多两轮。
+  if (quality === "refined") return { preparation: "editorial", refine: "editorial" };
+  return {};
+}
+
+/** agent 只在 anthropic 协议下发（否则后端 400）；legacy 不发字段，跟着后端默认走。 */
+export function agentEngineAvailable(apiProtocol: unknown): boolean {
+  return apiProtocol === "anthropic";
+}
+
+export function translationEngineFields(engine: unknown, apiProtocol: unknown): Pick<TranslationInput, "engine"> {
+  return engine === "agent" && agentEngineAvailable(apiProtocol) ? { engine: "agent" } : {};
+}
+
 function resolveStoredFontFamily(fallback: unknown): string {
   const fb = `${fallback || ""}`.trim();
   const fromConfig = "";
@@ -171,8 +205,14 @@ function resolveStoredFontFamily(fallback: unknown): string {
   return fb;
 }
 
+/** 下拉 → render.engine。auto 不发字段，跟着后端默认走。 */
+export function renderEngineFields(engine: unknown): Pick<RenderInput, "engine"> {
+  return engine === "rpr_fit" || engine === "typst" ? { engine } : {};
+}
+
 export function buildRenderPayload({
   developerConfig,
+  preferences,
   constants,
 }: BuildRenderPayloadOptions): RenderInput {
   const cfg = developerConfig as WorkflowDeveloperConfig;
@@ -180,6 +220,7 @@ export function buildRenderPayload({
   const storedFont = resolveStoredFontFamily(constants.DEFAULT_TYPST_FONT_FAMILY);
   const typstFont = cfgFont || storedFont || `${constants.DEFAULT_TYPST_FONT_FAMILY || ""}`.trim() || "Source Han Serif SC";
   return {
+    ...renderEngineFields(preferences?.renderEngine),
     render_mode: constants.DEFAULT_RENDER_MODE,
     compile_workers: developerConfig.compileWorkers,
     typst_font_family: typstFont,

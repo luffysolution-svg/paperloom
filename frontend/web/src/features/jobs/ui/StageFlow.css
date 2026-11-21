@@ -1,0 +1,103 @@
+/* 阶段条：OCR / 翻译 / 渲染各步、失败摘要。（StageFlow）
+ *
+ * @owns status, progress-track, progress-bar, task-toolbar-btn-result
+ * @uses hidden */
+
+@utility status-stage-flow {
+  grid-area: flow;
+  @apply grid w-full;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--status-stage-flow-gap, 7px);
+
+  @media (max-width: 767px) {
+    gap: 6px;
+  }
+}
+
+@utility status-stage-step {
+  @apply grid cursor-pointer place-items-center rounded-full border-0 bg-[var(--bg)] font-bold leading-none tracking-normal text-[var(--muted)];
+  appearance: none;
+  min-height: var(--status-stage-step-height, 26px);
+  font-size: var(--status-stage-step-font-size, 11px);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 2%, transparent);
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease;
+
+  /* 这排药丸是「看哪个阶段」的选择器，不是进度展示。
+   *
+   * 进度由上方的 ProcessingPipelineRail 独家表达。此前 is-done 填底色、
+   * is-active 高亮加投影，等于在同一个 Tab 里画了第二条进度轨——用户看到的是
+   * 两份相同的阶段状态和两条进度条，像两个任务在跑。
+   *
+   * class 保持不变（测试和烟测读 .is-active / .is-done），只把视觉压下来：
+   * 当前阶段用一个细边框点出位置，选中态才是这里的主角。 */
+  &.is-done {
+    @apply text-[var(--ink)];
+  }
+
+  &.is-active {
+    @apply text-[var(--ink)];
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 18%, transparent);
+  }
+
+  &.is-selected {
+    @apply bg-[var(--line)] text-[var(--ink)];
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 30%, transparent);
+  }
+
+  &.is-disabled {
+    @apply cursor-not-allowed opacity-[0.58];
+  }
+
+  @media (max-width: 767px) {
+    min-height: 30px;
+    font-size: 12px;
+  }
+}
+
+/* 阶段态 class（is-done / is-active / is-selected / is-disabled）
+ * 只挂在父 @utility 的 &.is-* 嵌套上，禁止再注册短名全局 @utility is-*，
+ * 避免与其它模块抢 .is-active 等全局类。substage 见下方 status-substage-step。 */
+
+@utility status-stage-error-summary {
+  grid-area: error;
+  @apply w-full overflow-hidden rounded-[14px] bg-[var(--bg)] px-3 py-2 text-center text-xs font-semibold leading-[1.45] text-[var(--ink)];
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  min-height: 34px;
+
+  &.hidden {
+    display: none;
+  }
+}
+
+@utility hidden {
+  &.status-stage-error-summary {
+    display: none;
+  }
+
+  &.status-stage-animation {
+    display: none;
+  }
+
+  &.status-substage-flow {
+    display: none;
+  }
+
+  &.status-progress-block {
+    display: none;
+  }
+
+  .status-card &#status-stage-retry {
+    display: grid !important;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  &.status-result-actions {
+    display: none;
+  }
+}

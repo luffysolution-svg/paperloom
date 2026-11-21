@@ -70,6 +70,28 @@ The legacy numeric top-level codes continue to use these values and ranges:
 These ranges are compatibility metadata, not the new dispatch key. Consumers
 should use `error.code`.
 
+### Internal errors
+
+A generic `INTERNAL` error never returns its cause. Underlying messages often
+carry server paths, SQL, or upstream responses, so the response is:
+
+```json
+{
+  "code": 50000,
+  "message": "internal server error (ref 19a3f0c2b41-0007)",
+  "error": {
+    "code": "INTERNAL",
+    "http_status": 500,
+    "details": { "error_id": "19a3f0c2b41-0007" }
+  }
+}
+```
+
+The full cause (for `anyhow` errors, the whole context chain) is logged with
+`tracing::error!` under the same `error_id`. Domain errors that deliberately
+use status 500 with their own stable code and a safe message (for example
+`CREDENTIAL_VAULT_UNAVAILABLE`) are unchanged.
+
 ### Framework and routing rejections
 
 Public JSON, query-string, path-parameter, and multipart input extractors
@@ -81,10 +103,12 @@ raw rejection details.
 | Rejection | HTTP status | Legacy `code` | `error.code` | Public `message` |
 | --- | ---: | ---: | --- | --- |
 | Malformed JSON syntax | 400 | `40000` | `BAD_REQUEST` | `invalid JSON request body` |
-| JSON value does not match the request schema | 422 | `42200` | `UNPROCESSABLE_ENTITY` | `JSON request body does not match the expected schema` |
+| JSON body has a field the endpoint does not accept (`deny_unknown_fields`) | 400 | `40000` | `BAD_REQUEST` | ``unknown field `<name>`, expected one of ... in the request body`` (field names only, never values) |
+| JSON value does not match the request schema (wrong type, missing field, unknown enum value) | 422 | `42200` | `UNPROCESSABLE_ENTITY` | `JSON request body does not match the expected schema` |
 | Missing JSON content type | 415 | `41500` | `UNSUPPORTED_MEDIA_TYPE` | `expected an application/json request body` |
 | JSON body exceeds the configured limit | 413 | `41300` | `PAYLOAD_TOO_LARGE` | `request body is too large` |
-| Invalid query parameters | 400 | `40000` | `BAD_REQUEST` | `invalid query parameters` |
+| Query string has a parameter the endpoint does not accept (`deny_unknown_fields`) | 400 | `40000` | `BAD_REQUEST` | ``unknown field `<name>`, expected one of ... in the query string`` (parameter names only, never values; since 2026-10-22, before that `invalid query parameters`) |
+| Invalid query parameters (wrong type, out-of-range integer, missing required parameter) | 400 | `40000` | `BAD_REQUEST` | `invalid query parameters` |
 | Invalid typed path parameters | 400 | `40000` | `BAD_REQUEST` | `invalid path parameters` |
 | Invalid initial multipart request | 400 | `40000` | `BAD_REQUEST` | `invalid multipart request` |
 
@@ -99,9 +123,6 @@ in-memory allocation. The current endpoint limits are:
 | Endpoint | Limit source | Default / fallback |
 | --- | --- | ---: |
 | `/api/v1/uploads` | `RUST_API_UPLOAD_MAX_BYTES` | 512 MiB when unset or `0` |
-| `/api/v1/ocr/jobs` | `RUST_API_UPLOAD_MAX_BYTES` | 512 MiB when unset or `0` |
-| `/api/v1/translate/bundle` | `RUST_API_UPLOAD_MAX_BYTES` | 512 MiB when unset or `0` |
-| `/api/v1/assets` | `RUST_API_ASSET_MAX_BYTES` | 20 MiB |
 | `/api/v1/fonts/upload` | backend hard limit | 64 MiB |
 
 These checks use bytes actually received from each field and do not trust
@@ -146,42 +167,6 @@ new clients one uniform dispatch location:
 }
 ```
 
-Deleting a document or a library run that favorite anchors point at returns
-`DELETE_BLOCKED_BY_FAVORITES`. Document-level and run-level blocks share one
-code because the client's next move is the same for both — tell the user how
-many favorites exist, ask whether to drop them, clear, retry — and only the
-clear target differs. `error.details.scope` and `error.details.clear_favorites_path`
-carry that difference, so a client needs one branch, not two:
-
-```json
-{
-  "code": "DELETE_BLOCKED_BY_FAVORITES",
-  "message": "document is referenced by 2 favorite(s); remove the favorites first",
-  "error": {
-    "code": "DELETE_BLOCKED_BY_FAVORITES",
-    "http_status": 409,
-    "details": {
-      "scope": "document",
-      "document_id": "6f1c…",
-      "favorite_count": 2,
-      "clear_favorites_path": "/api/v1/documents/6f1c…/favorites"
-    }
-  }
-}
-```
-
-For `scope: "job"` the details carry `job_id` and
-`clear_favorites_path: "/api/v1/library/books/{job_id}/favorites"` instead.
-`force=true` does not bypass either block — it only bypasses "this run is
-queued or running".
-
-The path named by `clear_favorites_path` accepts `DELETE` and answers with
-`{"deleted_count": N}`. It is idempotent (a document with no favorites clears
-to `0`), but a document or job that does not exist is a `404` rather than a
-zero-count success. The run-level variant also clears favorites pointing at the
-`{job_id}-ocr` child, because the delete it unblocks removes that child too —
-clearing only the parent would leave the retry blocked a second time.
-
 Error messages and details must not contain credentials, signed URLs, raw
 provider requests, or absolute filesystem paths. Unknown detail keys must not
 be used as an authorization or retry signal unless the owning domain documents
@@ -200,14 +185,21 @@ Rust API layer stores:
   - `pipeline_attempts`, `pipeline_stages`, `pipeline_units`, and
     `pipeline_dispatches` for durable generation-fenced execution state and
     external-provider dispatch receipts
+    (`pipeline_attempts.auto_resume_count` / `auto_resume_progress`, migration
+    v27, cap automatic resume without progress; see
+    [jobs-retry-and-control.md](jobs-retry-and-control.md))
   - `documents`, `favorites`, `collections`, `collection_documents`,
     `document_tags`, and `blocks_fts` for the library projection
-  - `ai_conversations` / `ai_messages` for the durable message tree
-  - `document_operations`, immutable attempts/events, and `document_versions`
-    for Agent operation execution and compare-and-swap publication
+  - `ai_conversations` / `ai_messages`, `document_operations` (with attempts/events),
+    `document_versions`：以前 AI 对话和 Agent 文档操作用的表，2026-11-03 AI 服务删了以后表还留着，
+    不再有接口读写
 - job workspaces in `DATA_ROOT/jobs/<job_id>/`
-- document-operation workspaces in `DATA_ROOT/operations/<operation_id>/`
+- `DATA_ROOT/operations/<operation_id>/`：以前 Agent 文档操作的工作区，2026-11-03 起不再新建
 - the credential vault in the protected `DATA_ROOT/secrets/` subtree
+- database backups in `DATA_ROOT/backups/db/` (`<kind>-<UTC stamp>-v<schema>.db.gz`,
+  created `0600`; since 2026-10-22 the WebDAV password is deleted from the
+  `VACUUM INTO` snapshot before compression, and a restore keeps the live
+  `sync_state`, see `docs/api/10-备份/01-数据库备份.md`)
 
 Current standard job workspace layout:
 
@@ -221,6 +213,22 @@ Current standard job workspace layout:
 Legacy jobs using `originPDF/jsonPDF/transPDF/typstPDF` or absolute-path artifact storage are no longer supported by detail and download endpoints and must be rerun.
 
 ## Implementation Notes
+
+- Database restore, manual/automatic backup, and a sync cycle run in a
+  detached `tokio::spawn` task that owns the service lock, the "sync paused"
+  guard, and the `running` flag (reset by a drop guard); the HTTP handler only
+  awaits the result, so a disconnected client cannot release the lock while
+  the blocking work is still running (2026-10-22). A restore checks the backup
+  before writing the `before-restore` safety backup, prepares the unpacked copy
+  (schema upgrade, sync bookkeeping reset, stale pid clearing) in one
+  transaction, re-checks `restore_blockers` and then swaps the copy in with a
+  single SQLite online-backup step, so any earlier failure leaves the live
+  database untouched. The outcome of the latest restore is kept in memory as
+  `GET /backups` `last_restore`.
+- `GET /backups`, `GET`/`PUT /sync` read and write SQLite on a blocking worker;
+  `PUT /sync` validates the whole input before one transactional write.
+  `POST /sync/test` uses a probe-only WebDAV client (10 s per request, no
+  retry, plain PUT for the probe file) with a 60 s overall deadline.
 
 - Rust API should not parse or manipulate PDF internals
 - Rust only orchestrates jobs and exposes resources

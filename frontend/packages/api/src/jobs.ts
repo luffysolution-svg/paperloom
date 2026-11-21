@@ -1,20 +1,15 @@
 // Jobs API — standalone, wraps job-status.v1
 // No frontend/web deps; browser-aware (reads window.__FRONT_RUNTIME_CONFIG__ for apiBase / X-API-Key if present).
 
-import { API_PREFIX, buildApiHeaders, buildApiUrl, unwrapEnvelope } from "./internal/runtime.js";
-import type { JobDetailView, JobListView } from "@retainpdf/contracts/job-status";
+// OCR 任务也走 /jobs（后端已统一），建任务也是（见 jobs-submit.ts），前端不再用 /ocr/jobs。
+// 请求走生成的函数（契约 job-status.v1 的端点表），这里只管参数整理和给用户看的报错。
+import { API_PREFIX } from "./internal/runtime.js";
+import { attachErrorDetails, type HttpError } from "./http.js";
+import * as generated from "./generated/job-status.js";
+import { failWith } from "./request.js";
+import type { JobDetailView, JobListView, ListJobsQuery } from "@retainpdf/contracts/job-status";
 
-function buildJobsEndpoint(apiPrefix: string | undefined, scope = "jobs"): string {
-  return buildApiUrl(apiPrefix, scope === "ocr" ? "ocr/jobs" : "jobs");
-}
-function buildJobDetailEndpoint(jobId: string, apiPrefix: string | undefined, scope = "jobs"): string {
-  return `${buildJobsEndpoint(apiPrefix, scope === "ocr" ? "ocr" : "jobs")}/${encodeURIComponent(jobId)}`;
-}
-function buildOcrJobDetailEndpoint(jobId: string, apiPrefix: string | undefined): string {
-  return buildJobDetailEndpoint(jobId, apiPrefix, "ocr");
-}
-
-export type FetchJobPayloadOptions = { apiPrefix?: string; signal?: AbortSignal };
+export type FetchJobPayloadOptions = { apiPrefix?: string };
 
 function jobRequestError(message: string, status: number): Error & { status: number } {
   const error = new Error(message) as Error & { status: number };
@@ -64,25 +59,13 @@ export async function fetchJobPayload(a: string, b?: string | FetchJobPayloadOpt
   const { jobId, apiPrefix } = normalizeJobPayloadArgs(a, b);
   const normalizedJobId = `${jobId || ""}`.trim();
   if (!normalizedJobId) throw new Error("读取任务失败: 缺少 job_id");
-  // Try generic endpoint first (covers both translation and OCR; OCR also readable via generic).
-  // If 404, retry OCR-specific endpoint to handle strict OCR-only routing.
-  const signal = (b && typeof b === "object" ? b.signal : undefined) || AbortSignal.timeout(20_000);
-  let resp = await fetch(buildJobDetailEndpoint(normalizedJobId, apiPrefix), { headers: buildApiHeaders(), signal });
-  if (resp.status === 404) {
-    const ocrResp = await fetch(buildOcrJobDetailEndpoint(normalizedJobId, apiPrefix), { headers: buildApiHeaders(), signal });
-    if (ocrResp.ok) return unwrapEnvelope<JobDetailView>(await ocrResp.json());
-    // keep original 404 semantics if both miss
-    if (!ocrResp.ok && ocrResp.status !== 404) {
-      throw new Error(`读取任务失败，请稍后重试。(${ocrResp.status})`);
-    }
-  }
-  if (!resp.ok) {
-    if (resp.status === 404) {
-      throw jobRequestError("未找到该任务，请检查 job_id 是否正确。", 404);
-    }
-    throw jobRequestError(`读取任务失败，请稍后重试。(${resp.status})`, resp.status);
-  }
-  return unwrapEnvelope<JobDetailView>(await resp.json());
+  // 通用地址同时覆盖翻译与 OCR 任务，不再 404 后退到 /ocr/jobs/ 别名。
+  return generated.getJob(apiPrefix, { job_id: normalizedJobId }, {
+    onError: (status, payload) => (status === 404
+      // 合并阅读的虚拟任务被清理了，404 带 reason=merged_reading_expired；阅读器靠它重新问阅读入口。
+      ? attachErrorDetails(jobRequestError("未找到该任务，请检查 job_id 是否正确。", 404) as HttpError, payload)
+      : jobRequestError(`读取任务失败，请稍后重试。(${status})`, status)),
+  });
 }
 
 export async function fetchJobList(
@@ -96,6 +79,7 @@ export async function fetchJobList(
     scope = "jobs",
     q = "",
     includeLiveStage = true,
+    jobIds = [],
   }: {
     limit?: number;
     offset?: number;
@@ -105,18 +89,39 @@ export async function fetchJobList(
     scope?: string;
     q?: string;
     includeLiveStage?: boolean;
+    /** 只列这些任务（`job_ids=a,b`），OCR 任务也在内。 */
+    jobIds?: string[];
   } = {},
 ): Promise<JobListView> {
-  const params = new URLSearchParams();
-  params.set("limit", `${limit}`);
-  params.set("offset", `${offset}`);
-  if (status) params.set("status", status);
-  if (workflow) params.set("workflow", workflow);
-  if (provider) params.set("provider", provider);
-  if (`${q || ""}`.trim()) params.set("q", `${q || ""}`.trim());
-  if (!includeLiveStage) params.set("include_live_stage", "false");
-  const endpoint = buildJobsEndpoint(apiPrefix, scope);
-  const resp = await fetch(`${endpoint}?${params.toString()}`, { headers: buildApiHeaders(), signal: AbortSignal.timeout(20_000) });
-  if (!resp.ok) throw new Error(`读取最近任务失败，请稍后重试。(${resp.status})`);
-  return unwrapEnvelope<JobListView>(await resp.json());
+  const wantedJobIds = jobIds.map((id) => `${id}`.trim()).filter(Boolean);
+  const query: ListJobsQuery = {
+    limit,
+    offset,
+    status: (status || undefined) as ListJobsQuery["status"],
+    // 只看 OCR 任务：在通用列表上按 workflow 过滤，不再走 /ocr/jobs 列表别名。
+    workflow: (workflow || (scope === "ocr" ? "ocr" : undefined)) as ListJobsQuery["workflow"],
+    provider: provider || undefined,
+    q: `${q || ""}`.trim() || undefined,
+    include_live_stage: includeLiveStage ? undefined : false,
+    job_ids: wantedJobIds.length ? wantedJobIds.join(",") : undefined,
+  };
+  return generated.listJobs(apiPrefix, { query }, { onError: failWith("读取最近任务失败，请稍后重试。") });
+}
+
+// GET /jobs 的 limit 只收 1..=500，越界 400。
+export const JOB_LIST_MAX_LIMIT = 500;
+
+// 按编号批量取任务的活态（列表项，阶段在 stage_snapshot 里）。名单超过 500 个就分批，结果按批次顺序拼起来；
+// 后端没有的编号不出现在 items 里。书架列表 GET /library/books 已删（2026-10-22），文档卡片和文件夹都走这里。
+export async function fetchJobsByIds(
+  apiPrefix: string = API_PREFIX,
+  jobIds: string[] = [],
+): Promise<Pick<JobListView, "items">> {
+  const wanted = Array.from(new Set(jobIds.map((id) => `${id || ""}`.trim()).filter(Boolean)));
+  const batches: string[][] = [];
+  for (let start = 0; start < wanted.length; start += JOB_LIST_MAX_LIMIT) {
+    batches.push(wanted.slice(start, start + JOB_LIST_MAX_LIMIT));
+  }
+  const pages = await Promise.all(batches.map((batch) => fetchJobList(apiPrefix, { jobIds: batch, limit: batch.length })));
+  return { items: pages.flatMap((page) => (Array.isArray(page?.items) ? page.items : [])) };
 }

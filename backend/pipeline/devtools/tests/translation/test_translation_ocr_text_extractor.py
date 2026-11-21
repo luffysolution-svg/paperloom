@@ -1,15 +1,10 @@
-import sys
 from pathlib import Path
-
-
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
 
 from retainpdf_pipeline.ocr.document_schema.defaults import default_block_continuation_hint
 from retainpdf_pipeline.ocr.document_schema.adapters import adapt_payload_to_document_v1
 from retainpdf_pipeline.ocr.document_schema.providers import PROVIDER_GENERIC_FLAT_OCR
-from retainpdf_pipeline.translate.core.ocr.json_extractor import extract_text_items
+from retainpdf_translation.core.ocr.json_extractor import extract_text_items
 
 def test_extract_text_items_only_keeps_primary_body_like_text_blocks() -> None:
     adapted = adapt_payload_to_document_v1(
@@ -76,6 +71,9 @@ def test_extract_text_items_only_keeps_primary_body_like_text_blocks() -> None:
 
     items = extract_text_items(adapted, 0)
 
+    # 表格标题在这里不抽出，是因为 generic provider 的 OCR 策略本身给它 policy.translate=False
+    # （provider_non_body:table_caption），不是翻译层的结构角色过滤。provider 白名单放行的
+    # 标题见 test_extract_text_items_keeps_provider_whitelisted_caption_roles。
     assert [item.text for item in items] == ["Body paragraph", "Results"]
     assert [item.structure_role for item in items] == ["body", "heading"]
     assert [item.block_class for item in items] == ["body", "title"]
@@ -235,3 +233,46 @@ def test_extract_text_items_suppresses_algorithm_subtree_even_with_child_policy_
     )
 
     assert extract_text_items(_normalized_document_with_blocks(algorithm), 0) == []
+
+
+def _caption_block(block_id: str, text: str, structure_role: str, *, policy_translate: bool = True) -> dict:
+    # 形状照搬 MinerU / Paddle 真实产出：layout_role=caption、semantic_role=metadata、
+    # structure_role=<raw caption 类型>、policy 由 provider_caption_whitelist 放行。
+    block = _normalized_block(block_id, text, block_class="caption", policy_translate=policy_translate)
+    block.update(
+        {
+            "sub_type": structure_role,
+            "layout_role": "caption",
+            "semantic_role": "metadata",
+            "structure_role": structure_role,
+        }
+    )
+    block["policy"]["translate_reason"] = f"provider_caption_whitelist:{structure_role}"
+    return block
+
+
+def test_extract_text_items_keeps_provider_whitelisted_caption_roles() -> None:
+    # 回归：OCR 层给 table_caption / image_caption / code_caption 的 policy.translate=True，
+    # 但翻译层最终的结构角色过滤只认 caption / figure_caption，表格标题被静默丢掉。
+    blocks = [
+        _caption_block("p001-b0000", "Table I. Electronic energies of the F and Cl atoms", "table_caption"),
+        _caption_block("p001-b0001", "Figure 2. Image caption text", "image_caption"),
+        _caption_block("p001-b0002", "Listing 1. Code caption text", "code_caption"),
+        _caption_block("p001-b0003", "Figure 3. Figure caption text", "figure_caption"),
+    ]
+
+    items = extract_text_items(_normalized_document_with_blocks(*blocks), 0)
+
+    assert [item.structure_role for item in items] == [
+        "table_caption",
+        "image_caption",
+        "code_caption",
+        "figure_caption",
+    ]
+    assert all(item.block_class == "caption" for item in items)
+
+
+def test_extract_text_items_still_drops_caption_when_provider_policy_says_no() -> None:
+    caption = _caption_block("p001-b0000", "Table 1. Caption text", "table_caption", policy_translate=False)
+
+    assert extract_text_items(_normalized_document_with_blocks(caption), 0) == []

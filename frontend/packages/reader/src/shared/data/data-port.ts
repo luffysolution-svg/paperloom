@@ -19,6 +19,13 @@ const DEFAULT_API_PREFIX = "/api/v1";
 const JOB_LOAD_REUSE_MS = 250;
 
 /** 可选产物（regions/metadata）失败降级：保留 fallback 值，同时记录真实错误。 */
+function defaultFetchProtected(input: any, init?: RequestInit): Promise<Response> {
+  if (typeof globalThis.fetch === "function") {
+    return (globalThis.fetch as any)(input, init);
+  }
+  return Promise.reject(new Error(`fetchProtected not injected for ${input}`));
+}
+
 function settleOptional<T>(
   load: () => Promise<T>,
   fallback: T,
@@ -47,13 +54,7 @@ function defaultLoadRegions(): Promise<unknown> {
 function defaultLoadMetadata(): Promise<unknown> {
   return Promise.resolve(null);
 }
-function defaultFetchProtected(input: any, init?: RequestInit): Promise<Response> {
-  if (typeof globalThis.fetch === "function") {
-    return (globalThis.fetch as any)(input, init);
-  }
-  return Promise.reject(new Error(`fetchProtected not injected for ${input}`));
-}
-
+/** 没注入 = 宿主没有这个端点。返回 null 表示「还没有」，不是失败。 */
 /** Markdown 原文的来源描述（来自 job detail artifacts.markdown）。 */
 export type MarkdownSourceDescriptor = {
   rawUrl: string;
@@ -94,6 +95,9 @@ export function createReaderDataPort({
   fetchMarkdownRange?: ((rawUrl: string, start: number, endInclusive: number, etag?: string, signal?: AbortSignal) => Promise<MarkdownRangeResult>) | null;
   loadRegions?: (jobId: string, apiPrefix: string) => Promise<unknown>;
   loadMetadata?: (jobId: string, apiPrefix: string) => Promise<unknown>;
+  /** agent 写的页面批注。**不跟着 loadReaderPayload 一起加载** —— 它会在阅读过程中
+   * 被 agent 重写，需要轮询，而 payload 是一次性的。所以单独一个方法。
+   * 文件不存在时返回 null（正常状态，不是错误）。 */
   fetchProtectedResource?: typeof fetch;
   liveTranslation?: ReaderLiveTranslationPort | null;
 } = {}) {
@@ -130,6 +134,24 @@ export function createReaderDataPort({
     return request;
   }
 
+  // regions/metadata are optional overlays: a failure must not be fatal, but
+  // it must be recorded rather than silently normalized into empty data.
+  // 单独暴露：PDF 地址只依赖 job / manifest，session 可以让 PDF 下载和它并行。
+  async function loadReaderOptionalArtifacts(jobId: string) {
+    const [regionsResult, metadataResult] = await Promise.all([
+      settleOptional(() => (loadRegions as any)(jobId, apiPrefix), { items: [] }),
+      settleOptional(() => (loadMetadata as any)(jobId, apiPrefix), null),
+    ]);
+    return {
+      readerMetadata: metadataResult.value,
+      regionsPayload: regionsResult.value,
+      readerErrors: {
+        regions: regionsResult.error,
+        metadata: metadataResult.error,
+      },
+    };
+  }
+
   async function loadReaderPayload(
     jobId: string,
     options: { includeOptionalArtifacts?: boolean } = {},
@@ -155,23 +177,15 @@ export function createReaderDataPort({
         readerErrors: { regions: null, metadata: null },
       };
     }
-    // regions/metadata are optional overlays: a failure must not be fatal, but
-    // it must be recorded rather than silently normalized into empty data.
-    const [jobPayload, manifestPayload, regionsResult, metadataResult] = await Promise.all([
+    const [jobPayload, manifestPayload, optional] = await Promise.all([
       jobPromise,
       manifestPromise,
-      settleOptional(() => (loadRegions as any)(jobId, apiPrefix), { items: [] }),
-      settleOptional(() => (loadMetadata as any)(jobId, apiPrefix), null),
+      loadReaderOptionalArtifacts(jobId),
     ]);
     return {
       jobPayload,
       manifestPayload,
-      readerMetadata: metadataResult.value,
-      regionsPayload: regionsResult.value,
-      readerErrors: {
-        regions: regionsResult.error,
-        metadata: metadataResult.error,
-      },
+      ...optional,
     };
   }
 
@@ -228,6 +242,7 @@ export function createReaderDataPort({
     return fetchMarkdownRange(rawUrl, start, endInclusive, etag, signal);
   }
 
+
   return Object.freeze({
     apiPrefix,
     fetchProtected: fetchProtectedResource,
@@ -236,6 +251,7 @@ export function createReaderDataPort({
     loadMarkdownRange,
     loadJobPayload,
     loadReaderPayload,
+    loadReaderOptionalArtifacts,
     liveTranslation,
   });
 }

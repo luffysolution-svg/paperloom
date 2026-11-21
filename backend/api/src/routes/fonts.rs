@@ -6,16 +6,17 @@ use axum::Json;
 use crate::error::AppError;
 use crate::models::api::ApiResponse;
 use crate::routes::common::{
-    build_fonts_route_deps, read_multipart_field_limited, safe_multipart_error, ApiMultipart,
+    build_fonts_route_deps, read_multipart_field_limited, run_fonts_blocking, safe_multipart_error,
+    ApiMultipart,
 };
-use crate::services::fonts::api::{self, FontInfo};
+use crate::services::platform::{self, FontInfo};
 use crate::AppState;
 
 pub async fn list_fonts(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<Vec<FontInfo>>>, AppError> {
-    let deps = build_fonts_route_deps(&state);
-    Ok(Json(ApiResponse::ok(api::list_fonts(&deps.font_api))))
+    let fonts = run_fonts_blocking(&state, |font_api| Ok(platform::list_fonts(font_api))).await?;
+    Ok(Json(ApiResponse::ok(fonts)))
 }
 
 pub async fn upload_font(
@@ -25,7 +26,8 @@ pub async fn upload_font(
     let deps = build_fonts_route_deps(&state);
     let (filename, bytes) =
         read_font_upload(ApiMultipart(multipart), deps.upload_max_bytes).await?;
-    let info = api::upload_font(&deps.font_api, &filename, &bytes)?;
+    let info =
+        run_fonts_blocking(&state, move |font_api| platform::upload_font(font_api, &filename, &bytes)).await?;
     Ok(Json(ApiResponse::ok(info)))
 }
 

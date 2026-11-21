@@ -1,74 +1,31 @@
 import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { JSDOM } from "jsdom";
+import { waitFor } from "../helpers/async.mjs";
+import { makeDom } from "../helpers/dom.mjs";
+import { bootHomeApp } from "../helpers/home-app.mjs";
 
 // ReaderNavigation 已改为「跳转 reader.html」，不再挂 iframe 对话框。
 
-function makeDom(search = "") {
-  const dom = new JSDOM("<!doctype html><html><body></body></html>", {
-    url: `http://localhost/index.html${search}`,
-  });
-  for (const key of [
-    "window",
-    "document",
-    "DocumentFragment",
-    "HTMLElement",
-    "HTMLButtonElement",
-    "HTMLFormElement",
-    "CustomEvent",
-    "Event",
-    "Node",
-    "MutationObserver",
-    "NodeFilter",
-  ]) {
-    Object.defineProperty(globalThis, key, {
-      value: dom.window[key] ?? dom.window,
-      writable: true,
-      configurable: true,
-    });
+// 这组用例一直只装下面这些全局、也没装 getComputedStyle；保持原样，免得多装的全局
+// 改变被测组件走的分支。
+const NAV_DOM = {
+  keys: [
+    "window", "document", "DocumentFragment", "HTMLElement", "HTMLButtonElement",
+    "HTMLFormElement", "CustomEvent", "Event", "Node", "MutationObserver", "NodeFilter",
+  ],
+  computedStyle: false,
+};
+
+// 用 act 渲染，保证 useAppEvent 的订阅 effect 已挂上；只在这一次渲染期间打开 act 环境，
+// 免得同文件里不走 act 的整页用例刷「not wrapped in act」警告。
+async function renderFlushingEffects(React, root, element) {
+  const previous = globalThis.IS_REACT_ACT_ENVIRONMENT;
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  try {
+    await React.act(async () => root.render(element));
+  } finally {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = previous;
   }
-  globalThis.window = dom.window;
-  globalThis.requestAnimationFrame = (callback) => setTimeout(() => callback(0), 0);
-  globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
-  globalThis.IS_REACT_ACT_ENVIRONMENT = false;
-  return dom;
-}
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitFor(predicate, description) {
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    if (predicate()) return;
-    await wait(15);
-  }
-  assert.fail(`等待超时：${description}`);
-}
-
-async function bootHomeApp(dom) {
-  const { createRoot } = await import("react-dom/client");
-  const React = await import("react");
-  const { createHomeComposition } = await import("../../src/app/home/create-home-composition.js");
-  const { HomeApp } = await import("../../src/app/home/HomeApp.jsx");
-
-  const host = dom.window.document.createElement("div");
-  host.id = "home-root";
-  dom.window.document.body.appendChild(host);
-
-  const services = createHomeComposition({
-    fetchGlossaries: async () => ({ items: [] }),
-    loadPersistedDeveloperConfig: () => ({}),
-    loadPersistedBrowserConfig: () => ({}),
-  });
-  services.initialize();
-
-  const root = createRoot(host);
-  root.render(React.createElement(HomeApp, { services }));
-  await waitFor(() => dom.window.document.getElementById("app-shell"), "HomeApp 首帧");
-  await wait(0);
-  return { services, root, host };
 }
 
 afterEach(async () => {
@@ -78,8 +35,90 @@ afterEach(async () => {
   setReaderNavigateForTests(null);
 });
 
+test("openReaderRequested：一本书翻译过多次时，打开后端给的合并结果而不是 active_job_id", async () => {
+  const dom = makeDom("", NAV_DOM);
+  const hits = { assign: [], replace: [] };
+  const asked = [];
+  const merged = `merged-${"a".repeat(64)}-0123456789abcdef`;
+  const { setReaderNavigateForTests } = await import("../../src/features/reader/domain.ts");
+  setReaderNavigateForTests((url, { replace } = {}) => {
+    if (replace) hits.replace.push(url);
+    else hits.assign.push(url);
+  });
+  const { createRoot } = await import("react-dom/client");
+  const React = await import("react");
+  const { ReaderNavigation } = await import("../../src/features/reader/index.js");
+  const { APP_EVENTS } = await import("@/platform/contracts/app-contract.js");
+
+  const host = dom.window.document.createElement("div");
+  dom.window.document.body.appendChild(host);
+  const root = createRoot(host);
+  // 等 useAppEvent 的订阅 effect 真的挂上再派发事件（固定 wait 在全量并发跑时会丢事件）。
+  await renderFlushingEffects(React, root,
+    React.createElement(ReaderNavigation, {
+      fetchReading: async (documentId) => {
+        asked.push(documentId);
+        return { job_id: merged };
+      },
+    }),
+  );
+  dom.window.document.dispatchEvent(
+    new dom.window.CustomEvent(APP_EVENTS.openReaderRequested, {
+      detail: { jobId: "job-latest-range", documentId: "doc-1", pageIdx: null, blockId: "" },
+    }),
+  );
+
+  await waitFor(() => hits.assign.length > 0, "应导航到阅读页");
+  assert.deepEqual(asked, ["doc-1"]);
+  assert.match(hits.assign[0], new RegExp(`job_id=${merged}`));
+  assert.doesNotMatch(hits.assign[0], /job-latest-range/);
+
+  root.unmount();
+  host.remove();
+});
+
+test("openReaderRequested：pinJob 点名的任务原样打开，不去问 /documents/:id/reading", async () => {
+  const dom = makeDom("", NAV_DOM);
+  const hits = { assign: [], replace: [] };
+  const asked = [];
+  const { setReaderNavigateForTests } = await import("../../src/features/reader/domain.ts");
+  setReaderNavigateForTests((url, { replace } = {}) => {
+    if (replace) hits.replace.push(url);
+    else hits.assign.push(url);
+  });
+  const { createRoot } = await import("react-dom/client");
+  const React = await import("react");
+  const { ReaderNavigation } = await import("../../src/features/reader/index.js");
+  const { APP_EVENTS } = await import("@/platform/contracts/app-contract.js");
+
+  const host = dom.window.document.createElement("div");
+  dom.window.document.body.appendChild(host);
+  const root = createRoot(host);
+  await renderFlushingEffects(React, root,
+    React.createElement(ReaderNavigation, {
+      fetchReading: async (documentId) => {
+        asked.push(documentId);
+        return { job_id: "job-translate-old" };
+      },
+    }),
+  );
+  dom.window.document.dispatchEvent(
+    new dom.window.CustomEvent(APP_EVENTS.openReaderRequested, {
+      detail: { jobId: "job-ocr-1", documentId: "doc-1", pageIdx: null, blockId: "", pinJob: true },
+    }),
+  );
+
+  await waitFor(() => hits.assign.length > 0, "应导航到阅读页");
+  assert.deepEqual(asked, [], "点名任务时不该去问后端");
+  assert.match(hits.assign[0], /job_id=job-ocr-1/);
+  assert.doesNotMatch(hits.assign[0], /job-translate-old/, "被换成了整本最新译文");
+
+  root.unmount();
+  host.remove();
+});
+
 test("openReaderRequested：跳转到 reader.html?job_id=（非 iframe）", async () => {
-  const dom = makeDom("?mock=parallel");
+  const dom = makeDom("?mock=parallel", NAV_DOM);
   const hits = { assign: [], replace: [] };
   const { setReaderNavigateForTests } = await import(
     "../../src/features/reader/domain.ts"
@@ -89,7 +128,7 @@ test("openReaderRequested：跳转到 reader.html?job_id=（非 iframe）", asyn
     else hits.assign.push(url);
   });
 
-  const { root, host, services } = await bootHomeApp(dom);
+  const { root, host, services } = await bootHomeApp(dom, { readyDescription: "HomeApp 首帧" });
   const { APP_EVENTS } = await import("@/platform/contracts/app-contract.js");
 
   assert.equal(dom.window.document.getElementById("reader-dialog"), null, "不再挂阅读对话框");
@@ -110,7 +149,7 @@ test("openReaderRequested：跳转到 reader.html?job_id=（非 iframe）", asyn
 });
 
 test("openReaderRequested：馆藏 document_id 跳转读原文", async () => {
-  const dom = makeDom("?mock=parallel");
+  const dom = makeDom("?mock=parallel", NAV_DOM);
   const hits = { assign: [], replace: [] };
   const { setReaderNavigateForTests } = await import(
     "../../src/features/reader/domain.ts"
@@ -120,7 +159,7 @@ test("openReaderRequested：馆藏 document_id 跳转读原文", async () => {
     else hits.assign.push(url);
   });
 
-  const { root, host, services } = await bootHomeApp(dom);
+  const { root, host, services } = await bootHomeApp(dom, { readyDescription: "HomeApp 首帧" });
   const { APP_EVENTS } = await import("@/platform/contracts/app-contract.js");
 
   dom.window.document.dispatchEvent(
@@ -138,7 +177,7 @@ test("openReaderRequested：馆藏 document_id 跳转读原文", async () => {
 });
 
 test("openReaderRequested：同时有 document/job 时以 job 路由打开对照与实时译文", async () => {
-  const dom = makeDom("?mock=parallel");
+  const dom = makeDom("?mock=parallel", NAV_DOM);
   const hits = { assign: [], replace: [] };
   const { setReaderNavigateForTests } = await import(
     "../../src/features/reader/domain.ts"
@@ -148,7 +187,7 @@ test("openReaderRequested：同时有 document/job 时以 job 路由打开对照
     else hits.assign.push(url);
   });
 
-  const { root, host, services } = await bootHomeApp(dom);
+  const { root, host, services } = await bootHomeApp(dom, { readyDescription: "HomeApp 首帧" });
   const { APP_EVENTS } = await import("@/platform/contracts/app-contract.js");
   dom.window.document.dispatchEvent(
     new dom.window.CustomEvent(APP_EVENTS.openReaderRequested, {
@@ -168,7 +207,7 @@ test("openReaderRequested：同时有 document/job 时以 job 路由打开对照
 });
 
 test("深链 ?view=reader&job_id=：replace 到 reader.html", async () => {
-  const dom = makeDom("?view=reader&job_id=job-deep&mock=parallel");
+  const dom = makeDom("?view=reader&job_id=job-deep&mock=parallel", NAV_DOM);
   const hits = { assign: [], replace: [] };
   const { setReaderNavigateForTests } = await import(
     "../../src/features/reader/domain.ts"
@@ -179,7 +218,7 @@ test("深链 ?view=reader&job_id=：replace 到 reader.html", async () => {
     else hits.assign.push(url);
   });
 
-  const { root, host, services } = await bootHomeApp(dom);
+  const { root, host, services } = await bootHomeApp(dom, { readyDescription: "HomeApp 首帧" });
 
   await waitFor(() => hits.replace.length > 0, "深链应 replace");
   assert.match(hits.replace[0], /reader\.html\?.*job_id=job-deep/);
@@ -190,7 +229,7 @@ test("深链 ?view=reader&job_id=：replace 到 reader.html", async () => {
 });
 
 test("retry-stage handoff replaces the open soft Reader job and preserves its anchor", async () => {
-  const dom = makeDom("?mock=parallel");
+  const dom = makeDom("?mock=parallel", NAV_DOM);
   const appShell = dom.window.document.createElement("div");
   appShell.id = "app-shell";
   dom.window.document.body.appendChild(appShell);
@@ -223,8 +262,8 @@ test("retry-stage handoff replaces the open soft Reader job and preserves its an
 });
 
 test("library job replacement automatically hands an open Reader to the new job", async () => {
-  const dom = makeDom("?mock=parallel");
-  const { root, host, services } = await bootHomeApp(dom);
+  const dom = makeDom("?mock=parallel", NAV_DOM);
+  const { root, host, services } = await bootHomeApp(dom, { readyDescription: "HomeApp 首帧" });
   const { APP_EVENTS } = await import("@/platform/contracts/app-contract.js");
   const {
     SOFT_READER_HISTORY_FLAG,
@@ -262,7 +301,7 @@ test("library job replacement automatically hands an open Reader to the new job"
 });
 
 test("retry-stage handoff keeps a canonical document Reader URL", async () => {
-  const dom = makeDom("?mock=parallel");
+  const dom = makeDom("?mock=parallel", NAV_DOM);
   const appShell = dom.window.document.createElement("div");
   appShell.id = "app-shell";
   dom.window.document.body.appendChild(appShell);

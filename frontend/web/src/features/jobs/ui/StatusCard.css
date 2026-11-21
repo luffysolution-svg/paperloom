@@ -1,0 +1,274 @@
+/* 状态卡外壳：卡片、头部（耗时 / 取消 / 详情）、按钮。（StatusCard / StatusCardEmbedded）
+ *
+ * @owns status, progress-track, progress-bar, task-toolbar-btn-result
+ * @uses disabled, hidden */
+
+@utility status-card {
+  @apply block h-full min-h-0 w-full max-w-full overflow-visible rounded-[18px] border-0 bg-transparent p-0 text-[var(--ink)] shadow-none;
+
+  &[data-status='succeeded'] .status-progress-bar {
+    --status-progress-indicator-color: var(--ok);
+  }
+
+  &[data-status='succeeded'] .status-progress-ring {
+    --status-ring-indicator-color: var(--ok);
+  }
+
+  &[data-status='failed'] .status-progress-bar {
+    --status-progress-indicator-color: var(--danger);
+  }
+
+  &[data-status='canceled'] .status-progress-bar {
+    --status-progress-indicator-color: var(--danger);
+  }
+
+  &[data-status='failed'] .status-progress-ring {
+    --status-ring-indicator-color: var(--danger);
+  }
+
+  &[data-status='canceled'] .status-progress-ring {
+    --status-ring-indicator-color: var(--danger);
+  }
+
+  & .progress-track {
+    height: var(--status-progress-track-height, 5px);
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--line);
+  }
+
+  & .progress-bar {
+    width: 0%;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--ink);
+    transition: width 0.25s ease;
+  }
+
+  & .progress-bar.is-indeterminate {
+    animation: status-progress-indeterminate 1.2s ease-in-out infinite;
+    transition: none;
+  }
+
+  & #status-stage-retry.hidden {
+    display: grid !important;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  & #status-stage-retry.is-empty {
+    display: grid !important;
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
+
+@utility status-card-shell {
+  @apply block h-full w-full overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--paper)];
+  container: status-card / size;
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--shadow-color) 4.5%, transparent);
+}
+
+@utility status-card-body {
+  --status-scale: clamp(1px, calc(0.15cqw + 0.16cqh), 2.4px);
+  --status-proportional-gap: clamp(14px, 3.2cqw, 28px);
+  --status-proportional-hero-padding-y: clamp(20px, 5.8cqh, 42px);
+  --status-proportional-hero-padding-x: clamp(24px, 5.2cqw, 46px);
+  --status-proportional-side-column: clamp(112px, 19cqw, 156px);
+  --status-proportional-ring-size: clamp(96px, 18cqw, 136px);
+  --status-proportional-ring-stroke: clamp(8px, 1.55cqw, 12px);
+  --status-proportional-animation-size: clamp(100px, 18cqw, 142px);
+  --status-proportional-spinner-size: clamp(66px, 12cqw, 92px);
+  --status-proportional-title-font: clamp(18px, 3.4cqw, 25px);
+  --status-proportional-detail-font: clamp(13px, 2.2cqw, 16px);
+  --status-proportional-progress-font: clamp(13px, 2.1cqw, 16px);
+  --status-proportional-meta-font: clamp(11px, 1.8cqw, 14px);
+  display: grid;
+  grid-template-areas:
+    'head'
+    'flow'
+    'error'
+    'hero'
+    'footer';
+  grid-template-rows:
+    auto
+    auto
+    auto
+    minmax(
+      var(
+        --status-progress-hero-min-height,
+        var(--status-progress-hero-height, 188px)
+      ),
+      1fr
+    )
+    var(--status-footer-slot-height, 48px);
+  gap: var(--status-body-gap, 11px);
+  align-content: stretch;
+  height: 100%;
+  min-height: 0;
+  padding: var(--status-body-padding, 14px);
+
+  &:not(.has-error) {
+    grid-template-areas:
+      'head'
+      'flow'
+      'hero'
+      'footer';
+    grid-template-rows:
+      auto
+      auto
+      minmax(
+        var(
+          --status-progress-hero-min-height,
+          var(--status-progress-hero-height, 188px)
+        ),
+        1fr
+      )
+      var(--status-footer-slot-height, 48px);
+  }
+
+  &:not(.has-result-actions) {
+    grid-template-areas:
+      'head'
+      'flow'
+      'error'
+      'hero';
+    grid-template-rows:
+      auto
+      auto
+      auto
+      minmax(
+        var(
+          --status-progress-hero-min-height,
+          var(--status-progress-hero-height, 188px)
+        ),
+        1fr
+      );
+  }
+
+  &:not(.has-error):not(.has-result-actions) {
+    grid-template-areas:
+      'head'
+      'flow'
+      'hero';
+    grid-template-rows:
+      auto
+      auto
+      minmax(
+        var(
+          --status-progress-hero-min-height,
+          var(--status-progress-hero-height, 188px)
+        ),
+        1fr
+      );
+  }
+
+  &:not(.has-result-actions) .status-card-footer {
+    display: none;
+  }
+
+  @media (max-width: 767px) {
+    padding: 16px;
+  }
+}
+
+@utility status-head {
+  grid-area: head;
+  @apply grid items-center gap-3;
+  grid-template-columns: 1fr auto 1fr;
+  min-height: var(--status-head-height, 30px);
+}
+
+@utility status-head-center {
+  @apply inline-grid justify-items-center gap-0.5 text-center;
+}
+
+@utility status-ring-label {
+  @apply font-bold leading-tight tracking-normal text-[var(--ink)];
+  font-size: var(--status-label-font-size, 12px);
+}
+
+@utility status-ring-elapsed {
+  @apply whitespace-nowrap font-semibold leading-tight text-[var(--muted)];
+  font-size: var(--status-elapsed-font-size, 11px);
+  min-height: auto;
+}
+
+/*
+  危险区修复(Tailwind v4 迁移):`.status-head-btn` 在整个代码库里只和
+  `.status-action-btn` 成对出现(StatusCard.jsx 的取消/详情按钮),
+  min-height/font-size 两边都定义、值不一样——v3 里靠同文件源码序(
+  status-action-btn 写在后面)tie-break,status-action-btn 的 32px/12px 胜出,
+  status-head-btn 这份 28px/11px 一直是死代码。v4 下顺序不再保证跟随源码序
+  (与前面几处 library-grid/library-brand-link 同一模式),实测迁移后
+  status-head-btn 反而胜出,按钮变矮变小。这里去掉冲突的 min-height/
+  font-size,尺寸完全交给 status-action-btn 一处定义;padding-inline 没有
+  与 status-action-btn 的 padding 冲突过(未观测到差异),保留。
+*/
+@utility status-head-btn {
+  padding-inline: var(--status-head-btn-padding, 10px);
+}
+
+@utility status-footer-btn {
+  min-height: var(--status-head-btn-height, 28px);
+  padding-inline: var(--status-head-btn-padding, 10px);
+  font-size: var(--status-head-btn-font-size, 11px);
+}
+
+@utility status-action-btn {
+  @apply inline-flex items-center justify-center whitespace-nowrap rounded-full border border-[var(--line)] bg-[var(--paper)] text-[var(--ink)] no-underline shadow-none;
+  min-height: var(--status-button-height, 32px);
+  padding: 0 var(--status-button-padding, 13px);
+  font-size: var(--status-button-font-size, 12px);
+  font-weight: 650;
+  line-height: 1;
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease;
+
+  &:hover:not(:disabled):not(.disabled) {
+    border-color: var(--ink);
+    background: var(--bg);
+    color: var(--ink);
+  }
+
+  &:disabled {
+    border-color: var(--line);
+    background: var(--bg);
+    color: var(--muted);
+    cursor: not-allowed;
+  }
+
+  &.disabled {
+    border-color: var(--line);
+    background: var(--bg);
+    color: var(--muted);
+    cursor: not-allowed;
+  }
+
+  &[aria-disabled='true'] {
+    border-color: var(--line);
+    background: var(--bg);
+    color: var(--muted);
+    cursor: not-allowed;
+  }
+}
+
+@utility disabled {
+  & .status-action-btn {
+    border-color: var(--line);
+    background: var(--bg);
+    color: var(--muted);
+    cursor: not-allowed;
+  }
+}
+
+@utility status-head-cancel {
+  @apply gap-1.5 justify-self-start;
+  border-color: var(--ink);
+}
+
+@utility status-head-detail {
+  @apply justify-self-end;
+}

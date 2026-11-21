@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from retainpdf_pipeline.render.layout.inline_content.fallback.latex_normalizer import aggressively_simplify_formula_for_latex_math
+from retainpdf_math.normalize import aggressively_simplify_formula_for_latex_math
 from retainpdf_pipeline.render.layout.model.render_text import get_render_protected_text
 from retainpdf_pipeline.render.layout.text_analysis import RAW_MATH_TOKEN_KINDS
 from retainpdf_pipeline.render.layout.text_analysis import analyze_text

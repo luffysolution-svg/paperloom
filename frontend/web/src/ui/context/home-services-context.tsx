@@ -13,9 +13,12 @@
 // 窄口是唯一来源：曾经的「泛型大包 + pick 回退」兼容口已退役（见下方
 // createNarrowHook 的说明），缺 Provider 直接按名字抛错。
 
+import type { ReaderAnchor } from "@/platform/navigation/pages.js";
+import type { StatusDetailDialogPayload } from "@/platform/contracts/status-detail-runtime-contract.js";
 import { createContext, createElement, useContext } from "react";
 import type { Context, ReactNode } from "react";
 import type { DialogStore } from "@/platform/store/dialog-store.js";
+import type { LibraryCardItem } from "@/platform/contracts/library-payloads.js";
 
 /** 窄口只暴露 store 读侧；写入仍经 store.actions / 域 action。
  *  subscribe 只建模单参监听（各域 store 的 notify 均为单参），兼容通用 Store
@@ -45,20 +48,23 @@ export type HomeBridgeValue = {
   submitForm: (event?: { preventDefault?: () => void } | null) => unknown;
 };
 
-export type HomeLibraryValue = {
-  actions: any;
-  viewPort: any;
-  recentJobsStore: HomeReadStore;
-};
+
+// ── 下面几样被好几个功能共用，而这些功能之间刻意互不引用 ──
+//
+// jobs 与 job-detail 之间靠 platform/contracts 的中性契约打交道（互相 import 会成环），
+// collections 已经 import 了 library。所以它们不能像书架、上传那样「谁拥有谁提供」，
+// 只能留在 ui 这个中性位置。能精确的已经精确了；controller / store 的值类型定义在各
+// 功能里，ui 层拿不到，消费方在取值处收窄。要彻底去掉，得先把这些状态类型搬进
+// platform/contracts，单独做。
 
 export type HomeStatusCardValue = {
   store: HomeReadStore;
-  cancelCurrentJob: (...args: any[]) => unknown;
+  cancelCurrentJob: () => unknown;
 };
 
 export type HomeStatusDetailValue = {
   store: HomeReadStore;
-  dialogStore: DialogStore<any>;
+  dialogStore: DialogStore<StatusDetailDialogPayload>;
   controller: any;
 };
 
@@ -67,7 +73,7 @@ export type HomeJobRuntimeValue = {
 };
 
 export type HomeBookDetailValue = {
-  dialogStore: DialogStore<any>;
+  dialogStore: DialogStore<LibraryCardItem | null>;
 };
 
 export type HomeCollectionsValue = {
@@ -76,26 +82,8 @@ export type HomeCollectionsValue = {
   dialogStore: DialogStore<any>;
 };
 
-/** services.appUpdate —— 版本检查横幅的视图与处理函数表。 */
-export type HomeAppUpdateValue = {
-  feature?: any;
-  view: any;
-  handlersRef: any;
-};
 
-/** services.glossaries —— 术语表弹窗的 feature/视图/开合。 */
-export type HomeGlossariesValue = {
-  feature?: any;
-  view: any;
-  dialogStore: DialogStore<any>;
-};
 
-/** services.credentials —— 凭据工作台的 feature/视图/开合。 */
-export type HomeCredentialsValue = {
-  feature?: any;
-  view?: any;
-  dialogStore?: DialogStore<any>;
-};
 
 export type HomeArtifactDownloadsValue = {
   // any 而不是 HomeReadStore：消费方（ResultActions / OverviewPanel）要的是
@@ -105,25 +93,9 @@ export type HomeArtifactDownloadsValue = {
   busyStore: any;
 };
 
-/** uploadView 读侧之外 TranslationOptionsPanel 还经 .actions 写页码范围。 */
-export type HomeUploadViewStoreValue = HomeReadStore & { actions?: any };
-
-export type HomeWorkflowViewActionsValue = {
-  setSelectedGlossaryId: (id: string) => unknown;
-  setOcrOnly: (value: boolean) => unknown;
-  isOcrOnly: () => boolean;
-};
 
 export type HomeUploadDomRefsValue = {
   fileInput: HTMLInputElement | null;
-};
-
-// 只登记窄口消费方真正读到的两个。其余七个 feature 仍然活在 composition 的
-// HomeFeatures 上（entry/测试经 services.features 直取），只是没有任何组件
-// 经这个 hook 读它们——写在这里只是让 useHomeFeatures() 的返回值显得什么都有。
-export type HomeFeaturesValue = {
-  workflowFeature?: any;
-  uploadFeature?: any;
 };
 
 export type HomeCredentialsStatePortValue = {
@@ -137,7 +109,7 @@ export type HomeUploadStatePortValue = {
 
 /** 主页阅读入口（跳独立 reader.html）。 */
 export type HomeReaderValue = {
-  openReader: (jobId: string, anchor?: unknown, documentId?: string) => unknown;
+  openReader: (jobId: string, anchor?: ReaderAnchor | null, documentId?: string, options?: { pinJob?: boolean }) => unknown;
 };
 
 /** app 侧映射出的窄口聚合；HomeShellProviders 按此一次灌入全部窄 Context。 */
@@ -146,23 +118,15 @@ export type HomeNarrowServices = {
   workflowDialog: HomeWorkflowDialogValue;
   settingsHub: HomeSettingsHubValue;
   bridge: HomeBridgeValue;
-  library: HomeLibraryValue;
   statusCard: HomeStatusCardValue;
   statusDetail: HomeStatusDetailValue;
   jobRuntime: HomeJobRuntimeValue;
   bookDetail: HomeBookDetailValue;
   collections: HomeCollectionsValue;
-  appUpdate: HomeAppUpdateValue;
-  glossaries: HomeGlossariesValue;
-  credentials: HomeCredentialsValue;
   artifactDownloads: HomeArtifactDownloadsValue;
   textStore: HomeReadStore;
   homeStateStore: HomeReadStore;
-  workflowViewStore: HomeReadStore;
-  uploadViewStore: HomeUploadViewStoreValue;
   credentialsViewStore: HomeReadStore;
-  features: HomeFeaturesValue;
-  workflowViewActions: HomeWorkflowViewActionsValue;
   uploadDomRefs: HomeUploadDomRefsValue;
   credentialsStatePort: HomeCredentialsStatePortValue;
   uploadStatePort: HomeUploadStatePortValue;
@@ -176,23 +140,15 @@ export const HomeDialogStoreContext = createContext<HomeDialogStoreValue | null>
 export const HomeWorkflowDialogContext = createContext<HomeWorkflowDialogValue | null>(null);
 export const HomeSettingsHubContext = createContext<HomeSettingsHubValue | null>(null);
 export const HomeBridgeContext = createContext<HomeBridgeValue | null>(null);
-export const HomeLibraryContext = createContext<HomeLibraryValue | null>(null);
 export const HomeStatusCardContext = createContext<HomeStatusCardValue | null>(null);
 export const HomeStatusDetailContext = createContext<HomeStatusDetailValue | null>(null);
 export const HomeJobRuntimeContext = createContext<HomeJobRuntimeValue | null>(null);
 export const HomeBookDetailContext = createContext<HomeBookDetailValue | null>(null);
 export const HomeCollectionsContext = createContext<HomeCollectionsValue | null>(null);
-export const HomeAppUpdateContext = createContext<HomeAppUpdateValue | null>(null);
-export const HomeGlossariesContext = createContext<HomeGlossariesValue | null>(null);
-export const HomeCredentialsContext = createContext<HomeCredentialsValue | null>(null);
 export const HomeArtifactDownloadsContext = createContext<HomeArtifactDownloadsValue | null>(null);
 export const HomeTextStoreContext = createContext<HomeReadStore | null>(null);
 export const HomeHomeStateStoreContext = createContext<HomeReadStore | null>(null);
-export const HomeWorkflowViewStoreContext = createContext<HomeReadStore | null>(null);
-export const HomeUploadViewStoreContext = createContext<HomeUploadViewStoreValue | null>(null);
 export const HomeCredentialsViewStoreContext = createContext<HomeReadStore | null>(null);
-export const HomeFeaturesContext = createContext<HomeFeaturesValue | null>(null);
-export const HomeWorkflowViewActionsContext = createContext<HomeWorkflowViewActionsValue | null>(null);
 export const HomeUploadDomRefsContext = createContext<HomeUploadDomRefsValue | null>(null);
 export const HomeCredentialsStatePortContext = createContext<HomeCredentialsStatePortValue | null>(null);
 export const HomeUploadStatePortContext = createContext<HomeUploadStatePortValue | null>(null);
@@ -238,10 +194,6 @@ export const useHomeBridge = createNarrowHook(
   HomeBridgeContext,
   "useHomeBridge",
 );
-export const useHomeLibrary = createNarrowHook(
-  HomeLibraryContext,
-  "useHomeLibrary",
-);
 export const useHomeStatusCard = createNarrowHook(
   HomeStatusCardContext,
   "useHomeStatusCard",
@@ -262,18 +214,6 @@ export const useHomeCollections = createNarrowHook(
   HomeCollectionsContext,
   "useHomeCollections",
 );
-export const useHomeAppUpdate = createNarrowHook(
-  HomeAppUpdateContext,
-  "useHomeAppUpdate",
-);
-export const useHomeGlossaries = createNarrowHook(
-  HomeGlossariesContext,
-  "useHomeGlossaries",
-);
-export const useHomeCredentials = createNarrowHook(
-  HomeCredentialsContext,
-  "useHomeCredentials",
-);
 export const useHomeArtifactDownloads = createNarrowHook(
   HomeArtifactDownloadsContext,
   "useHomeArtifactDownloads",
@@ -286,25 +226,9 @@ export const useHomeHomeStateStore = createNarrowHook(
   HomeHomeStateStoreContext,
   "useHomeHomeStateStore",
 );
-export const useHomeWorkflowViewStore = createNarrowHook(
-  HomeWorkflowViewStoreContext,
-  "useHomeWorkflowViewStore",
-);
-export const useHomeUploadViewStore = createNarrowHook(
-  HomeUploadViewStoreContext,
-  "useHomeUploadViewStore",
-);
 export const useHomeCredentialsViewStore = createNarrowHook(
   HomeCredentialsViewStoreContext,
   "useHomeCredentialsViewStore",
-);
-export const useHomeFeatures = createNarrowHook(
-  HomeFeaturesContext,
-  "useHomeFeatures",
-);
-export const useHomeWorkflowViewActions = createNarrowHook(
-  HomeWorkflowViewActionsContext,
-  "useHomeWorkflowViewActions",
 );
 export const useHomeUploadDomRefs = createNarrowHook(
   HomeUploadDomRefsContext,
@@ -326,28 +250,21 @@ export const useHomeReader = createNarrowHook(
 // ── 一次灌入所有窄 Context（app 侧映射 HomeServices → HomeNarrowServices） ──
 
 export function HomeShellProviders({ services, children }: { services: HomeNarrowServices; children: ReactNode }) {
+  // 异构列表：每一项的 Context 与值类型各不相同，Context 又是不变的，只能用 any 收口。
   const providers: Array<[Context<any>, any]> = [
     [HomeDialogStoreContext, services.dialogStore],
     [HomeWorkflowDialogContext, services.workflowDialog],
     [HomeSettingsHubContext, services.settingsHub],
     [HomeBridgeContext, services.bridge],
-    [HomeLibraryContext, services.library],
     [HomeStatusCardContext, services.statusCard],
     [HomeStatusDetailContext, services.statusDetail],
     [HomeJobRuntimeContext, services.jobRuntime],
     [HomeBookDetailContext, services.bookDetail],
     [HomeCollectionsContext, services.collections],
-    [HomeAppUpdateContext, services.appUpdate],
-    [HomeGlossariesContext, services.glossaries],
-    [HomeCredentialsContext, services.credentials],
     [HomeArtifactDownloadsContext, services.artifactDownloads],
     [HomeTextStoreContext, services.textStore],
     [HomeHomeStateStoreContext, services.homeStateStore],
-    [HomeWorkflowViewStoreContext, services.workflowViewStore],
-    [HomeUploadViewStoreContext, services.uploadViewStore],
     [HomeCredentialsViewStoreContext, services.credentialsViewStore],
-    [HomeFeaturesContext, services.features],
-    [HomeWorkflowViewActionsContext, services.workflowViewActions],
     [HomeUploadDomRefsContext, services.uploadDomRefs],
     [HomeCredentialsStatePortContext, services.credentialsStatePort],
     [HomeUploadStatePortContext, services.uploadStatePort],

@@ -11,16 +11,12 @@ Upload execution boundaries:
 - PDF parsing, hashing, file publication, and database writes run on a blocking worker, not an async executor thread.
 - Parsing and Python repair have independent capacities owned by one application-level `UploadService`. The main and simple HTTP servers, standalone uploads, OCR submission, and bundle submission share the service from the same `AppState`. A repair (including reparsing its output) does not hold a normal parsing permit. Waiting for either stage uses a shared bounded queue, with a deadline per wait; queue exhaustion/timeout returns 503.
 - Before normal parsing starts, disconnect releases the queue and input budget. Once parsing starts, admitted processing finishes even if the HTTP caller disconnects; its stage/overall permits remain owned by that work. Disconnect is not proof that the upload was rejected.
-- Standalone PDF multipart uploads stream into `uploads/.incoming/` with incremental SHA-256, then rename the completed file into its upload directory. The request no longer keeps two complete in-memory copies. Internal byte-based calls keep their existing contract. A MiB-rounded budget still accounts for parsing input; transient exhaustion returns 503 and a PDF exceeding the budget returns 413. Decoded parser memory is additional to this budget.
+- Original PDF bytes are released before waiting for repair. A separate MiB-rounded input budget bounds buffers retained by the processing layer: transient exhaustion returns 503; a single PDF exceeding the configured budget returns 413. This is not a total RSS limit: multipart buffering happens before admission, and decoded parser memory is additional.
 - Python repair has a 60-second deadline; its direct child is killed and reaped on timeout. Missing repair tooling and timeout return 503; unsuccessful repair or page-limit rejection return 400. Python stdout/stderr are not returned to clients.
 - Failed uploads clean up only their newly created directory. Upload and document records publish in one SQLite transaction; existing content-hash deduplication and original-input hash semantics remain unchanged.
 - Synchronous PDF parsing is isolated and concurrency-limited, but is not forcibly interrupted by a wall-clock deadline. Process crashes and cleanup permission failures can still leave filesystem orphans; this is not a filesystem/database distributed transaction.
 
 Processing configuration (set before process startup; restart after changes):
-
-New uploads and job runs require `RUST_API_MIN_FREE_DISK_MB` free space (default 1024 MiB, `0` disables the check). A refusal returns 503 with `error.details.reason=insufficient_storage`. Queued runs use a FIFO semaphore wait; `RUST_API_MAX_QUEUED_JOBS` defaults to 1000 (`0` unlimited) and returns 429 `queue_full` when full. Running jobs are not counted. Refused reruns leave the previous PDF in place.
-
-Job numeric inputs have upper bounds: translation workers 1000 (preserving PaperLoom's existing DeepSeek default), translation/classification batch size 1000, render compile workers 64, compression DPI 1200, and both runtime timeouts 604800 seconds. Values above these limits return 400 and identify the field. Zero retains its existing automatic/disabled meaning where supported. The request JSON Schema mirrors these bounds.
 
 Configuration is captured when `AppConfig` is built and passed explicitly into the service; idle periods and subsequent requests do not reread environment variables. Capacity is not registered globally by directory path. Independent `build_state` calls have independent capacity even when configured with the same uploads directory; applications requiring shared capacity must explicitly share the same service instance. This is an in-process limit, not coordination across API processes.
 
@@ -32,7 +28,7 @@ Configuration is captured when `AppConfig` is built and passed explicitly into t
 | `RUST_API_UPLOAD_QUEUE_WAIT_MS` | 5000 per stage wait | 1–60000 |
 | `RUST_API_UPLOAD_BUFFER_MIB` | 512 | 1–16384 |
 
-Out-of-range numeric values are clamped; malformed values use defaults. These are conservative starting defaults, not universal throughput optima. The overall admitted-request cap is parse workers + repair workers + queue capacity, including publication work; buffer pressure can reject earlier than the queue count. Increase the input budget alongside the existing single-upload limit when accepting PDFs larger than 512 MiB. Burst/load tests should include parser RSS and other API traffic, not just upload throughput.
+Out-of-range numeric values are clamped; malformed values use defaults. These are conservative starting defaults, not universal throughput optima. The overall admitted-request cap is parse workers + repair workers + queue capacity, including publication work; buffer pressure can reject earlier than the queue count. Increase the input budget alongside the existing single-upload limit when accepting PDFs larger than 512 MiB. Each upload reserves its file size from this budget while its page count is read: the whole file is read into memory once, and stream contents (images, page content, fonts) are dropped as they are parsed, so the peak is about the file size (before 2026-10-28 every stream was kept as a second copy, roughly doubling the peak). Burst/load tests should include parser RSS and other API traffic, not just upload throughput.
 
 Multipart fields:
 
@@ -46,7 +42,7 @@ Upload limit policy:
 - `RUST_API_UPLOAD_MAX_PAGES`: a positive value is the page limit; `0` disables
   only the page-count limit
 - the same byte limit applies while streaming PDF fields for
-  `/api/v1/uploads`, `/api/v1/ocr/jobs`, and `/api/v1/translate/bundle`
+  `/api/v1/uploads`
 - a field that exceeds the byte limit is rejected with HTTP `413` and stable
   code `PAYLOAD_TOO_LARGE` before the complete field is buffered or persisted
 
@@ -131,6 +127,7 @@ Canonical JSON request:
     "body_leading_factor": 1.08,
     "font_unify_mode": "role_min",
     "source_cleanup_strategy": "pikepdf_text_strip",
+    "engine": "typst",
     "inner_bbox_shrink_x": 0.0,
     "inner_bbox_shrink_y": 0.0,
     "inner_bbox_dense_shrink_x": 0.0,
@@ -145,14 +142,33 @@ Canonical JSON request:
 }
 ```
 
+`runtime.job_id` is server-assigned. Public entries (`POST /api/v1/jobs`,
+`POST /api/v1/documents/{document_id}/translate|ocr`)
+reject a non-empty value with `400` (`runtime.job_id is set by the server; do not
+send it`); send it empty or omit it. As a backstop, `submit_job` refuses a new job
+whose id is not `[A-Za-z0-9_-]{1,128}` (`400`) or already exists (`409`). Internal
+paths (retry, rerun, OCR-ambiguity recovery) clear the field and get a fresh id.
+
+Upper bounds (since 2026-10-24; a larger value answers `400` with
+`"<field> must be at most <max>"`): `translation.workers` ≤ 256,
+`translation.batch_size` and `translation.classify_batch_size` ≤ 1000,
+`render.compile_workers` ≤ 64, `render.pdf_compress_dpi` ≤ 1200,
+`runtime.timeout_seconds` and `runtime.no_output_timeout_seconds` ≤ 604800 (one week).
+The lower bounds are unchanged.
+
 Timeout note:
 
-`timeout_seconds` and `no_output_timeout_seconds` are two independent limits and
-are meant to sit orders of magnitude apart.
+`timeout_seconds` and `no_output_timeout_seconds` are two independent limits.
 
-- `timeout_seconds` caps the whole run and must be sized for the worst case — a
-  long book translation legitimately takes hours, so the threshold has to be
-  hours. It must be a positive integer; there is no "unlimited".
+- `timeout_seconds` is how long a stage worker may go **without progress**
+  (since 2026-10-31; it used to cap the whole run from process start, and the
+  web client's default of 1800 s killed agent translations of 100+ page books
+  half way). Progress means the worker reports a new stage or progress value
+  (a page or batch done), commits a checkpoint, or publishes an artifact;
+  changing only the message or repeating the same progress does not count.
+  A worker that keeps making progress runs until the absolute cap
+  `RUST_API_WORKER_MAX_RUNTIME_SECS` (server env, default 24 h, `0` = no cap;
+  a larger `timeout_seconds` wins). It must be a positive integer.
 - `no_output_timeout_seconds` watches whether the worker is still moving: the
   clock resets on every stdout line and expires only if the worker goes silent.
   A job that wedges after page one no longer waits out the multi-hour total.
@@ -160,11 +176,12 @@ are meant to sit orders of magnitude apart.
   waiting on a provider response, OCRing a single page — so there is no safe
   universal default; set it per workflow.
 
-Both end the job as `failed` with `return_code: -1` and failure code
+All three end the job as `failed` with `return_code: -1` and failure code
 `process_timeout`, since the handling is the same either way. They differ in
-`stage_detail`, because the thing to investigate is not: the total timeout reads
-`provider timeout` (or `normalization timeout`), the idle timeout reads
-`no output for {N}s`. Output collected before the job wedged is preserved in
+`stage_detail`, because the thing to investigate is not: no progress reads
+`no progress for {N}s` (it used to read `provider timeout` or
+`normalization timeout`), the absolute cap reads `max runtime {N}s exceeded`,
+the idle timeout reads `no output for {N}s`. Output collected before the job wedged is preserved in
 either case.
 
 Security note:
@@ -186,7 +203,7 @@ Security note:
 
 Diagnostics note:
 
-- `GET /api/v1/jobs/{job_id}/diagnostics` returns failure-oriented fields plus optional `render_diagnostics`
+- `GET /api/v1/jobs/{job_id}/reports/failure` returns failure-oriented fields plus optional `render_diagnostics`
 - `render_diagnostics` is copied from `artifacts/pipeline_summary.json` when present
 - current render diagnostics include fallback summaries such as `typst_cover_fallback_pages` and `typst_cover_fallback_items`; these are operational diagnostics, not failure classification fields
 
@@ -205,13 +222,27 @@ Workflow contract:
   then runs Translate -> Render without creating an OCR child. This endpoint
   sets the internal `runtime.render_after_translation` policy while preserving
   `workflow=translate` in the public response.
+- The document entries are as strict as `POST /api/v1/jobs` (2026-10-19). They
+  parse the body the same way (unknown or mistyped fields are `400`
+  `invalid job payload: …`) and reject fields that contradict the entry with
+  `400` instead of rewriting them:
+  - `POST /api/v1/documents/{document_id}/ocr`: `workflow` other than `ocr`
+    (omitting it is fine), a non-empty `source.artifact_job_id`, or a non-empty
+    `source.source_url`. Before, any `workflow` was silently turned into `ocr`
+    and the two source fields were silently cleared.
+  - `POST /api/v1/documents/{document_id}/translate`: `workflow=ocr|render`
+    (as before) and a non-empty `source.source_url` (was silently cleared).
+  - `source.upload_id` may be sent; it must equal the document's newest upload.
+  The request is checked before the document's state: a bad request is `400`
+  even when the document does not exist (`404`) or the OCR to reuse is not
+  usable (`404`/`409`). `runtime.job_id` is rejected first, as on `POST /jobs`.
 - OCR reuse failures never fall back silently. They return `409` (or `404` for a
   missing source job) with `code`, `message`, `reason`, and
   `can_fallback_to_ocr=true`; callers must explicitly resubmit without
   `source.artifact_job_id` to authorize a new OCR run.
 - `workflow=render`: reuse `source.artifact_job_id`; rerun render only
-- `POST /api/v1/jobs/{job_id}/rerun`: if the source job already has committed `translations_dir + source_pdf`, the backend reuses the same `job_id`, resets render runtime state, and replaces render artifacts in place. If only `normalized_document_json + source_pdf` is available, it creates a new `book` recovery job. A failed/canceled source job with `translation_checkpoint_json` seeds the new job by copy-on-write; the worker reuses it only when the translation input fingerprint matches.
-- `GET /api/v1/jobs/{job_id}/stage-actions` and `POST /api/v1/jobs/{job_id}/retry-stage` are the explicit stage-level retry contract for frontend stage cards. The backend decides reusable artifacts, rerun stages, and whether a request can run.
+- `POST /api/v1/jobs/{job_id}/actions/rerun` (removed: `/rerun`): if the source job already has committed `translations_dir + source_pdf`, the backend reuses the same `job_id`, resets render runtime state, and replaces render artifacts in place. If only `normalized_document_json + source_pdf` is available, it creates a new `book` recovery job. A failed/canceled source job with `translation_checkpoint_json` seeds the new job by copy-on-write; the worker reuses it only when the translation input fingerprint matches.
+- `GET /api/v1/jobs/{job_id}/actions` and `POST /api/v1/jobs/{job_id}/actions/retry-stage` (removed: `/stage-actions` and `/retry-stage`) are the explicit stage-level retry contract for frontend stage cards. The backend decides reusable artifacts, rerun stages, and whether a request can run.
 
 OCR artifact reuse owns these error codes:
 
@@ -253,9 +284,8 @@ shared generic error codes.
 
 Endpoint boundary:
 
-- `/api/v1/jobs` is for `book`, `translate`, and `render`
-- `/api/v1/ocr/jobs` is for OCR-only jobs
-- `/api/v1/translate/bundle` is the synchronous multipart helper for the same full flow; flat multipart fields remain supported here, including `provider=paddle|mineru`, `ocr_credential_ref`, and the translation field `credential_ref`
+- `/api/v1/jobs` is for `book`, `translate`, `render`, and OCR-only (`workflow=ocr`) jobs. An OCR-only job is created by uploading the PDF first (`POST /api/v1/uploads`) and then sending `POST /api/v1/jobs` with `workflow: "ocr"` and `source.upload_id` (or `source.source_url`). The former multipart `POST /api/v1/ocr/jobs` was removed on 2026-10-18
+- The multipart helper `POST /api/v1/translate/bundle` (second port, flat fields) was removed on 2026-10-19; the second port (`42000`) now serves only `/health` and `/ready`. Upload with `POST /api/v1/uploads`, then `POST /api/v1/jobs`
 - `GET /api/v1/providers/ocr` returns discoverable OCR provider metadata, credentials, options, capabilities, and artifact layout
 
 The provider response's optional `credential` object is authoritative for
@@ -282,13 +312,23 @@ validated for that path.
 OCR provider options:
 
 - `ocr.options` is the canonical JSON object for provider-specific non-secret options.
-- For multipart helper requests, send the same object as JSON string field `ocr_options`.
-- Multipart helper requests accept `timeout_seconds` and `no_output_timeout_seconds` as flat fields, same semantics as the JSON `runtime` block.
+- Server-owned options are rejected (since 2026-10-22): `command` and
+  `raw_provider` for every provider, plus any option whose entry in
+  `ocr_providers.json` declares `env` (unless it also declares
+  `"client_settable": true`). A request carrying one returns 400
+  `ocr.options.<key> is server-owned; configure it on the server …`. This applies
+  to `POST /api/v1/jobs`, `POST /api/v1/documents/:id/translate|ocr`, and retry
+  `overrides.ocr.options`. Reruns and stage retries copy the source job's request
+  and drop these keys first (jobs created before the check may still store them),
+  so an old job never fails a rerun because of them. The stage spec only ever
+  carries the server-configured values, and the Python pipeline ignores
+  `command`/`raw_provider` in the spec and reads them from the provider config or
+  `RETAIN_LOCAL_OCR_COMMAND` / `RETAIN_OCR_RAW_PROVIDER`.
 - Paddle `ocr.options.transport` accepts `official_http` (default) or `official_cli`.
-- `official_cli` uses the externally installed official `paddleocr api` client and is only accepted by `/api/v1/ocr/jobs`. It is a Markdown/coarse document extraction path; its result does not provide the `bbox`/`prunedResult` contract required by translation and render, so `book` and `translate` requests must use `official_http`.
+- `official_cli` uses the externally installed official `paddleocr api` client and is only accepted by OCR-only jobs (`workflow=ocr`). It is a Markdown/coarse document extraction path; its result does not provide the `bbox`/`prunedResult` contract required by translation and render, so `book` and `translate` requests must use `official_http`.
 - Selecting `official_cli` does not install PaddleOCR or add it to the server base image. A missing executable is reported as a provider worker failure.
 - Legacy fields such as `paddle_model` and `paddle_api_url` remain accepted for current built-in providers; new command providers should prefer `ocr.options`.
-- Dynamic providers declared in `services/config/ocr_providers.json` with
+- Dynamic providers declared in `backend/config/ocr_providers.json` with
   `kind=local_command` or `kind=remote_command` are discoverable through
   `/api/v1/providers/ocr` and are executed through `provider.stage.v1`.
   The removed `backend/config` compatibility path is not a supported source.
@@ -300,7 +340,11 @@ OCR provider options:
   exposes the resolved secret to the command as `RETAIN_OCR_CREDENTIAL` and,
   when configured, the provider-specific environment variable.
 
-`GET /api/v1/providers/ocr` response example:
+`GET /api/v1/providers/ocr` response example (schema:
+`contracts/ocr-providers.v1.schema.json`; not paginated). Every option carries
+`client_settable` (added 2026-10-22); options with `client_settable: false`
+(for example `local.command`, `local.raw_provider`) are listed with
+`"default": null` so the operator's configured command line is not disclosed:
 
 ```json
 {
@@ -323,14 +367,20 @@ OCR provider options:
         "transport": {
           "type": "string",
           "default": "official_http",
-          "choices": ["official_http", "official_cli"]
+          "aliases": {},
+          "choices": ["official_http", "official_cli"],
+          "required": false,
+          "client_settable": true
         },
         "paddle_model": {
           "type": "string",
           "default": "PaddleOCR-VL-1.6",
           "aliases": {
             "paddleocr-vl": "PaddleOCR-VL-1.6"
-          }
+          },
+          "choices": [],
+          "required": false,
+          "client_settable": true
         }
       },
       "capabilities": {
@@ -374,6 +424,7 @@ Render options:
 - `bbox_text_strip` and `legacy` are compatibility aliases for the pikepdf text-strip path
 - `redact_restore_formulas` is a compatibility alias for the current `pikepdf_text_strip` behavior; keep the name only for old configs/spec replay and do not treat it as a separate formula restore strategy
 - `render.inner_bbox_shrink_x`, `render.inner_bbox_shrink_y`, `render.inner_bbox_dense_shrink_x`, and `render.inner_bbox_dense_shrink_y` default to `0.0`
+- `render.engine` defaults to `rpr_fit`, the in-house typesetting engine (retain-pdf-rendering) that measures and picks font sizes itself; `typst` selects the original Typst route. The old value `rpr` is still accepted and rendered as `rpr_fit` (its own route was removed on 2026-11-02). `dual` mode, a non-Source-Han-Serif font, an unavailable Node (>= 22.8 required) or an engine failure fall back to `typst` with a warning in `pipeline_summary` and `fit_report.reason`; the job does not fail
 
 Validation:
 
@@ -391,7 +442,7 @@ Validation:
 - a supplied `translation.credential_ref` must exist and have kind
   `translation_api_key`; invalid, missing, wrong-kind, or unavailable-vault
   references return structured `CREDENTIAL_*` errors
-- render enum-like options are validated in Rust; unknown `render_mode`, `font_unify_mode`, or `source_cleanup_strategy` values return `400`
+- render enum-like options are validated in Rust; unknown `render_mode`, `font_unify_mode`, `source_cleanup_strategy`, or `engine` values return `400` (also for `actions/retry-stage` `overrides.render.engine`)
 - provider-specific upstream limits apply only to the selected OCR provider, not to the shared `workflow=book` protocol itself
 - Rust API no longer supplies default OCR provider / LLM credentials for `create_job`
 - legacy flat JSON fields such as `upload_id`, `model`, and `api_key` are rejected by `/api/v1/jobs`; flat field mapping only remains in selected multipart helper endpoints
@@ -410,7 +461,9 @@ Glossary v1 contract:
 
 - `translation.glossary_id`: optional named glossary resource ID
 - `translation.glossary_entries`: optional inline glossary array; each item is `{source, target, note}`
-- if both are provided, the backend loads the named glossary first and then overlays inline entries by normalized `source`
+- if both are provided, the backend loads the named glossary first and then overlays inline entries by the (source, context) key (sources lowercased only for `case_insensitive`; since 2026-10-22)
+- a missing or disabled `translation.glossary_id` is 400 (since 2026-10-22; a missing one used to be 404)
+- the stored job request keeps the merged snapshot in `glossary_entries` and the user's inline entries in `glossary_inline_entries` (server-written, omitted when empty); reruns that create a new job re-resolve against the current glossary with those inline entries, 409 `glossary_missing` / `glossary_disabled` when the source job's glossary is gone / disabled. See `docs/api/04-翻译/03-术语表.md`
 - inline entries override resource entries with the same `source`
 - glossary usage is prompt/guidance only in v1; the pipeline does not force a post-translation find/replace pass
 - frontend should parse Excel itself and send JSON entries, or send CSV text to the helper parse endpoint below; backend does not add Excel parsing
@@ -441,23 +494,23 @@ shows a normal non-reuse submission; `links` and `actions` are abbreviated.
     "links": {
       "self_path": "/api/v1/jobs/20260327190500-ef3456",
       "self_url": "http://127.0.0.1:41000/api/v1/jobs/20260327190500-ef3456",
-      "artifacts_path": "/api/v1/jobs/20260327190500-ef3456/artifacts",
-      "artifacts_url": "http://127.0.0.1:41000/api/v1/jobs/20260327190500-ef3456/artifacts",
-      "artifacts_manifest_path": "/api/v1/jobs/20260327190500-ef3456/artifacts-manifest",
-      "artifacts_manifest_url": "http://127.0.0.1:41000/api/v1/jobs/20260327190500-ef3456/artifacts-manifest",
-      "events_path": "/api/v1/jobs/20260327190500-ef3456/events",
-      "events_url": "http://127.0.0.1:41000/api/v1/jobs/20260327190500-ef3456/events",
-      "cancel_path": "/api/v1/jobs/20260327190500-ef3456/cancel",
-      "cancel_url": "http://127.0.0.1:41000/api/v1/jobs/20260327190500-ef3456/cancel"
+      "artifacts_path": "/api/v1/jobs/20260327190500-ef3456/files",
+      "artifacts_url": "http://127.0.0.1:41000/api/v1/jobs/20260327190500-ef3456/files",
+      "artifacts_manifest_path": "/api/v1/jobs/20260327190500-ef3456/files",
+      "artifacts_manifest_url": "http://127.0.0.1:41000/api/v1/jobs/20260327190500-ef3456/files",
+      "events_path": "/api/v1/jobs/20260327190500-ef3456/progress/events",
+      "events_url": "http://127.0.0.1:41000/api/v1/jobs/20260327190500-ef3456/progress/events",
+      "cancel_path": "/api/v1/jobs/20260327190500-ef3456/actions/cancel",
+      "cancel_url": "http://127.0.0.1:41000/api/v1/jobs/20260327190500-ef3456/actions/cancel"
     },
     "actions": {
       "open_job": {"enabled": true, "method": "GET", "path": "/api/v1/jobs/20260327190500-ef3456", "url": "http://127.0.0.1:41000/api/v1/jobs/20260327190500-ef3456"},
-      "open_artifacts": {"enabled": true, "method": "GET", "path": "/api/v1/jobs/20260327190500-ef3456/artifacts", "url": "http://127.0.0.1:41000/api/v1/jobs/20260327190500-ef3456/artifacts"},
-      "cancel": {"enabled": true, "method": "POST", "path": "/api/v1/jobs/20260327190500-ef3456/cancel", "url": "http://127.0.0.1:41000/api/v1/jobs/20260327190500-ef3456/cancel"},
-      "download_pdf": {"enabled": false, "method": "GET", "path": "/api/v1/jobs/20260327190500-ef3456/pdf", "url": "http://127.0.0.1:41000/api/v1/jobs/20260327190500-ef3456/pdf"},
-      "open_markdown": {"enabled": false, "method": "GET", "path": "/api/v1/jobs/20260327190500-ef3456/markdown", "url": "http://127.0.0.1:41000/api/v1/jobs/20260327190500-ef3456/markdown"},
-      "open_markdown_raw": {"enabled": false, "method": "GET", "path": "/api/v1/jobs/20260327190500-ef3456/markdown?raw=true", "url": "http://127.0.0.1:41000/api/v1/jobs/20260327190500-ef3456/markdown?raw=true"},
-      "download_bundle": {"enabled": false, "method": "GET", "path": "/api/v1/jobs/20260327190500-ef3456/download", "url": "http://127.0.0.1:41000/api/v1/jobs/20260327190500-ef3456/download"}
+      "open_artifacts": {"enabled": true, "method": "GET", "path": "/api/v1/jobs/20260327190500-ef3456/files", "url": "http://127.0.0.1:41000/api/v1/jobs/20260327190500-ef3456/files"},
+      "cancel": {"enabled": true, "method": "POST", "path": "/api/v1/jobs/20260327190500-ef3456/actions/cancel", "url": "http://127.0.0.1:41000/api/v1/jobs/20260327190500-ef3456/actions/cancel"},
+      "download_pdf": {"enabled": false, "method": "GET", "path": "/api/v1/jobs/20260327190500-ef3456/files/output/translated.pdf", "url": "http://127.0.0.1:41000/api/v1/jobs/20260327190500-ef3456/files/output/translated.pdf"},
+      "open_markdown": {"enabled": false, "method": "GET", "path": "/api/v1/jobs/20260327190500-ef3456/reader/markdown", "url": "http://127.0.0.1:41000/api/v1/jobs/20260327190500-ef3456/reader/markdown"},
+      "open_markdown_raw": {"enabled": false, "method": "GET", "path": "/api/v1/jobs/20260327190500-ef3456/files/output/ocr.md", "url": "http://127.0.0.1:41000/api/v1/jobs/20260327190500-ef3456/files/output/ocr.md"},
+      "download_bundle": {"enabled": false, "method": "GET", "path": "/api/v1/jobs/20260327190500-ef3456/files/output/all.zip?download=1", "url": "http://127.0.0.1:41000/api/v1/jobs/20260327190500-ef3456/files/output/all.zip?download=1"}
     }
   }
 }

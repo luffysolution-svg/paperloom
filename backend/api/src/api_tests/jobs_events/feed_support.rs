@@ -69,7 +69,7 @@ pub(super) async fn response(app: &Router, uri: &str) -> (StatusCode, Value) {
 }
 
 pub(super) async fn page(app: &Router, job_id: &str, query: &str) -> Value {
-    let (status, payload) = response(app, &format!("/api/v1/jobs/{job_id}/events?{query}")).await;
+    let (status, payload) = response(app, &format!("/api/v1/jobs/{job_id}/progress/events?{query}")).await;
     assert_eq!(status, StatusCode::OK, "{payload}");
     assert_eq!(payload["data"]["protocol_version"], 2);
     assert!(!cursor(&payload["data"]).is_empty());

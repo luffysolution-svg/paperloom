@@ -1,7 +1,4 @@
-import type { ReaderAssistantPanel, ReaderWorkspaceMode } from "./components/react-pdf/index.js";
-import { loadReaderViewState } from "./shared/state/reader-view-state.js";
-export declare function resolveReaderAiLayout(_mode: string): "workspace";
-export declare function resolveVisiblePdfMode(mode: "source" | "compare" | "translated", assistantPanel: ReaderAssistantPanel | null): "compare" | "source" | "translated";
+import type { ReaderWorkspaceMode } from "./components/react-pdf/index.js";
 /** 阅读视图可见台面的判别联合。 */
 export type ReaderPaneComposition = {
     /**
@@ -54,6 +51,5 @@ export declare function resolveReaderPaneComposition(input: {
  * 返回 null 表示保持用户当前选择不动。
  */
 export declare function resolveLiveTranslationVisibleOnWorkspaceChange(next: ReaderWorkspaceMode, liveTranslationAvailable: boolean): boolean | null;
-export declare function resolveInitialAssistantPanel(mode: "source" | "compare" | "translated", saved: ReturnType<typeof loadReaderViewState>): ReaderAssistantPanel | null;
 export declare function ReaderAppReactPdf(): import("react").JSX.Element;
 //# sourceMappingURL=ReaderAppReactPdf.d.ts.map

@@ -1,12 +1,11 @@
 export declare function resolveJobActions(job: any): {
     cancelEnabled: boolean;
-    rerunEnabled: boolean;
+    resumeEnabled: boolean;
     bundleEnabled: boolean;
     pdfEnabled: boolean;
     markdownJsonEnabled: boolean;
     markdownRawEnabled: boolean;
     cancel: string;
-    rerun: string;
     bundle: string;
     pdf: string;
     markdownJson: string;

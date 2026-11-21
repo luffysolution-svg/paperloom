@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { ExternalLink, LoaderCircle } from "lucide-react";
 
 import { writeTranslatedPdfToZotero, type ZoteroWritebackResult } from "@/platform/api/index.js";
-import { Button } from "@/ui/components/button.js";
 import {
+  Button,
   Dialog,
   DialogBody,
   DialogClose,
@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogShell,
   DialogTitle,
-} from "@/ui/components/dialog.js";
+} from "@retainpdf/ui";
 
 function openZoteroUri(uri: string): void {
   if (typeof window === "undefined" || !uri) return;
@@ -99,7 +99,7 @@ export function ZoteroWritebackDialog({
               </Button>
             )}
             <DialogClose asChild>
-              <Button type="button" variant="outline">{result ? "完成" : "取消"}</Button>
+              <Button type="button" variant="secondary">{result ? "完成" : "取消"}</Button>
             </DialogClose>
           </DialogFooter>
         </DialogShell>

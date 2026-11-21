@@ -1,4 +1,15 @@
-"""Clip OCR rounding overflow to the page before validation, retaining the original block bounds."""
+"""把略微超出页边的框夹回页内（2026-10-29 起）。
+
+OCR 的坐标有取整误差，块常常超出页边一两个单位。校验器要求块在页内，以前一个这样的块就让整份文档校验失败、任务直接失败
+（MinerU 超出 1.5 点、Paddle 超出 2 像素的人造样例都撞上过，见 `devtools/tests/document_schema/fixtures/synthetic/`）。
+
+只夹"略微"超出的：每条边超出的距离不超过页面那一边长的 `PAGE_OVERFLOW_TOLERANCE_RATIO`。超得更多的不动，让校验照样报错——那多半是
+数据真的错了（单位弄错、配错了页），不该悄悄藏起来。块夹了以后，它的行、行里的片段、块的片段跟着收进块里（校验要求它们在块内）；
+整个落在块外的不动，照样让校验报出来。夹过的块在 `metadata.page_overflow_clamped` 记下原来的框，文档的 `derived` 记夹了几个
+（没夹的文档一个字都不改）。
+
+在适配器出来、第一次校验之前调（坐标还是 OCR 自己的单位，按 OCR 自己的页面尺寸比）。
+"""
 
 from __future__ import annotations
 

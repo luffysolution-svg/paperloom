@@ -1,0 +1,12 @@
+/* 状态详情 · 页签面板容器。（StatusDetailTabPanel）
+ *
+ * @owns status-detail, detail, stage-history, events, event, failure, info-list
+ * @uses status-panel */
+
+.detail-tab-panel .status-panel {
+  min-height: 100%;
+}
+
+.detail-tab-panel .detail-grid {
+  padding-right: 2px;
+}

@@ -22,6 +22,15 @@ fn sha256_hex(bytes: &[u8]) -> String {
 }
 
 fn seed_live_translation_job(state: &crate::AppState, test_name: &str) -> (JobSnapshot, Vec<u8>) {
+    seed_live_translation_job_with_page_file(state, test_name, "page-001-deepseek.json")
+}
+
+/// `page_file`：每页译文的文件名，2026-10-30 起是 page-001.json，以前的任务是 page-001-deepseek.json。
+fn seed_live_translation_job_with_page_file(
+    state: &crate::AppState,
+    test_name: &str,
+    page_file: &str,
+) -> (JobSnapshot, Vec<u8>) {
     let mut job = JobSnapshot::new(
         format!("job-live-translation-{test_name}"),
         CreateJobInput::default(),
@@ -105,12 +114,12 @@ fn seed_live_translation_job(state: &crate::AppState, test_name: &str) -> (JobSn
         translated_dir
             .join(".translation-checkpoints")
             .join("generation-1")
-            .join("page-001-deepseek.json"),
+            .join(page_file),
         &snapshot,
     )
     .expect("write committed snapshot");
     fs::write(
-        translated_dir.join("page-001-deepseek.json"),
+        translated_dir.join(page_file),
         br#"[{"item_id":"p001-b3","translated_text":"not committed"}]"#,
     )
     .expect("write uncommitted working page");
@@ -156,7 +165,7 @@ async fn live_translation_reads_layout_and_only_hash_matched_checkpoint_page() {
         .oneshot(
             Request::builder()
                 .uri(format!(
-                    "/api/v1/jobs/{}/live-translation/layout",
+                    "/api/v1/jobs/{}/progress/layout",
                     job.job_id
                 ))
                 .header("X-API-Key", "test-key")
@@ -198,7 +207,7 @@ async fn live_translation_reads_layout_and_only_hash_matched_checkpoint_page() {
         .oneshot(
             Request::builder()
                 .uri(format!(
-                    "/api/v1/jobs/{}/live-translation/pages/0",
+                    "/api/v1/jobs/{}/progress/pages/0",
                     job.job_id
                 ))
                 .header("X-API-Key", "test-key")
@@ -223,6 +232,27 @@ async fn live_translation_reads_layout_and_only_hash_matched_checkpoint_page() {
 }
 
 #[tokio::test]
+async fn live_translation_reads_pages_named_without_a_model() {
+    let state = test_state("live-translation-neutral-name");
+    let (job, snapshot) = seed_live_translation_job_with_page_file(&state, "neutral-name", "page-001.json");
+    let app = build_app(state);
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/jobs/{}/progress/pages/0", job.job_id))
+                .header("X-API-Key", "test-key")
+                .body(Body::empty())
+                .expect("page request"),
+        )
+        .await
+        .expect("page response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let page = read_json(response).await;
+    assert_eq!(page["data"]["page_hash"], sha256_hex(&snapshot));
+    assert_eq!(page["data"]["items"].as_array().expect("items").len(), 1);
+}
+
+#[tokio::test]
 async fn live_translation_omits_typography_when_structured_prewarm_is_missing() {
     let state = test_state("live-translation-no-typography");
     let (job, _) = seed_live_translation_job(&state, "no-typography");
@@ -240,7 +270,7 @@ async fn live_translation_omits_typography_when_structured_prewarm_is_missing() 
         .oneshot(
             Request::builder()
                 .uri(format!(
-                    "/api/v1/jobs/{}/live-translation/layout",
+                    "/api/v1/jobs/{}/progress/layout",
                     job.job_id
                 ))
                 .header("X-API-Key", "test-key")
@@ -275,7 +305,7 @@ async fn live_translation_refuses_snapshot_when_committed_hash_has_no_match() {
         .oneshot(
             Request::builder()
                 .uri(format!(
-                    "/api/v1/jobs/{}/live-translation/pages/0",
+                    "/api/v1/jobs/{}/progress/pages/0",
                     job.job_id
                 ))
                 .header("X-API-Key", "test-key")
@@ -297,7 +327,7 @@ async fn live_events_streams_authoritative_commit_with_database_sequence() {
         .oneshot(
             Request::builder()
                 .uri(format!(
-                    "/api/v1/jobs/{}/live-events?after_seq=0",
+                    "/api/v1/jobs/{}/progress/stream?after_seq=0",
                     job.job_id
                 ))
                 .header("X-API-Key", "test-key")
@@ -307,6 +337,9 @@ async fn live_events_streams_authoritative_commit_with_database_sequence() {
         .await
         .expect("events response");
     assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["content-type"], "text/event-stream");
+    // 反向代理（nginx）看到这个头就不缓冲，保活和新译文马上能到浏览器。
+    assert_eq!(response.headers()["x-accel-buffering"], "no");
     let mut stream = response.into_body().into_data_stream();
     let chunk = tokio::time::timeout(Duration::from_secs(1), stream.next())
         .await
@@ -357,15 +390,9 @@ async fn live_events_use_the_greater_of_after_seq_and_last_event_id() {
     let response = app
         .oneshot(
             Request::builder()
-                .uri(format!(
-                    "/api/v1/jobs/{}/live-events?after_seq=0",
-                    job.job_id
-                ))
+                .uri(format!("/api/v1/jobs/{}/progress/stream?after_seq=0", job.job_id))
                 .header("X-API-Key", "test-key")
-                .header(
-                    HeaderName::from_static("last-event-id"),
-                    committed_seq.to_string(),
-                )
+                .header(HeaderName::from_static("last-event-id"), committed_seq.to_string())
                 .body(Body::empty())
                 .expect("events request"),
         )
@@ -374,8 +401,71 @@ async fn live_events_use_the_greater_of_after_seq_and_last_event_id() {
     assert_eq!(response.status(), StatusCode::OK);
     let mut stream = response.into_body().into_data_stream();
     let first = tokio::time::timeout(Duration::from_millis(900), stream.next()).await;
-    assert!(
-        first.is_err(),
-        "Last-Event-ID must advance the replay cursor"
-    );
+    assert!(first.is_err(), "Last-Event-ID must advance the replay cursor");
+}
+
+/// 普通读请求共用的有界执行器（2 个槽）被占满时，边翻边看的流照样能开、能收到已提交的页：
+/// 它的轮询走自己的阻塞线程，不和任务列表、详情抢槽（服务端工程审查 M8）。
+///
+/// 反证方式：把 `read_commit_events` 改回走 `run_job_query`，这个测试必须变红——流的第一次查询要排在被占住的槽后面。
+#[tokio::test]
+async fn live_events_do_not_wait_for_the_shared_read_slots() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    let state = test_state("live-translation-events-own-slots");
+    let (job, _snapshot) = seed_live_translation_job(&state, "own-slots");
+
+    // 把两个槽都占住，直到测试结束才放。
+    let started = Arc::new(AtomicUsize::new(0));
+    let mut releases = Vec::new();
+    let mut holders = Vec::new();
+    for index in 0..2 {
+        let (release, wait) = std::sync::mpsc::channel::<()>();
+        releases.push(release);
+        let started = started.clone();
+        let state = state.clone();
+        holders.push(tokio::spawn(async move {
+            crate::routes::common::run_job_query_once(&state, format!("hold-slot-{index}"), move |_| {
+                started.fetch_add(1, Ordering::SeqCst);
+                let _ = wait.recv();
+                Ok(())
+            })
+            .await
+        }));
+    }
+    for _ in 0..200 {
+        if started.load(Ordering::SeqCst) == 2 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert_eq!(started.load(Ordering::SeqCst), 2, "两个槽都应该被占住");
+
+    let opened = tokio::time::timeout(
+        Duration::from_secs(3),
+        build_app(state).oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/jobs/{}/progress/stream?after_seq=0", job.job_id))
+                .header("X-API-Key", "test-key")
+                .body(Body::empty())
+                .expect("events request"),
+        ),
+    )
+    .await;
+    for release in releases {
+        let _ = release.send(());
+    }
+    for holder in holders {
+        holder.await.expect("holder task").expect("holder query");
+    }
+    let response = opened.expect("槽被占满时流也要能开").expect("events response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let mut stream = response.into_body().into_data_stream();
+    let chunk = tokio::time::timeout(Duration::from_secs(1), stream.next())
+        .await
+        .expect("event timeout")
+        .expect("event chunk")
+        .expect("event bytes");
+    assert!(String::from_utf8_lossy(&chunk).contains("event: translation_units_committed"));
 }

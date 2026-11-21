@@ -175,7 +175,6 @@ export function useProtectedPdfFile(
     if (cached) {
       // 渲染里只读缓存不动它；LRU 的「最近用过」在这里记。
       touchFileCache(normalized, cached);
-      setLoaded({ url: normalized, file: cached, loading: false, error: "" });
       return undefined;
     }
     const controller = new AbortController();
@@ -194,8 +193,8 @@ export function useProtectedPdfFile(
 
   if (preloaded) return { file: preloaded, loading: false, error: "" };
   if (!normalized) return EMPTY_STATE;
+  if (loaded?.url === normalized) return loaded;
   const cached = fileCache.get(normalized);
   if (cached) return { file: cached, loading: false, error: "" };
-  if (loaded?.url === normalized) return loaded;
   return LOADING_STATE;
 }

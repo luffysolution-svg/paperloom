@@ -29,7 +29,7 @@ const UPLOAD_ANIMATION_PATH = "/src/assets/animations/pdf_upload_Lottie.json";
 const DOWNLOAD_ANIMATION_PATH = "/src/assets/animations/pdf_download_Lottie.json";
 const RENDER_ANIMATION_PATH = "/src/assets/animations/typst_rendering.json";
 
-const STAGE_ANIMATIONS = {
+const STAGE_ANIMATIONS: Readonly<Record<string, string>> = {
   queued: UPLOAD_ANIMATION_PATH,
   ocr_upload: UPLOAD_ANIMATION_PATH,
   ocr: OCR_ANIMATION_PATH,
@@ -52,10 +52,27 @@ function resolveAnimationPathForStage(stageKey = "") {
 // 惰性解析：resolveLottieVendorUrl 依赖 document.baseURI，模块级求值会在无 DOM
 // 的环境（node 测试经传递依赖 import 本模块时）抛 ERR_INVALID_URL。
 const lottieWebPath = () => resolveLottieVendorUrl("build/player/lottie.min.js");
-let lottieLoaderPromise: Promise<any> | null = null;
+/** lottie-web 全局对象里本文件用到的最小面 */
+export interface LottieAnimation {
+  setSpeed?: (speed: number) => void;
+  play?: () => void;
+  destroy?: () => void;
+}
 
-function windowLottie() {
-  return (globalThis.window as any)?.lottie;
+export interface LottieApi {
+  loadAnimation: (options: {
+    container: HTMLElement;
+    renderer: "svg";
+    loop: boolean;
+    autoplay: boolean;
+    path: string;
+  }) => LottieAnimation;
+}
+
+let lottieLoaderPromise: Promise<LottieApi> | null = null;
+
+function windowLottie(): LottieApi | undefined {
+  return (globalThis.window as (Window & { lottie?: LottieApi }) | undefined)?.lottie;
 }
 
 function loadLottieWeb() {
@@ -66,7 +83,7 @@ function loadLottieWeb() {
   if (lottieLoaderPromise) {
     return lottieLoaderPromise;
   }
-  lottieLoaderPromise = new Promise((resolve, reject) => {
+  lottieLoaderPromise = new Promise<LottieApi>((resolve, reject) => {
     const script = document.createElement("script");
     script.src = lottieWebPath();
     script.async = true;
@@ -80,7 +97,16 @@ function loadLottieWeb() {
   return lottieLoaderPromise;
 }
 
-function speedForProgressDelta(stageKey, previous, next) {
+/** 倍速计算用的进度采样（时间戳毫秒） */
+type SpeedSample = {
+  stageKey: string;
+  current: number;
+  total: number;
+  progressUnit: string;
+  time: number;
+};
+
+function speedForProgressDelta(stageKey: string, previous: SpeedSample | null, next: SpeedSample) {
   if (!["ocr", "translate", "render"].includes(stageKey) || !previous || previous.stageKey !== stageKey || previous.total !== next.total) {
     return 1;
   }
@@ -125,12 +151,12 @@ type ProgressSample = {
 
 export function useLottieStageAnimation(visualStageKey = "", progressSample: ProgressSample = {}) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const stageAnimationRef = useRef(null);
+  const stageAnimationRef = useRef<LottieAnimation | null>(null);
   const stageAnimationKeyRef = useRef("");
   const stageAnimationLoadingKeyRef = useRef("");
   const stageAnimationDesiredKeyRef = useRef("");
   const playbackSpeedRef = useRef(1);
-  const lastProgressSampleRef = useRef(null);
+  const lastProgressSampleRef = useRef<SpeedSample | null>(null);
   const [isFallback, setIsFallback] = useState(false);
 
   const normalized = `${visualStageKey || ""}`.trim();
@@ -151,7 +177,7 @@ export function useLottieStageAnimation(visualStageKey = "", progressSample: Pro
     setIsFallback(false);
   }
 
-  function ensureStageAnimation(stageKey, path) {
+  function ensureStageAnimation(stageKey: string, path: string) {
     const container = containerRef.current;
     if (!container || !path || stageAnimationKeyRef.current === stageKey || stageAnimationLoadingKeyRef.current === stageKey) {
       return;

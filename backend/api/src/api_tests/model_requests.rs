@@ -5,8 +5,7 @@ use crate::models::{
     domain::{JobSnapshot, JobStatusKind},
     request::CreateJobInput,
 };
-use crate::services::model_executor::ModelExecutor;
-use crate::services::model_requests_api::{ModelConnection, ModelRequest, ModelRequestsApi};
+use crate::services::providers::{ModelConnection, ModelExecutor, ModelRequest, ModelRequestsApi};
 use axum::{
     body::Body,
     http::{Request, StatusCode},
@@ -60,11 +59,9 @@ impl Fixture {
             .unwrap();
     }
 
+    /// 能力令牌由任务运行时在进程内直接发（没有签发接口），测试照样直接找执行器要。
     fn capability(&self, job: &str) -> String {
-        self.api.issue(job, profile()).unwrap()["capability"]
-            .as_str()
-            .unwrap()
-            .to_owned()
+        self.executor.register_job(job, &profile(), 3600).unwrap()
     }
 }
 
@@ -95,77 +92,8 @@ fn request() -> ModelRequest {
     .unwrap()
 }
 
-#[test]
-fn issue_rejects_every_changed_snapshot_field() {
-    let fixture = Fixture::new("model-api-frozen-profile");
-    for (field, replacement) in [
-        ("id", json!("other")),
-        ("revision", json!(2)),
-        ("provider", json!("openai_compatible")),
-        ("base_url", json!("https://other.example/v1")),
-        ("model", json!("other-model")),
-        ("credential_ref", json!("cred_other")),
-        ("concurrency", json!(3)),
-        ("thinking", json!("on")),
-        ("stream", json!(true)),
-        ("allow_private_endpoint", json!(false)),
-    ] {
-        let mut value = serde_json::to_value(profile()).unwrap();
-        value[field] = replacement;
-        let changed = serde_json::from_value(value).unwrap();
-        assert!(
-            matches!(
-                fixture.api.issue("job-a", changed),
-                Err(AppError::Conflict(_))
-            ),
-            "{field}"
-        );
-    }
-    for field in ["queue_ms", "connect_ms", "idle_ms", "total_ms"] {
-        let mut value = serde_json::to_value(profile()).unwrap();
-        value["deadlines"][field] = json!(value["deadlines"][field].as_u64().unwrap() + 1);
-        assert!(
-            matches!(
-                fixture
-                    .api
-                    .issue("job-a", serde_json::from_value(value).unwrap()),
-                Err(AppError::Conflict(_))
-            ),
-            "{field}"
-        );
-    }
-    assert_eq!(fixture.capability("job-a").len(), 64);
-}
-
-#[test]
-fn issue_rejects_legacy_fields_that_disagree_with_matching_snapshot() {
-    let fixture = Fixture::new("model-api-frozen-legacy");
-    for field in ["model", "base_url", "credential_ref", "workers"] {
-        fixture.save_job("job-a", JobStatusKind::Queued);
-        let mut job = fixture.state.db.get_job("job-a").unwrap();
-        match field {
-            "model" => job.request_payload.translation.model = "other-model".into(),
-            "base_url" => {
-                job.request_payload.translation.base_url = "https://other.example/v1".into()
-            }
-            "credential_ref" => {
-                job.request_payload.translation.credential_ref = "cred_other".into()
-            }
-            _ => job.request_payload.translation.workers = 3,
-        }
-        fixture.state.db.save_job(&job).unwrap();
-        assert!(
-            matches!(
-                fixture.api.issue("job-a", profile()),
-                Err(AppError::Conflict(_))
-            ),
-            "{field}"
-        );
-    }
-}
-
 #[tokio::test]
-async fn terminal_jobs_reject_issuance_and_submission_without_dispatch() {
+async fn terminal_jobs_reject_submission_without_dispatch() {
     let fixture = Fixture::new("model-api-inactive");
     let token = fixture.capability("job-a");
     for status in [
@@ -174,10 +102,6 @@ async fn terminal_jobs_reject_issuance_and_submission_without_dispatch() {
         JobStatusKind::Canceled,
     ] {
         fixture.save_job("job-a", status);
-        assert!(matches!(
-            fixture.api.issue("job-a", profile()),
-            Err(AppError::Conflict(_))
-        ));
         assert!(matches!(
             fixture.api.submit("job-a", &token, request()).await,
             Err(AppError::Conflict(_))
@@ -190,17 +114,15 @@ async fn terminal_jobs_reject_issuance_and_submission_without_dispatch() {
     }
 }
 
-#[test]
-fn missing_job_is_404_but_corrupt_job_is_500() {
+#[tokio::test]
+async fn corrupt_job_is_500_without_leaking() {
+    // 没有这个任务就发不出令牌（会话表外键指向任务），所以「任务不存在」在验令牌那一步就是 401。
     let fixture = Fixture::new("model-api-job-errors");
-    assert!(matches!(
-        fixture.api.issue("missing", profile()),
-        Err(AppError::NotFound(_))
-    ));
+    let token = fixture.capability("job-a");
     fixture.sql(
         "UPDATE jobs SET request_json='synthetic-private-storage-marker' WHERE job_id='job-a'",
     );
-    let error = fixture.api.issue("job-a", profile()).unwrap_err();
+    let error = fixture.api.submit("job-a", &token, request()).await.unwrap_err();
     assert!(matches!(error, AppError::Internal(_)));
     assert!(!error.to_string().contains(PRIVATE_MARKER));
 }
@@ -222,7 +144,7 @@ async fn disabled_executor_returns_503_for_all_facade_methods() {
     let fixture = Fixture::new("model-api-disabled");
     let api = ModelRequestsApi::new(fixture.state.db.clone(), None);
     assert!(matches!(
-        api.issue("job-a", profile()),
+        api.authorize("job-a", "bad"),
         Err(AppError::ServiceUnavailable(_))
     ));
     assert!(matches!(
@@ -327,34 +249,116 @@ async fn http_storage_faults_are_500_not_401_and_do_not_leak() {
 }
 
 #[tokio::test]
-async fn http_launcher_distinguishes_missing_corrupt_and_unauthorized_jobs() {
-    let fixture = Fixture::new("model-api-http-launcher");
+async fn http_submit_on_a_corrupt_job_is_500_without_leaking() {
+    let fixture = Fixture::new("model-api-http-corrupt-job");
     let token = fixture.capability("job-a");
     fixture.sql(
         "UPDATE jobs SET request_json='synthetic-private-storage-marker' WHERE job_id='job-a'",
     );
-    for (job, key, expected) in [
-        ("missing", "test-key", StatusCode::NOT_FOUND),
-        ("job-a", "test-key", StatusCode::INTERNAL_SERVER_ERROR),
-        ("job-a", "wrong-key", StatusCode::UNAUTHORIZED),
-    ] {
-        let response = build_app(fixture.state.clone())
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri(format!("/api/v1/internal/model/jobs/{job}/capability"))
-                    .header("x-api-key", key)
-                    .header("content-type", "application/json")
-                    .body(Body::from(serde_json::to_vec(&profile()).unwrap()))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(response.status(), expected);
-        let body = read_json(response).await;
-        assert!(!body.to_string().contains(PRIVATE_MARKER));
-    }
     let (status, body) = worker_response(&fixture, "job-a", &token, "submit").await;
     assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(body["code"], 50000);
     assert!(!body.to_string().contains(PRIVATE_MARKER));
+}
+
+async fn raw_submit(
+    fixture: &Fixture,
+    authorization: Option<String>,
+    content_type: Option<&str>,
+    body: &str,
+) -> (StatusCode, Value) {
+    let mut builder = Request::builder()
+        .method("POST")
+        .uri("/api/v1/internal/model/jobs/job-a/requests");
+    if let Some(value) = authorization {
+        builder = builder.header("authorization", value);
+    }
+    if let Some(value) = content_type {
+        builder = builder.header("content-type", value);
+    }
+    let response = build_app(fixture.state.clone())
+        .oneshot(builder.body(Body::from(body.to_owned())).unwrap())
+        .await
+        .unwrap();
+    let status = response.status();
+    (status, read_json(response).await)
+}
+
+#[tokio::test]
+async fn http_worker_checks_the_capability_before_reading_the_body() {
+    let fixture = Fixture::new("model-api-http-auth-before-body");
+    let malformed = [
+        (Some("application/json"), "{"),
+        (Some("application/json"), r#"{"operation_id":"op-a","unknown_field":1}"#),
+        (Some("application/json"), r#"{"operation_id":5}"#),
+        (Some("text/plain"), "{}"),
+        (None, "{}"),
+    ];
+    for authorization in [None, Some("Bearer bad".to_owned()), Some(format!("Bearer {}", "0".repeat(64)))] {
+        for (content_type, body) in malformed {
+            let (status, payload) =
+                raw_submit(&fixture, authorization.clone(), content_type, body).await;
+            assert_eq!(status, StatusCode::UNAUTHORIZED, "{authorization:?} {body}: {payload}");
+            assert_eq!(payload["code"], 40100);
+            assert_eq!(payload["error"]["code"], "UNAUTHORIZED");
+            // 没有有效令牌就不告诉调用方请求体哪里写错了。
+            assert!(!payload.to_string().contains("unknown_field"), "{payload}");
+        }
+    }
+}
+
+#[tokio::test]
+async fn http_worker_body_errors_use_the_api_error_envelope() {
+    let fixture = Fixture::new("model-api-http-body-envelope");
+    let token = Some(format!("Bearer {}", fixture.capability("job-a")));
+    for (content_type, body, status, code, stable) in [
+        (Some("application/json"), "{", StatusCode::BAD_REQUEST, 40000, "BAD_REQUEST"),
+        (
+            Some("application/json"),
+            r#"{"operation_id":"op-a","unknown_field":"synthetic-private-storage-marker"}"#,
+            StatusCode::BAD_REQUEST,
+            40000,
+            "BAD_REQUEST",
+        ),
+        (
+            Some("application/json"),
+            r#"{"operation_id":"synthetic-private-storage-marker","unit_id":7}"#,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            42200,
+            "UNPROCESSABLE_ENTITY",
+        ),
+        (Some("text/plain"), "{}", StatusCode::UNSUPPORTED_MEDIA_TYPE, 41500, "UNSUPPORTED_MEDIA_TYPE"),
+        (None, "{}", StatusCode::UNSUPPORTED_MEDIA_TYPE, 41500, "UNSUPPORTED_MEDIA_TYPE"),
+    ] {
+        let (actual, payload) = raw_submit(&fixture, token.clone(), content_type, body).await;
+        assert_eq!(actual, status, "{body}: {payload}");
+        assert_eq!(payload["code"], code, "{payload}");
+        assert_eq!(payload["error"]["code"], stable, "{payload}");
+        assert_eq!(payload["error"]["http_status"], status.as_u16());
+        // 不回显请求里的值，只在不认识的字段时带字段名。
+        assert!(!payload.to_string().contains(PRIVATE_MARKER), "{payload}");
+    }
+    let (_, payload) = raw_submit(
+        &fixture,
+        token.clone(),
+        Some("application/json"),
+        r#"{"operation_id":"op-a","unknown_field":1}"#,
+    )
+    .await;
+    assert!(payload["message"]
+        .as_str()
+        .unwrap()
+        .starts_with("unknown field `unknown_field`"));
+
+    // 写对了的请求体能过解析、走到任务状态检查（这里任务已结束，409；不真的发上游请求）。
+    fixture.save_job("job-a", JobStatusKind::Succeeded);
+    let (status, payload) = raw_submit(
+        &fixture,
+        token,
+        Some("application/json; charset=utf-8"),
+        &serde_json::to_string(&request()).unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{payload}");
+    assert_eq!(payload["code"], 40900);
 }

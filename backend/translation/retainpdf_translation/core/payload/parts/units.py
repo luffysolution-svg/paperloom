@@ -1,0 +1,401 @@
+from __future__ import annotations
+
+import re
+
+from retainpdf_translation.core.item_reader import item_is_aggregate_geometry_member
+from retainpdf_translation.core.item_reader import item_block_class
+from retainpdf_translation.core.item_reader import item_block_kind
+from retainpdf_translation.core.item_reader import item_source_text
+from retainpdf_translation.core.reading_order import continuation_reading_order
+
+from .formula_gaps import formulas_between
+from .common import (
+    effective_translation_unit_id,
+    GROUP_ITEM_PREFIX,
+    has_item_translation,
+    is_group_unit_id,
+    seed_group_translation_unit,
+)
+from .translation_units import refresh_payload_translation_units
+
+HEAVY_GROUP_MAX_FORMULA_SEGMENTS = 12
+HEAVY_GROUP_MAX_MEMBERS = 3
+HEAVY_GROUP_MAX_SOURCE_CHARS = 1600
+FORMULA_SEGMENT_WINDOW_TARGET_COUNT = 8
+PROTECTED_FORMULA_RE = re.compile(r"<[ft]\d+-[0-9a-z]{3}/>|\[\[FORMULA_\d+]]")
+_MICRO_CONNECTOR_SEGMENTS = {
+    "a",
+    "an",
+    "and",
+    "as",
+    "at",
+    "be",
+    "by",
+    "but",
+    "can",
+    "for",
+    "from",
+    "in",
+    "into",
+    "is",
+    "it",
+    "its",
+    "of",
+    "on",
+    "or",
+    "that",
+    "the",
+    "their",
+    "this",
+    "to",
+    "was",
+    "which",
+    "with",
+}
+
+
+def _segment_word_tokens(text: str) -> list[str]:
+    normalized = " ".join((text or "").split()).strip().lower()
+    if not normalized:
+        return []
+    return re.findall(r"[a-z]+(?:[-'][a-z]+)?", normalized)
+
+
+def _is_micro_formula_segment(text: str) -> bool:
+    normalized = " ".join((text or "").split()).strip().lower()
+    if not normalized:
+        return True
+    words = _segment_word_tokens(normalized)
+    if not words:
+        return True
+    if len(words) <= 2 and len(normalized) <= 20 and all(word in _MICRO_CONNECTOR_SEGMENTS for word in words):
+        return True
+    if len(words) <= 3 and len(normalized) <= 24 and (
+        words[0] in _MICRO_CONNECTOR_SEGMENTS or words[-1] in _MICRO_CONNECTOR_SEGMENTS
+    ):
+        return True
+    if len(words) <= 4 and all(word in _MICRO_CONNECTOR_SEGMENTS for word in words):
+        return True
+    return False
+
+
+def _effective_formula_segment_count(source_text: str) -> int:
+    source = item_source_text({"translation_unit_protected_source_text": source_text}) or ""
+    segments: list[str] = []
+    cursor = 0
+    for match in PROTECTED_FORMULA_RE.finditer(source):
+        text = source[cursor : match.start()]
+        if any(ch.isalpha() for ch in text):
+            segments.append(text.strip())
+        cursor = match.end()
+    tail = source[cursor:]
+    if any(ch.isalpha() for ch in tail):
+        segments.append(tail.strip())
+    if not segments:
+        return 0
+    meaningful = [segment for segment in segments if not _is_micro_formula_segment(segment)]
+    return len(meaningful) or len(segments)
+
+
+def _reset_group_item_to_single(item: dict, *, reason: str) -> None:
+    item_id = str(item.get("item_id", "") or "")
+    item["continuation_group"] = ""
+    item["translation_unit_id"] = item_id
+    item["translation_unit_kind"] = "single"
+    item["translation_unit_member_ids"] = [item_id]
+    item["translation_unit_protected_source_text"] = item.get("protected_source_text", "")
+    item["translation_unit_formula_map"] = item.get("formula_map", [])
+    item["translation_unit_protected_map"] = item.get("protected_map", [])
+    item["group_protected_source_text"] = ""
+    item["group_formula_map"] = []
+    item["group_protected_map"] = []
+    item["translation_unit_formula_before"] = ""
+    item["group_split_reason"] = reason
+
+
+# 跨栏 / 跨页断词：OCR 有时把前一块末尾的半个词补全、还补了句号（"…ab initio calculations."），
+# 后一块开头却仍留着后半截（"tions in order to…"）。原样拼起来，模型看到的是一句话在
+# "calculations." 处结束、后面跟着一个乱码残片——这一块整个被当成残片原样交回了英文
+# （20261014022104-4120a5 p001-b0013）。后半截正好是前一个词的结尾时，删掉残片和多出来的句号。
+_TRAILING_WORD_RE = re.compile(r"([A-Za-z]+)(\.?)$")
+_LEADING_FRAGMENT_RE = re.compile(r"([a-z]+)(?=[\s,;:]|$)")
+_MIN_FRAGMENT_CHARS = 3
+_MIN_WORD_HEAD_CHARS = 3
+
+
+def _drop_duplicated_word_tail(prev: str, nxt: str) -> tuple[str, str]:
+    word = _TRAILING_WORD_RE.search(prev)
+    fragment = _LEADING_FRAGMENT_RE.match(nxt)
+    if not word or not fragment:
+        return prev, nxt
+    whole, tail = word.group(1), fragment.group(1)
+    if len(tail) < _MIN_FRAGMENT_CHARS or len(whole) < len(tail) + _MIN_WORD_HEAD_CHARS:
+        return prev, nxt
+    if not whole.lower().endswith(tail):
+        return prev, nxt
+    return prev[: word.end(1)], nxt[fragment.end(1) :].lstrip()
+
+
+def join_member_sources(chunks: list[str], formulas_before: list[str] | None = None) -> str:
+    """把一组成员的原文拼成一段话：断词处修好再拼。
+
+    - 前一块以连字符收尾（"SF-EOM-" / "calcula-"）：直接接上，不加空格。
+    - 后一块开头是前一块最后一个词的后半截：删掉残片和 OCR 多补的句号。
+    - 两块之间夹着独立公式（`formulas_before`，见 `formula_gaps`）：公式原文放在两块中间，各占一行。
+    """
+    joined = ""
+    for index, chunk in enumerate(chunks):
+        chunk = chunk.strip()
+        formula = (formulas_before[index] if formulas_before and index < len(formulas_before) else "").strip()
+        if not chunk:
+            continue
+        if not joined:
+            joined = chunk
+            continue
+        if formula:
+            joined = f"{joined}\n{formula}\n{chunk}"
+            continue
+        joined, chunk = _drop_duplicated_word_tail(joined, chunk)
+        if not chunk:
+            continue
+        separator = "" if joined.endswith("-") and chunk[:1].isalnum() else " "
+        joined = f"{joined}{separator}{chunk}"
+    return joined
+
+
+def _formula_segment_count(source_text: str) -> int:
+    placeholder_count = len(PROTECTED_FORMULA_RE.findall(source_text or ""))
+    if placeholder_count <= 0:
+        return 0
+    return _effective_formula_segment_count(source_text or "")
+
+
+def _is_heavy_group(combined_source: str, items: list[dict]) -> tuple[bool, str]:
+    segment_count = _formula_segment_count(combined_source)
+    continuation_group = str(items[0].get("continuation_group", "") or "").strip() if items else ""
+    aggregate_geometry_group = item_is_aggregate_geometry_member(items[0]) if items else False
+    if segment_count > HEAVY_GROUP_MAX_FORMULA_SEGMENTS:
+        return True, "formula_heavy_group"
+    if segment_count > FORMULA_SEGMENT_WINDOW_TARGET_COUNT:
+        return True, "formula_windowed_group"
+    if len(combined_source) > HEAVY_GROUP_MAX_SOURCE_CHARS and not continuation_group and not aggregate_geometry_group:
+        return True, "long_continuation_group"
+    if len(items) > HEAVY_GROUP_MAX_MEMBERS and not continuation_group and not aggregate_geometry_group:
+        return True, "large_continuation_group"
+    return False, ""
+
+
+def _build_group_translation_unit(unit_id: str, items: list[dict], formulas_before: list[str] | None = None) -> dict | None:
+    formula_map: list[dict] = []
+    protected_map: list[dict] = []
+    protected_chunks: list[str] = []
+    next_formula_index = 1
+    next_term_index = 1
+    first_item = items[0]
+    for item in items:
+        source = str(item.get("protected_source_text", "") or "")
+        local_map = item.get("formula_map", [])
+        local_protected_map = item.get("protected_map", []) or []
+        remapped_source = source
+        remapped_formulas = []
+        remapped_tokens = []
+        placeholder_mapping: dict[str, str] = {}
+        temporary_mapping: dict[str, str] = {}
+        for local_index, entry in enumerate(local_protected_map, start=1):
+            old_placeholder = entry.get("token_tag") or entry.get("placeholder")
+            token_type = str(entry.get("token_type", "") or "formula")
+            if not old_placeholder:
+                continue
+            temp_placeholder = f"[[GROUP_TMP_{unit_id}_{local_index}]]"
+            if token_type == "formula":
+                new_placeholder = f"<f{next_formula_index}-{str(entry.get('checksum', '') or '000')}/>"
+                next_formula_index += 1
+            elif token_type == "term":
+                new_placeholder = f"<t{next_term_index}-{str(entry.get('checksum', '') or '000')}/>"
+                next_term_index += 1
+            else:
+                continue
+            placeholder_mapping[old_placeholder] = new_placeholder
+            temporary_mapping[old_placeholder] = temp_placeholder
+            remapped_source = remapped_source.replace(old_placeholder, temp_placeholder)
+
+        for old_placeholder, temp_placeholder in temporary_mapping.items():
+            remapped_source = remapped_source.replace(temp_placeholder, placeholder_mapping[old_placeholder])
+
+        for entry in local_protected_map:
+            old_placeholder = entry.get("token_tag") or entry.get("placeholder")
+            if not old_placeholder or old_placeholder not in placeholder_mapping:
+                continue
+            remapped_entry = dict(entry)
+            remapped_entry["token_tag"] = placeholder_mapping[old_placeholder]
+            remapped_tokens.append(remapped_entry)
+            if str(entry.get("token_type", "") or "formula") == "formula":
+                remapped_formulas.append(
+                    {
+                        "placeholder": placeholder_mapping[old_placeholder],
+                        "formula_text": entry.get("restore_text") or entry.get("formula_text") or entry.get("original_text") or "",
+                    }
+                )
+        formula_map.extend(remapped_formulas)
+        protected_map.extend(remapped_tokens)
+        protected_chunks.append(remapped_source.strip())
+
+    formulas_before = formulas_before or [""] * len(items)
+    combined_source = join_member_sources(protected_chunks, formulas_before)
+    if not combined_source:
+        for item in items:
+            _reset_group_item_to_single(item, reason="empty_continuation_group")
+        return None
+    is_heavy, split_reason = _is_heavy_group(combined_source, items)
+    if is_heavy:
+        for item in items:
+            _reset_group_item_to_single(item, reason=split_reason)
+        return None
+
+    member_ids = [member.get("item_id", "") for member in items]
+    for item, formula in zip(items, formulas_before):
+        item["translation_unit_formula_before"] = formula
+        seed_group_translation_unit(
+            item,
+            unit_id=unit_id,
+            member_ids=member_ids,
+            protected_source_text=combined_source,
+            formula_map=formula_map,
+            protected_map=protected_map,
+        )
+
+    return {
+        "item_id": unit_id,
+        "translation_unit_id": unit_id,
+        "translation_unit_kind": "group",
+        "translation_unit_member_ids": list(member_ids),
+        "translation_unit_members": [
+            {
+                "item_id": str(member_id or ""),
+                "protected_source_text": protected_chunk,
+                **({"formula_before": formula} if formula else {}),
+            }
+            for member_id, protected_chunk, formula in zip(member_ids, protected_chunks, formulas_before)
+        ],
+        "block_type": item_block_kind(first_item) or "text",
+        "block_kind": str(first_item.get("block_kind", "") or item_block_kind(first_item) or "text"),
+        "block_class": item_block_class(first_item),
+        "layout_role": str(first_item.get("layout_role", "") or ""),
+        "semantic_role": str(first_item.get("semantic_role", "") or ""),
+        "structure_role": str(first_item.get("structure_role", "") or ""),
+        "policy_translate": first_item.get("policy_translate"),
+        "asset_id": str(first_item.get("asset_id", "") or ""),
+        "reading_order": int(first_item.get("reading_order", first_item.get("block_idx", 0)) or 0),
+        "raw_block_type": str(first_item.get("raw_block_type", "") or first_item.get("block_type", "") or "").lower(),
+        "normalized_sub_type": str(first_item.get("normalized_sub_type", "") or "").lower(),
+        "math_mode": str(first_item.get("math_mode", "placeholder") or "placeholder"),
+        "metadata": {},
+        "formula_map": formula_map,
+        "protected_map": protected_map,
+        "continuation_group": str(first_item.get("continuation_group", "") or ""),
+        "translation_group_id": str(first_item.get("translation_group_id", "") or ""),
+        "translation_group_kind": str(first_item.get("translation_group_kind", "") or ""),
+        "translation_group_strategy": str(first_item.get("translation_group_strategy", "") or ""),
+        "translation_style_hint": str(first_item.get("translation_style_hint", "") or ""),
+        "protected_source_text": combined_source,
+    }
+
+
+def _compact_group_text(text: str) -> str:
+    return " ".join((text or "").split())
+
+
+def _group_translation_text(item: dict) -> str:
+    return _compact_group_text(
+        item.get("translation_unit_protected_translated_text")
+        or item.get("group_protected_translated_text")
+        or ""
+    )
+
+
+def _member_translation_text(item: dict) -> str:
+    """Member-level translation only: group-level unit fields excluded.
+
+    A stale solo text sitting in a group field must not count as this
+    member being translated; only text written for the member itself does.
+    """
+    return _compact_group_text(
+        item.get("protected_translated_text") or item.get("translated_text") or ""
+    )
+
+
+def _group_translation_complete(items: list[dict]) -> bool:
+    """A group counts as translated when every member is covered.
+
+    Two ways to be covered: (a) all members carry the same group-level
+    translation (genuinely translated as a unit), or (b) every member has
+    its own member-level translation (e.g. translated as singles before a
+    review join; retranslation would add nothing).
+
+    A lone member holding a stale solo group-field text while another
+    member is empty satisfies neither and stays pending (previously: the
+    empty member was silently skipped, then a later regroup exposed it as
+    pending and the checkpoint guard failed the entire job).
+    """
+    if not items:
+        return False
+    texts = [_group_translation_text(item) for item in items]
+    if all(texts) and len(set(texts)) == 1:
+        return True
+    return all(bool(_member_translation_text(item)) for item in items)
+
+
+def _unit_formulas_before(payload: list[dict], items: list[dict]) -> list[str]:
+    """公式直写时，组里两块之间夹着的独立公式（`formula_gaps`）；占位符模式不放。"""
+    if not any(str(item.get("math_mode", "") or "").strip() == "direct_typst" for item in items):
+        return [""] * len(items)
+    return formulas_between(payload, items)
+
+
+def pending_translation_items(payload: list[dict], *, deferred_item_ids: frozenset[str] = frozenset()) -> list[dict]:
+    """待翻的单元（单块，或一组接续段拼成的一个单元）。
+
+    `deferred_item_ids`：这一轮先不翻的块（OCR 和翻译并行时，最新一页最后一段还不知道接不接下一页，
+    见 `workflow/streaming_flow.py`）。组里只要有一块先不翻，整组都不翻，等拼接定下来再整组翻。"""
+    refresh_payload_translation_units(payload)
+    units: list[dict] = []
+    groups: dict[str, list[dict]] = {}
+    deferred_units = {
+        effective_translation_unit_id(item)
+        for item in payload
+        if deferred_item_ids and str(item.get("item_id", "") or "") in deferred_item_ids
+    }
+
+    for item in payload:
+        if not item.get("should_translate", True):
+            continue
+        if deferred_units and (
+            str(item.get("item_id", "") or "") in deferred_item_ids
+            or effective_translation_unit_id(item) in deferred_units
+        ):
+            continue
+        unit_id = effective_translation_unit_id(item)
+        if is_group_unit_id(unit_id):
+            groups.setdefault(unit_id, []).append(item)
+            continue
+        if not has_item_translation(item):
+            units.append(item)
+
+    for unit_id, items in groups.items():
+        items = [item for item in items if item.get("should_translate", True)]
+        if not items:
+            continue
+        if _group_translation_complete(items):
+            continue
+        if items[0].get("continuation_group") and not items[0].get("translation_group_id"):
+            # 双栏交错的接续组按栏内阅读顺序拼；要在算夹着的公式之前排，`formulas_before` 和块一一对应。
+            items = continuation_reading_order(items)
+        unit = _build_group_translation_unit(unit_id, items, _unit_formulas_before(payload, items))
+        if unit is None:
+            for item in items:
+                if not has_item_translation(item):
+                    units.append(item)
+            continue
+        units.append(unit)
+
+    return units

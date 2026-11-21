@@ -1,13 +1,8 @@
-import sys
-from pathlib import Path
 
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
-
-from retainpdf_pipeline.translate.services.classification.page_classifier import _candidate_record
-from retainpdf_pipeline.translate.llm.style_hints import structure_style_hint
+from retainpdf_translation.services.classification.page_classifier import _candidate_record
+from retainpdf_translation.llm.style_hints import structure_style_hint
 
 
 def test_structure_style_hint_prefers_top_level_structure_role() -> None:

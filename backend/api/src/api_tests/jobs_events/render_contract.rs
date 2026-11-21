@@ -71,7 +71,7 @@ async fn job_events_route_keeps_rendering_page_progress_events() {
     let events_response = app
         .oneshot(
             Request::builder()
-                .uri(format!("/api/v1/jobs/{}/events", job.job_id))
+                .uri(format!("/api/v1/jobs/{}/progress/events", job.job_id))
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("events request"),
@@ -120,7 +120,7 @@ async fn job_events_route_canonicalizes_render_prewarm_even_when_user_stage_is_s
     let events_response = app
         .oneshot(
             Request::builder()
-                .uri(format!("/api/v1/jobs/{}/events", job.job_id))
+                .uri(format!("/api/v1/jobs/{}/progress/events", job.job_id))
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("events request"),

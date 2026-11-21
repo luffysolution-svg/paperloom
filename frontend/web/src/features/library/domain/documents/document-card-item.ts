@@ -4,7 +4,7 @@
 // 一张卡",但底层复用 features/recent-jobs 那套按 job_id 键控的 store/去重/轮询
 // 引擎(一行不改)。于是:
 // - 有 active job 的文档(翻译或 OCR-only):卡片带真实 job_id，并把
-//   library/books 或 canonical job detail 的实时 status/stage/readiness 合并进来。
+//   /jobs?job_ids= 列表项或 canonical job detail 的实时 status/stage/readiness 合并进来。
 // - 馆藏文档(active_job_id 为 null/空):给一个**合成命名空间 job_id**
 //   `doc:<document_id>`,让它能原样穿过按 job_id 去重的 dedupeRecentJobs / store,
 //   不被"空 job_id 直接丢弃"的逻辑滤掉;卡片靠 library_only 布尔分支馆藏态
@@ -12,18 +12,37 @@
 
 import { flattenStageSnapshot } from "@retainpdf/domain/job";
 
+import type { LibraryCardItem } from "../types.js";
+
 export const LIBRARY_ONLY_JOB_PREFIX = "doc:";
 
-export function syntheticLibraryJobId(documentId) {
+export function syntheticLibraryJobId(documentId: unknown) {
   const normalized = `${documentId || ""}`.trim();
   return normalized ? `${LIBRARY_ONLY_JOB_PREFIX}${normalized}` : "";
 }
 
-export function isLibraryOnlyItem(item: any = {}) {
+export type LibraryDocumentRecord = {
+  document_id?: string | null;
+  active_job_id?: string | null;
+  title?: string | null;
+  source_filename?: string | null;
+  reading_status?: string | null;
+  source_pdf_url?: string | null;
+  bytes?: number | null;
+  added_at?: string | null;
+  last_opened_at?: string | null;
+  has_translation?: boolean | null;
+  page_count?: number | null;
+  cover_url?: string | null;
+  thumbnail_url?: string | null;
+  updated_at?: string | null;
+};
+
+export function isLibraryOnlyItem(item: LibraryCardItem = {}) {
   return item?.library_only === true;
 }
 
-function firstUrl(...candidates) {
+function firstUrl(...candidates: unknown[]) {
   for (const candidate of candidates) {
     const url = `${candidate || ""}`.trim();
     if (url) {
@@ -33,19 +52,29 @@ function firstUrl(...candidates) {
   return "";
 }
 
-/** book 标题若是 job_id / job_id.pdf / Mock…，改用文档真名 */
-function pickCardTitle(bookTitle, document, jobId) {
+/**
+ * 卡片书名：文档标题优先 —— 和书籍详情同一个名字。
+ *
+ * 文档标题会被元数据建议自动改名、或被用户手改；任务（book 投影）只知道上传时的文件名。
+ * 原来是任务标题优先、只在它是 job_id / Mock 占位时才换文档名，于是改过名的书在卡片上
+ * 还是文件名，和详情对不上。文档没有标题时才用任务标题（占位的除外），最后退回文件名。
+ */
+function pickCardTitle(bookTitle: unknown, document: LibraryDocumentRecord | null | undefined, jobId: unknown) {
+  const docTitle = `${document?.title || ""}`.trim();
+  if (docTitle) {
+    return docTitle;
+  }
   const book = `${bookTitle || ""}`.trim();
-  const docTitle = `${document?.title || document?.source_filename || ""}`.trim();
+  const fileName = `${document?.source_filename || ""}`.trim();
   const id = `${jobId || ""}`.trim();
   const bookIsPlaceholder = !book
     || (id && (book === id || book === `${id}.pdf`))
     || /^Mock(\s|重试|-|_)/i.test(book)
     || /^mock-/i.test(book);
-  if (bookIsPlaceholder && docTitle) {
-    return docTitle;
+  if (bookIsPlaceholder && fileName) {
+    return fileName;
   }
-  return book || docTitle || id || "";
+  return book || fileName || id || "";
 }
 
 // document + 可选的 active-job 投影 → 一张网格卡片 item。
@@ -53,28 +82,34 @@ function pickCardTitle(bookTitle, document, jobId) {
 // 等待后续轮询/恢复。
 //
 // job/document 身份规则:
-// - 文档身份(document_id/reading_status/tags/source_pdf_url/bytes/added_at/
+// - 文档身份(document_id/reading_status/source_pdf_url/bytes/added_at/
 //   last_opened_at)恒由 document 侧提供,三分支共享(sharedDocumentIdentity);
 // - job 身份(job_id/active_job_id/library_only):有投影取投影 job_id(回落
 //   activeJobId);投影未命中保留真实 activeJobId(library_only=false,等轮询);
 //   无 active_job_id 则合成 `doc:<document_id>`(library_only=true),只为穿过
 //   按 job_id 键控的 store/去重,不被解析;
 // - 封面/标题:job 活态优先、文档兜底;book 占位标题(job_id/Mock)改用文档真名。
-export function shapeDocumentCardItem(document: any = {}, jobProjection = null) {
+export function shapeDocumentCardItem(
+  document: LibraryDocumentRecord = {},
+  jobProjection: LibraryCardItem | null = null,
+): LibraryCardItem {
   const documentId = `${document.document_id || ""}`.trim();
   const activeJobId = `${document.active_job_id || ""}`.trim();
   const sharedDocumentIdentity = {
     document_id: documentId,
     reading_status: document.reading_status || "",
-    tags: Array.isArray(document.tags) ? document.tags : [],
     source_pdf_url: document.source_pdf_url || "",
     bytes: document.bytes,
     added_at: document.added_at || "",
     last_opened_at: document.last_opened_at || null,
+    // 文档级事实：有没有任何成功的带译文任务（后端列表字段，老后端不带 → false）。
+    has_translation: document.has_translation === true,
   };
 
   if (activeJobId && jobProjection && typeof jobProjection === "object") {
-    const flattenedJobProjection = flattenStageSnapshot(jobProjection);
+    // flattenStageSnapshot 只把 stage_snapshot 摊平到同一条卡片上；领域包把返回值声明成宽松的
+    // JobLike（page_count 等字段是 unknown），这里按卡片类型收回来。
+    const flattenedJobProjection = flattenStageSnapshot(jobProjection) as LibraryCardItem;
     const jobId = `${flattenedJobProjection.job_id || jobProjection.job_id || activeJobId}`.trim();
     return {
       ...flattenedJobProjection,

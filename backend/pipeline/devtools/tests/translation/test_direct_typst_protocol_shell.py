@@ -1,29 +1,24 @@
-import sys
 import time
 from types import SimpleNamespace
 from unittest.mock import Mock
-from pathlib import Path
 
 import pytest
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
-
-from retainpdf_pipeline.translate.llm.placeholder_guard import TranslationProtocolError
-from retainpdf_pipeline.translate.llm.placeholder_guard import canonicalize_batch_result
-from retainpdf_pipeline.translate.llm.placeholder_guard import MathDelimiterError
-from retainpdf_pipeline.translate.llm.placeholder_guard import result_entry
-from retainpdf_pipeline.translate.llm.placeholder_guard import validate_batch_result
-from retainpdf_pipeline.translate.llm.validation.errors import EmptyTranslationError
-from retainpdf_pipeline.translate.llm.shared.control_context import build_translation_control_context
-from retainpdf_pipeline.translate.llm.shared.orchestration.direct_typst import translate_direct_typst_plain_text_with_retries
-from retainpdf_pipeline.translate.llm.shared.orchestration.direct_typst_salvage import extract_direct_typst_protocol_text
+from retainpdf_translation.llm.placeholder_guard import TranslationProtocolError
+from retainpdf_translation.llm.placeholder_guard import canonicalize_batch_result
+from retainpdf_translation.llm.placeholder_guard import MathDelimiterError
+from retainpdf_translation.llm.placeholder_guard import result_entry
+from retainpdf_translation.llm.placeholder_guard import validate_batch_result
+from retainpdf_translation.llm.validation.errors import EmptyTranslationError
+from retainpdf_translation.llm.shared.control_context import build_translation_control_context
+from retainpdf_translation.llm.shared.orchestration.direct_typst import translate_direct_typst_plain_text_with_retries
+from retainpdf_translation.llm.shared.orchestration.direct_typst_salvage import extract_direct_typst_protocol_text
 
 
 @pytest.fixture
 def retry_sleep(monkeypatch):
-    from retainpdf_pipeline.translate.llm.shared.orchestration import direct_typst
+    from retainpdf_translation.llm.shared.orchestration import direct_typst
 
     sleep = Mock()
     monkeypatch.setattr(direct_typst, "time", SimpleNamespace(perf_counter=time.perf_counter, sleep=sleep))
@@ -58,22 +53,6 @@ def test_extract_direct_typst_protocol_text_handles_item_id_mapping() -> None:
     raw = '{"p014-b004": "示例 4.2：水分子单点能计算的 Q-CHEM 输入。"}'
 
     assert extract_direct_typst_protocol_text(raw, item_id="p014-b004") == "示例 4.2：水分子单点能计算的 Q-CHEM 输入。"
-
-
-def test_canonicalize_batch_result_preserves_group_member_translations() -> None:
-    item = _body_item()
-    item["item_id"] = "__cg__:cg-014-001"
-    item["translation_unit_id"] = "__cg__:cg-014-001"
-    payload = result_entry("translate", "合并后的译文。")
-    payload["member_translations"] = [
-        {"item_id": "p014-b004", "translated_text": "第一段译文。"},
-        {"item_id": "p014-b005", "translated_text": "第二段译文。"},
-    ]
-
-    result = canonicalize_batch_result([item], {item["item_id"]: payload})
-
-    assert result[item["item_id"]]["translated_text"] == "合并后的译文。"
-    assert result[item["item_id"]]["member_translations"] == payload["member_translations"]
 
 
 def test_repeated_direct_typst_protocol_shell_marks_body_failed(retry_sleep) -> None:

@@ -59,6 +59,41 @@ def ocr_provider_options(provider: str) -> dict[str, dict[str, Any]]:
     }
 
 
+# 不管哪个提供方、配置怎么写都只能服务器定的选项：本地 / 命令型 OCR 要执行的命令，和原始结果交给
+# 哪个转换器。和 Rust 的 retainpdf-data ocr_provider::SERVER_OWNED_OCR_OPTION_KEYS 一致（审计 A2，2026-10-22）。
+SERVER_OWNED_OCR_OPTION_KEYS = ("command", "raw_provider")
+
+
+def is_server_owned_ocr_option(provider: str, key: str) -> bool:
+    """这个选项是不是只能服务器定（规则同 Rust 的 is_server_owned_ocr_option）。
+
+    command / raw_provider 永远是；配置里写了 client_settable 的照它；带 env 的是；其余不是。
+    """
+    name = str(key or "").strip()
+    if name in SERVER_OWNED_OCR_OPTION_KEYS:
+        return True
+    spec = ocr_provider_options(provider).get(name)
+    if not spec:
+        return False
+    explicit = spec.get("client_settable")
+    if isinstance(explicit, bool):
+        return not explicit
+    return bool(str(spec.get("env", "") or "").strip())
+
+
+def client_ocr_options(provider: str, options: dict[str, Any] | None) -> dict[str, Any]:
+    """stage spec 的 ocr.options 去掉只能服务器定的键。
+
+    这些值流水线自己从 ocr_providers.json 和环境变量读，不认 stage spec 里的
+    （stage spec 的 options 来自任务请求，就算 Rust 那边漏了也不能拿来执行）。
+    """
+    return {
+        key: value
+        for key, value in dict(options or {}).items()
+        if not is_server_owned_ocr_option(provider, key)
+    }
+
+
 def ocr_provider_credential_spec(provider: str) -> dict[str, Any] | None:
     credential = ocr_provider_definition(provider).get("credential")
     return dict(credential) if isinstance(credential, dict) else None
@@ -163,6 +198,16 @@ def _legacy_provider_definitions() -> dict[str, dict[str, Any]]:
                 },
             },
         },
+        "glm_ocr": {
+            "display_name": "GLM-OCR",
+            "kind": "remote_command",
+            "credential": {
+                "field": "credential",
+                "env": "RETAIN_GLM_OCR_API_TOKEN",
+                "required_for": ["local_upload"],
+            },
+            "options": {},
+        },
         "local": {
             "display_name": "Local OCR",
             "kind": "local_command",
@@ -240,6 +285,8 @@ __all__ = [
     "OCR_PROVIDER_CONFIG_ENV",
     "PADDLE_DEFAULT_MODEL_ENV",
     "PADDLE_DEFAULT_MODEL_FALLBACK",
+    "SERVER_OWNED_OCR_OPTION_KEYS",
+    "client_ocr_options",
     "configured_command_providers",
     "configured_local_command_providers",
     "configured_remote_command_providers",
@@ -248,6 +295,7 @@ __all__ = [
     "ocr_provider_credential_spec",
     "ocr_provider_definition",
     "ocr_provider_definitions",
+    "is_server_owned_ocr_option",
     "ocr_provider_options",
     "paddle_default_model",
 ]

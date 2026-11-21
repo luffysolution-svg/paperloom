@@ -41,11 +41,19 @@
   }
 }
 
+/* 卡片是纵向的：上面一行是原来那条操作栏，下面是「另一栏那段话」的气泡。
+   气泡往下长，不往旁边长 —— 浮条一变宽就开始盖正文。 */
 .reader-sel-pop-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 6px;
+}
+.reader-sel-pop-row {
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 6px;
 }
 
 .reader-sel-pop-context {
@@ -63,6 +71,54 @@
 }
 .reader-sel-pop-context-divider {
   color: color-mix(in srgb, var(--muted) 54%, transparent);
+}
+
+/* 原文 / 译文切换。它顶掉的是原来那段只能看的栏别文字，所以整条浮条只贵
+   40px 左右。 */
+.reader-sel-pop-panes {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 1px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+.reader-sel-pop-pane {
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.reader-sel-pop-pane:hover {
+  color: var(--ink);
+}
+.reader-sel-pop-pane.is-active {
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 18%, transparent);
+}
+
+/* 另一栏的那段文本。高度封死：一段正文可以很长，浮条不该长到把选区本身顶出
+   视口（定位那边按 showPeek 多留了 headroom，这里得守住上限这一半）。 */
+.reader-sel-pop-peek {
+  max-width: 340px;
+  max-height: 120px;
+  margin: 0;
+  padding: 7px 9px;
+  overflow-y: auto;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  color: var(--ink);
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .reader-sel-pop-actions {

@@ -63,6 +63,7 @@
   "dependencies": {
     "@retainpdf/api": "0.1.0",
     "@retainpdf/domain": "0.1.0",
+    "@retainpdf/ui": "0.1.0",
     "marked": "^18.0.6",
     "mathjax-full": "^3.2.1",
     "pdfjs-dist": "^4.8.69",

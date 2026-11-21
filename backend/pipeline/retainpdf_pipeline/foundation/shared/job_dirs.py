@@ -7,13 +7,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from retainpdf_pipeline.foundation.config.output_layout import ARTIFACTS_DIR_NAME
-from retainpdf_pipeline.foundation.config.output_layout import LOGS_DIR_NAME
-from retainpdf_pipeline.foundation.config.output_layout import OCR_DIR_NAME
-from retainpdf_pipeline.foundation.config.output_layout import RENDERED_DIR_NAME
-from retainpdf_pipeline.foundation.config.output_layout import SOURCE_DIR_NAME
-from retainpdf_pipeline.foundation.config.output_layout import TRANSLATED_DIR_NAME
-from retainpdf_pipeline.foundation.config.output_layout import TYPST_DIR_NAME
+from retainpdf_base.output_layout import ARTIFACTS_DIR_NAME
+from retainpdf_base.output_layout import LOGS_DIR_NAME
+from retainpdf_base.output_layout import OCR_DIR_NAME
+from retainpdf_base.output_layout import RENDERED_DIR_NAME
+from retainpdf_base.output_layout import SOURCE_DIR_NAME
+from retainpdf_base.output_layout import TRANSLATED_DIR_NAME
+from retainpdf_base.output_layout import TYPST_DIR_NAME
 
 
 def build_job_id(now: datetime | None = None, random_length: int = 6) -> str:

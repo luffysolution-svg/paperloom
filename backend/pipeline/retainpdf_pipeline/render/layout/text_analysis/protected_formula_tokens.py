@@ -1,6 +1,6 @@
 """Render-local protected-token / inline-formula helpers.
 
-Duplicated from retainpdf_pipeline.translate.core.payload.formula_protection
+Duplicated from retainpdf_translation.core.payload.formula_protection
 (stage-decouple: render must not import translate; duplicate wins over cross-package).
 Only the glossary-independent subset is carried here. Render never passes
 glossary entries, so term-span protection is intentionally unsupported here;

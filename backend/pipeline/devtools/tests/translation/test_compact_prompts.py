@@ -1,13 +1,10 @@
-import json
-
 import pytest
 
-from retainpdf_pipeline.translate.llm.shared.prompt_building import (
-    build_group_member_messages,
+from retainpdf_translation.llm.shared.prompt_building import (
     build_messages,
     build_single_item_fallback_messages,
 )
-from retainpdf_pipeline.translate.prompt_loader import render_prompt
+from retainpdf_translation.prompt_loader import render_prompt
 
 
 def item(**changes):
@@ -36,17 +33,6 @@ def test_single_json_has_no_plain_text_instruction():
     assert "JSON 协议" in messages[1]["content"]
 
 
-def test_group_preserves_member_contract_and_source():
-    source = "Energy $E=mc^2$ is conserved."
-    messages = build_group_member_messages(item(
-        translation_unit_member_ids=["p001-b001"],
-        translation_unit_members=[{"item_id": "p001-b001", "source_text": source}],
-    ))
-    assert '"member_translations"' in messages[0]["content"]
-    assert "不要输出占位符、结构化数据、标签" not in messages[0]["content"]
-    assert json.loads(messages[1]["content"])["group"]["members"][0]["source_text"] == source
-
-
 @pytest.mark.parametrize("role,expected", [("body", ""), ("document_title", "标题规则"),
                                           ("reference_entry", "参考文献规则")])
 @pytest.mark.parametrize("math_mode", ["direct_typst", "placeholder"])
@@ -62,7 +48,8 @@ def test_role_guidance_is_scoped(role, expected, math_mode):
 
 
 def test_compact_templates_keep_safety_rules_and_bounded_size():
-    names = ["translation_system_plain_text.txt", "translation_output_plain_text.txt",
+    # translation_zh_conventions.txt 只在目标语言是中文时拼进系统提示，但默认就是中文，按全量算。
+    names = ["translation_system.txt", "translation_zh_conventions.txt", "translation_output_plain_text.txt",
              "translation_task_plain_text.txt", "translation_direct_typst_guidance.txt"]
     fixed = "\n".join(render_prompt(n, target_language_name="简体中文") for n in names)
     assert len(fixed) < 1200  # Previous fixed templates: 1832 characters.

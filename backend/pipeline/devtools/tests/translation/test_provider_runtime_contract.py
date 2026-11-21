@@ -1,17 +1,11 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 
-
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-from retainpdf_pipeline.translate.llm.shared.provider_runtime import ACTIVE_PROVIDER
-from retainpdf_pipeline.translate.llm.shared.provider_runtime import DEFAULT_BASE_URL
-from retainpdf_pipeline.translate.llm.shared.provider_runtime import DEFAULT_MODEL
-from retainpdf_pipeline.translate.llm.shared.provider_runtime import PROVIDER_CAPABILITIES
-from retainpdf_pipeline.translate.llm.shared.provider_registry import resolve_active_provider_runtime
+from retainpdf_translation.llm.shared.provider_runtime import ACTIVE_PROVIDER
+from retainpdf_translation.llm.shared.provider_runtime import DEFAULT_BASE_URL
+from retainpdf_translation.llm.shared.provider_runtime import DEFAULT_MODEL
+from retainpdf_translation.llm.shared.provider_runtime import PROVIDER_CAPABILITIES
+from retainpdf_translation.llm.shared.provider_registry import resolve_active_provider_runtime
 
 
 def test_active_provider_runtime_uses_deepseek_flash_default() -> None:

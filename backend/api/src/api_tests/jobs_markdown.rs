@@ -42,7 +42,7 @@ async fn markdown_document_route_returns_content_and_direct_image_links() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/api/v1/jobs/markdown-document-job/markdown/document")
+                .uri("/api/v1/jobs/markdown-document-job/reader/markdown")
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("markdown document request"),
@@ -66,21 +66,21 @@ async fn markdown_document_route_returns_content_and_direct_image_links() {
         .expect("absolute markdown");
     assert!(
         abs_md.contains(
-            "http://127.0.0.1:41000/api/v1/jobs/markdown-document-job/markdown/images/page-1/imgs/chart%20a.png"
+            "http://127.0.0.1:41000/api/v1/jobs/markdown-document-job/files/output/ocr/images/page-1/imgs/chart%20a.png"
         ),
         "absolute markdown unexpected: {abs_md:?}"
     );
     // 不得出现双 images 前缀
-    assert!(!abs_md.contains("/markdown/images/images/"));
+    assert!(!abs_md.contains("/ocr/images/images/"));
     assert!(!abs_md.contains("chart%2520a.png"));
     assert_eq!(abs_md.matches("chart%20a.png").count(), 2);
     assert_eq!(
         payload["data"]["raw_path"],
-        "/api/v1/jobs/markdown-document-job/markdown?raw=true"
+        "/api/v1/jobs/markdown-document-job/files/output/ocr.md"
     );
     assert_eq!(
         payload["data"]["images_base_path"],
-        "/api/v1/jobs/markdown-document-job/markdown/images/"
+        "/api/v1/jobs/markdown-document-job/files/output/ocr/images/"
     );
     let image = &payload["data"]["images"][0];
     assert_eq!(image["path"], "images/page-1/imgs/chart a.png");
@@ -88,7 +88,7 @@ async fn markdown_document_route_returns_content_and_direct_image_links() {
     assert_eq!(image["size_bytes"], 8);
     assert_eq!(
         image["url"],
-        "http://127.0.0.1:41000/api/v1/jobs/markdown-document-job/markdown/images/page-1/imgs/chart%20a.png"
+        "http://127.0.0.1:41000/api/v1/jobs/markdown-document-job/files/output/ocr/images/page-1/imgs/chart%20a.png"
     );
 }
 
@@ -128,7 +128,7 @@ async fn markdown_document_rewrites_html_img_and_titled_markdown_links() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/api/v1/jobs/markdown-html-img-job/markdown/document")
+                .uri("/api/v1/jobs/markdown-html-img-job/reader/markdown")
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("markdown document request"),
@@ -141,13 +141,13 @@ async fn markdown_document_rewrites_html_img_and_titled_markdown_links() {
     let abs = payload["data"]["content_with_absolute_image_urls"]
         .as_str()
         .expect("absolute markdown");
-    let expected = "http://127.0.0.1:41000/api/v1/jobs/markdown-html-img-job/markdown/images/page-2/imgs/fig.png";
+    let expected = "http://127.0.0.1:41000/api/v1/jobs/markdown-html-img-job/files/output/ocr/images/page-2/imgs/fig.png";
     assert!(abs.contains(expected), "html img rewritten: {abs}");
     assert!(
         abs.contains(&format!("![cap]({expected})")),
         "titled md rewritten: {abs}"
     );
-    assert!(!abs.contains("/markdown/images/images/"));
+    assert!(!abs.contains("/ocr/images/images/"));
 }
 
 /// `?raw=true` 必须支持 HTTP Range,阅读器据此按需分段拉正文。
@@ -187,7 +187,7 @@ async fn raw_markdown_serves_byte_ranges_so_readers_can_page_through_it() {
     });
     state.db.save_job(&job).expect("save job");
     let app = build_app(state);
-    let uri = "/api/v1/jobs/markdown-range-job/markdown?raw=true";
+    let uri = "/api/v1/jobs/markdown-range-job/files/output/ocr.md";
     let total = full.as_bytes().len();
 
     // 不带 Range:整篇 + 声明支持 Range

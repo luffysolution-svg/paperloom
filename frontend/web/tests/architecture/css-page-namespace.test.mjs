@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { basename, join, relative } from "node:path";
+import { join, relative } from "node:path";
 
 // 源码级命名空间门禁：reader/detail 源文件选择器必须带页前缀。
 // 构建已按页拆包 dist/css/{home,detail,reader}.css，跨页污染风险已大幅下降；
@@ -89,7 +89,7 @@ const GROUPS = [
       // 工具类，无业务类，2026-09-10 目检），两者不纳入命名空间门禁。
       // web 侧 entries/reader.css 是薄代理入口，也纳入扫描。
       ...cssFilesUnder(READER_STYLES_ROOT).filter(
-        (f) => !f.endsWith("-legacy.css") && basename(f) !== "base.css",
+        (f) => !f.endsWith("-legacy.css") && !f.replaceAll("\\", "/").endsWith("/base.css"),
       ),
       join(STYLES_ROOT, "entries/reader.css"),
     ],

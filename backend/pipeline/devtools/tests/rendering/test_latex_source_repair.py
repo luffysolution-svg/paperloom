@@ -15,20 +15,16 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 
 import pytest
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
 from devtools.tests.rendering.mitex_probe import TYPST_BIN  # noqa: E402
 from devtools.tests.rendering.mitex_probe import compile_pipeline  # noqa: E402
-from retainpdf_pipeline.foundation.shared.latex_source_repair import (  # noqa: E402
+from retainpdf_math.source_repair import (  # noqa: E402
     collapse_doubled_command_backslashes,
 )
-from retainpdf_pipeline.services.pipeline_shared.direct_typst_math import (  # noqa: E402
+from retainpdf_math.direct_typst import (  # noqa: E402
     normalize_direct_typst_translation,
 )
 
@@ -69,6 +65,7 @@ def test_translation_side_uses_the_same_rule() -> None:
     assert r"\\b" in normalize_direct_typst_translation(text), "翻译侧仍在合并换行符"
 
 
+@pytest.mark.needs_typst
 @pytest.mark.skipif(not TYPST_BIN, reason="没有可用的 typst 二进制")
 @pytest.mark.parametrize("expr", ROW_SEPARATOR_CASES, ids=lambda s: s[:26])
 def test_row_separators_really_compile(expr: str) -> None:

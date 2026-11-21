@@ -5,9 +5,9 @@ import json
 
 import pytest
 
-from retainpdf_pipeline.translate.core.context import build_item_context, TranslationItemContext
-from retainpdf_pipeline.translate.llm.shared.prompt_building import (
-    build_messages, build_group_member_messages, build_single_item_fallback_messages,
+from retainpdf_translation.core.context import build_item_context, TranslationItemContext
+from retainpdf_translation.llm.shared.prompt_building import (
+    build_messages, build_single_item_fallback_messages,
 )
 
 
@@ -21,7 +21,7 @@ def _item(math_mode):
                 translation_context_after="Next sentence.")
 
 
-_BUILDERS = [build_single_item_fallback_messages, lambda item: build_messages([item]), build_group_member_messages]
+_BUILDERS = [build_single_item_fallback_messages, lambda item: build_messages([item])]
 # Captured from the previous implementation, not computed by the new renderer.
 #
 # direct_typst 这组在 mitex 升到 0.2.7 后重录过一次:公式指引改成明确要求 LaTeX
@@ -30,18 +30,28 @@ _BUILDERS = [build_single_item_fallback_messages, lambda item: build_messages([i
 #
 # placeholder 那组一字未动,正说明改动只落在 direct_typst 路径上——重录时要一并
 # 确认这一点,否则就是改宽了。
+#
+# 第二次重录:引用规则从「论文引用统一输出 $^{117}$」改成「行内方括号 [n] 原样、原文是上标才
+# 输出上标」(模型曾把行内 [n] 改上标且只改一部分,同篇混排)。placeholder 那组同样一字未动。
+#
+# 第三次重录：两组都变了，因为改的是两组共用的系统提示——把系统提示和任务说明里重复的规则
+# 合并成一份分节的提示（「半句照翻」原来写了 3 遍），并新增三条有数据支撑的规则：交叉引用
+# 对照（31 本书里 Equation 译「式」360 次、「方程」83 次、「公式」15 次）、中文全角标点、
+# 有通行译名的术语一律译出。公式指引去掉了 mitex 专属的说法（默认渲染已是自研引擎）。
+#
+# 第四次重录：逐段请求（route 0，两组）改了排法——前后文挪到原文前面并用起止标记括起来，
+# 作答要求放最后一行（原来夹在中间，模型读完一串「后文上下文：……」后自己补了个「译文：」）。
+# direct_typst 的整批请求（route 1）只换了格式示例里占位的那行；placeholder 的整批请求走 JSON，一字未动。
 _DIGESTS = {
-    False: ["92f286faeba1db6ce9a76cf68360a3a3fe1c4806ea528d8258d879677fe7b4c0",
-            "517126bb63dbde134291b00af08c9892b901f623335067179400430a24ecaf27",
-            "5e819e5e3685f7a25bb9d7360d34537933633ab035287c3ed85daaa8e8539a59"],
-    True: ["47b3870e63d9fcaa35e531da60c62013cc3b02025555fa6e762febe484bf0ab9",
-           "0760237ce536bab523d0d490bb4f79eaa92dda405ed56811a735acaa1906eb8d",
-           "cf5fbb8b3a35d20d0c63a65a6f88259ad495eb3bac030def152904153193c217"],
+    False: ["84cc32bb5d212f354d3cf051c1084cbee08f6899d559794a66d2c4903dd1f8fe",
+            "e0ff9a772d08d6301c011abcc41d8da089f67345018b17f9da500422dd7bee51"],
+    True: ["60a91bc52d5f721b439d5894140c4f6d8d2b962315d1152777acc78d08bab1a8",
+           "76bcc838cc8ac22aaa308c130aee266b2b4f9771785f3471958f8639b90f73e0"],
 }
 
 
 @pytest.mark.parametrize("math_mode", ["placeholder", "direct_typst", " direct_typst ", ""])
-@pytest.mark.parametrize("route", range(3))
+@pytest.mark.parametrize("route", range(len(_BUILDERS)))
 def test_messages_match_pre_snapshot_bytes(math_mode, route):
     messages = _BUILDERS[route](_item(math_mode))
     digest = hashlib.sha256(json.dumps(messages, ensure_ascii=False).encode()).hexdigest()
@@ -69,18 +79,6 @@ def test_source_mutation_cannot_change_prompt_values(direct_constructor):
     assert context.raw_item is original  # Compatibility handle, not prompt authority.
     with pytest.raises(FrozenInstanceError):
         context.scoped_terms_guidance = "changed"
-    group = json.loads(before[2][1]["content"])["group"]
-    assert group["member_ids"] == ["b", "a", "b", "missing"]
-    assert group["members"][0]["source_text"] == "Last."
-    assert group["combined_source_text"] == original["source_text"]
-
-
-def test_direct_constructor_keeps_historical_raw_math_mode_distinction():
-    context = TranslationItemContext(item_id="a", source_text="$E", protected_source_text="$E",
-                                     math_mode="direct_typst", raw_item={})
-    payload = json.loads(build_group_member_messages(context)[1]["content"])
-    assert "math_delimiter_note" not in payload["group"]
-    assert payload["group"]["member_ids"] == ["a"]
 
 
 @pytest.mark.parametrize("value", [None, [], 7, "invalid"])
@@ -91,24 +89,3 @@ def test_optional_unused_member_metadata_does_not_break_single_route(value):
     expected = build_single_item_fallback_messages(original)
     original.update(translation_unit_member_ids=value, translation_unit_members=value)
     assert build_single_item_fallback_messages(original) == expected
-
-
-@pytest.mark.parametrize("field", ["translation_unit_member_ids", "translation_unit_members"])
-@pytest.mark.parametrize("value", [None, 7, False])
-def test_invalid_group_metadata_fails_only_when_group_consumes_it(field, value):
-    original = _item("placeholder")
-    original[field] = value
-    context = build_item_context(original)
-    build_single_item_fallback_messages(context)
-    # Mutating the source after extraction cannot erase the captured failure.
-    original[field] = []
-    with pytest.raises(TypeError, match=f"'{type(value).__name__}' object is not iterable"):
-        build_group_member_messages(context)
-
-
-def test_historical_iterable_member_metadata_is_not_newly_validated():
-    original = _item("placeholder")
-    original.update(translation_unit_member_ids="ab", translation_unit_members={"a": "ignored"})
-    group = json.loads(build_group_member_messages(original)[1]["content"])["group"]
-    assert group["member_ids"] == ["a", "b"]
-    assert [member["source_text"] for member in group["members"]] == ["", ""]

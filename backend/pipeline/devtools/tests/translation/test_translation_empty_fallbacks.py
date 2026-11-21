@@ -1,13 +1,8 @@
-import sys
-from pathlib import Path
 
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
-
-from retainpdf_pipeline.translate.llm.shared.orchestration.common import should_keep_origin_on_empty_translation
-from retainpdf_pipeline.translate.llm.shared.orchestration.intentional_keep_origin import (
+from retainpdf_translation.llm.shared.orchestration.common import should_keep_origin_on_empty_translation
+from retainpdf_translation.llm.shared.orchestration.intentional_keep_origin import (
     keep_origin_payload_for_empty_translation,
 )
 

@@ -1,0 +1,110 @@
+/* 管理后台（admin.html）· 平台设置：状态卡、表单字段栅格、检测结果、保存栏。配色只用主题变量。
+ *
+ * @owns admin
+ */
+
+.admin-platform-status {
+  display: grid;
+  gap: 4px;
+  padding: 12px 16px;
+  border: 1px solid color-mix(in srgb, var(--ok) 50%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ok) 8%, var(--paper));
+  font-size: 13px;
+}
+
+.admin-platform-status[data-ready="false"] {
+  border-color: color-mix(in srgb, var(--warn) 60%, var(--line));
+  background: color-mix(in srgb, var(--warn) 10%, var(--paper));
+}
+
+.admin-platform-status small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.admin-platform-form {
+  display: grid;
+  gap: 16px;
+}
+
+.admin-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+}
+
+.admin-field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.admin-field-wide {
+  grid-column: 1 / -1;
+}
+
+.admin-field input,
+.admin-field select {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.admin-field input:focus,
+.admin-field select:focus {
+  border-color: var(--ink);
+  outline: none;
+}
+
+.admin-card-foot,
+.admin-savebar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  font-size: 12px;
+}
+
+.admin-test-ok {
+  color: var(--ok);
+}
+
+/* 检测结果的补充说明：单独一行，底层错误可能很长，允许任意处断行 */
+.admin-test-hint {
+  flex-basis: 100%;
+  order: 1;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.admin-docs-link {
+  margin-left: auto;
+}
+
+.admin-savebar {
+  position: sticky;
+  bottom: 0;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+}
+
+@media (max-width: 760px) {
+  .admin-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+.admin-warn-text {
+  color: color-mix(in srgb, var(--warn) 65%, var(--ink));
+}

@@ -11,19 +11,6 @@ import {
   createStore,
 } from "../../src/platform/store/store.js";
 
-test("createResource releases a synchronous loader failure so a later load can recover", async () => {
-  let calls = 0;
-  const resource = createResource({
-    loader: () => {
-      if (++calls === 1) throw new Error("temporary failure");
-      return "recovered";
-    },
-  });
-  assert.equal((await resource.load()).status, "error");
-  assert.equal((await resource.load()).data, "recovered");
-  assert.equal(calls, 2);
-});
-
 test("createStore owns immutable snapshots and action updates", () => {
   const store = createStore({
     name: "library",
@@ -181,4 +168,25 @@ test("createResource records loader errors without throwing by default", async (
 
   assert.equal(snapshot.status, "error");
   assert.equal(snapshot.error.message, "network failed");
+});
+
+test("createResource: loader 同步抛错也记成 error，且不把这个 key 卡在失败的在途请求上", async () => {
+  let calls = 0;
+  const resource = createResource({
+    name: "sync-throw",
+    loader: () => {
+      calls += 1;
+      if (calls === 1) throw new Error("sync failed");
+      return "ok";
+    },
+  });
+
+  const first = await resource.load();
+  assert.equal(first.status, "error");
+  assert.equal(first.error.message, "sync failed");
+
+  const second = await resource.load();
+  assert.equal(calls, 2, "第二次要真的再调 loader，而不是拿到卡住的那个失败请求");
+  assert.equal(second.status, "success");
+  assert.equal(second.data, "ok");
 });

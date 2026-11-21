@@ -1,6 +1,6 @@
 """Render-local source text-item model (file-contract duplicate).
 
-Duplicated from retainpdf_pipeline.translate.core.ocr.models
+Duplicated from retainpdf_translation.core.ocr.models
 (stage-decouple: render must not import translate; duplicate wins over cross-package).
 """
 

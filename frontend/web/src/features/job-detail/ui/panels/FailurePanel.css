@@ -1,0 +1,132 @@
+/* 状态详情 · 失败：主卡、根因、恢复队列与阶段、技术细节、动作行。（FailurePanel / FailureStageActions）
+ *
+ * @owns status-detail, detail, stage-history, events, event, failure, info-list
+ * @uses button-link, info-value, status-panel-note */
+
+@utility failure-hero-card {
+  @apply grid gap-1.5 rounded-[14px] px-4 py-3.5;
+  margin-bottom: 0;
+  background: color-mix(in srgb, var(--danger) 5%, var(--paper));
+  border: 1px solid color-mix(in srgb, var(--danger) 12%, transparent);
+
+  & .label {
+    font-size: 12px;
+    letter-spacing: 0.01em;
+    color: var(--danger);
+    text-transform: uppercase;
+  }
+
+  & .info-value {
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--ink);
+    word-break: break-word;
+  }
+}
+
+@utility status-detail-failure-root-cause {
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+@utility status-detail-failure-recovery {
+  margin-top: 12px;
+}
+
+@utility status-detail-failure-queue {
+  @apply mb-3 grid gap-2 rounded-[14px] border px-4 py-3;
+  border-color: color-mix(in srgb, var(--warn) 20%, transparent);
+  background: color-mix(in srgb, var(--warn) 6%, transparent);
+
+  & strong {
+    color: var(--ink);
+    font-size: 13px;
+  }
+
+  & p {
+    margin: 3px 0 0;
+    color: var(--muted);
+    font-size: 12.5px;
+  }
+}
+
+/* 阶段恢复列表：阶段数量由后端决定，这里只保证多行时行距一致、推荐项显眼。 */
+@utility status-detail-failure-stages {
+  @apply mb-3 grid gap-2;
+
+  & > .status-panel-note {
+    color: var(--muted);
+    font-size: 12.5px;
+  }
+
+  & [data-recommended="true"] .button-link {
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+}
+
+@utility status-detail-technical-details {
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+
+  &.status-detail-runtime-details {
+    margin-top: 7px;
+    border-top: 0;
+  }
+
+  & summary {
+    padding: 12px 2px 2px;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 12.5px;
+    font-weight: 500;
+    list-style-position: inside;
+  }
+
+  &.status-detail-runtime-details summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 2px 0;
+  }
+
+  &.status-detail-runtime-details summary > svg {
+    width: 13px;
+    height: 13px;
+  }
+
+  & .detail-info-list {
+    margin-top: 10px;
+  }
+}
+
+@utility status-detail-failure-detail-wide {
+  grid-column: 1 / -1;
+}
+
+@utility status-detail-log-entry-row {
+  @apply mt-3 flex flex-wrap items-center gap-2;
+
+  & .button-link {
+    min-height: 36px;
+    padding: 7px 12px;
+    font-size: 12.5px;
+  }
+}
+
+@utility failure-action-row {
+  @apply flex flex-wrap items-center gap-2;
+}
+
+@utility status-detail-recovery-actions {
+  & .button-link {
+    min-height: 36px;
+    padding: 7px 12px;
+    font-size: 12.5px;
+  }
+
+  & > .status-panel-note {
+    flex: 1 1 240px;
+  }
+}

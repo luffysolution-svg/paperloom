@@ -5,7 +5,7 @@ use std::{fs, path::PathBuf};
 
 use anyhow::{ensure, Context, Result};
 use rusqlite::{params, Connection, OpenFlags};
-use rust_api::db::{Db, PipelineUnitCommit};
+use retainpdf_api::db::{Db, PipelineUnitCommit};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
@@ -132,7 +132,7 @@ fn main() -> Result<()> {
     let cursor =
         db.acquire_pipeline_attempt(job_id, "offline-mineru-page-repair", "translate", 2)?;
     let committed = db.commit_pipeline_units(&cursor, &units)?;
-    let completed = db.complete_pipeline_stage(&rust_api::db::PipelineAttemptCursor {
+    let completed = db.complete_pipeline_stage(&retainpdf_api::db::PipelineAttemptCursor {
         generation: committed.generation,
         ..cursor
     })?;

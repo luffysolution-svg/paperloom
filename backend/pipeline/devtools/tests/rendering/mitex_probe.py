@@ -76,6 +76,14 @@ def compile_pipeline(latex: str) -> tuple[bool, str]:
     return ok, message
 
 
+def compile_pipeline_together(latexes: list[str]) -> bool:
+    """一批公式放进同一个文档走完整链路编译一次，全过才算过。用来省掉逐个起 Typst 的开销：
+    整批失败时调用方再逐个编译，报出是哪一个坏了。"""
+    markdown = "\n\n".join(build_direct_typst_passthrough_markdown(f"${latex}$") for latex in latexes)
+    ok, _, _ = _compile(markdown)
+    return ok
+
+
 def compile_native(latex: str) -> tuple[bool, str]:
     """跳过我们的清洗器，看 mitex 原生支不支持。
 
@@ -86,10 +94,19 @@ def compile_native(latex: str) -> tuple[bool, str]:
     return ok, message
 
 
+def compile_markdown_pdf(markdown: str) -> tuple[bool, str, bytes]:
+    """把已经清洗好的 markdown 编译成 PDF，返回 (成功?, 报错, PDF 字节)。
+
+    「编译通过」不等于「渲染正确」：mitex 在文本组里把 `\\AA` 翻成 `circle(A)`
+    照样编译成功，只有抽出 PDF 文本才看得见那串残字。
+    """
+    return _compile(markdown)
+
+
 def png_digest(latex: str) -> str | None:
     """渲染成 PNG 的哈希；编译失败返回 None。"""
     ok, _, payload = _compile(build_direct_typst_passthrough_markdown(f"${latex}$"), png=True)
     return hashlib.sha256(payload).hexdigest() if ok else None
 
 
-__all__ = ["TYPST_BIN", "compile_native", "compile_pipeline", "png_digest"]
+__all__ = ["TYPST_BIN", "compile_markdown_pdf", "compile_native", "compile_pipeline", "png_digest"]

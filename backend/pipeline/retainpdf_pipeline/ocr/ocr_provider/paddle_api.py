@@ -9,7 +9,7 @@ from typing import Callable
 
 import requests
 
-from retainpdf_pipeline.foundation.shared.local_env import get_secret
+from retainpdf_base.local_env import get_secret
 from retainpdf_pipeline.ocr.retry import RetainNetworkError
 from retainpdf_pipeline.ocr.retry import RetainRateLimitError
 from retainpdf_pipeline.ocr.retry import direct_session

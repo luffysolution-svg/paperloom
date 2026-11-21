@@ -3,36 +3,52 @@
 // DOM id "page-range-dialog" / "page-range-title" 为历史契约（测试与样式锚点），保留不改。
 
 import type { FormEvent } from "react";
-import { BookOpen, FileText, SlidersHorizontal, X } from "lucide-react";
+import { BookOpen, Bot, FileText, LayoutTemplate, Sparkles, SlidersHorizontal, X } from "lucide-react";
 
-import { Button } from "@/ui/components/button.js";
+import { LegacyButton } from "@retainpdf/ui";
 import { useStoreSnapshot } from "@/ui/hooks/use-store.js";
-import {
-  useHomeFeatures,
-  useHomeUploadViewStore,
-  useHomeWorkflowViewActions,
-  useHomeWorkflowViewStore,
-} from "@/ui/context/home-services-context.js";
-import type { UploadViewStore } from "../../domain/upload-store.js";
+import { agentEngineAvailable } from "../../domain/workflow/payload.js";
+import { useIngestServices, useIngestWorkflowView } from "../workflow-view-context.js";
 
-export function TranslationOptionsPanel() {
-  const uploadViewStore = useHomeUploadViewStore();
-  const workflowViewStore = useHomeWorkflowViewStore();
-  const workflowViewActions = useHomeWorkflowViewActions();
-  const features = useHomeFeatures();
+const QUALITY_HINTS: Record<string, string> = {
+  standard: "直接翻译，速度最快、费用最低。",
+  terms: "先通读全书定好术语和文风再翻译，译法更一致；模型费用多约 0.4 倍。",
+  refined: "统一术语之外，术语表先经审定；翻完由模型挑错，再分派局部修改或整段重写，最多两轮，改不好就保留原译并列出来给你看；模型费用约为普通的 2.5 倍，耗时更长。",
+};
+
+const ENGINE_HINTS: Record<string, string> = {
+  auto: "目前默认用自研排版引擎；以后服务端换默认，这里跟着换。",
+  rpr_fit: "自研排版引擎：公式不再转换成 Typst，字号按实际放得下的大小来定，放不下会报告。出问题自动退回 Typst。",
+  typst: "原来的 Typst 排版，公式要先转换一遍，个别公式可能出错。",
+};
+
+const TRANSLATION_ENGINE_HINTS: Record<string, string> = {
+  legacy: "现有流程：按批翻译，可配合上面的翻译质量。",
+  agent: "翻译 agent：先通读全文，再逐页翻译并审校，自带统一术语和审校，所以翻译质量不再单独选。开头通读要一会儿，进度会先停在 0。",
+  unavailable: "翻译 agent 只支持 Anthropic 格式的接口；在翻译设置里把接口协议换成 Anthropic 格式后可选。",
+};
+
+/** hidePageRange：一次上传多本时每本整本处理，不给页码范围。 */
+export function TranslationOptionsPanel({ hidePageRange = false }: { hidePageRange?: boolean } = {}) {
+  const { uploadViewStore, features } = useIngestServices();
+  const workflowView = useIngestWorkflowView();
   const upload = useStoreSnapshot(uploadViewStore);
-  const workflow = useStoreSnapshot(workflowViewStore);
+  const workflow = useStoreSnapshot(workflowView.store);
 
   if (!upload.translationOptionsOpen) return null;
 
   const selectedId = `${workflow.selectedGlossaryId || ""}`.trim();
   const hasSelected = !selectedId
     || workflow.glossaries.some((glossary) => glossary.glossaryId === selectedId);
+  // 协议在凭据设置里改，改完再打开这个面板时会重新读到；不可用时即使偏好存的是 agent，
+  // 提交时也不发（payload.ts 的 translationEngineFields），这里同样按现有流程显示。
+  const agentAvailable = agentEngineAvailable(features.workflowFeature?.developerConfigWithDefaults().apiProtocol);
+  const translationEngine = agentAvailable ? workflow.preferences.translationEngine : "legacy";
   const maxAttr = upload.pageRangeMax > 0 ? { max: `${upload.pageRangeMax}` } : {};
 
   function handlePageInput(source: "start" | "end", event: FormEvent<HTMLInputElement>) {
     const value = event.currentTarget.value;
-    (uploadViewStore as unknown as UploadViewStore).actions.setPageRange(
+    uploadViewStore.actions.setPageRange(
       source === "start" ? { start: value } : { end: value },
     );
     features.uploadFeature?.constrainPageRanges({ source });
@@ -50,22 +66,26 @@ export function TranslationOptionsPanel() {
             <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
             翻译选项
           </h3>
-          <p id="page-range-limit-text">按需设置页码范围和术语表；留空表示处理整份 PDF。</p>
+          <p id="page-range-limit-text">
+            {hidePageRange
+              ? "这一批每本都整本处理；术语表、翻译质量、翻译引擎和排版引擎对每本都一样。"
+              : "按需设置页码范围、术语表和翻译质量；页码留空表示处理整份 PDF。"}
+          </p>
         </div>
-        <Button
+        <LegacyButton
           id="page-range-close-btn"
           type="button"
           variant="ghost"
           size="icon-sm"
           aria-label="收起翻译选项"
-          onClick={() => (uploadViewStore as unknown as UploadViewStore).actions.closeTranslationOptions()}
+          onClick={() => uploadViewStore.actions.closeTranslationOptions()}
         >
           <X aria-hidden="true" />
-        </Button>
+        </LegacyButton>
       </div>
 
       <div className="translation-options-grid">
-        <fieldset className="translation-options-range">
+        <fieldset className={`translation-options-range${hidePageRange ? " hidden" : ""}`}>
           <legend>
             <FileText className="h-4 w-4" aria-hidden="true" />
             页码范围
@@ -111,7 +131,7 @@ export function TranslationOptionsPanel() {
           <select
             id="job-glossary-id"
             value={selectedId}
-            onChange={(event) => workflowViewActions.setSelectedGlossaryId(event.target.value)}
+            onChange={(event) => workflowView.setSelectedGlossaryId(event.target.value)}
           >
             <option value="">不使用术语表</option>
             {workflow.glossaries.map((glossary) => (
@@ -125,24 +145,84 @@ export function TranslationOptionsPanel() {
             ) : null}
           </select>
         </label>
+
+        <label className="translation-options-glossary" htmlFor="job-translation-quality">
+          <span>
+            <Sparkles className="h-4 w-4" aria-hidden="true" />
+            翻译质量
+          </span>
+          <select
+            id="job-translation-quality"
+            value={workflow.preferences.translationQuality}
+            disabled={translationEngine === "agent"}
+            onChange={(event) => workflowView.setPreference("translationQuality", event.target.value)}
+          >
+            <option value="standard">普通</option>
+            <option value="terms">统一术语</option>
+            <option value="refined">精翻</option>
+          </select>
+          <small id="job-translation-quality-hint">
+            {translationEngine === "agent"
+              ? "翻译 agent 自带通读和审校，不用另选。"
+              : QUALITY_HINTS[workflow.preferences.translationQuality] || QUALITY_HINTS.standard}
+          </small>
+        </label>
+
+        <label className="translation-options-glossary" htmlFor="job-translation-engine">
+          <span>
+            <Bot className="h-4 w-4" aria-hidden="true" />
+            翻译引擎
+          </span>
+          <select
+            id="job-translation-engine"
+            value={translationEngine}
+            onChange={(event) => workflowView.setPreference("translationEngine", event.target.value)}
+          >
+            <option value="legacy">现有流程</option>
+            <option value="agent" disabled={!agentAvailable}>翻译 agent</option>
+          </select>
+          <small id="job-translation-engine-hint">
+            {agentAvailable ? TRANSLATION_ENGINE_HINTS[translationEngine] : TRANSLATION_ENGINE_HINTS.unavailable}
+          </small>
+        </label>
+
+        <label className="translation-options-glossary" htmlFor="job-render-engine">
+          <span>
+            <LayoutTemplate className="h-4 w-4" aria-hidden="true" />
+            排版引擎
+          </span>
+          <select
+            id="job-render-engine"
+            value={workflow.preferences.renderEngine}
+            onChange={(event) => workflowView.setPreference("renderEngine", event.target.value)}
+          >
+            <option value="auto">默认（新引擎）</option>
+            <option value="rpr_fit">新引擎</option>
+            <option value="typst">Typst（旧）</option>
+          </select>
+          <small id="job-render-engine-hint">
+            {ENGINE_HINTS[workflow.preferences.renderEngine] || ENGINE_HINTS.auto}
+          </small>
+        </label>
       </div>
 
       <div className="translation-options-actions">
-        <Button
+        <LegacyButton
           id="page-range-clear-btn"
           type="button"
           variant="outline"
+          className={hidePageRange ? "hidden" : undefined}
           onClick={() => features.uploadFeature?.clearPageRanges()}
         >
           清除页码
-        </Button>
-        <Button
+        </LegacyButton>
+        <LegacyButton
           id="page-range-apply-btn"
           type="button"
           onClick={() => features.uploadFeature?.applyPageRanges()}
         >
           完成
-        </Button>
+        </LegacyButton>
       </div>
     </section>
   );

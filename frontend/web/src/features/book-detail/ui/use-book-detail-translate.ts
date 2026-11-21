@@ -3,8 +3,13 @@
 
 import { usePageRange } from "./use-page-range.js";
 import {
-  inclusivePageNumbers,
   reusableOcrJobId,
+} from "@/features/library/domain.js";
+import type {
+  DocumentJobSummary,
+  JobSubmissionView,
+  OcrDocumentPayload,
+  TranslateDocumentPayload,
 } from "@/features/library/domain.js";
 
 /**
@@ -28,19 +33,32 @@ export function useBookDetailTranslate({
   onTranslateStarted,
   onJobSubmitted,
   reusableOcrJob,
-}: any) {
+}: {
+  open: boolean;
+  documentId: string;
+  pageCount?: number | null;
+  actions: {
+    submitDocument: (
+      documentId?: string | null,
+      payload?: TranslateDocumentPayload | OcrDocumentPayload,
+    ) => Promise<JobSubmissionView | null>;
+  };
+  withBusy: (key: string, fn: () => Promise<void>, fail: string) => Promise<void>;
+  setError: (message: string) => void;
+  onTranslateStarted?: () => void;
+  onJobSubmitted?: (job: Partial<DocumentJobSummary>) => unknown;
+  reusableOcrJob?: DocumentJobSummary | null;
+}) {
   const {
     rangeOn,
-    startPage,
-    endPage,
+    pageSpec,
     setRangeOn,
-    setStartPage,
-    setEndPage,
+    setPageSpec,
     validateRange,
   } = usePageRange({ open, documentId, pageCount });
 
   async function handleTranslate() {
-    const payload: any = {};
+    const payload: TranslateDocumentPayload = {};
     const artifactJobId = reusableOcrJobId(reusableOcrJob);
     if (artifactJobId) {
       payload.workflow = "translate";
@@ -53,11 +71,12 @@ export function useBookDetailTranslate({
         setError(checked.error);
         return;
       }
-      const { s, e } = checked as { s: number; e: number };
       if (artifactJobId) {
         // 复用已有 OCR：不裁页，artifact 里是整本的 OCR JSON，
         // 所以这里给的是**原文 1 基页号**，由 ocr_artifact_reuse.rs 按页号挑页。
-        payload.translation = { page_ranges: inclusivePageNumbers(s, e) };
+        // 混合范围、或超出这份 OCR 覆盖的页，后端按连续段拆成几个任务（library/translate_plan.rs）：
+        // 有 OCR 整段覆盖的复用它，没有的那段重新 OCR。回包里 sibling_job_ids 是拆出来的其余任务。
+        payload.translation = { page_ranges: checked.pages };
       } else {
         // 无可复用 OCR：ocr.page_ranges 会让 runner 先把 PDF 裁成子集
         // （ocr_flow/transport.rs 的 prepare_uploaded_source_pdf），
@@ -71,37 +90,40 @@ export function useBookDetailTranslate({
         // "Invalid page range"；选 5-12 → 裁成 8 页 → 只翻到原文 10-12 页，
         // 前 5 页被静默吞掉。省略这两个字段即取默认 0 / -1（-1 表示到末页），
         // 语义正是"全部翻完"，与主上传弹窗的做法一致。
-        payload.ocr = { page_ranges: `${s}-${e}` };
+        payload.ocr = { page_ranges: checked.spec };
       }
     }
     // 先切到处理 Tab，保证 bd-job-status-inner 在视口内再接进度
     onTranslateStarted?.();
-    await withBusy(
-      "translate",
-      async () => {
-        // promoteDocumentToJob：改详情 payload + silent attachJobProgress
-        // 不 openTranslationWorkflow
-        const result = await actions.submitDocument(documentId, payload);
-        if (result) {
-          onJobSubmitted?.({
-            ...result,
-            document_id: result.document_id || documentId,
-            workflow: result.workflow || payload.workflow || "book",
-          });
-        }
-        onTranslateStarted?.();
-      },
-      "发起翻译失败",
-    );
+    try {
+      await withBusy(
+        "translate",
+        async () => {
+          // promoteDocumentToJob：改详情 payload + silent attachJobProgress
+          // 不 openTranslationWorkflow
+          const result = await actions.submitDocument(documentId, payload);
+          if (result) {
+            onJobSubmitted?.({
+              ...result,
+              document_id: result.document_id || documentId,
+              workflow: result.workflow || payload.workflow || "book",
+            });
+          }
+          onTranslateStarted?.();
+        },
+        "发起翻译失败",
+      );
+    } catch {
+      // 失败原因（含额度不够的原话）已由 withBusy -> setError 显示在翻译表单和概览里；
+      // 这里吞掉，免得按钮回调留下未处理的 rejection（和同文件的保存 / 阅读状态一致）。
+    }
   }
 
   return {
     rangeOn,
-    startPage,
-    endPage,
+    pageSpec,
     setRangeOn,
-    setStartPage,
-    setEndPage,
+    setPageSpec,
     handleTranslate,
   };
 }

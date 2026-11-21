@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { JSDOM } from "jsdom";
+import { wait, waitFor } from "../helpers/async.mjs";
+import { byId, clickWithMouseDown, makeDom } from "../helpers/dom.mjs";
+import { bootHomeApp } from "../helpers/home-app.mjs";
 
 // artifact-downloads(dialogs 蓝图 §7)组件级测试。本域此前被历轮 agent 跳过——
 // ResultActions.jsx/StatusDetailDialog.jsx 的 7 个下载 id 只渲染了裸
@@ -10,89 +12,10 @@ import { JSDOM } from "jsdom";
 // ① 点击命中 7 个 id 各自触发正确的下载(mock fetchProtected,不是裸导航);
 // ② busy 态文案不被父组件重渲染覆盖(蓝图 §7.5 方案二核心机制)。
 //
-// makeDom/waitFor/bootHomeApp 模式镜像 status-card-component.test.mjs 先例。
+// makeDom/waitFor/bootHomeApp 来自 tests/helpers（原先镜像 status-card-component.test.mjs）。
 
-function makeDom(search) {
-  const dom = new JSDOM("<!doctype html><html><body></body></html>", {
-    url: `http://localhost/index.html${search}`,
-  });
-  for (const key of ["window", "document", "DocumentFragment", "HTMLElement", "HTMLButtonElement", "HTMLFormElement", "HTMLInputElement", "CustomEvent", "Event", "KeyboardEvent", "MouseEvent", "Node", "MutationObserver", "NodeFilter"]) {
-    Object.defineProperty(globalThis, key, {
-      value: dom.window[key] ?? dom.window,
-      writable: true,
-      configurable: true,
-    });
-  }
-  globalThis.window = dom.window;
-  globalThis.requestAnimationFrame = (callback) => setTimeout(() => callback(0), 0);
-  // Radix Presence/Tabs(阶段 B 引入)在 jsdom 下需要 cancelAnimationFrame
-  // (TabsContent 的 mount 动画计时器清理)和 getComputedStyle(Presence 读取
-  // animation-name 判断退场动画是否结束)——jsdom 的 window 上有实现,只是没有
-  // 像 requestAnimationFrame 一样被复制到裸 global 上,这里一并补上。NodeFilter
-  // 是阶段 C(TranslationWorkflowDialog/StatusDetailDialog 换 Radix Dialog)
-  // 新增的需要——Dialog.Content 的 FocusScope 用它做可聚焦元素树遍历。
-  globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
-  globalThis.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
-  globalThis.IS_REACT_ACT_ENVIRONMENT = false;
-  return dom;
-}
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitFor(predicate, description) {
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    if (predicate()) {
-      return;
-    }
-    await wait(15);
-  }
-  assert.fail(`等待超时：${description}`);
-}
-
-function click(dom, element) {
-  // Radix Tabs 的 Trigger 激活逻辑挂在 onMouseDown(不是 onClick)上——阶段 B
-  // 迁移 StatusDetailDialog 到 Radix Tabs 后,只 dispatch "click" 不会触发 tab
-  // 切换。真实浏览器点击本来就是 mousedown→mouseup→click 全套,这里补上
-  // mousedown 让模拟点击更贴近真实交互,而不是放宽任何断言。
-  element.dispatchEvent(new dom.window.MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
-  element.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
-}
-
-function byId(dom, id) {
-  return dom.window.document.getElementById(id);
-}
-
-async function bootHomeApp(dom) {
-  const { createRoot } = await import("react-dom/client");
-  const React = await import("react");
-  const { createHomeComposition } = await import("../../src/app/home/create-home-composition.js");
-  const { HomeApp } = await import("../../src/app/home/HomeApp.jsx");
-
-  const host = dom.window.document.createElement("div");
-  host.id = "home-root";
-  dom.window.document.body.appendChild(host);
-
-  const services = createHomeComposition({
-    fetchGlossaries: async () => ({ items: [] }),
-    loadPersistedDeveloperConfig: () => ({}),
-    loadPersistedBrowserConfig: () => ({}),
-  });
-  services.initialize();
-
-  const root = createRoot(host);
-  root.render(React.createElement(HomeApp, { services }));
-  await waitFor(() => byId(dom, "library-add-pdf-btn"), "HomeApp 首帧渲染");
-  // 主页那张页面级状态卡 #job-status-card 已下线（进度主场收敛到书籍详情的
-  // 「进度」Tab），它曾是 ResultActions 三个下载按钮的宿主。本文件里只有真正
-  // 依赖那三个按钮的用例才需要另找宿主（见 openProcessingTab），其余
-  // （document 级委托、StatusDetailDialog 概览面板）本来就不经过它。
-  await wait(0);
-
-  return { services, root, host };
-}
+// 书籍详情的 Tab 切换要 mousedown（Radix Tabs）；cancelable 沿用原写法。
+const click = (dom, element) => clickWithMouseDown(dom, element, { cancelable: true });
 
 // 「真实任务数据到达」的等待条件。
 // 旧写法等的是主页状态卡的 #status-ring-value 文案不再是「准备中」；那张卡随
@@ -133,7 +56,7 @@ async function waitForRealJobData(services, jobId) {
 // 但程序化调用不依赖网格排序与渲染时序，而且能精确打开「正在被轮询的这个 job
 // 所属的那份文档」，不会误开一张与当前任务无关的馆藏卡。
 async function openProcessingTab(dom, services, jobId) {
-  // 注意：本文件的 waitFor 只等条件成立、不回传值，所以命中后要重新取一次。
+  // 谓词只返回 Boolean，命中后要重新取一次那张卡。
   const findCard = () => (services.library.recentJobsStore.getSnapshot?.().items || []).find(
     (row) => `${row?.job_id || ""}`.trim() === jobId,
   );
@@ -168,7 +91,7 @@ function stubObjectUrl() {
 
 test("artifact-downloads：真实轮询(mock=done)驱动 ResultActions 三个下载按钮就绪且可点击", async () => {
   const dom = makeDom("?mock=done");
-  const { services, root, host } = await bootHomeApp(dom);
+  const { services, root, host } = await bootHomeApp(dom, { readyId: "library-add-pdf-btn" });
   const { getMockJobId } = await import("@/platform/mock/index.js");
   const jobId = getMockJobId();
 
@@ -197,7 +120,7 @@ test("artifact-downloads：真实轮询(mock=done)驱动 ResultActions 三个下
 
 test("artifact-downloads：点击 ResultActions 的 3 个受保护下载按钮触发 fetchProtected 下载流程(不是裸导航)", async () => {
   const dom = makeDom("?mock=done");
-  const { services, root, host } = await bootHomeApp(dom);
+  const { services, root, host } = await bootHomeApp(dom, { readyId: "library-add-pdf-btn" });
   const { getMockJobId } = await import("@/platform/mock/index.js");
   const jobId = getMockJobId();
   const urlStub = stubObjectUrl();
@@ -253,7 +176,7 @@ test("artifact-downloads：点击 ResultActions 的 3 个受保护下载按钮�
 
 test("artifact-downloads：StatusDetailDialog 概览面板的 markdown-bundle-btn 同样接入下载流程", async () => {
   const dom = makeDom("?mock=done");
-  const { services, root, host } = await bootHomeApp(dom);
+  const { services, root, host } = await bootHomeApp(dom, { readyId: "library-add-pdf-btn" });
   const { getMockJobId } = await import("@/platform/mock/index.js");
   const urlStub = stubObjectUrl();
 
@@ -286,7 +209,7 @@ test("artifact-downloads：StatusDetailDialog 概览面板的 markdown-bundle-bt
 
 test("artifact-downloads：document 级委托覆盖全部 7 个契约 id(含当前无 UI 消费点的 3 个)", async () => {
   const dom = makeDom("?mock=done");
-  const { services, root, host } = await bootHomeApp(dom);
+  const { services, root, host } = await bootHomeApp(dom, { readyId: "library-add-pdf-btn" });
   const { getMockJobId } = await import("@/platform/mock/index.js");
   const { DOWNLOAD_ACTION_IDS } = await import("@/platform/contracts/download-action-contract.js");
   const urlStub = stubObjectUrl();
@@ -339,7 +262,7 @@ test("artifact-downloads：document 级委托覆盖全部 7 个契约 id(含当�
 // 无关的 statusCard store 变化重渲染时，busy 文案不应被打回原始 label。
 test("artifact-downloads：busy 态文案不被父组件(书籍详情处理卡)重渲染覆盖(蓝图 §7.5 方案二核心保障)", async () => {
   const dom = makeDom("?mock=done");
-  const { services, root, host } = await bootHomeApp(dom);
+  const { services, root, host } = await bootHomeApp(dom, { readyId: "library-add-pdf-btn" });
   const { getMockJobId } = await import("@/platform/mock/index.js");
   const jobId = getMockJobId();
 
@@ -398,7 +321,7 @@ test("artifact-downloads：busy 态文案不被父组件(书籍详情处理卡)�
 
 test("artifact-downloads：StatusDetailDialog 概览下载按钮的 busy 态同样不被翻页/tab 切换等重渲染覆盖", async () => {
   const dom = makeDom("?mock=done");
-  const { services, root, host } = await bootHomeApp(dom);
+  const { services, root, host } = await bootHomeApp(dom, { readyId: "library-add-pdf-btn" });
   const { getMockJobId } = await import("@/platform/mock/index.js");
 
   services.features.jobRuntimeFeature.startPolling(getMockJobId());

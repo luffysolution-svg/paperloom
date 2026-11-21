@@ -1,28 +1,23 @@
 import json
-import sys
 import tempfile
 from pathlib import Path
 
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-
-from retainpdf_pipeline.translate.core.item_reader import item_block_class
-from retainpdf_pipeline.translate.core.item_reader import item_layout_role
-from retainpdf_pipeline.translate.core.item_reader import item_is_algorithm_like
-from retainpdf_pipeline.translate.core.item_reader import item_is_metadata_like
-from retainpdf_pipeline.translate.core.item_reader import item_is_reference_heading_like
-from retainpdf_pipeline.translate.core.item_reader import item_is_reference_compatible
-from retainpdf_pipeline.translate.core.item_reader import item_policy_translate
-from retainpdf_pipeline.translate.core.item_reader import item_semantic_role
-from retainpdf_pipeline.translate.core.item_reader import item_structure_role
-from retainpdf_pipeline.translate.core.ocr.models import TextItem
-from retainpdf_pipeline.translate.artifacts.status import is_allowed_untranslated
-import retainpdf_pipeline.translate.core.payload.translations as translations_module
-from retainpdf_pipeline.translate.core.payload.translations import ensure_translation_template
-from retainpdf_pipeline.translate.core.payload.translations import export_translation_template
-from retainpdf_pipeline.translate.core.payload.translations import load_translations
+from retainpdf_translation.core.item_reader import item_block_class
+from retainpdf_translation.core.item_reader import item_layout_role
+from retainpdf_translation.core.item_reader import item_is_algorithm_like
+from retainpdf_translation.core.item_reader import item_is_metadata_like
+from retainpdf_translation.core.item_reader import item_is_reference_heading_like
+from retainpdf_translation.core.item_reader import item_is_reference_compatible
+from retainpdf_translation.core.item_reader import item_policy_translate
+from retainpdf_translation.core.item_reader import item_semantic_role
+from retainpdf_translation.core.item_reader import item_structure_role
+from retainpdf_translation.core.ocr.models import TextItem
+from retainpdf_translation.artifacts.status import is_allowed_untranslated
+import retainpdf_translation.core.payload.translations as translations_module
+from retainpdf_translation.core.payload.translations import ensure_translation_template
+from retainpdf_translation.core.payload.translations import export_translation_template
+from retainpdf_translation.core.payload.translations import load_translations
 
 
 def _text_item(item_id: str, text: str = "Body paragraph") -> TextItem:

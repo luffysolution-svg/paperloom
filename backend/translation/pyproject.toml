@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "retainpdf-translation"
+version = "0.2.8"
+description = "RetainPDF translation: normalized document.v1 to per-page translation payloads and manifest"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+  # 领域推断读源 PDF 前几页的文字（llm/domain_context.py）。
+  "PyMuPDF==1.26.5",
+  "requests==2.32.5",
+  "retainpdf-base",
+  "retainpdf-math",
+  # 翻译引擎 agent（translation.engine=agent，workflow/agent_flow.py）；它只用标准库
+  "retainpdf-translation-agent",
+  "urllib3==2.5.0",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest==9.0.3",
+]
+
+[tool.uv.sources]
+retainpdf-base = { workspace = true }
+retainpdf-math = { workspace = true }
+retainpdf-translation-agent = { workspace = true }
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = [
+  "retainpdf_translation*",
+]
+
+[tool.setuptools.package-data]
+# prompt_loader 用 importlib.resources 读提示词；漏声明会让 wheel 丢掉 *.txt，翻译一调模型就 FileNotFoundError。
+"retainpdf_translation.prompts" = ["*.txt", "*.md"]
+"retainpdf_translation.services.quality.qa" = ["*.json"]

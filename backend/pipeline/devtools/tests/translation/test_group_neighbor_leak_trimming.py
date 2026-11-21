@@ -15,13 +15,8 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-from retainpdf_pipeline.translate.core.payload.parts.apply import (  # noqa: E402
+from retainpdf_translation.core.payload.parts.apply import (  # noqa: E402
     apply_translated_text_map,
 )
 
@@ -63,10 +58,10 @@ def _payload(*, with_neighbour: bool = True) -> list[dict]:
 
 
 def _apply(payload: list[dict]) -> str:
-    from retainpdf_pipeline.translate.core.payload.parts.common import (
+    from retainpdf_translation.core.payload.parts.common import (
         effective_translation_unit_id,
     )
-    from retainpdf_pipeline.translate.core.payload.parts.translation_units import (
+    from retainpdf_translation.core.payload.parts.translation_units import (
         refresh_payload_translation_units,
     )
 

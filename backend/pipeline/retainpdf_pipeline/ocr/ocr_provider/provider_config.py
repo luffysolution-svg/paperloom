@@ -1,6 +1,7 @@
 from retainpdf_pipeline.ocr.ocr_provider_config import OCR_PROVIDER_CONFIG_ENV
 from retainpdf_pipeline.ocr.ocr_provider_config import PADDLE_DEFAULT_MODEL_ENV
 from retainpdf_pipeline.ocr.ocr_provider_config import PADDLE_DEFAULT_MODEL_FALLBACK
+from retainpdf_pipeline.ocr.ocr_provider_config import client_ocr_options
 from retainpdf_pipeline.ocr.ocr_provider_config import configured_command_providers
 from retainpdf_pipeline.ocr.ocr_provider_config import configured_local_command_providers
 from retainpdf_pipeline.ocr.ocr_provider_config import configured_remote_command_providers
@@ -16,6 +17,7 @@ __all__ = [
     "OCR_PROVIDER_CONFIG_ENV",
     "PADDLE_DEFAULT_MODEL_ENV",
     "PADDLE_DEFAULT_MODEL_FALLBACK",
+    "client_ocr_options",
     "configured_command_providers",
     "configured_local_command_providers",
     "configured_remote_command_providers",

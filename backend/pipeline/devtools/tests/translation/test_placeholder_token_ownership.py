@@ -3,9 +3,9 @@ from pathlib import Path
 
 import pytest
 
-from retainpdf_pipeline.translate.core import placeholder_tokens as core
-from retainpdf_pipeline.translate.core.payload import formula_protection
-from retainpdf_pipeline.translate.llm.validation import placeholder_tokens as compatibility
+from retainpdf_translation.core import placeholder_tokens as core
+from retainpdf_translation.core.payload import formula_protection
+from retainpdf_translation.llm.validation import placeholder_tokens as compatibility
 
 
 @pytest.mark.parametrize("prefix", list("futnvc"))
@@ -57,4 +57,4 @@ def test_policy_consumers_use_core_owner_without_frozen_debt():
         tree = ast.parse((root / "services/policy" / f"{name}.py").read_text())
         owners = [node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)
                   and any(alias.name == "strip_placeholders" for alias in node.names)]
-        assert owners == ["retainpdf_pipeline.translate.core.placeholder_tokens"]
+        assert owners == ["retainpdf_translation.core.placeholder_tokens"]

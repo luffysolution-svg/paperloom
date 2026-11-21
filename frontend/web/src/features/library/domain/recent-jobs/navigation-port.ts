@@ -1,47 +1,53 @@
-import { APP_EVENTS } from "@/platform/contracts/app-contract.js";
+import type { ReaderAnchor } from "@/platform/navigation/pages.js";
 import { createRecentJobsReaderPort } from "./reader-port.js";
 import { createRecentJobsRuntimePort } from "./job-runtime-port.js";
 
+/** 导航只用到任务运行端口的这几个方法（createRecentJobsRuntimePort 或调用方自备）。 */
+export type NavigationJobRuntimePort = {
+  currentJobId?: () => string;
+  openJob?: (jobId: string) => unknown;
+  recoverJob?: (jobId: string) => unknown;
+};
+
+export type NavigationReaderPort = {
+  openReader?: (jobId: string, anchor: ReaderAnchor | null, documentId: string, options: { pinJob?: boolean }) => unknown;
+};
+
+export type RecentJobsNavigationPort = ReturnType<typeof createRecentJobsNavigationPort>;
+
 export function createRecentJobsNavigationPort({
-  closeDialog,
   currentJobId = () => "",
-  doc = document,
   jobRuntimePort = createRecentJobsRuntimePort({ currentJobId }),
   readerPort = createRecentJobsReaderPort(),
-  /** 图书馆网格默认 false：进度在书籍详情 Tab，不弹旧工作流窗 */
-  openWorkflowOnSelect = false,
-}: any = {}) {
-  function openWorkflow() {
-    doc?.dispatchEvent?.(new CustomEvent(APP_EVENTS.openTranslationWorkflow));
-  }
+}: {
+  currentJobId?: () => string;
+  jobRuntimePort?: NavigationJobRuntimePort;
+  readerPort?: NavigationReaderPort;
+} = {}) {
 
   return {
     currentJobId() {
       return `${jobRuntimePort.currentJobId?.() || currentJobId?.() || ""}`.trim();
     },
 
-    openJob(jobId) {
+    openJob(jobId: unknown) {
       const normalizedJobId = `${jobId || ""}`.trim();
       if (!normalizedJobId) {
         return false;
       }
-      closeDialog?.();
-      if (openWorkflowOnSelect) {
-        openWorkflow();
-      }
+      // 进度在书籍详情的「进度」页，不弹旧工作流窗。
       return jobRuntimePort.openJob?.(normalizedJobId) !== false;
     },
 
-    openReader(jobId, documentId = "") {
+    openReader(jobId: unknown, documentId = "", options: { pinJob?: boolean } = {}) {
       const normalizedJobId = `${jobId || ""}`.trim();
       if (!normalizedJobId) {
         return false;
       }
-      closeDialog?.();
-      return readerPort.openReader?.(normalizedJobId, null, `${documentId || ""}`.trim()) !== false;
+      return readerPort.openReader?.(normalizedJobId, null, `${documentId || ""}`.trim(), options) !== false;
     },
 
-    recoverJob(jobId) {
+    recoverJob(jobId: unknown) {
       const normalizedJobId = `${jobId || ""}`.trim();
       if (!normalizedJobId) {
         return false;

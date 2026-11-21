@@ -1,58 +1,25 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { eventPage } from "../helpers/job-events-fixture.mjs";
-import { JSDOM } from "jsdom";
+import { waitFor } from "../helpers/async.mjs";
+import { byId, click, makeDom } from "../helpers/dom.mjs";
 
 // DetailApp(任务详情页 React 编排根)组件级测试:
 // 经 tests/helpers/jsx-loader.mjs 的 esbuild 钩子直接加载 .jsx。
 // 校验:加载编排(overview → markdown)、setText/setActionLink 适配、
 // 命令式孤岛(产物清单)落地、事件流按需加载与模态框开合。
 
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/detail.html?job_id=job-react-detail" });
-for (const key of ["window", "document", "HTMLElement", "HTMLInputElement", "HTMLSelectElement", "CustomEvent", "Event", "KeyboardEvent", "MouseEvent", "Node", "MutationObserver", "NodeFilter"]) {
-  Object.defineProperty(globalThis, key, {
-    value: dom.window[key] ?? dom.window,
-    writable: true,
-    configurable: true,
-  });
-}
-globalThis.window = dom.window;
-globalThis.requestAnimationFrame = (callback) => setTimeout(() => callback(0), 0);
-// Radix Presence/Tabs(阶段 B 引入)在 jsdom 下需要 cancelAnimationFrame
-// (TabsContent 的 mount 动画计时器清理)和 getComputedStyle(Presence 读取
-// animation-name 判断退场动画是否结束)——jsdom 的 window 上有实现,只是没有
-// 像 requestAnimationFrame 一样被复制到裸 global 上,这里一并补上。
-globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
-globalThis.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
-globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+const dom = makeDom("", {
+  url: "http://localhost/detail.html?job_id=job-react-detail",
+  keys: [
+    "window", "document", "HTMLElement", "HTMLInputElement", "HTMLSelectElement", "CustomEvent",
+    "Event", "KeyboardEvent", "MouseEvent", "Node", "MutationObserver", "NodeFilter",
+  ],
+});
 
 const { createRoot } = await import("react-dom/client");
 const React = await import("react");
 const { DetailApp } = await import("../../src/app/detail/DetailApp.jsx");
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-// 并行跑测时进程负载不定,固定等待会抖;轮询直到条件成立(上限 3s)
-async function waitFor(predicate, description) {
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    if (predicate()) {
-      return;
-    }
-    await wait(20);
-  }
-  assert.fail(`等待超时:${description}`);
-}
-
-function click(element) {
-  element.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-}
-
-function byId(id) {
-  return dom.window.document.getElementById(id);
-}
 
 function makePorts() {
   const payloadRaw = {
@@ -129,7 +96,6 @@ function makePorts() {
       fetchProtected: async () => {
         throw new Error("本测试不应发起受保护请求");
       },
-      rerunJob: async () => ({}),
       resumeJob: async () => ({}),
     },
   };
@@ -150,40 +116,40 @@ test("DetailApp:加载编排、文案适配、产物孤岛、事件流模态框"
   }));
   // 等待 overview + markdown 两段异步编排全部落地
   await waitFor(
-    () => /已加载/.test(byId("detail-markdown-status")?.textContent || ""),
+    () => /已加载/.test(byId(dom, "detail-markdown-status")?.textContent || ""),
     "markdown 状态就绪",
   );
 
   // 头部:job id 与分享提示走 setText 适配
-  assert.equal(byId("detail-job-id")?.textContent, "job-react-detail");
-  assert.equal(byId("detail-head-note")?.textContent, "分享提示文案(测试)");
-  assert.notEqual(byId("detail-status-summary")?.textContent, "-");
+  assert.equal(byId(dom, "detail-job-id")?.textContent, "job-react-detail");
+  assert.equal(byId(dom, "detail-head-note")?.textContent, "分享提示文案(测试)");
+  assert.notEqual(byId(dom, "detail-status-summary")?.textContent, "-");
 
   // 断点恢复:resumePlan 可恢复 → 文案与按钮状态(命令式写入)
-  assert.match(byId("detail-rerun-status")?.textContent || "", /可从 translation 恢复/);
-  assert.equal(byId("detail-rerun-btn")?.disabled, false);
+  assert.match(byId(dom, "detail-rerun-status")?.textContent || "", /可从 translation 恢复/);
+  assert.equal(byId(dom, "detail-rerun-btn")?.disabled, false);
 
   // 动作链接:setActionLink 适配(reader/pdf 均就绪)
-  assert.equal(byId("detail-reader-btn")?.classList.contains("disabled"), false);
-  assert.equal(byId("detail-reader-btn")?.getAttribute("aria-disabled"), "false");
-  assert.equal(byId("detail-pdf-btn")?.classList.contains("disabled"), false);
+  assert.equal(byId(dom, "detail-reader-btn")?.classList.contains("disabled"), false);
+  assert.equal(byId(dom, "detail-reader-btn")?.getAttribute("aria-disabled"), "false");
+  assert.equal(byId(dom, "detail-pdf-btn")?.classList.contains("disabled"), false);
 
   // 产物清单:保留的 artifacts.js 经 overview-renderer 命令式写入 React 容器
-  assert.equal(byId("detail-artifacts-summary")?.textContent, "共 2 项");
+  assert.equal(byId(dom, "detail-artifacts-summary")?.textContent, "共 2 项");
   assert.equal(host.querySelectorAll(".detail-artifact-row").length, 2);
 
   // Markdown:markdown-flow 复用 → 状态与预览
-  assert.match(byId("detail-markdown-status")?.textContent || "", /已加载 \/markdown JSON/);
-  assert.match(byId("detail-markdown-preview")?.textContent || "", /# 测试文档/);
-  assert.equal(byId("detail-markdown-image-count")?.textContent, "0");
+  assert.match(byId(dom, "detail-markdown-status")?.textContent || "", /已加载 \/markdown JSON/);
+  assert.match(byId(dom, "detail-markdown-preview")?.textContent || "", /# 测试文档/);
+  assert.equal(byId(dom, "detail-markdown-image-count")?.textContent, "0");
 
   // 阶段时间线模态框(阶段 C 收官批换 Radix Dialog,不 forceMount:关闭态
   // 整个 Content 不挂载于 DOM,断言从"hidden class 真假"改为"是否挂载"):
   // 打开渲染条目,Escape 关闭
-  assert.equal(byId("detail-stage-history-modal"), null, "初始未打开时不挂载");
-  click(byId("detail-open-stage-history-btn"));
+  assert.equal(byId(dom, "detail-stage-history-modal"), null, "初始未打开时不挂载");
+  click(dom, byId(dom, "detail-open-stage-history-btn"));
   await waitFor(
-    () => byId("detail-stage-history-modal") !== null,
+    () => byId(dom, "detail-stage-history-modal") !== null,
     "阶段时间线模态框打开",
   );
   // Radix Dialog Content 走 Portal,渲染到 document.body 而不是 host 子树内,
@@ -192,32 +158,32 @@ test("DetailApp:加载编排、文案适配、产物孤岛、事件流模态框"
   assert.match(dom.window.document.querySelector(".detail-stage-item .detail-stage-title")?.textContent || "", /^1\. /);
   dom.window.document.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   await waitFor(
-    () => byId("detail-stage-history-modal") === null,
+    () => byId(dom, "detail-stage-history-modal") === null,
     "Escape 关闭阶段时间线模态框",
   );
 
   // 事件流:按需分页拉全量 + 页内缓存 + 按钮文案变为「查看」
-  assert.equal(byId("detail-open-events-btn")?.textContent, "按需加载");
-  assert.equal(byId("detail-events-modal"), null, "初始未打开时不挂载");
-  click(byId("detail-open-events-btn"));
+  assert.equal(byId(dom, "detail-open-events-btn")?.textContent, "按需加载");
+  assert.equal(byId(dom, "detail-events-modal"), null, "初始未打开时不挂载");
+  click(dom, byId(dom, "detail-open-events-btn"));
   await waitFor(
     () => dom.window.document.querySelectorAll(".detail-event-item").length === 2,
     "事件流条目渲染",
   );
-  assert.ok(byId("detail-events-modal"), "事件流模态框已挂载");
+  assert.ok(byId(dom, "detail-events-modal"), "事件流模态框已挂载");
   assert.deepEqual(ports.calls.events, [["job-react-detail", "/api/v1", { limit: 500, start: "head" }]]);
-  assert.equal(byId("detail-events-status")?.textContent, "全部事件 · 2 条");
-  assert.equal(byId("detail-open-events-btn")?.textContent, "查看");
+  assert.equal(byId(dom, "detail-events-status")?.textContent, "全部事件 · 2 条");
+  assert.equal(byId(dom, "detail-open-events-btn")?.textContent, "查看");
 
   // 再次打开不重复请求(页内缓存)
-  click(byId("detail-close-events-btn"));
+  click(dom, byId(dom, "detail-close-events-btn"));
   await waitFor(
-    () => byId("detail-events-modal") === null,
+    () => byId(dom, "detail-events-modal") === null,
     "关闭事件流模态框",
   );
-  click(byId("detail-open-events-btn"));
+  click(dom, byId(dom, "detail-open-events-btn"));
   await waitFor(
-    () => byId("detail-events-modal") !== null,
+    () => byId(dom, "detail-events-modal") !== null,
     "再次打开事件流模态框",
   );
   assert.equal(ports.calls.events.length, 1);
@@ -252,6 +218,15 @@ test("DetailApp:缺少 job_id 时提示且不发起请求", async () => {
     "缺少 job_id 提示",
   );
   assert.equal(overviewCalls, 0);
+
+  // 这时点开事件流，弹窗要说清楚为什么加载不了，而不是一直停在「尚未加载」
+  click(dom, byId(dom, "detail-open-events-btn"));
+  await waitFor(() => byId(dom, "detail-events-modal") !== null, "事件流弹窗打开");
+  await waitFor(
+    () => byId(dom, "detail-events-status")?.textContent === "缺少 job_id，无法加载事件流。",
+    "弹窗显示缺少 job_id 的原因",
+    3_000,
+  );
 
   root.unmount();
   host.remove();

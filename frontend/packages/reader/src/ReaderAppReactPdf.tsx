@@ -3,68 +3,41 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useReaderReactController } from "./hooks/use-reader-react-controller.js";
 import { useReaderKeyboard } from "./hooks/use-reader-keyboard.js";
 import {
-  ReaderAiSplitResizeHandle,
+  ReaderAssistantSplitResizeHandle,
   ReaderAssistantDock,
+  ReaderPanelToggles,
   ReaderCloseHome,
   ReaderWorkspaceTabs,
   ReaderReactBoot,
   ReaderCompareGrid,
   ReaderZoomHud,
-  ReaderFab,
-  ReaderSelectionToolbar,
-  ReaderNotesPanel,
+  ReaderDownloadActions,
 } from "./components/react-pdf/index.js";
 import type { ReaderAssistantPanel, ReaderWorkspaceMode } from "./components/react-pdf/index.js";
-import type { ReaderFabToolId } from "./components/react-pdf/ReaderFab.js";
-import { useReaderAnnotations } from "./hooks/use-reader-annotations.js";
-import type { ReaderNote } from "./annotations/types.js";
+import { useReaderAssistantPanel } from "./hooks/use-reader-assistant-panel.js";
 import { DownloadToastHost } from "./shared/react/DownloadToastHost.jsx";
 import { READER_ROOT_CLASS } from "./pdf/reader-dom-contract.js";
+import { readerViewportWidth } from "./pdf/reader-zoom.js";
+import { resolveReaderInitialMode, shouldPersistReaderMode } from "./hooks/reader-initial-mode.js";
+import type { ReaderMode } from "./hooks/use-reader-session.js";
 import {
   loadReaderViewState,
   saveReaderViewState,
 } from "./shared/state/reader-view-state.js";
-import type { ReaderSelectionNoteInput } from "./components/react-pdf/ReaderSelectionToolbar.js";
 import {
   ReaderProvider,
   type ReaderContextValue,
   type ReaderHudContextValue,
 } from "./components/react-pdf/reader-context.js";
 
-const ReaderFavoritesPanel = lazy(() => import("./components/react-pdf/ReaderFavoritesPanel.js").then((m) => ({ default: m.ReaderFavoritesPanel })));
 const ReaderMarkdownPanel = lazy(() => import("./components/react-pdf/ReaderMarkdownPanel.js").then((m) => ({ default: m.ReaderMarkdownPanel })));
 
-/**
- * 「曾经打开过」latch：上面三个面板是 lazy 的，但 lazy() 的动态 import 在组件
- * 挂载时就会触发 —— 无条件渲染(仅用 open 控制显隐)会让分包边界形同虚设，
- * reader 首屏因此白拉整个 AI 面板与 mathjax。
- *
- * 不能改成 `open && <Panel/>` 条件渲染：关闭即卸载会丢掉面板内部状态
- * (AI 会话、滚动位置)。故首次打开后就一直挂载，仅把首次加载推迟到真正需要时。
- *
- * 用 ref 而非 state：取值只会 false→true 单调翻转，且发生在 open 变化已经
- * 触发的那次渲染内，不需要额外再渲染一轮。
- */
-function useMountedSinceFirstOpen(open: boolean): boolean {
-  const everOpened = useRef(false);
-  if (open) {
-    everOpened.current = true;
-  }
-  return everOpened.current;
-}
+import { useReaderPanelSlot } from "./components/react-pdf/use-reader-panel-slot.js";
 
-export function resolveReaderAiLayout(_mode: string): "workspace" {
-  return "workspace";
-}
-
-export function resolveVisiblePdfMode(
-  mode: "source" | "compare" | "translated",
-  assistantPanel: ReaderAssistantPanel | null,
-) {
-  return assistantPanel !== null && mode === "compare"
-    ? "source"
-    : mode;
-}
+/** 稳定的空数组：每次渲染新建一个会让每页的标记层白白重算。 */
+import { resolveLiveTranslationToggles } from "./shared/data/live-translation-state.js";
+import { createRegionHoverStore } from "./shared/state/region-hover-store.js";
+import { ReaderFinder, ReaderFinderToggles, type ReaderFinderTab } from "./components/react-pdf/ReaderFinder.js";
 
 /** 阅读视图可见台面的判别联合。 */
 export type ReaderPaneComposition = {
@@ -125,9 +98,17 @@ export function resolveReaderPaneComposition(input: {
   const visibleMode = pdfMode;
   // 对照态叠加不再「消栏」：overlay 只在源栏叠加流式画布，右栏（最终译文）
   // 照常保留。compareMode / showTranslated 不再被 overlay 强制关闭。
-  const compareMode = visibleMode === "compare";
-  const showSource = overlayOnSource || visibleMode !== "translated";
-  const showTranslated = visibleMode === "translated" || visibleMode === "compare";
+  //
+  // **但要看有没有最终译文可挂。** 这两个值原来完全不看 sourceViewOnly，而真正
+  // 挂载右栏的闸在别处（use-reader-pane-model 的 `mountTranslated = … && !sourceOnly`）。
+  // 于是翻译还在跑、最终译文 PDF 还不存在时点「对照」：栅格按两列排
+  // （minmax(0,1fr) 两份），第二列一个子元素都没有 —— 不是空状态文案，是**半个
+  // 屏幕纯白**。而这正是翻译期间点对照的默认路径（pill 在时对照页签是放开的，
+  // changeWorkspace 还会自动打开叠加）。
+  const showTranslated = !sourceViewOnly
+    && (visibleMode === "translated" || visibleMode === "compare");
+  const compareMode = visibleMode === "compare" && showTranslated;
+  const showSource = overlayOnSource || visibleMode !== "translated" || !showTranslated;
   const kind: ReaderPaneComposition["kind"] = overlayOnSource
     ? "live-overlay"
     : visibleMode === "compare"
@@ -164,32 +145,18 @@ export function resolveLiveTranslationVisibleOnWorkspaceChange(
   return false;
 }
 
-export function resolveInitialAssistantPanel(
-  mode: "source" | "compare" | "translated",
-  saved: ReturnType<typeof loadReaderViewState>,
-): ReaderAssistantPanel | null {
-  // A newly opened job always starts in its canonical PDF comparison view.
-  if (mode === "compare") return null;
-  if (saved?.assistantPanel === "markdown") {
-    return "markdown";
-  }
-  // One-time migration from the former arbitrary two-pane layout.
-  if (saved?.splitLayout?.left === "markdown" || saved?.splitLayout?.right === "markdown") {
-    return "markdown";
-  }
-  return null;
-}
-
 export function ReaderAppReactPdf() {
   const c = useReaderReactController();
-  const { boot, panes, sessionFiles, tools, session } = c;
-  const [assistantPanel, setAssistantPanel] = useState<ReaderAssistantPanel | null>(() => (
-    resolveInitialAssistantPanel(c.mode, loadReaderViewState(c.viewStateKey))
-  ));
+  const { boot, panes, sessionFiles, session } = c;
+  // 「开着哪个面板」的恢复 / 持久化整段在 use-reader-assistant-panel 里 ——
+  // 那是 effect 顺序的事，只有真渲染才测得到，所以单独成 hook 好被真渲染。
+  const assistant = useReaderAssistantPanel(c.viewStateKey);
+  const assistantPanel = assistant.panel;
+  const setAssistantPanel = assistant.setPanel;
   const [assistantPdfPane, setAssistantPdfPane] = useState<"source" | "translated" | null>(null);
   const [liveTranslationVisible, setLiveTranslationVisible] = useState(false);
-  const layoutScopeRef = useRef(c.viewStateKey);
   const modeScopeRef = useRef<string | null>(null);
+  const autoModeRef = useRef<ReaderMode | null>(null);
 
   const assistantOpen = assistantPanel !== null;
   // 是否有「可叠加到原文 PDF 上的流式译文内容」：进行中（available）或已完成
@@ -206,31 +173,27 @@ export function ReaderAppReactPdf() {
     assistantOpen,
     assistantPdfPane,
   });
+  // 叠层的两个开关分别摆在哪 —— 判断在 live-translation-state.ts 里，因为
+  // 「收掉顶栏 pill 之后叠层还够得着吗」这个不变式要能单测（见那里的注释）。
+  const liveToggles = resolveLiveTranslationToggles({
+    hasOverlayContent,
+    connection: c.liveTranslation.connection,
+    showSource: paneComposition.showSource,
+    liveTranslationVisible,
+    assistantOpen,
+  });
   const sourceViewOnly = paneComposition.sourceViewOnly;
   const visiblePdfMode = paneComposition.visibleMode;
-  // 本地批注：选中文字后生成注记，面板内按页分组 / 编辑 / 删除 / 导出。
-  const [notesOpen, setNotesOpen] = useState(false);
-  const openNotes = useCallback(() => setNotesOpen(true), []);
-  const toggleNotes = useCallback(() => setNotesOpen((value) => !value), []);
-  const annotations = useReaderAnnotations(
-    { jobId: session.jobId, documentId: session.documentId },
-    { onAfterAdd: openNotes },
-  );
-  const addNoteFromSelection = useCallback((input: ReaderSelectionNoteInput) => {
-    annotations.addFromQuote(input);
-    c.clearSelection();
-  }, [annotations.addFromQuote, c.clearSelection]);
-  const jumpToNote = useCallback((note: ReaderNote) => {
-    c.goToPage(note.page, note.pane === "translated" ? "translated" : "source");
-  }, [c.goToPage]);
-  const exportNotes = useCallback(
-    () => annotations.exportMarkdown(session.title || ""),
-    [annotations.exportMarkdown, session.title],
-  );
-
+  // 换文档（或 viewStateKey 迁移）时丢掉上一本书的选区上下文。
+  //
+  // 这里原来还有一行 `setLiveTranslationVisible(true)`，它让上面那个
+  // `useState(false)` 成了死初值 —— 挂载时就跑，而且 viewStateKey 每迁一次就
+  // 再跑一次，连「任务到终态自动取消叠加」都能被它翻回来。和
+  // resolveReaderPaneComposition 头上写的「默认不叠加，避免旧『左右都是中文』
+  // 的自动叠加 bug」直接矛盾，删掉才是那段注释说的行为。
+  // 需要自动打开的那一处走 resolveLiveTranslationVisibleOnWorkspaceChange。
   useEffect(() => {
-    setLiveTranslationVisible(true);
-    setNotesOpen(false);
+    setLiveTranslationVisible(false);
   }, [c.viewStateKey]);
 
   // 任务到终态后自动取消「实时译文」选中：终态应回到最终译文 PDF / 对照，
@@ -239,36 +202,39 @@ export function ReaderAppReactPdf() {
     if (c.session.jobTerminal) setLiveTranslationVisible(false);
   }, [c.session.jobTerminal]);
 
+  // 栏锁（从某栏的选区问 AI）也是按 scope 作废的：换了书那一栏就不是那一栏了。
   useEffect(() => {
-    if (boot.loading) return;
-    if (layoutScopeRef.current !== c.viewStateKey) {
-      layoutScopeRef.current = c.viewStateKey;
-      const saved = loadReaderViewState(c.viewStateKey);
-      setAssistantPanel(resolveInitialAssistantPanel(c.mode, saved));
-      setAssistantPdfPane(null);
-      return;
-    }
-    saveReaderViewState(c.viewStateKey, { assistantPanel, splitLayout: null });
-  }, [assistantPanel, boot.loading, c.mode, c.viewStateKey]);
+    setAssistantPdfPane(null);
+  }, [assistant.scope]);
 
   // 阅读模式恢复/持久化：与 anchor/zoom 对齐。sourceViewOnly 时只允许 source。
+  // 窄屏没有存档时自动进译文（resolveReaderInitialMode）；停在这个自动默认上时
+  // 不写存档，用户换过模式之后照常写（shouldPersistReaderMode）。
   useEffect(() => {
     if (boot.loading || boot.failed) return;
     if (modeScopeRef.current !== c.viewStateKey) {
       modeScopeRef.current = c.viewStateKey;
       const saved = loadReaderViewState(c.viewStateKey);
-      const target = sourceViewOnly ? "source" : saved?.mode;
-      if (target && target !== c.mode) {
-        c.setModeKeepingPage(target);
+      const initial = resolveReaderInitialMode({
+        savedMode: saved?.mode,
+        sourceViewOnly,
+        viewportWidth: readerViewportWidth(),
+      });
+      autoModeRef.current = initial.auto ? initial.mode : null;
+      if (initial.mode && initial.mode !== c.mode) {
+        c.setModeKeepingPage(initial.mode);
       }
       return;
     }
+    if (!shouldPersistReaderMode(c.mode, autoModeRef.current)) return;
+    autoModeRef.current = null;
     saveReaderViewState(c.viewStateKey, { mode: c.mode });
   }, [boot.failed, boot.loading, c.mode, c.setModeKeepingPage, c.viewStateKey, sourceViewOnly]);
   const workspaceView = assistantPanel || (c.mode === "compare" ? "compare" : "reading");
-  // 两个 lazy 面板各自的挂载 latch，见 useMountedSinceFirstOpen。
-  const favoritesMounted = useMountedSinceFirstOpen(tools.isOpen("favorites"));
-  const markdownMounted = useMountedSinceFirstOpen(assistantPanel === "markdown");
+  // 五个包内面板的开合 —— 每个 id 只在这里写一次，open 和挂载闸都从它派生。
+  // 原来是「闸一遍、open 一遍」，两处各自合法，抄改时把闸上那个写成别的面板
+  // 整套测试全绿而摘录永远打不开。见 use-reader-panel-slot.ts。
+  const markdownSlot = useReaderPanelSlot(assistantPanel, "markdown");
   // 键盘与 UI 共用同一「可见模式」真源：paneComposition.visibleMode。
   // 「0」重置缩放据此取模式默认，避免与 HUD/网格显示的模式脱节。
   useReaderKeyboard({
@@ -282,13 +248,11 @@ export function ReaderAppReactPdf() {
     goToPage: c.goToPage,
     enabled: c.showHud,
   });
-  const closeTool = useCallback(() => { tools.close(); }, [tools]);
   const closeAssistant = useCallback(() => {
     setAssistantPanel(null);
     setAssistantPdfPane(null);
   }, []);
   const changeWorkspace = useCallback((next: ReaderWorkspaceMode) => {
-    tools.close();
     setAssistantPdfPane(null);
     // A running translation can provide the compare workspace before the
     // immutable translated PDF exists. Keep the visible workspace and the
@@ -298,12 +262,12 @@ export function ReaderAppReactPdf() {
     const autoEnable = resolveLiveTranslationVisibleOnWorkspaceChange(next, c.liveTranslationAvailable);
     if (autoEnable !== null) setLiveTranslationVisible(autoEnable);
     c.setModeKeepingPage(next);
-  }, [c.liveTranslationAvailable, c.setModeKeepingPage, tools]);
+  }, [c.liveTranslationAvailable, c.setModeKeepingPage]);
 
   // 源栏「译文」开关：把流式译文直接叠在原文 PDF 上 / 收起。进行中与完成后
   // 都可用（只要有可叠加内容）。默认关，避免自动叠加造成「左右都中文」。
   const sourcePaneAction = useMemo(() => {
-    if (!hasOverlayContent || !paneComposition.showSource) return null;
+    if (!liveToggles.sourcePaneToggle) return null;
     return (
       <button
         type="button"
@@ -315,38 +279,30 @@ export function ReaderAppReactPdf() {
         译文
       </button>
     );
-  }, [hasOverlayContent, paneComposition.showSource, liveTranslationVisible]);
+  }, [liveToggles.sourcePaneToggle, liveTranslationVisible]);
 
   const selectAssistant = useCallback((next: ReaderAssistantPanel) => {
     setAssistantPanel(next);
+    // 栏锁的语义是「这一次从某栏的选区问 AI」，生命周期跟着那次提问。
+    //
+    // 清它的路原来覆盖了「关面板」「切顶栏页签」「换文档」，**唯独漏了换面板**
+    // —— 而换面板是 dock 上最常用的动作。漏掉的表现：在译文栏问过 AI 之后点
+    // Markdown，面板换了，PDF 那半边却还只剩译文栏，顶栏还挂着「对照被面板挤掉」。
+    setAssistantPdfPane(null);
   }, []);
-
-  // FAB 与 Dock 行为一致：favorites 走 tools，markdown 走辅助面板
-  // （workspace），notes 走本地批注。markdown 点击为 toggle（再点关闭）。
-  const handleFabTool = useCallback((id: ReaderFabToolId) => {
-    if (id === "notes") {
-      toggleNotes();
-      return;
-    }
-    if (id === "markdown") {
-      if (assistantPanel === id) {
-        setAssistantPanel(null);
-        setAssistantPdfPane(null);
-      } else {
-        setAssistantPanel(id);
-        setAssistantPdfPane(null);
-      }
-      return;
-    }
-    tools.toggle(id);
-  }, [assistantPanel, toggleNotes, tools]);
-  // FAB 高亮：批注 > 辅助面板（与 Dock 同真源）> tools（摘录）。
-  const fabActiveTool: ReaderFabToolId | null = notesOpen
-    ? "notes"
-    : (assistantPanel ?? tools.active);
 
   // 外壳 Context：只装频繁下钻、且此前纯透传的值；currentPage/numPages 走 HUD
   // context，避免滚动带动整棵外壳重渲染。
+  const [regionHover] = useState(createRegionHoverStore);
+  // 左栏的目录 / 搜索：开着哪一页签，null 收着。
+  const [finder, setFinder] = useState<ReaderFinderTab | null>(null);
+  const toggleFinder = useCallback((tab: ReaderFinderTab) => setFinder((open) => (open === tab ? null : tab)), []);
+  const jumpFromFinder = useCallback((itemId: string) => {
+    c.jumpToAnchor({ block_id: itemId });
+    // 窄屏上左栏盖着书：跳过去就收起来。
+    if (readerViewportWidth() < 900) setFinder(null);
+  }, [c.jumpToAnchor]);
+  const jumpToBlock = useCallback((itemId: string) => c.jumpToAnchor({ block_id: itemId }), [c.jumpToAnchor]);
   const readerContext = useMemo<ReaderContextValue>(() => ({
     bindShell: c.shell.bindShell,
     shellEl: c.shell.shellEl,
@@ -365,7 +321,9 @@ export function ReaderAppReactPdf() {
     regions: session.regions,
     readerMetadata: session.readerMetadata,
     activeRegion: c.activeRegion,
-    onSelectRegion: c.selectRegion,
+    regionHover,
+    jumpToBlock,
+    revisedBlocks: c.revisedBlocks,
     sourceOnly: c.sourceOnly,
     sourceViewOnly,
     download: c.download,
@@ -381,7 +339,9 @@ export function ReaderAppReactPdf() {
     session.regions,
     session.readerMetadata,
     c.activeRegion,
-    c.selectRegion,
+    regionHover,
+    jumpToBlock,
+    c.revisedBlocks,
     c.sourceOnly,
     sourceViewOnly,
     c.download,
@@ -399,6 +359,7 @@ export function ReaderAppReactPdf() {
     READER_ROOT_CLASS,
     `is-workspace-${workspaceView}`,
     assistantOpen ? "is-assistant-open" : "",
+    finder ? "is-finder-open" : "",
     paneComposition.overlayOnSource ? "is-live-translation-overlay" : "",
   ].filter(Boolean).join(" ");
 
@@ -406,43 +367,46 @@ export function ReaderAppReactPdf() {
     <ReaderProvider value={readerContext} hud={readerHud}>
       <div className={rootClasses} data-reader-engine="react-pdf" data-reader-workspace={workspaceView}>
         <ReaderReactBoot loading={boot.loading} failed={boot.failed} text={boot.text} percent={boot.percent} regionsError={Boolean(session.readerErrors.regions)} metadataError={Boolean(session.readerErrors.metadata)} />
-        <ReaderCloseHome onBeforeClose={session.prepareClose} />
+        {/* 三路下载和「关闭回主页」同一组：顶栏常驻，任何面板开着都够得到。
+            原来它们在可拖动圆钮的菜单里，而圆钮一开 dock 就被 CSS 整个吃掉。 */}
+        <ReaderFinderToggles open={finder} onToggle={toggleFinder} />
+        {finder ? (
+          <ReaderFinder
+            tab={finder}
+            onTab={setFinder}
+            onClose={() => setFinder(null)}
+            onJump={jumpFromFinder}
+          />
+        ) : null}
+        <div className="reader-chrome-tray">
+          <ReaderPanelToggles active={assistantPanel} />
+          <ReaderDownloadActions />
+          <ReaderCloseHome onBeforeClose={session.prepareClose} />
+        </div>
         <ReaderWorkspaceTabs
           mode={visiblePdfMode}
           documentReady={Boolean(session.jobId)}
           sourceViewOnly={sourceViewOnly}
           onModeChange={changeWorkspace}
-          liveTranslation={hasOverlayContent ? {
+          liveTranslation={liveToggles.topBarPill ? {
             visible: liveTranslationVisible,
             state: c.liveTranslation,
             onToggle: () => setLiveTranslationVisible((visible) => !visible),
           } : null}
         />
         <ReaderAssistantDock active={assistantPanel} />
-        {assistantOpen ? <ReaderAiSplitResizeHandle /> : null}
-        {c.showHud ? <ReaderFab activeTool={fabActiveTool} noteCount={annotations.count} onToggleTool={handleFabTool} /> : null}
-        <ReaderCompareGrid paneComposition={paneComposition} markdownSplit={assistantPanel === "markdown"} assistantSplit={assistantOpen} liveTranslation={c.liveTranslation} sourcePaneAction={sourcePaneAction} />
+        {assistantOpen ? <ReaderAssistantSplitResizeHandle /> : null}
+        <ReaderCompareGrid paneComposition={paneComposition} markdownSplit={markdownSlot.open} assistantSplit={assistantOpen} liveTranslation={c.liveTranslation} sourcePaneAction={sourcePaneAction} />
         {c.showHud ? (
           <ReaderZoomHud
             mode={visiblePdfMode}
             modeControls={null}
+            bookmarkScope={c.viewStateKey}
           />
         ) : null}
         <Suspense fallback={null}>
-          {favoritesMounted ? <ReaderFavoritesPanel open={tools.isOpen("favorites")} jobId={session.jobId} documentId={session.documentId} onClose={closeTool} onJumpPage={c.goToPage} /> : null}
-          {markdownMounted ? <ReaderMarkdownPanel open={assistantPanel === "markdown"} jobId={session.jobId} sourceOnly={c.sourceOnly} layout="workspace" side="right" onClose={closeAssistant} /> : null}
+          {markdownSlot.mounted ? <ReaderMarkdownPanel open={markdownSlot.open} jobId={session.jobId} sourceOnly={c.sourceOnly} side="right" onClose={closeAssistant} /> : null}
         </Suspense>
-        <ReaderNotesPanel
-          open={notesOpen}
-          groups={annotations.groups}
-          count={annotations.count}
-          onClose={() => setNotesOpen(false)}
-          onJump={jumpToNote}
-          onUpdateNote={annotations.updateNote}
-          onRemove={annotations.remove}
-          onExport={exportNotes}
-        />
-        <ReaderSelectionToolbar selection={c.selection} onDismiss={c.clearSelection} onAddNote={addNoteFromSelection} />
         <DownloadToastHost />
       </div>
     </ReaderProvider>

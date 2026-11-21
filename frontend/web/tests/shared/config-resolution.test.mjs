@@ -58,12 +58,9 @@ test("local 文件能盖掉默认：合并顺序 base→local，local 值胜出"
     "index.html 应先加载 runtime-config.js 再加载 runtime-config.local.js",
   );
 
-  // runtime-config.local.js 是 gitignore 的本地文件，CI 干净检出里没有；
-  // 有就读真的，没有就用同形 fixture，保证单测 hermetic。
-  const localPath = path.join(frontendRoot, "runtime-config.local.js");
-  const localText = fs.existsSync(localPath)
-    ? fs.readFileSync(localPath, "utf8")
-    : 'window.__FRONT_RUNTIME_CONFIG__ = { apiBase: "http://127.0.0.1:41000" };';
+  // runtime-config.local.js 是 gitignore 的本机文件：不读真的。它因人而异（同源部署时 apiBase 本来就是空的），
+  // 里面还可能有本机的 key；这里只验合并顺序，用同形 fixture 保证单测 hermetic。
+  const localText = 'window.__FRONT_RUNTIME_CONFIG__ = { apiBase: "http://127.0.0.1:41000" };';
   const baseApi = lastConfigValue(baseText, "apiBase");
   const localApi = lastConfigValue(localText, "apiBase");
   assert.ok(localApi, "runtime-config.local.js 应给出本地 apiBase 覆盖");
@@ -166,18 +163,14 @@ function walk(dir, out = []) {
   return out;
 }
 
-test("401 提示文案只收敛一处：读取图书馆失败，请稍后重试。(status)", () => {
+test("书架列表的报错文案不在 web 里留副本，书架客户端已删", () => {
   const hits = [];
   for (const file of walk(path.join(frontendRoot, "src"))) {
     const content = fs.readFileSync(file, "utf8");
     if (content.includes("读取图书馆失败")) hits.push(path.relative(frontendRoot, file));
   }
-  // 文案真值已随 library-books 客户端收敛到 @retainpdf/api；
-  // frontend/web/src 内不得再出现副本(旧的 src/js/api/library-books.ts 已删除)。
+  // 文案真值曾随 library-books 客户端收敛到 @retainpdf/api；书架冻结后那个客户端删了，
+  // 卡片活态改走 fetchJobsByIds（报错沿用 fetchJobList 的文案），web 里也不该冒出副本。
   assert.deepEqual(hits, []);
-  const lib = fs.readFileSync(
-    path.join(frontendRoot, "../packages/api/src/library-books.ts"),
-    "utf8",
-  );
-  assert.ok(lib.includes("读取图书馆失败，请稍后重试。(${resp.status})"));
+  assert.equal(fs.existsSync(path.join(frontendRoot, "../packages/api/src/library-books.ts")), false);
 });

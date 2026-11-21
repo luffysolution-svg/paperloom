@@ -1,24 +1,33 @@
+export type CommandMeta = { command: string };
+/** 处理器收到的载荷形状由各命令自己约定，总线不关心。 */
+export type CommandHandler = (payload: unknown, meta: CommandMeta) => unknown;
+
 export function createCommandBus({
   onError = null,
-}: any = {}) {
-  const handlers = new Map<string, Set<(payload: any, meta: any) => any>>();
+}: {
+  /** 给了就逐个隔离处理器的异常（记下、继续下一个）；不给就直接抛。 */
+  onError?: ((error: unknown, info: { command: string; payload: unknown }) => void) | null;
+} = {}) {
+  const handlers = new Map<string, Set<CommandHandler>>();
 
-  function on(command, handler) {
+  function on(command: string, handler: CommandHandler) {
     const commandName = `${command || ""}`.trim();
     if (!commandName || typeof handler !== "function") {
       return () => {};
     }
-    if (!handlers.has(commandName)) {
-      handlers.set(commandName, new Set());
+    let set = handlers.get(commandName);
+    if (!set) {
+      set = new Set();
+      handlers.set(commandName, set);
     }
-    handlers.get(commandName).add(handler);
+    set.add(handler);
     return () => handlers.get(commandName)?.delete(handler);
   }
 
-  async function dispatch(command, payload = {}) {
+  async function dispatch(command: string, payload: unknown = {}) {
     const commandName = `${command || ""}`.trim();
     const registered = Array.from(handlers.get(commandName) || []);
-    const results = [];
+    const results: unknown[] = [];
     for (const handler of registered) {
       try {
         results.push(await handler(payload, { command: commandName }));

@@ -1,0 +1,146 @@
+/* 状态详情弹窗：外壳、头部（标题 / 元信息 / 图标 / 状态徽标）、主体。（StatusDetailDialog / StatusDetailHeader）
+ *
+ * @owns status-detail
+ * @uses desktop-shell, desktop-head, desktop-body */
+
+@utility status-detail-dialog {
+  /* width/z-index/遮罩/圆角由 AppDialog 的 wide + nested 变体提供。 */
+  width: min(860px, calc(100vw - 32px));
+  width: min(860px, calc(100dvw - 32px));
+  height: min(560px, calc(100vh - 40px));
+  height: min(560px, calc(100dvh - 40px));
+  max-width: none;
+  max-height: none;
+
+  & .desktop-shell {
+    width: 100%;
+    height: 100%;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  & .desktop-head {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--paper) 94%, transparent);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  & .desktop-body {
+    padding: 0 16px 14px;
+  }
+
+  @media (max-width: 767px) {
+    --app-dialog-radius: 0px;
+    width: 100vw;
+    width: 100dvw;
+    height: 100vh;
+    height: 100dvh;
+  }
+}
+
+@utility status-detail-headline {
+  @apply flex min-w-0 items-center gap-3;
+  flex: 1 1 auto;
+
+  & h2 {
+    @apply text-[1rem] font-semibold;
+    color: var(--ink);
+    letter-spacing: -0.02em;
+  }
+}
+
+@utility status-detail-head-copy {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+@utility status-detail-head-title-row {
+  @apply flex items-center gap-2.5;
+  min-width: 0;
+}
+
+@utility status-detail-head-meta-row {
+  @apply flex min-w-0 items-center gap-3;
+
+  & > .status-panel-note {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 767px) {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+}
+
+@utility status-detail-job-meta {
+  @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1;
+  margin: 0;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  border: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+@utility status-detail-job-id {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+@utility status-detail-head-icon {
+  @apply flex h-8 w-8 items-center justify-center rounded-[9px];
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  color: var(--ink);
+  flex: 0 0 auto;
+
+  & svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  &.is-failed {
+    background: color-mix(in srgb, var(--danger) 10%, transparent);
+    color: var(--danger);
+  }
+
+  &.is-success {
+    background: color-mix(in srgb, var(--ok) 10%, transparent);
+    color: var(--ok);
+  }
+}
+
+@utility status-detail-state-badge {
+  @apply inline-flex min-h-6 items-center rounded-full px-2.5 text-[12px] font-medium;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--muted);
+
+  &.is-running {
+    color: var(--ink);
+  }
+
+  &.is-success {
+    background: color-mix(in srgb, var(--ok) 10%, transparent);
+    color: var(--ok);
+  }
+
+  &.is-failed {
+    background: color-mix(in srgb, var(--danger) 10%, transparent);
+    color: var(--danger);
+  }
+}
+
+@utility status-detail-body {
+  display: block;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}

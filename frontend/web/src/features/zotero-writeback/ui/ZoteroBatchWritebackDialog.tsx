@@ -2,11 +2,11 @@ import { useEffect, useState } from "react";
 import { LoaderCircle } from "lucide-react";
 
 import { writeDocumentsToZotero, type ZoteroBatchWritebackResult } from "@/platform/api/index.js";
-import { Button } from "@/ui/components/button.js";
 import {
+  Button,
   Dialog, DialogBody, DialogClose, DialogCloseButton, DialogContent,
   DialogDescription, DialogFooter, DialogHeader, DialogShell, DialogTitle,
-} from "@/ui/components/dialog.js";
+} from "@retainpdf/ui";
 
 export function ZoteroBatchWritebackDialog({ open, onOpenChange, documentIds }: {
   open: boolean;
@@ -79,7 +79,7 @@ export function ZoteroBatchWritebackDialog({ open, onOpenChange, documentIds }: 
             {!result ? <Button type="button" disabled={busy || count === 0 || count > 200} onClick={() => void submit()}>
               {busy ? "正在写回…" : "写回所选译文 PDF"}
             </Button> : null}
-            <DialogClose asChild><Button type="button" variant="outline" disabled={busy}>{result ? "完成" : "取消"}</Button></DialogClose>
+            <DialogClose asChild><Button type="button" variant="secondary" disabled={busy}>{result ? "完成" : "取消"}</Button></DialogClose>
           </DialogFooter>
         </DialogShell>
       </DialogContent>

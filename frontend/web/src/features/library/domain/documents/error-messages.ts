@@ -1,10 +1,5 @@
 // 文档域的友好错误文案（纯函数，无副作用）。
 
-import {
-  blockedFavoriteCount,
-  isDeleteBlockedByFavorites,
-} from "./delete-blocked-favorites.js";
-
 export type ErrorLike = {
   message?: string;
   status?: number;
@@ -37,16 +32,20 @@ export function friendlyTranslateError(error: ErrorLike, { reusingOcr = false } 
   return message || "发起翻译失败，请稍后重试。";
 }
 
+// 删除被拒（409）有两种：还有排队或运行中的任务（后端原文是英文的 "pass force=true"，没有 reason），
+// 或者删单个任务时别的任务还在用它的产物（reason = job_has_dependents，比如换字体重排出的任务）。
+export const DELETE_BLOCKED_BY_ACTIVE_JOB_MESSAGE = "还有排队或运行中的任务，请先取消再删除。";
+export const DELETE_BLOCKED_BY_DEPENDENTS_MESSAGE = "还有别的任务在用这个任务的产物（比如换字体重排出的版本），请先删掉那些任务再删。";
+
 export function friendlyDocumentDeleteError(error: ErrorLike): string {
   const message = typeof error === "string" ? error : `${error?.message || error || ""}`;
   const status = typeof error === "object" && error ? error.status : undefined;
-  if (isDeleteBlockedByFavorites(error) || status === 409 || message.includes("(409)")) {
-    // 结构化字段优先；message 正则只作为旧错误源的兜底。
-    const structured = blockedFavoriteCount(error);
-    const count = structured > 0 ? structured : Number(message.match(/\d+/)?.[0]);
-    return Number.isFinite(count) && count > 0
-      ? `该文档有 ${count} 条收藏，请先删除收藏后再删除文档。`
-      : "该文档存在收藏引用，请先删除相关收藏后再删除文档。";
+  const reason = typeof error === "object" && error ? `${error.reason || ""}`.trim() : "";
+  if (reason === "job_has_dependents") {
+    return DELETE_BLOCKED_BY_DEPENDENTS_MESSAGE;
+  }
+  if (status === 409 || message.includes("(409)")) {
+    return DELETE_BLOCKED_BY_ACTIVE_JOB_MESSAGE;
   }
   return message || "删除文档失败";
 }

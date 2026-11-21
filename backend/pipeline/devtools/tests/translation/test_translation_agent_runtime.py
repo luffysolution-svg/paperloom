@@ -1,19 +1,13 @@
 import json
-import sys
-from pathlib import Path
 
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-
-from retainpdf_pipeline.translate.services.agents import AgentRunContext
-from retainpdf_pipeline.translate.services.agents import AgentPlan
-from retainpdf_pipeline.translate.services.agents import LLMTask
-from retainpdf_pipeline.translate.services.agents import TranslationAgentCoordinator
-from retainpdf_pipeline.translate.services.agents import TranslationAgentRuntime
-from retainpdf_pipeline.translate.services.agents import TranslationRepairRequest
-from retainpdf_pipeline.translate.services.quality import TranslationQualityIssue
+from retainpdf_translation.services.agents import AgentRunContext
+from retainpdf_translation.services.agents import AgentPlan
+from retainpdf_translation.services.agents import LLMTask
+from retainpdf_translation.services.agents import TranslationAgentCoordinator
+from retainpdf_translation.services.agents import TranslationAgentRuntime
+from retainpdf_translation.services.agents import TranslationRepairRequest
+from retainpdf_translation.services.quality import TranslationQualityIssue
 
 
 def test_agent_runtime_executes_task_with_provider_request_contract() -> None:

@@ -11,7 +11,6 @@ export interface MockDocument {
   bytes: number;
   active_job_id: string | null;
   reading_status: MockReadingStatus | string;
-  tags: string[];
   added_at: string;
   updated_at: string;
   last_opened_at?: string | null;
@@ -29,7 +28,6 @@ export interface MockDocumentListQuery {
   limit?: number;
   offset?: number;
   readingStatus?: string;
-  tag?: string;
   collectionId?: string;
   /** 镜像后端 q：标题或原始文件名包含（大小写不敏感，字面匹配）。 */
   q?: string;
@@ -45,7 +43,6 @@ export interface MockDocumentListResult {
 export interface MockDocumentPatch {
   title?: string;
   reading_status?: MockReadingStatus | string;
-  tags?: string[];
 }
 
 export interface MockCollection {

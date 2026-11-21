@@ -1,0 +1,2449 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "retainpdf/contracts/library-documents/v1",
+  "title": "书库契约（Library Documents）",
+  "description": "书（文档）、合集、全文检索、阅读入口、翻译覆盖、书的文件清单、元数据建议、书的任务列表、翻译这本书、给这本书做 OCR 的请求和返回。生产者：backend/packages/retainpdf-core/src/models/library.rs（DocumentRecord / CollectionRecord / BlockSearchHit，库里存的记录）、backend/packages/retainpdf-library/src/views.rs（请求体、查询参数、列表和删除结果）、merge/reading.rs（DocumentReadingView）、merge/coverage.rs（TranslationCoverageView）、media.rs（DocumentFilesView）；消费者：@retainpdf/contracts/library-documents 生成 DTO（前端以后用它换掉 frontend/packages/api/src/documents.ts、collections.ts、search.ts 里手写的类型）。所有响应为 {code, message, data} 信封，本契约描述 data 部分。键的写法照 Rust 实际序列化：类型是 [\"x\", \"null\"] 的键总在、空时是 null；没写进 required 的返回键是空时整个省掉（不是 null）。请求体和查询参数都是 additionalProperties: false，对应 Rust 的 deny_unknown_fields（不认识的字段 400）。翻译、OCR 的请求体是 POST /api/v1/jobs 的 CreateJobInput，五个段和 JsonValue、ModelConnection、GlossaryEntryInput 从 create-job.v1 原样抄来；任务列表条目 JobListItemView 和它用到的阶段、失败摘要，以及提交结果里的 JobLinksView、JobActionsView、ActionLinkView 从 job-status.v1 原样抄来（$ref 不能跨文件，前端生成器也只读本文件的 definitions）。抄来的定义由 contracts/tests/library-documents-shared-definitions.test.mjs 锁成和源头一致，要改先改源头再照抄。Rust 侧由 backend/api/src/api_tests/library_documents_contract.rs 对真实接口的返回钉键集合，并把请求类型的字段集合和这里对上。改契约先改本文件，再重新生成 DTO 并让两端测试变绿。",
+  "base_path": "/api/v1",
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/api/v1/documents",
+      "client_name": "listDocuments",
+      "transport": "json",
+      "query": "ListDocumentsQuery",
+      "output": "DocumentListView",
+      "rust_view": "DocumentListView",
+      "ts_consumer": "@retainpdf/contracts/library-documents :: DocumentListView",
+      "note": "书列表，按 added_at DESC, document_id DESC。带 job_id 时是另一种查法（只按任务找它所属的书，最多一条），其余参数不起作用，limit 照样校验。"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/documents/:document_id",
+      "client_name": "getDocument",
+      "transport": "json",
+      "output": "DocumentRecord",
+      "rust_view": "DocumentRecord"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/documents/:document_id",
+      "client_name": "patchDocument",
+      "transport": "json",
+      "input": "PatchDocumentInput",
+      "output": "DocumentRecord",
+      "rust_view": "DocumentRecord",
+      "note": "改书名会把 title_source 设成 user 并锁住（title_locked=true），之后自动元数据建议不再覆盖。"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/documents/:document_id",
+      "client_name": "deleteDocument",
+      "transport": "json",
+      "query": "DeleteDocumentQuery",
+      "output": "DocumentDeleteResultView",
+      "rust_view": "DocumentDeleteResultView",
+      "note": "删书、它名下的全部任务（含 -ocr 子任务）、上传和磁盘文件。运行中的任务要 force=true；别的书的任务还在用它名下任务的产物时 409（job_has_dependents），force=true 也跳过这项检查。"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/documents/:document_id/reading",
+      "client_name": "getDocumentReading",
+      "transport": "json",
+      "output": "DocumentReadingView",
+      "rust_view": "DocumentReadingView",
+      "note": "阅读器该打开哪个任务。多次范围翻译拼成的是虚拟任务 merged-<文档>-<指纹>，按需生成合并目录。"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/documents/:document_id/translation-coverage",
+      "client_name": "getTranslationCoverage",
+      "transport": "json",
+      "output": "TranslationCoverageView",
+      "rust_view": "TranslationCoverageView",
+      "note": "只计算合并计划，不生成合并目录。"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/documents/:document_id/files",
+      "client_name": "listDocumentFiles",
+      "transport": "json",
+      "output": "DocumentFilesView",
+      "rust_view": "DocumentFilesView",
+      "note": "书本身的文件清单。取文件本身走 GET /api/v1/documents/:document_id/files/:name 和 /files/pages/:page，返回的是文件，不在本契约里。"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/documents/:document_id/metadata-suggestions",
+      "client_name": "listMetadataSuggestions",
+      "transport": "json",
+      "query": "ListDocumentMetadataSuggestionsQuery",
+      "output": "DocumentMetadataSuggestionListView",
+      "rust_view": "DocumentMetadataSuggestionListView"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/documents/:document_id/metadata-suggestions",
+      "client_name": "createMetadataSuggestion",
+      "transport": "json",
+      "input": "CreateDocumentMetadataSuggestionInput",
+      "output": "DocumentMetadataSuggestionView",
+      "rust_view": "DocumentMetadataSuggestionView"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/documents/:document_id/metadata-suggestions/:suggestion_id/apply",
+      "client_name": "applyMetadataSuggestion",
+      "transport": "json",
+      "input": "ApplyDocumentMetadataSuggestionInput",
+      "output": "DocumentMetadataSuggestionApplyView",
+      "rust_view": "DocumentMetadataSuggestionApplyView",
+      "note": "expected_document_updated_at 和书的 updated_at 对不上时 409。"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/search",
+      "client_name": "searchLibrary",
+      "transport": "json",
+      "query": "SearchQuery",
+      "output": "SearchResultView",
+      "rust_view": "SearchResultView",
+      "note": "块级全文检索（原文和译文）。没有 offset，要更多就加大 limit。"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/collections",
+      "client_name": "listCollections",
+      "transport": "json",
+      "output": "CollectionListView",
+      "rust_view": "CollectionListView",
+      "note": "不分页。"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/collections",
+      "client_name": "createCollection",
+      "transport": "json",
+      "input": "CreateCollectionInput",
+      "output": "CollectionRecord",
+      "rust_view": "CollectionRecord"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/collections/:collection_id",
+      "client_name": "patchCollection",
+      "transport": "json",
+      "input": "PatchCollectionInput",
+      "output": "CollectionRecord",
+      "rust_view": "CollectionRecord"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/collections/:collection_id",
+      "client_name": "deleteCollection",
+      "transport": "json",
+      "output": "CollectionDeleteResultView",
+      "rust_view": "CollectionMutationResult",
+      "note": "合集不存在 404。删合集和它的成员关系、工作区目录，书不动。"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/collections/:collection_id/documents",
+      "client_name": "addCollectionDocuments",
+      "transport": "json",
+      "input": "AddCollectionDocumentsInput",
+      "output": "CollectionRecord",
+      "rust_view": "CollectionRecord",
+      "note": "返回加完以后的整条合集。合集或任何一本书不存在 404。"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/collections/:collection_id/documents/:document_id",
+      "client_name": "removeCollectionDocument",
+      "transport": "json",
+      "output": "CollectionDocumentRemoveResultView",
+      "rust_view": "CollectionMutationResult",
+      "note": "书不在这个合集里 404。"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/documents/:document_id/jobs",
+      "client_name": "listDocumentJobs",
+      "transport": "json",
+      "query": "ListDocumentJobsQuery",
+      "output": "DocumentJobListView",
+      "rust_view": "DocumentJobListView",
+      "ts_consumer": "@retainpdf/contracts/library-documents :: DocumentJobListView",
+      "note": "这本书的 OCR、翻译任务（含失败、取消的），新的在前。条目和 GET /api/v1/jobs 的 JobListItemView 同形。has_more 是多取一条判断的，total 是 COUNT（读不出来的行列表会跳过，所以最后一页 offset + items 可能小于 total，以 has_more 为准）。书不存在 404；limit 越界（0 或大于 500）、不认识的参数 400。"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/documents/:document_id/translate",
+      "client_name": "translateDocument",
+      "transport": "json",
+      "input": "CreateJobInput",
+      "output": "JobSubmissionView",
+      "rust_view": "JobSubmissionView",
+      "ts_consumer": "@retainpdf/contracts/library-documents :: JobSubmissionView",
+      "note": "翻译这本书：用书存着的原文建任务，请求体和 POST /api/v1/jobs 同一个 CreateJobInput、同样的校验（不认识的字段 400 \"invalid job payload: …\"）。workflow 只能是 book（缺省）或 translate，写 ocr、render 400；source.source_url、runtime.job_id 不许写（400）；source.upload_id 可以不写，写了必须是这本书的上传（不然 400）。source.artifact_job_id 指定复用哪个 OCR 任务；复用 OCR 又给了 translation.page_ranges（原文 1 基页号）时，页不连续或超出那份 OCR 的覆盖，就按连续段拆成几个任务（有 OCR 覆盖的段复用，没有的段重新 OCR，要带 OCR 设置），返回第一个任务，其余的编号在 sibling_job_ids。书不存在 404。复用 OCR 出错时是 OCR 复用信封：顶层 code 是字符串（OCR_JOB_NOT_FOUND 404；OCR_JOB_NOT_SUCCEEDED、OCR_ARTIFACT_NOT_REUSABLE、OCR_ARTIFACT_MISSING、OCR_PAGE_COVERAGE_MISMATCH 409），同级还有 reason、can_fallback_to_ocr（恒为 true），error.details 是 {reason, can_fallback_to_ocr}。多用户模式下页数额度不够时 402：{\"code\": \"PAGE_QUOTA_EXCEEDED\", \"message\": \"页数额度不够：这次要 N 页，还剩 M 页，请联系管理员\", \"error\": {\"code\": \"PAGE_QUOTA_EXCEEDED\", \"http_status\": 402, \"details\": PageQuotaExceededErrorDetails}}——顶层 code 是字符串，不是 40200 这种数字，按 error.code 认；被拒时不留任务。单机模式不计页数，不会有 402。"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/documents/:document_id/ocr",
+      "client_name": "ocrDocument",
+      "transport": "json",
+      "input": "CreateJobInput",
+      "output": "JobSubmissionView",
+      "rust_view": "JobSubmissionView",
+      "ts_consumer": "@retainpdf/contracts/library-documents :: JobSubmissionView",
+      "note": "给这本书做 OCR：用书存着的原文建一个只做 OCR 的任务，请求体同 POST /api/v1/jobs 的 CreateJobInput。workflow 可以不写，写了只能是 ocr（写 book 等 400，翻译走 /translate）；source.artifact_job_id、source.source_url、runtime.job_id 不许写（400）；source.upload_id 可以不写，写了必须是这本书的上传。选页写 ocr.page_ranges（如 \"1-5,8\"）。返回的 sibling_job_ids 不会出现。书不存在 404。多用户模式下页数额度不够时 402：{\"code\": \"PAGE_QUOTA_EXCEEDED\", \"message\": \"页数额度不够：这次要 N 页，还剩 M 页，请联系管理员\", \"error\": {\"code\": \"PAGE_QUOTA_EXCEEDED\", \"http_status\": 402, \"details\": PageQuotaExceededErrorDetails}}——顶层 code 是字符串，不是 40200 这种数字，按 error.code 认；被拒时不留任务。单机模式不计页数，不会有 402。"
+    }
+  ],
+  "definitions": {
+    "JobStatusKind": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "running",
+        "succeeded",
+        "failed",
+        "canceled"
+      ],
+      "description": "retainpdf-core models::domain::JobStatusKind（serde rename_all snake_case）。"
+    },
+    "WorkflowKind": {
+      "type": "string",
+      "enum": [
+        "book",
+        "ocr",
+        "translate",
+        "render"
+      ],
+      "description": "retainpdf-core models::domain::WorkflowKind。"
+    },
+    "DocumentRecord": {
+      "type": "object",
+      "description": "retainpdf-core models/library.rs :: DocumentRecord —— 一本书。document_id 是原文字节的 sha256。接口返回时 source_pdf_url、cover_url、thumbnail_url 总会填上；只有 active_version_id 在没有时整个键不出现。authors_json、year、doi、last_opened_at 四个键没有功能（审计 A8），留着是为了不破坏旧客户端。",
+      "required": [
+        "document_id",
+        "title",
+        "title_source",
+        "title_locked",
+        "authors_json",
+        "year",
+        "doi",
+        "source_filename",
+        "page_count",
+        "bytes",
+        "active_job_id",
+        "reading_status",
+        "added_at",
+        "last_opened_at",
+        "updated_at",
+        "source_pdf_url",
+        "cover_url",
+        "thumbnail_url",
+        "has_translation"
+      ],
+      "properties": {
+        "document_id": {
+          "type": "string",
+          "description": "原文 PDF 字节的 sha256（64 位小写十六进制）。"
+        },
+        "title": {
+          "type": "string",
+          "description": "书名。刚入库时是去掉扩展名的文件名。"
+        },
+        "title_source": {
+          "type": "string",
+          "enum": [
+            "filename",
+            "pdf_metadata",
+            "ocr",
+            "user"
+          ],
+          "description": "当前书名从哪来：filename（默认，上传文件名）、pdf_metadata / ocr（采用了元数据建议）、user（用户改过）。"
+        },
+        "title_locked": {
+          "type": "boolean",
+          "description": "用户手工改过书名后为 true，自动元数据建议不再覆盖。"
+        },
+        "authors_json": {
+          "type": "string",
+          "description": "未使用，恒为空：恒为字符串 \"[]\"（JSON 编码后的字符串，不是数组），没有写入点。"
+        },
+        "year": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "未使用，恒为空：恒为 null，没有写入点。"
+        },
+        "doi": {
+          "type": "string",
+          "description": "未使用，恒为空：恒为空字符串 \"\"，没有写入点。"
+        },
+        "source_filename": {
+          "type": "string",
+          "description": "最近一次上传这本书时的文件名。"
+        },
+        "page_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "原文页数；读不出来是 0。"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "原文 PDF 字节数。"
+        },
+        "active_job_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "书卡当前对应的任务：有在排队或在跑的就是它，否则是最好的成功任务（翻译优先于纯 OCR），再否则是最近提交的任务；书里没有任务时是 null。打开阅读器请用 /documents/:id/reading，不要直接用它。"
+        },
+        "active_version_id": {
+          "type": "string",
+          "description": "当前已提交的 Agent 文档版本。没有时整个键不出现（不是 null），表示用的是原始上传。"
+        },
+        "reading_status": {
+          "type": "string",
+          "enum": [
+            "unread",
+            "reading",
+            "done"
+          ],
+          "description": "阅读状态，入库时是 unread。"
+        },
+        "added_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "last_opened_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "未使用，恒为空：恒为 null，没有写入点。"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "书的信息最后一次变化的时间；采用元数据建议时当版本护栏用。"
+        },
+        "source_pdf_url": {
+          "type": "string",
+          "description": "原文 PDF 的绝对地址（…/api/v1/documents/:id/files/source.pdf?download=1）。Rust 里为空时省略键，但接口返回总会填。"
+        },
+        "cover_url": {
+          "type": "string",
+          "description": "封面图绝对地址（…/files/cover.jpg，第一次请求时生成）。Rust 里为空时省略键，但接口返回总会填。"
+        },
+        "thumbnail_url": {
+          "type": "string",
+          "description": "缩略图绝对地址（…/files/thumbnail.jpg，第一次请求时生成）。Rust 里为空时省略键，但接口返回总会填。"
+        },
+        "has_translation": {
+          "type": "boolean",
+          "description": "有没有成功的、带译文（非纯 OCR）的任务，即能不能对照阅读。读时由 SQL 现算，不保证输出 PDF 还在磁盘上。"
+        }
+      }
+    },
+    "DocumentListView": {
+      "type": "object",
+      "description": "views.rs :: DocumentListView。",
+      "required": [
+        "documents",
+        "total",
+        "limit",
+        "offset",
+        "has_more"
+      ],
+      "properties": {
+        "documents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DocumentRecord"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "符合筛选条件的总数，不受 limit / offset 影响。带 job_id 时是 0 或 1。"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500,
+          "description": "生效的 limit：没传是 50，越界 400（不夹），所以总等于请求的值。"
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "has_more": {
+          "type": "boolean",
+          "description": "这一页之后还有没有（offset + 这一页条数 < total）。带 job_id 时恒为 false。"
+        }
+      }
+    },
+    "ListDocumentsQuery": {
+      "type": "object",
+      "description": "views.rs :: ListDocumentsQuery（deny_unknown_fields）。GET /api/v1/documents 的查询参数，不认识的参数 400。",
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500,
+          "default": 50
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0
+        },
+        "reading_status": {
+          "type": "string",
+          "description": "只列这个阅读状态的书（unread / reading / done）。"
+        },
+        "collection_id": {
+          "type": "string",
+          "description": "只列这个合集里的书。"
+        },
+        "job_id": {
+          "type": "string",
+          "description": "按任意 job_id（含历史任务、merged- 虚拟任务）找它所属的书。带它时其余参数不起作用（limit 照样校验）。"
+        },
+        "q": {
+          "type": "string",
+          "description": "书名或原始文件名包含它（大小写不敏感）。搜正文用 GET /api/v1/search。"
+        }
+      }
+    },
+    "PatchDocumentInput": {
+      "type": "object",
+      "description": "views.rs :: PatchDocumentInput（deny_unknown_fields）。两个字段都可选，传 null 等于不传。",
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "新书名，去掉首尾空白后 1 到 512 个字符，否则 400。改了以后 title_source=user、title_locked=true。"
+        },
+        "reading_status": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "unread",
+                "reading",
+                "done"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "别的值 400。"
+        }
+      }
+    },
+    "DeleteDocumentQuery": {
+      "type": "object",
+      "description": "views.rs :: DeleteDocumentQuery（deny_unknown_fields）。拼错的 force 是 400，不会悄悄变成不强删。",
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "type": "boolean",
+          "default": false,
+          "description": "名下运行中的任务先取消再删。"
+        }
+      }
+    },
+    "DocumentDeleteResultView": {
+      "type": "object",
+      "description": "views.rs :: DocumentDeleteResultView。",
+      "required": [
+        "deleted",
+        "document_id",
+        "removed_jobs",
+        "removed_paths"
+      ],
+      "properties": {
+        "deleted": {
+          "type": "boolean",
+          "description": "书的那一行删掉了。"
+        },
+        "document_id": {
+          "type": "string"
+        },
+        "removed_jobs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "一起删掉的任务编号（含 -ocr 子任务）。"
+        },
+        "removed_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "删掉的目录，是服务器上的绝对路径（审计 A8）。只用来排查，客户端不要依赖它。"
+        }
+      }
+    },
+    "DocumentReadingView": {
+      "type": "object",
+      "description": "merge/reading.rs :: DocumentReadingView。",
+      "required": [
+        "job_id",
+        "merged",
+        "contributing_job_ids"
+      ],
+      "properties": {
+        "job_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "阅读器该打开的任务；多次范围翻译拼成的是 merged-<文档>-<指纹>。null 表示还没有可读的译文。"
+        },
+        "merged": {
+          "type": "boolean",
+          "description": "是不是多次翻译拼成的。"
+        },
+        "contributing_job_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "拼成这份译文的任务，按页序首次出现的顺序；不是合并时就是那一个任务，没有译文时是空数组。"
+        }
+      }
+    },
+    "CoverageSegment": {
+      "type": "object",
+      "description": "merge/coverage.rs :: CoverageSegment —— 连续几页来自同一个来源。",
+      "required": [
+        "first",
+        "last",
+        "job_id"
+      ],
+      "properties": {
+        "first": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "第一页（1 起）。"
+        },
+        "last": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "最后一页（含）。"
+        },
+        "job_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "这几页的译文取自哪个任务；null 表示原文（没翻译）。"
+        }
+      }
+    },
+    "CoverageJobView": {
+      "type": "object",
+      "description": "merge/coverage.rs :: CoverageJobView —— 这本书的一个任务。所有键总在，没有值时是 null（不是省略）。",
+      "required": [
+        "job_id",
+        "workflow",
+        "status",
+        "created_at",
+        "finished_at",
+        "model",
+        "engine",
+        "has_editorial_events",
+        "pages",
+        "supplied_pages",
+        "ocr_reused",
+        "note",
+        "kept_origin_blocks",
+        "kept_origin_blocks_supplied",
+        "failure_summary",
+        "error_head"
+      ],
+      "properties": {
+        "job_id": {
+          "type": "string"
+        },
+        "workflow": {
+          "$ref": "#/definitions/WorkflowKind"
+        },
+        "status": {
+          "$ref": "#/definitions/JobStatusKind"
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "finished_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "type": "string",
+          "description": "翻译模型；纯 OCR 任务是空字符串。"
+        },
+        "engine": {
+          "type": "string",
+          "enum": [
+            "legacy",
+            "agent"
+          ],
+          "description": "翻译引擎：legacy 现有流程、agent 翻译 agent；老任务、纯 OCR 任务是 legacy。"
+        },
+        "has_editorial_events": {
+          "type": "boolean",
+          "description": "有翻译 agent 的编辑部事件可看（GET /api/v1/jobs/:job_id/progress/editorial）；agent 任务开翻以后才有，legacy 任务总是 false。"
+        },
+        "pages": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "description": "这个任务处理的文档页（1 起、升序）。成功的翻译任务按实际执行算，没完成的按请求算；老任务算不出来是空数组。"
+        },
+        "supplied_pages": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "当前合并结果里有几页取自这个任务（被后来的翻译盖掉的不算）。"
+        },
+        "ocr_reused": {
+          "type": "boolean",
+          "description": "复用了别的任务的 OCR。"
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "成功但有额外说明（目前就是「N 个内容块保留原文未翻译」），和任务列表的 completion_note 同一个来源；没有是 null。"
+        },
+        "kept_origin_blocks": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "成功的翻译任务里该翻却保留原文的内容块数；读不到是 0。"
+        },
+        "kept_origin_blocks_supplied": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "上面那些块里，落在当前合并结果仍取自这个任务的页上的块数；旧任务没有逐块记录时等于 kept_origin_blocks。"
+        },
+        "failure_summary": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "失败原因一句话（中文）。只有失败任务有，别的是 null。"
+        },
+        "error_head": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "原始错误的第一行（截到 160 字）。只有失败任务有，别的是 null。"
+        }
+      }
+    },
+    "TranslationCoverageView": {
+      "type": "object",
+      "description": "merge/coverage.rs :: TranslationCoverageView —— 书籍详情「进度」。",
+      "required": [
+        "page_count",
+        "translated_pages",
+        "contributing_jobs",
+        "segments",
+        "jobs"
+      ],
+      "properties": {
+        "page_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "translated_pages": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "有译文的文档页数。"
+        },
+        "contributing_jobs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "当前合并结果用到了几次翻译。"
+        },
+        "segments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CoverageSegment"
+          },
+          "description": "整本书按页的来源，连续同源的页合成一段。"
+        },
+        "jobs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CoverageJobView"
+          },
+          "description": "这本书的全部任务，新到旧。"
+        }
+      }
+    },
+    "DocumentFileEntryView": {
+      "type": "object",
+      "description": "media.rs :: DocumentFileEntryView。",
+      "required": [
+        "name",
+        "url",
+        "content_type",
+        "ready",
+        "on_demand"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "enum": [
+            "source.pdf",
+            "cover.jpg",
+            "thumbnail.jpg"
+          ]
+        },
+        "url": {
+          "type": "string",
+          "description": "绝对地址（…/api/v1/documents/:id/files/<name>）。默认在浏览器里打开，加 ?download=1 下载。"
+        },
+        "content_type": {
+          "type": "string"
+        },
+        "ready": {
+          "type": "boolean",
+          "description": "原文在磁盘上。只有书在、原文不在时是 false（书不在是 404）。"
+        },
+        "on_demand": {
+          "type": "boolean",
+          "description": "按需生成：第一次请求时才生成，会慢一些。"
+        }
+      }
+    },
+    "DocumentPagesView": {
+      "type": "object",
+      "description": "media.rs :: DocumentPagesView —— 原文页预览图。",
+      "required": [
+        "url_template",
+        "page_count"
+      ],
+      "properties": {
+        "url_template": {
+          "type": "string",
+          "description": "把 {page} 换成页码（1 起）：…/api/v1/documents/:id/files/pages/{page}.jpg。"
+        },
+        "page_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "description": "页数；不知道（书的 page_count 是 0）时是 null。"
+        }
+      }
+    },
+    "DocumentFilesView": {
+      "type": "object",
+      "description": "media.rs :: DocumentFilesView —— 书本身的文件。files 固定三项：source.pdf、cover.jpg、thumbnail.jpg。",
+      "required": [
+        "document_id",
+        "files",
+        "pages"
+      ],
+      "properties": {
+        "document_id": {
+          "type": "string"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DocumentFileEntryView"
+          }
+        },
+        "pages": {
+          "$ref": "#/definitions/DocumentPagesView"
+        }
+      }
+    },
+    "DocumentMetadataEvidenceView": {
+      "type": "object",
+      "description": "views.rs :: DocumentMetadataEvidenceView。除 source 外的键没有时整个不出现（不是 null）。",
+      "required": [
+        "source"
+      ],
+      "properties": {
+        "source": {
+          "type": "string",
+          "description": "证据来源，例如 pdf_info_title、normalized_document。"
+        },
+        "page_idx": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "0 起的页号；没有时键不出现。"
+        },
+        "block_id": {
+          "type": "string",
+          "description": "没有时键不出现。"
+        },
+        "structure_role": {
+          "type": "string",
+          "description": "没有时键不出现。"
+        },
+        "layout_role": {
+          "type": "string",
+          "description": "没有时键不出现。"
+        }
+      }
+    },
+    "DocumentTitleCandidateView": {
+      "type": "object",
+      "description": "views.rs :: DocumentTitleCandidateView。",
+      "required": [
+        "value",
+        "source",
+        "confidence",
+        "evidence"
+      ],
+      "properties": {
+        "value": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string",
+          "description": "候选从哪来，例如 pdf_metadata、ocr_structure。"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DocumentMetadataEvidenceView"
+          }
+        }
+      }
+    },
+    "DocumentMetadataSuggestionView": {
+      "type": "object",
+      "description": "views.rs :: DocumentMetadataSuggestionView。只有 source_job_id 在没有时整个键不出现（不是 null）。",
+      "required": [
+        "suggestion_id",
+        "document_id",
+        "artifact_sha256",
+        "status",
+        "fields",
+        "title_candidates",
+        "selected_title",
+        "generation_method",
+        "needs_ai_review",
+        "applied",
+        "can_apply",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "suggestion_id": {
+          "type": "string"
+        },
+        "document_id": {
+          "type": "string"
+        },
+        "source_job_id": {
+          "type": "string",
+          "description": "从哪个任务的规范化 OCR 产物读出来的；只读了原文 PDF 时键不出现。"
+        },
+        "artifact_sha256": {
+          "type": "string",
+          "description": "读的那份产物（或原文）的 sha256。"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "completed",
+            "applied"
+          ]
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "v1 只有 title。"
+        },
+        "title_candidates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DocumentTitleCandidateView"
+          }
+        },
+        "selected_title": {
+          "type": "string"
+        },
+        "generation_method": {
+          "type": "string",
+          "description": "等于被选中那个候选的 source（pdf_metadata 或 ocr_structure）。"
+        },
+        "needs_ai_review": {
+          "type": "boolean"
+        },
+        "applied": {
+          "type": "boolean",
+          "description": "已采用，而且书名现在还是它（用户之后改过就是 false）。"
+        },
+        "can_apply": {
+          "type": "boolean",
+          "description": "现在还能采用：已采用，或者书名仍是默认值（title_source=filename 且没锁）。"
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "updated_at": {
+          "type": "string"
+        }
+      }
+    },
+    "DocumentMetadataSuggestionListView": {
+      "type": "object",
+      "description": "views.rs :: DocumentMetadataSuggestionListView，新到旧。",
+      "required": [
+        "suggestions",
+        "limit",
+        "has_more"
+      ],
+      "properties": {
+        "suggestions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DocumentMetadataSuggestionView"
+          }
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "description": "生效的 limit：没传是 20，越界 400。"
+        },
+        "has_more": {
+          "type": "boolean",
+          "description": "还有更早的建议（多取一条判断）。"
+        }
+      }
+    },
+    "DocumentMetadataSuggestionApplyView": {
+      "type": "object",
+      "description": "views.rs :: DocumentMetadataSuggestionApplyView —— 采用后的建议和书。",
+      "required": [
+        "suggestion",
+        "document"
+      ],
+      "properties": {
+        "suggestion": {
+          "$ref": "#/definitions/DocumentMetadataSuggestionView"
+        },
+        "document": {
+          "$ref": "#/definitions/DocumentRecord"
+        }
+      }
+    },
+    "ListDocumentMetadataSuggestionsQuery": {
+      "type": "object",
+      "description": "views.rs :: ListDocumentMetadataSuggestionsQuery（deny_unknown_fields）。没有 offset。",
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 20
+        }
+      }
+    },
+    "CreateDocumentMetadataSuggestionInput": {
+      "type": "object",
+      "description": "views.rs :: CreateDocumentMetadataSuggestionInput（deny_unknown_fields）。",
+      "additionalProperties": false,
+      "properties": {
+        "job_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "读哪个任务的规范化 OCR 产物；缺省时选这本书最新的可读产物。"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "title"
+            ]
+          },
+          "default": [
+            "title"
+          ],
+          "description": "v1 只支持 title。"
+        },
+        "apply_if_default": {
+          "type": "boolean",
+          "default": false,
+          "description": "书名仍是默认值（上传文件名且没锁）时直接采用。"
+        }
+      }
+    },
+    "ApplyDocumentMetadataSuggestionInput": {
+      "type": "object",
+      "description": "views.rs :: ApplyDocumentMetadataSuggestionInput（deny_unknown_fields）。可以是空对象 {}。",
+      "additionalProperties": false,
+      "properties": {
+        "expected_document_updated_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "版本护栏：和书的 updated_at 不一样时 409。"
+        }
+      }
+    },
+    "SearchQuery": {
+      "type": "object",
+      "description": "views.rs :: SearchQuery（deny_unknown_fields）。没有 offset。",
+      "additionalProperties": false,
+      "required": [
+        "q"
+      ],
+      "properties": {
+        "q": {
+          "type": "string",
+          "description": "检索词；空串返回空结果。"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 20
+        },
+        "document_id": {
+          "type": "string",
+          "default": "",
+          "description": "只搜这一本书；空串是全库。"
+        }
+      }
+    },
+    "BlockSearchHit": {
+      "type": "object",
+      "description": "views.rs :: SearchHitView（retainpdf-core models/library.rs :: BlockSearchHit 展开，加上 document_page）—— 一个块级命中，带完整锚点，前端可以跳到阅读器原位。",
+      "required": [
+        "document_id",
+        "job_id",
+        "page_idx",
+        "block_id",
+        "source_snippet",
+        "translated_snippet",
+        "document_page"
+      ],
+      "properties": {
+        "document_id": {
+          "type": "string"
+        },
+        "job_id": {
+          "type": "string",
+          "description": "建索引时用的那个任务。"
+        },
+        "page_idx": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "0 起的页号：建索引那个任务（job_id）自己的本地页号。分段翻译的书和整本书的页号不同，跳到 GET /documents/{id}/reading 给的阅读任务时用 document_page。"
+        },
+        "document_page": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "description": "这一块在整本书里是第几页（1 起），和 GET /documents/{id}/reading 给的阅读任务的页序一致（合并任务按整本书编页：本地页 = document_page - 1）。2026-11-03 加。任务记录读不到时是 null。"
+        },
+        "block_id": {
+          "type": "string"
+        },
+        "source_snippet": {
+          "type": "string",
+          "description": "原文片段。检索词 3 个字及以上走全文索引：命中的词用 [ ] 括起来，截断处是 …；更短的检索词走包含匹配：取原文前 120 个字，不加标记。"
+        },
+        "translated_snippet": {
+          "type": "string",
+          "description": "译文片段，写法同上。"
+        }
+      }
+    },
+    "SearchResultView": {
+      "type": "object",
+      "description": "views.rs :: SearchResultView。",
+      "required": [
+        "query",
+        "hits",
+        "limit",
+        "has_more"
+      ],
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "原样回显的 q。"
+        },
+        "hits": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/BlockSearchHit"
+          }
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "description": "生效的 limit：没传是 20，越界 400。"
+        },
+        "has_more": {
+          "type": "boolean",
+          "description": "命中不止这么多（多取一条判断）。"
+        }
+      }
+    },
+    "CollectionRecord": {
+      "type": "object",
+      "description": "retainpdf-core models/library.rs :: CollectionRecord —— 一个合集（文件夹）。",
+      "required": [
+        "collection_id",
+        "name",
+        "parent_id",
+        "sort_order",
+        "created_at",
+        "document_count"
+      ],
+      "properties": {
+        "collection_id": {
+          "type": "string",
+          "description": "col-<编号>。"
+        },
+        "name": {
+          "type": "string"
+        },
+        "parent_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "给以后嵌套合集预留：建合集时可以传，但前端只按扁平结构展示，也改不了；没有是 null。"
+        },
+        "sort_order": {
+          "type": "integer",
+          "description": "新合集排在末尾（当前最大值 + 1）。"
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "document_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "合集里有几本书，每次读时现算（单条和列表都是）。"
+        }
+      }
+    },
+    "CollectionListView": {
+      "type": "object",
+      "description": "views.rs :: CollectionListView。不分页。",
+      "required": [
+        "collections"
+      ],
+      "properties": {
+        "collections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CollectionRecord"
+          }
+        }
+      }
+    },
+    "CreateCollectionInput": {
+      "type": "object",
+      "description": "views.rs :: CreateCollectionInput（deny_unknown_fields）。",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "去掉首尾空白后不能是空的，否则 400。"
+        },
+        "parent_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "上级合集；不存在 404。空串等于不传。"
+        }
+      }
+    },
+    "PatchCollectionInput": {
+      "type": "object",
+      "description": "views.rs :: PatchCollectionInput（deny_unknown_fields）。只能改名字和排序，传 parent_id 是 400。",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "去掉首尾空白后不能是空的，否则 400。"
+        },
+        "sort_order": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "AddCollectionDocumentsInput": {
+      "type": "object",
+      "description": "views.rs :: AddCollectionDocumentsInput（deny_unknown_fields）。",
+      "additionalProperties": false,
+      "required": [
+        "document_ids"
+      ],
+      "properties": {
+        "document_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "要加进来的书；空串忽略，已经在里面的不重复加。"
+        }
+      }
+    },
+    "CollectionDeleteResultView": {
+      "type": "object",
+      "description": "views.rs :: CollectionMutationResult 删合集时的形状：只有 deleted。",
+      "required": [
+        "deleted"
+      ],
+      "properties": {
+        "deleted": {
+          "type": "boolean",
+          "enum": [
+            true
+          ],
+          "description": "恒为 true；合集不存在是 404。"
+        }
+      }
+    },
+    "CollectionDocumentRemoveResultView": {
+      "type": "object",
+      "description": "views.rs :: CollectionMutationResult 从合集拿掉一本书时的形状：只有 removed。",
+      "required": [
+        "removed"
+      ],
+      "properties": {
+        "removed": {
+          "type": "boolean",
+          "enum": [
+            true
+          ],
+          "description": "恒为 true；书不在这个合集里是 404。"
+        }
+      }
+    },
+    "CreateJobInput": {
+      "type": "object",
+      "description": "models/input/request.rs :: CreateJobInput。六个顶层字段全部可省（Rust 侧都是 #[serde(default)]），但**不认识的字段一律 400**。",
+      "additionalProperties": false,
+      "properties": {
+        "workflow": {
+          "$ref": "#/definitions/WorkflowKind"
+        },
+        "source": {
+          "$ref": "#/definitions/JobSourceInput"
+        },
+        "ocr": {
+          "$ref": "#/definitions/OcrInput"
+        },
+        "translation": {
+          "$ref": "#/definitions/TranslationInput"
+        },
+        "render": {
+          "$ref": "#/definitions/RenderInput"
+        },
+        "runtime": {
+          "$ref": "#/definitions/RuntimeInput"
+        }
+      }
+    },
+    "JobSourceInput": {
+      "type": "object",
+      "description": "models/input/source.rs :: JobSourceInput。三选一：上传件 / 外部 URL / 复用既有任务产物。",
+      "additionalProperties": false,
+      "properties": {
+        "upload_id": {
+          "type": "string"
+        },
+        "source_url": {
+          "type": "string"
+        },
+        "artifact_job_id": {
+          "type": "string"
+        }
+      }
+    },
+    "OcrInput": {
+      "type": "object",
+      "description": "models/input/ocr.rs :: OcrInput。凭据可以用 credential_ref 引用，也可以内联 mineru_token / paddle_token。",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "credential_ref": {
+          "type": "string"
+        },
+        "mineru_token": {
+          "type": "string"
+        },
+        "model_version": {
+          "type": "string"
+        },
+        "paddle_token": {
+          "type": "string"
+        },
+        "paddle_api_url": {
+          "type": "string"
+        },
+        "paddle_model": {
+          "type": "string"
+        },
+        "is_ocr": {
+          "type": "boolean"
+        },
+        "disable_formula": {
+          "type": "boolean"
+        },
+        "disable_table": {
+          "type": "boolean"
+        },
+        "language": {
+          "type": "string"
+        },
+        "page_ranges": {
+          "type": "string"
+        },
+        "data_id": {
+          "type": "string"
+        },
+        "no_cache": {
+          "type": "boolean"
+        },
+        "cache_tolerance": {
+          "type": "integer"
+        },
+        "extra_formats": {
+          "type": "string"
+        },
+        "poll_interval": {
+          "type": "integer"
+        },
+        "poll_timeout": {
+          "type": "integer"
+        },
+        "options": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/JsonValue"
+          }
+        }
+      }
+    },
+    "TranslationInput": {
+      "type": "object",
+      "description": "models/input/translation.rs :: TranslationInput。与响应侧的 PublicTranslationInput 的差别：这里 api_key 可以带明文，且**没有** api_key_configured —— 那个字段只存在于脱敏后的响应里，带上就会被 deny_unknown_fields 拒掉。",
+      "additionalProperties": false,
+      "properties": {
+        "execution_connection": {
+          "$ref": "#/definitions/ModelConnection"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "math_mode": {
+          "type": "string",
+          "enum": [
+            "direct_typst",
+            "placeholder"
+          ],
+          "description": "TRANSLATION_MATH_MODES"
+        },
+        "skip_title_translation": {
+          "type": "boolean"
+        },
+        "classify_batch_size": {
+          "type": "integer"
+        },
+        "rule_profile_name": {
+          "type": "string"
+        },
+        "custom_rules_text": {
+          "type": "string"
+        },
+        "glossary_id": {
+          "type": "string"
+        },
+        "glossary_name": {
+          "type": "string"
+        },
+        "glossary_resource_entry_count": {
+          "type": "integer"
+        },
+        "glossary_inline_entry_count": {
+          "type": "integer"
+        },
+        "glossary_overridden_entry_count": {
+          "type": "integer"
+        },
+        "glossary_entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/GlossaryEntryInput"
+          }
+        },
+        "glossary_inline_entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/GlossaryEntryInput"
+          },
+          "description": "服务器写：建任务时用户真正内联的条目（规范化、去重后），客户端发了也会被覆盖。glossary_entries 是和术语表合并后的快照；重跑、阶段重试先换回这一份再按现在的表解析。空的时候不出现。2026-10-22 加。"
+        },
+        "context_mode": {
+          "type": "string",
+          "enum": [
+            "needed",
+            "all",
+            "off"
+          ],
+          "description": "TRANSLATION_CONTEXT_MODES"
+        },
+        "glossary_mode": {
+          "type": "string",
+          "enum": [
+            "matched",
+            "all",
+            "off"
+          ],
+          "description": "TRANSLATION_GLOSSARY_MODES"
+        },
+        "memory_mode": {
+          "type": "string",
+          "enum": [
+            "matched",
+            "broad",
+            "off"
+          ],
+          "description": "TRANSLATION_MEMORY_MODES"
+        },
+        "preparation": {
+          "type": "string",
+          "enum": [
+            "off",
+            "artifacts_only",
+            "terms",
+            "terms+style",
+            "editorial"
+          ],
+          "default": "off",
+          "description": "TRANSLATION_PREPARATION_MODES。译前准备（全书术语预扫 + 风格指南）。off：不生成产物，prompt 与缓存 key 与不带该字段时完全一致；artifacts_only：只生成并冻结 translated/term-base.v1.json、translated/style-guide.v1.json，不注入；terms：按块命中注入术语库（用户术语优先）；terms+style：再把风格指南放进 system 前缀；editorial：terms+style 之上由术语专员审定术语表（专业术语锁定、文献与期刊保留原文、人名机构不强制、通用词剔除，首现括注只标需要的专业术语）。"
+        },
+        "refine": {
+          "type": "string",
+          "enum": [
+            "off",
+            "review_only",
+            "review_and_fix",
+            "editorial"
+          ],
+          "default": "off",
+          "description": "TRANSLATION_REFINE_MODES。精修（挑错 + 定点修改），在渲染阶段、真正渲染之前运行，只在翻译之后紧接着的那次渲染里自动跑（普通的重新渲染不会再跑）。off：不挑错不修改，渲染行为与不带该字段时完全一致；review_only：只挑错，写 artifacts/refine_report.v1.json，不改译文；review_and_fix：再对 critical/major 问题做定点修改，经确定性检查通过才写回（走修订历史，可回退）。挑错模型用 reviewer_*，留空回退到翻译模型。editorial：编辑部模式——规则修正、审校挑错与质检出问题后，主编（模型）逐块在规则允许的动作里分流（局部改 / 整块重写 / 不改 / 交给人），修订执行并经同一套确定性检查验收，最多两轮，剩下的列入待人看；全程写 artifacts/editorial/ledger.jsonl。"
+        },
+        "refine_max_items": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "精修最多挑错多少块；0 = 不限（默认，审全书）。超出就停，报告里写明停在哪一页（review.next_page），可以从那一页接着精修。"
+        },
+        "refine_max_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "精修（挑错 + 修改）的总 token 上限；0 = 不限（默认）。给了上限、超出就停，报告里写明停在哪一页（review.next_page）。"
+        },
+        "api_key": {
+          "type": "string"
+        },
+        "credential_ref": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "base_url": {
+          "type": "string"
+        },
+        "reviewer_model": {
+          "type": "string",
+          "default": "",
+          "description": "审校（挑错）模型。本期只留配置位；留空回退到 model。"
+        },
+        "reviewer_base_url": {
+          "type": "string",
+          "default": "",
+          "description": "审校模型的 endpoint；留空回退到 base_url。"
+        },
+        "reviewer_api_key": {
+          "type": "string",
+          "default": "",
+          "description": "审校模型的内联 key，与 api_key 同样处理：创建任务时导入凭据库换成 reviewer_credential_ref 并清空，不明文落库。与 reviewer_credential_ref 互斥。"
+        },
+        "reviewer_credential_ref": {
+          "type": "string",
+          "default": "",
+          "description": "审校模型 key 的凭据引用（kind=translation_api_key）。reviewer_api_key 与它都为空时：reviewer_base_url 为空或与 base_url 相同则回退翻译 key，否则不带 key。"
+        },
+        "api_protocol": {
+          "type": "string",
+          "enum": [
+            "openai",
+            "openai_responses",
+            "anthropic"
+          ],
+          "default": "openai",
+          "description": "TRANSLATION_API_PROTOCOLS。翻译模型接口的协议。openai：POST {base_url}/chat/completions + Bearer；openai_responses：POST {base_url}/responses + Bearer（OpenAI Responses API，服务商明确支持才用）；anthropic：POST {base_url}/messages + x-api-key（Anthropic Messages API）。带 execution_connection 时只能是 openai。"
+        },
+        "thinking": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "off",
+            "low",
+            "medium",
+            "high",
+            "max"
+          ],
+          "default": "auto",
+          "description": "TRANSLATION_THINKING_LEVELS。翻译模型的思考深度。auto：只对实测过的模型关掉或压低思考，其余由服务商默认；其余档位按协议与服务商换成对应字段，服务商不认时逐级退回，最后不带思考字段。"
+        },
+        "reviewer_api_protocol": {
+          "type": "string",
+          "enum": [
+            "",
+            "openai",
+            "openai_responses",
+            "anthropic"
+          ],
+          "default": "",
+          "description": "审校模型接口的协议；留空沿用 api_protocol。"
+        },
+        "reviewer_thinking": {
+          "type": "string",
+          "enum": [
+            "",
+            "auto",
+            "off",
+            "low",
+            "medium",
+            "high",
+            "max"
+          ],
+          "default": "",
+          "description": "审校模型的思考深度；留空沿用 thinking。"
+        },
+        "engine": {
+          "type": "string",
+          "enum": [
+            "legacy",
+            "agent"
+          ],
+          "default": "legacy",
+          "description": "TRANSLATION_ENGINES。翻译引擎。legacy：现有流程；agent：翻译 agent（先通读全文，再逐页翻译并审校），要求 api_protocol=anthropic，公式按 direct_typst 处理。"
+        },
+        "start_page": {
+          "type": "integer"
+        },
+        "end_page": {
+          "type": "integer"
+        },
+        "page_ranges": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "description": "显式的一基页码；空数组保持 start_page/end_page 的旧语义。"
+        },
+        "batch_size": {
+          "type": "integer"
+        },
+        "workers": {
+          "type": "integer"
+        },
+        "accepted_ambiguous_request_risk": {
+          "type": "boolean"
+        }
+      }
+    },
+    "RenderInput": {
+      "type": "object",
+      "description": "models/input/render.rs :: RenderInput。默认值的权威来源是 backend/api/RENDER_OPTIONS_CONTRACT.md。",
+      "additionalProperties": false,
+      "properties": {
+        "render_mode": {
+          "type": "string"
+        },
+        "compile_workers": {
+          "type": "integer"
+        },
+        "typst_font_family": {
+          "type": "string"
+        },
+        "pdf_compress_dpi": {
+          "type": "integer"
+        },
+        "translated_pdf_name": {
+          "type": "string"
+        },
+        "body_font_size_factor": {
+          "type": "number"
+        },
+        "body_leading_factor": {
+          "type": "number"
+        },
+        "inner_bbox_shrink_x": {
+          "type": "number"
+        },
+        "inner_bbox_shrink_y": {
+          "type": "number"
+        },
+        "inner_bbox_dense_shrink_x": {
+          "type": "number"
+        },
+        "inner_bbox_dense_shrink_y": {
+          "type": "number"
+        },
+        "font_unify_mode": {
+          "type": "string"
+        },
+        "source_cleanup_strategy": {
+          "type": "string",
+          "enum": [
+            "pikepdf_text_strip",
+            "bbox_text_strip",
+            "legacy",
+            "redact_restore_formulas"
+          ],
+          "description": "SOURCE_CLEANUP_STRATEGIES"
+        },
+        "engine": {
+          "type": "string",
+          "enum": [
+            "typst",
+            "rpr",
+            "rpr_fit"
+          ],
+          "description": "RENDER_ENGINES：rpr_fit = 自研排版引擎，字号由引擎按测量决定、直接写 PDF（默认）；typst = 原 Typst 路线；rpr = 旧取值，照旧接受、按 rpr_fit 渲染（2026-11-02 起）。引擎不可用或失败时回退 typst"
+        }
+      }
+    },
+    "RuntimeInput": {
+      "type": "object",
+      "description": "models/input/runtime.rs :: RuntimeInput",
+      "additionalProperties": false,
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "description": "任务编号由服务器分配。公开入口（POST /jobs、书库的翻译和 OCR）收到非空的 runtime.job_id 会返回 400，请留空或不要发。"
+        },
+        "timeout_seconds": {
+          "type": "integer"
+        },
+        "no_output_timeout_seconds": {
+          "type": "integer",
+          "description": "空闲检测：多久没有 stdout 输出就判定 worker 卡死（秒）。0 表示关闭，也是默认值。与 timeout_seconds 相互独立——后者是整段执行的上限，要按最坏情况给。"
+        },
+        "render_after_translation": {
+          "type": "boolean",
+          "description": "内部执行策略：文档级翻译接口在翻译后还要产出渲染候选。公共 translate 工作流通常翻完即止。"
+        }
+      }
+    },
+    "GlossaryEntryInput": {
+      "type": "object",
+      "description": "models/input/translation.rs :: GlossaryEntryInput",
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "level": {
+          "type": "string"
+        },
+        "match_mode": {
+          "type": "string"
+        },
+        "context": {
+          "type": "string"
+        }
+      }
+    },
+    "ModelConnection": {
+      "type": "object",
+      "description": "model_connection.rs :: ModelConnection。不含明文密钥，只带 credential_ref。",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "revision",
+        "provider",
+        "base_url",
+        "model",
+        "credential_ref",
+        "concurrency"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "provider": {
+          "enum": [
+            "qwen",
+            "deepseek",
+            "openai_compatible"
+          ]
+        },
+        "base_url": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "credential_ref": {
+          "type": "string",
+          "pattern": "^cred_[a-z0-9_-]+$",
+          "maxLength": 64
+        },
+        "concurrency": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "thinking": {
+          "enum": [
+            "auto",
+            "off",
+            "on"
+          ]
+        },
+        "stream": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "allow_private_endpoint": {
+          "type": "boolean"
+        },
+        "deadlines": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "queue_ms",
+            "connect_ms",
+            "idle_ms",
+            "total_ms"
+          ],
+          "properties": {
+            "queue_ms": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 900000
+            },
+            "connect_ms": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 900000
+            },
+            "idle_ms": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 900000
+            },
+            "total_ms": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 900000
+            }
+          }
+        }
+      }
+    },
+    "JsonValue": {
+      "description": "可安全跨线传输的任意 JSON 值；用于 provider 扩展 options。",
+      "tsType": "null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue }",
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JsonValue"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/JsonValue"
+          }
+        }
+      ]
+    },
+    "JobListItemView": {
+      "type": "object",
+      "description": "job_types.rs :: JobListItemView — 列表卡用；关键字段 job_id / display_name / workflow / status / stage_snapshot / progress(经 stage_snapshot.progress) / cover_url 均在契约内。",
+      "required": [
+        "job_id",
+        "display_name",
+        "workflow",
+        "status",
+        "attempt",
+        "retry_count",
+        "last_retry_at",
+        "stage_snapshot",
+        "background_snapshots",
+        "stages",
+        "output_pdf_ready",
+        "markdown_ready",
+        "bundle_ready",
+        "created_at",
+        "updated_at",
+        "detail_path",
+        "detail_url"
+      ],
+      "properties": {
+        "source_artifact_job_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "复用了哪个任务的产物（OCR / 译文）；顺着它能找到真正持有译文的任务。没有复用时为 null。"
+        },
+        "job_id": {
+          "type": "string"
+        },
+        "display_name": {
+          "type": "string"
+        },
+        "workflow": {
+          "$ref": "#/definitions/WorkflowKind"
+        },
+        "status": {
+          "$ref": "#/definitions/JobStatusKind"
+        },
+        "attempt": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "retry_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "last_retry_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "trace_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "completion_note": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "终态任务的完成说明，仅在有额外信息时出现（正常完成为 null）。例如「任务完成，但有 N 个内容块保留原文未翻译」。这不是阶段字段——终态的 stage_snapshot 恒为 null。"
+        },
+        "stage_snapshot": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/JobStageSnapshotView"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "background_snapshots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JobStageSnapshotView"
+          }
+        },
+        "stages": {
+          "$ref": "#/definitions/JobStagesView"
+        },
+        "page_count": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "source_file_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cover_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "thumbnail_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "output_pdf_ready": {
+          "type": "boolean"
+        },
+        "markdown_ready": {
+          "type": "boolean"
+        },
+        "bundle_ready": {
+          "type": "boolean"
+        },
+        "invocation": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/InvocationSummaryView"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "detail_path": {
+          "type": "string"
+        },
+        "detail_url": {
+          "type": "string"
+        },
+        "failure": {
+          "$ref": "#/definitions/JobFailureBriefView"
+        }
+      }
+    },
+    "InvocationSummaryView": {
+      "type": "object",
+      "required": [
+        "stage",
+        "input_protocol",
+        "stage_spec_schema_version"
+      ],
+      "properties": {
+        "stage": {
+          "type": "string"
+        },
+        "input_protocol": {
+          "type": "string"
+        },
+        "stage_spec_schema_version": {
+          "type": "string"
+        }
+      }
+    },
+    "JobFailureBriefView": {
+      "type": "object",
+      "description": "backend/packages/retainpdf-jobs/src/views/job_types.rs :: JobFailureBriefView — 列表里那份精简失败信息。只有失败的任务才带（JobListItemView.failure），成功 / 进行中的任务整个键不出现，不是 null。只放「一眼能判断该怎么办」的几项，不带 raw_excerpt / traceback；要完整错误按需去打任务详情（那边的 failure 是 JobFailureInfo）。root_cause / suggestion / provider 为空时整个键不出现（不是 null）。",
+      "required": [
+        "category",
+        "stage",
+        "retryable",
+        "summary"
+      ],
+      "properties": {
+        "category": {
+          "type": "string",
+          "description": "面向用户的分类：provider / translation / timeout / render / internal …"
+        },
+        "stage": {
+          "type": "string",
+          "description": "失败发生在哪一段：ocr / translation / render"
+        },
+        "retryable": {
+          "type": "boolean",
+          "description": "能不能重试。"
+        },
+        "summary": {
+          "type": "string",
+          "description": "一句话结论。"
+        },
+        "root_cause": {
+          "type": "string",
+          "description": "根因；没有时键不出现。"
+        },
+        "suggestion": {
+          "type": "string",
+          "description": "建议的处理办法；没有时键不出现。"
+        },
+        "provider": {
+          "type": "string",
+          "description": "上游是谁（mineru / deepseek …），排查时第一眼要看的；没有时键不出现。"
+        }
+      }
+    },
+    "JobListInvocationSummaryView": {
+      "type": "object",
+      "required": [
+        "stage_spec_count",
+        "unknown_count"
+      ],
+      "properties": {
+        "stage_spec_count": {
+          "type": "integer"
+        },
+        "unknown_count": {
+          "type": "integer"
+        }
+      }
+    },
+    "JobStageSnapshotView": {
+      "type": "object",
+      "description": "job_types.rs :: JobStageSnapshotView。前端 adaptJobStageSnapshot / buildStageSnapshot 消费全部字段；lane=main|background。",
+      "required": [
+        "progress"
+      ],
+      "properties": {
+        "display_stage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "substage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lane": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stage_detail": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "progress": {
+          "$ref": "#/definitions/JobProgressView"
+        }
+      }
+    },
+    "JobStagesView": {
+      "type": "object",
+      "required": [
+        "ocr",
+        "translation",
+        "render"
+      ],
+      "properties": {
+        "ocr": {
+          "$ref": "#/definitions/JobStageRuntimeView"
+        },
+        "translation": {
+          "$ref": "#/definitions/JobStageRuntimeView"
+        },
+        "render": {
+          "$ref": "#/definitions/JobStageRuntimeView"
+        }
+      }
+    },
+    "JobStageRuntimeView": {
+      "type": "object",
+      "required": [
+        "state",
+        "progress"
+      ],
+      "properties": {
+        "state": {
+          "$ref": "#/definitions/JobStageStateView"
+        },
+        "progress": {
+          "$ref": "#/definitions/JobProgressView"
+        }
+      }
+    },
+    "JobStageStateView": {
+      "type": "string",
+      "enum": [
+        "reused",
+        "queued",
+        "pending",
+        "in_progress",
+        "completed",
+        "failed",
+        "skipped"
+      ]
+    },
+    "JobProgressView": {
+      "type": "object",
+      "description": "common.rs :: JobProgressView。前端 progress_unit / progress_current / progress_total 均由此归一。",
+      "required": [],
+      "properties": {
+        "current": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "JobProgress.current，null=未知"
+        },
+        "total": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "percent": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "unit": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "page|batch|block|step|percent，skip_serializing_if None"
+        }
+      }
+    },
+    "JobLinksView": {
+      "type": "object",
+      "required": [
+        "self_path",
+        "self_url",
+        "artifacts_path",
+        "artifacts_url",
+        "artifacts_manifest_path",
+        "artifacts_manifest_url",
+        "events_path",
+        "events_url",
+        "cancel_path",
+        "cancel_url"
+      ],
+      "properties": {
+        "self_path": {
+          "type": "string"
+        },
+        "self_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "artifacts_path": {
+          "type": "string"
+        },
+        "artifacts_url": {
+          "type": "string"
+        },
+        "artifacts_manifest_path": {
+          "type": "string"
+        },
+        "artifacts_manifest_url": {
+          "type": "string"
+        },
+        "events_path": {
+          "type": "string"
+        },
+        "events_url": {
+          "type": "string"
+        },
+        "cancel_path": {
+          "type": "string"
+        },
+        "cancel_url": {
+          "type": "string"
+        }
+      }
+    },
+    "JobActionsView": {
+      "type": "object",
+      "required": [
+        "open_job",
+        "open_artifacts",
+        "cancel",
+        "resume",
+        "rerun",
+        "download_pdf",
+        "open_markdown",
+        "open_markdown_raw",
+        "download_bundle"
+      ],
+      "properties": {
+        "open_job": {
+          "$ref": "#/definitions/ActionLinkView"
+        },
+        "open_artifacts": {
+          "$ref": "#/definitions/ActionLinkView"
+        },
+        "cancel": {
+          "$ref": "#/definitions/ActionLinkView"
+        },
+        "resume": {
+          "$ref": "#/definitions/ActionLinkView",
+          "description": "从断点续跑：POST /api/v1/jobs/:job_id/actions/resume。"
+        },
+        "rerun": {
+          "$ref": "#/definitions/ActionLinkView",
+          "description": "旧名，和 resume 同值，地址是旧地址 actions/rerun。新代码读 resume。"
+        },
+        "download_pdf": {
+          "$ref": "#/definitions/ActionLinkView"
+        },
+        "open_markdown": {
+          "$ref": "#/definitions/ActionLinkView"
+        },
+        "open_markdown_raw": {
+          "$ref": "#/definitions/ActionLinkView"
+        },
+        "download_bundle": {
+          "$ref": "#/definitions/ActionLinkView"
+        }
+      }
+    },
+    "ActionLinkView": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "method",
+        "path",
+        "url"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "method": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      }
+    },
+    "ListDocumentJobsQuery": {
+      "type": "object",
+      "description": "retainpdf-jobs views/common.rs :: ListDocumentJobsQuery（deny_unknown_fields）。只认 limit、offset：书由地址给定，列表的其它筛选不认。",
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500,
+          "default": 20,
+          "description": "越界 400，不会被夹。"
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0
+        }
+      }
+    },
+    "DocumentJobListView": {
+      "type": "object",
+      "description": "retainpdf-jobs views/job_types.rs :: DocumentJobListView。",
+      "required": [
+        "items",
+        "invocation_summary",
+        "total",
+        "limit",
+        "offset",
+        "has_more"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JobListItemView"
+          }
+        },
+        "invocation_summary": {
+          "$ref": "#/definitions/JobListInvocationSummaryView"
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "这本书的任务总数（不随分页变）。"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500,
+          "description": "生效的 limit（没传是 20）。"
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "has_more": {
+          "type": "boolean",
+          "description": "这一页之后还有没有（多取一条判断）。"
+        }
+      }
+    },
+    "JobSubmissionView": {
+      "type": "object",
+      "description": "retainpdf-jobs views/common.rs :: JobSubmissionView —— 建任务的回包，status 刚建好是 queued。只有 sibling_job_ids 在没有时整个键不出现。",
+      "additionalProperties": false,
+      "required": [
+        "job_id",
+        "status",
+        "workflow",
+        "ocr_reused",
+        "source_artifact_job_id",
+        "stages",
+        "links",
+        "actions"
+      ],
+      "properties": {
+        "job_id": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/definitions/JobStatusKind"
+        },
+        "workflow": {
+          "$ref": "#/definitions/WorkflowKind"
+        },
+        "ocr_reused": {
+          "type": "boolean",
+          "description": "这个任务复用了已有 OCR（不重新识别）。"
+        },
+        "source_artifact_job_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "复用了哪个任务的产物；没有复用时为 null。"
+        },
+        "stages": {
+          "$ref": "#/definitions/JobStagesView"
+        },
+        "links": {
+          "$ref": "#/definitions/JobLinksView"
+        },
+        "actions": {
+          "$ref": "#/definitions/JobActionsView"
+        },
+        "sibling_job_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "同一次提交拆出来的其它任务（翻译复用 OCR、页不连续或超出覆盖时按连续段拆）。上面的字段描述第一个任务。只拆出一个任务时整个键不出现。"
+        }
+      }
+    },
+    "PageQuotaExceededErrorDetails": {
+      "type": "object",
+      "description": "402 PAGE_QUOTA_EXCEEDED 的 error.details（retainpdf-accounts page_quota）。整个信封见 translateDocument、ocrDocument 端点的 note。",
+      "additionalProperties": false,
+      "required": [
+        "required_pages",
+        "balance"
+      ],
+      "properties": {
+        "required_pages": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "这次要扣的页数。"
+        },
+        "balance": {
+          "type": "integer",
+          "description": "账号还剩的页数。"
+        }
+      }
+    }
+  }
+}

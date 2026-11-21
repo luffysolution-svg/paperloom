@@ -23,14 +23,14 @@
 @source "../../features/**/*.{ts,tsx}";
 @source "../../ui/**/*.{ts,tsx}";
 @source "../../platform/**/*.{ts,tsx}";
-@source "../../../../packages/ui/src/**/*.{ts,tsx}";
 @source inline("app-settings-panel credential-provider-panel credential-tabs credential-top-up-link glossary-list-item library-bottom-bar progress-bar recent-job-cover status-result-actions status-substage-flow status-substage-step");
+@source "../../../../packages/ui/src/**/*.{ts,tsx}";
 
 @layer tokens, base, pages;
 
 @import "../tokens.css" layer(tokens);
-@import "../shadcn-theme.css" layer(tokens);
 @import "@retainpdf/ui/primitives.css";
+@import "../shadcn-theme.css" layer(tokens);
 @import "../base.css" layer(base);
 /* 主页氛围：浅纹理 + 宽屏侧翼（装饰） */
 @import "../core/ambient-surface.css";
@@ -43,19 +43,66 @@
 @import "../core/download-toast.css";
 
 /* —— home-only（主页领域；勿再塞 reader/detail）—— */
+/* 原 components.utilities.css 按组件拆分（顺序与拆分前一致）。 */
 @import "../pages/home/components.utilities.css";
+@import "../../features/jobs/ui/StatusCardBase.css";
+@import "../../features/job-detail/ui/StatusPanel.css";
+@import "../../features/ingest/ui/InlineErrorBox.css";
+@import "../../features/sync/ui/SyncSettingsPanel.css";
+@import "../../features/usage/ui/usage.css";
+@import "../../features/auth/ui/auth.css";
+@import "../../features/backup/ui/BackupPanel.css";
+@import "../../features/notify/ui/NotifySettingsPanel.css";
+@import "../../features/settings/ui/CommandLinePanel.css";
 @import "../pages/home/translation-workflow.utilities.css";
 @import "../pages/home/collections.utilities.css";
-@import "../pages/home/status-detail-translation.utilities.css";
-@import "../pages/home/status-detail.utilities.css";
+/* 原 status-detail-translation.utilities.css 按组件拆分（顺序与拆分前一致）。 */
+@import "../../features/job-detail/ui/TranslationDebugTab.css";
+@import "../../features/job-detail/ui/TranslationSummary.css";
+@import "../../features/job-detail/ui/status-detail-shared.css";
+@import "../../features/job-detail/ui/TranslationFilterPanel.css";
+@import "../../features/job-detail/ui/TranslationItemsPanel.css";
+@import "../../features/job-detail/ui/TranslationItemDetailPanel.css";
+/* 原 status-detail.utilities.css 按组件拆分（顺序与拆分前一致）。 */
+@import "../pages/home/job-ui-shared.css";
+@import "../../features/job-detail/ui/panels/OverviewPanel.css";
+@import "../../features/job-detail/ui/StageHistoryList.css";
+@import "../../features/job-detail/ui/EventsList.css";
+@import "../../features/job-detail/ui/panels/FailurePanel.css";
+@import "../../features/job-detail/ui/FailureLogDialog.css";
+@import "../../features/job-detail/ui/panels/StatusDetailTabPanel.css";
 @import "../pages/home/app-update.css";
 @import "../pages/home/app-settings.css";
+@import "../pages/home/backup-panel.css";
+/* 主页外壳与书架：样式放在组件旁边；library-shell.css 里有普通规则必须最后（顺序与拆分前一致）。 */
+@import "../../features/reader/ui/SoftReaderHost.css";
+@import "../../app/home/shell/AppTopBar.css";
+@import "../../features/collections/ui/CollectionsView.css";
+@import "../pages/home/favorites.css";
+@import "../../ui/icons/EmptyState.css";
+@import "../../features/library/ui/page/RecentJobsLibrary.css";
+@import "../../features/library/ui/page/LibraryBatchToolbar.css";
+@import "../../app/home/shell/AppBottomBar.css";
+@import "../../features/app-update/ui/AppUpdateBanner.css";
+@import "../../features/library/ui/shell/BookCard.css";
+@import "../../app/home/shell/MockModeBanner.css";
 @import "../pages/home/library-shell.css";
 @import "../pages/home/library-search-island.css";
 @import "../pages/home/upload-workflow.css";
-@import "../pages/home/upload-workflow.utilities.css";
+/* 原 upload-workflow.utilities.css 按组件拆分（顺序与拆分前一致）。 */
+@import "../../features/ingest/ui/WorkflowPanel.css";
+@import "../../features/ingest/ui/components/upload/UploadDropzone.css";
+@import "../../features/ingest/ui/components/upload/UploadWorkflowNotices.css";
+@import "../../features/ingest/ui/components/upload/ProcessingChoicePanel.css";
+@import "../../features/ingest/ui/components/upload/BatchUploadPanel.css";
+@import "../../features/ingest/ui/UploadWorkflowResponsive.css";
 @import "../pages/home/job-dialogs.css";
-@import "../pages/home/job-dialogs.utilities.css";
+/* 原 job-dialogs.utilities.css 按组件拆分（顺序与拆分前一致）。 */
+@import "../../features/library/ui/shell/RecentJobItem.css";
+@import "../../features/library/ui/RecentJobsDialog.css";
+@import "../../features/job-detail/ui/StatusDetailDialog.css";
+@import "../../features/job-detail/ui/StatusDetailTabs.css";
+/* 凭据 / 术语表：样式放在组件旁边（顺序与原 credential-settings.css 一致，普通规则的先后不能变）。 */
 @import "../pages/home/settings-dialogs.css";
 @import "../../features/credentials/ui/CredentialsWorkbench.css";
 @import "../../features/credentials/ui/TranslationPanel.css";
@@ -66,11 +113,49 @@
 @import "../../features/credentials/ui/SecretInput.css";
 @import "../../features/credentials/ui/CredentialsWorkbenchInSettings.css";
 @import "../pages/home/credential-ocr.css";
-@import "../pages/home/status-card.css";
+/* 任务状态卡：样式放在组件旁边（顺序与原 status-card.css 一致）。 */
+@import "../../features/jobs/ui/StatusCard.css";
+@import "../../features/jobs/ui/StageFlow.css";
+@import "../../features/jobs/ui/StatusCardAnimation.css";
+@import "../../features/jobs/ui/ProgressBlock.css";
+@import "../../features/jobs/ui/StageRetry.css";
+@import "../../features/jobs/ui/ResultActions.css";
 /* 书籍详情按职责拆分：壳层 → 概览 → 处理 → 文件产物。 */
-@import "../pages/home/book-detail-shell.css" layer(pages);
-@import "../pages/home/book-detail-overview.css" layer(pages);
-@import "../pages/home/book-detail-processing.css" layer(pages);
+/* 原 book-detail-shell.css 按组件拆分（顺序与拆分前一致）。 */
+@import "../../features/book-detail/ui/shell/BookDetailShell.css" layer(pages);
+@import "../../features/book-detail/ui/panels/ArtifactQuickDownloads.css" layer(pages);
+@import "../../features/book-detail/ui/shell/BookDetailLeftReading.css" layer(pages);
+@import "../../features/book-detail/ui/tabs/BookDetailRightTabs.css" layer(pages);
+@import "../../features/book-detail/ui/shell/BookDetailShellResponsive.css" layer(pages);
+/* 概览页签：layout 定义卡片底与标题，必须在最前；responsive 必须在最后。 */
+@import "../../features/book-detail/ui/tabs/overview/layout.css" layer(pages);
+@import "../../features/book-detail/ui/tabs/overview/info.css" layer(pages);
+@import "../../features/book-detail/ui/tabs/overview/activity.css" layer(pages);
+@import "../../features/book-detail/ui/tabs/overview/quality.css" layer(pages);
+@import "../../features/book-detail/ui/tabs/history.css" layer(pages);
+@import "../../features/book-detail/ui/tabs/terms.css" layer(pages);
+@import "../../features/book-detail/ui/tabs/overview/danger.css" layer(pages);
+@import "../../features/book-detail/ui/tabs/overview/responsive.css" layer(pages);
+/* 「进度」分区按组件拆分；layout 定义共享变量，必须在最前。 */
+@import "../pages/home/book-detail-processing/layout.css" layer(pages);
+@import "../pages/home/book-detail-processing/processing-card.css" layer(pages);
+@import "../pages/home/book-detail-processing/processing-head.css" layer(pages);
+@import "../pages/home/book-detail-processing/processing-hud.css" layer(pages);
+@import "../pages/home/book-detail-processing/processing-details.css" layer(pages);
+@import "../pages/home/book-detail-processing/pipeline-rail.css" layer(pages);
+@import "../pages/home/book-detail-processing/assembly-line.css" layer(pages);
+@import "../pages/home/book-detail-processing/assembly-line-labels.css" layer(pages);
+@import "../pages/home/book-detail-processing/editorial-flow.css" layer(pages);
+/* 翻译 agent 的编辑部画面（只引用户视图 EditorialStage 用到的几份，调试视图不进主页）。 */
+@import "../../features/editorial-room/ui/EditorialMotion.css" layer(pages);
+@import "../../features/editorial-room/ui/EditorialStage.css" layer(pages);
+@import "../../features/editorial-room/ui/office/EditorialOffice.css" layer(pages);
+@import "../../features/editorial-room/ui/EditorialFigure.css" layer(pages);
+@import "../../features/editorial-room/ui/EditorialRobot.css" layer(pages);
+@import "../../features/editorial-room/ui/EditorialLivePanel.css" layer(pages);
+@import "../pages/home/book-detail-processing/ocr-range.css" layer(pages);
+@import "../pages/home/book-detail-processing/failure-card.css" layer(pages);
+@import "../pages/home/book-detail-processing/job-history.css" layer(pages);
 @import "../pages/home/book-detail-artifacts.css" layer(pages);
 @import "../pages/home/zotero-import.css" layer(pages);
 @import "../pages/home/mojia-ornaments.css" layer(pages);

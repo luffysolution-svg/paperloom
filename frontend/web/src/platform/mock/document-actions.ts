@@ -1,5 +1,5 @@
-// mock 文档的“API 行为”层：列表查询、删除保护、翻译/OCR 提交、名下 job 列表。
-// 依赖 document-seed / collections / favorites / live-jobs，但自身不再持有状态。
+// mock 文档的“API 行为”层：列表查询、删除、翻译/OCR 提交、名下 job 列表。
+// 依赖 document-seed / collections / live-jobs，但自身不再持有状态。
 
 import {
   MOCK_HISTORICAL_JOB_TO_DOCUMENT,
@@ -7,7 +7,6 @@ import {
   withMockDocumentMediaUrls,
 } from "./document-seed.js";
 import { collectionMembership, removeDocumentFromAllCollections } from "./collections.js";
-import { countMockFavoritesForDocument } from "./favorites.js";
 import {
   buildLiveMockJobPayload,
   isLiveMockJobActive,
@@ -20,27 +19,16 @@ import type {
 } from "./documents.types.js";
 import type { JobSubmissionView } from "@/platform/contracts/library-payloads.js";
 
-type HttpStatusError = Error & {
-  status?: number;
-  favoriteCount?: number;
-  clearFavoritesPath?: string;
-  favoriteScope?: "document" | "job";
-};
-
 export function getMockDocumentList({
   limit = 50,
   offset = 0,
   readingStatus = "",
-  tag = "",
   collectionId = "",
   q = "",
 }: MockDocumentListQuery = {}): MockDocumentListResult {
   let list = documents();
   if (`${readingStatus}`.trim()) {
     list = list.filter((item) => item.reading_status === trimId(readingStatus));
-  }
-  if (`${tag}`.trim()) {
-    list = list.filter((item) => item.tags.includes(trimId(tag)));
   }
   if (`${collectionId}`.trim()) {
     const memberIds = collectionMembership(trimId(collectionId));
@@ -59,7 +47,6 @@ export function getMockDocumentList({
 }
 
 // mock 版 DELETE /documents/:id:从 mock 文档表移除该文档(连同其合集成员关系)。
-// 被收藏引用时抛 409(镜像后端收藏保护)。
 export function deleteMockDocument(documentId: string): {
   deleted: boolean;
   document_id: string;
@@ -70,17 +57,7 @@ export function deleteMockDocument(documentId: string): {
   if (index < 0) {
     throw new Error("未找到该文档。(404)");
   }
-  const favoriteCount = countMockFavoritesForDocument(documentId);
-  if (favoriteCount > 0) {
-    const error: HttpStatusError = new Error(
-      `该文档有 ${favoriteCount} 条收藏，请先删除收藏后再删除文档。(409)`,
-    );
-    error.status = 409;
-    error.favoriteCount = favoriteCount;
-    error.favoriteScope = "document";
-    error.clearFavoritesPath = `/api/v1/documents/${documentId}/favorites`;
-    throw error;
-  }
+
   list.splice(index, 1);
   removeDocumentFromAllCollections(documentId);
   return { deleted: true, document_id: documentId, removed_paths: [] };
@@ -151,7 +128,7 @@ export function getMockDocumentJobs(documentId: string) {
   const stage = `${live?.stage || (isOcr ? "queued" : "finished")}`;
   const displayStage = `${live?.display_stage || (isOcr ? "ocr" : "done")}`;
   const stageDetail = `${live?.stage_detail || (isOcr ? "OCR 任务已排队" : "任务完成")}`;
-  const liveProgress: any = live?.progress || {};
+  const liveProgress: { current?: unknown; total?: unknown; percent?: unknown } = live?.progress || {};
   return {
     items: [{
       job_id: jobId,

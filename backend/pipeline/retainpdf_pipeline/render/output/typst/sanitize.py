@@ -16,7 +16,7 @@ from retainpdf_pipeline.render.output.typst.sanitize_steps import try_selective_
 from retainpdf_pipeline.render.output.typst.sanitize_steps import try_selective_llm_repair
 from retainpdf_pipeline.render.output.typst.sanitize_steps import try_selective_math_token_plain_text
 from retainpdf_pipeline.render.output.typst.sanitize_steps import try_selective_plain_text
-from retainpdf_pipeline.services.pipeline_shared.events import emit_stage_progress
+from retainpdf_base.events import emit_stage_progress
 
 TypstRepairRequestFn = Callable[..., str]
 

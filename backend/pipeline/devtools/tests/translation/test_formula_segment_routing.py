@@ -1,13 +1,7 @@
 import json
-import sys
-from pathlib import Path
 
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-
-from retainpdf_pipeline.translate.llm.shared.orchestration import segment_routing
+from retainpdf_translation.llm.shared.orchestration import segment_routing
 
 
 def _formula_item(formula_count: int) -> dict:

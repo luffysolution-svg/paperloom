@@ -1,12 +1,8 @@
-// 详情弹窗 panel 共用小工具（样式 / 图标），无业务。
+// 详情弹窗 panel 共用的图标，无业务。按钮用 @retainpdf/ui 的 Button（以前这里的 btn() 包着 shadcn 旧按钮，已删）。
 
-import { cn } from "@retainpdf/ui/lib/utils";
-import { buttonVariants } from "@retainpdf/ui/components/ui/button";
+import type { SVGProps } from "react";
 
-export const btn = (variant, extra = "") =>
-  cn(buttonVariants({ variant, size: "sm" }), "h-8 text-xs rounded-md", extra);
-
-export function IconLanguages(props) {
+export function IconLanguages(props: SVGProps<SVGSVGElement>) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -29,7 +25,7 @@ export function IconLanguages(props) {
   );
 }
 
-export function IconEye(props) {
+export function IconEye(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="12" height="12" {...props}>
       <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
@@ -38,7 +34,7 @@ export function IconEye(props) {
   );
 }
 
-export function IconCompare(props) {
+export function IconCompare(props: SVGProps<SVGSVGElement>) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -57,7 +53,7 @@ export function IconCompare(props) {
   );
 }
 
-export function IconLayers(props) {
+export function IconLayers(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="12" height="12" {...props}>
       <path d="M12 3 3 8l9 5 9-5-9-5ZM3 13l9 5 9-5M3 17.5l9 5 9-5" />

@@ -6,9 +6,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from retainpdf_pipeline.translate.core.payload.parts.common import group_unit_id
-from retainpdf_pipeline.translate.services.postprocess import garbled_reconstruction as reconstruction
-from retainpdf_pipeline.translate.workflow.phases import repair
+from retainpdf_translation.core.payload.parts.common import group_unit_id
+from retainpdf_translation.services.postprocess import garbled_reconstruction as reconstruction
+from retainpdf_translation.workflow.phases import repair
 
 
 def item(page):

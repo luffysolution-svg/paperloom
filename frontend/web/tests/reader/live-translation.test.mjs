@@ -160,7 +160,7 @@ test("authenticated fetch SSE parser handles split chunks and reconnect cursor",
     fetchImpl,
     onEvent: (event) => events.push(event),
   });
-  assert.match(requestedUrl, /jobs\/job-a\/live-events\?after_seq=41$/);
+  assert.match(requestedUrl, /jobs\/job-a\/progress\/stream\?after_seq=41$/);
   assert.deepEqual(events.map((event) => [event.seq, event.generation]), [[42, 18]]);
 });
 
@@ -186,7 +186,7 @@ test("live overlay is non-interactive and can be assigned to the dedicated live 
     readFile(new URL("../../../../frontend/packages/reader/src/pdf/PdfDocumentPane.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(css, /\.reader-live-translation-overlay\s*\{[\s\S]*pointer-events:\s*none/);
-  assert.match(pageSlot, /active && showLiveTranslation/);
+  assert.match(pageSlot, /active && textLayer && showLiveTranslation/, "只给眼前的页挂（textLayer）");
   assert.match(pageSlot, /showLiveTranslation = pane === "source"/);
   assert.match(pane, /liveTranslation\?\.layoutByPage\.get\(pageNumber - 1\)/);
   assert.match(pane, /const isWindowed = windowedSet\.has\(pageNumber\)/);
@@ -297,13 +297,13 @@ test("live translation consumes session terminal status without polling the job"
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   globalThis.fetch = async (url, init = {}) => {
     requestedUrls.push(String(url));
-    if (String(url).includes("/live-translation/layout")) {
+    if (String(url).includes("/progress/layout")) {
       return new Response(JSON.stringify({ code: 0, message: "ok", data: { pages: [] } }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
     }
-    if (String(url).includes("/live-events")) {
+    if (String(url).includes("/progress/stream")) {
       return new Response(new ReadableStream({
         start(controller) {
           controller.enqueue(enc.encode(": connected\n\n"));
@@ -318,15 +318,15 @@ test("live translation consumes session terminal status without polling the job"
   let latest = null;
   const liveTranslationPort = {
     fetchLayout: async (jobId, options = {}) => {
-      const response = await fetch(`/api/v1/jobs/${jobId}/live-translation/layout`, { signal: options.signal });
+      const response = await fetch(`/api/v1/jobs/${jobId}/progress/layout`, { signal: options.signal });
       return (await response.json()).data;
     },
     fetchPage: async (jobId, pageIdx, options = {}) => {
-      const response = await fetch(`/api/v1/jobs/${jobId}/live-translation/pages/${pageIdx}`, { signal: options.signal });
+      const response = await fetch(`/api/v1/jobs/${jobId}/progress/pages/${pageIdx}`, { signal: options.signal });
       return (await response.json()).data;
     },
     streamEvents: async (jobId, options) => {
-      const response = await fetch(`/api/v1/jobs/${jobId}/live-events?after_seq=${options.afterSeq || 0}`, {
+      const response = await fetch(`/api/v1/jobs/${jobId}/progress/stream?after_seq=${options.afterSeq || 0}`, {
         signal: options.signal,
         headers: { Accept: "text/event-stream" },
       });
@@ -350,7 +350,7 @@ test("live translation consumes session terminal status without polling the job"
       root.render(createElement(Harness, { jobStatus: "running" }));
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
-    assert.ok(requestedUrls.some((url) => url.includes("/live-events")));
+    assert.ok(requestedUrls.some((url) => url.includes("/progress/stream")));
 
     await act(async () => root.render(createElement(Harness, { jobStatus: "succeeded" })));
     assert.equal(latest.connection, "terminal");

@@ -13,7 +13,6 @@ import {
 import { APP_EVENTS } from "@/platform/contracts/app-contract.js";
 
 export function showDesktopUi() {
-  // 首装时凭据为空，bootstrap 可能早于 React 首次提交；按钮还不在也不能让后面的首配弹窗被跳过。
   document.getElementById("open-output-btn")?.classList.remove("hidden");
 }
 

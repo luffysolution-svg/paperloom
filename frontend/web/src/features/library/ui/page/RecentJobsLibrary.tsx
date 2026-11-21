@@ -11,32 +11,35 @@
 // (loading/empty/error 三态由 renderLoading()/actions.js 的边缘路径驱动)。
 
 import { useRef, useState } from "react";
+import { Button } from "@retainpdf/ui";
 import { useStoreSnapshot } from "@/ui/hooks/use-store.js";
 import {
   useHomeCollections,
   useHomeHomeStateStore,
-  useHomeLibrary,
   useHomeWorkflowDialog,
 } from "@/ui/context/home-services-context.js";
 import { LibraryToolbar } from "./LibraryToolbar.jsx";
 import { LibraryFilterMenu } from "./LibraryFilterMenu.jsx";
 import { LibraryBatchToolbar } from "./LibraryBatchToolbar.jsx";
 import { BatchExportDialog } from "./BatchExportDialog.js";
+import { ObsidianExportDialog } from "@/features/obsidian-export/index.js";
+import { ZoteroBatchWritebackDialog } from "@/features/zotero-writeback/index.js";
 import { useLibraryAutoLoad } from "./useLibraryAutoLoad.js";
 import { useHomeReturnRestore } from "./useHomeReturnRestore.js";
 import { deriveLibraryPageState } from "../../domain/library-page-state.js";
-import { buildRecentJobsSummaryViewModel } from "../../domain/recent-jobs/summary-view-model.js";
+import {
+  buildRecentJobsSummaryViewModel,
+} from "../../domain/recent-jobs/summary-view-model.js";
 import { RecentJobsLibraryEmpty } from "./RecentJobsLibraryEmpty.jsx";
 import { RecentJobsLibraryGrid } from "./RecentJobsLibraryGrid.jsx";
 import { RecentJobsLibraryBatchDialogs } from "./RecentJobsLibraryBatchDialogs.jsx";
-import { ObsidianExportDialog } from "@/features/obsidian-export/index.js";
-import { ZoteroBatchWritebackDialog } from "@/features/zotero-writeback/index.js";
 import { useRecentJobsListDerivation } from "./useRecentJobsListDerivation.js";
 import { useRecentJobsBatchSelection } from "./useRecentJobsBatchSelection.js";
 import { VIEW_TEXT } from "./recent-jobs-library-helpers.js";
+import { useLibraryServices } from "../library-services-context.js";
 
-export function RecentJobsLibrary({ onBatchModeChange }: any = {}) {
-  const { viewPort, recentJobsStore, actions } = useHomeLibrary();
+export function RecentJobsLibrary({ onBatchModeChange }: { onBatchModeChange?: (active: boolean) => void } = {}) {
+  const { viewPort, recentJobsStore, actions } = useLibraryServices();
   const homeStateStore = useHomeHomeStateStore();
   const { controller: collectionsController } = useHomeCollections();
   const workflowDialog = useHomeWorkflowDialog();
@@ -49,17 +52,15 @@ export function RecentJobsLibrary({ onBatchModeChange }: any = {}) {
   const [viewMode, setViewMode] = useState("grid");
   const [sortMode, setSortMode] = useState("updated");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [tagFilter, setTagFilter] = useState("");
   const [obsidianBatchOpen, setObsidianBatchOpen] = useState(false);
   const [batchExportOpen, setBatchExportOpen] = useState(false);
   const [zoteroBatchOpen, setZoteroBatchOpen] = useState(false);
 
   const items = Array.isArray(recentJobs.items) ? recentJobs.items : [];
 
-  const { tags, statusCounts, visibleItems } = useRecentJobsListDerivation({
+  const { statusCounts, visibleItems } = useRecentJobsListDerivation({
     items,
     statusFilter,
-    tagFilter,
     sortMode,
   });
 
@@ -72,16 +73,12 @@ export function RecentJobsLibrary({ onBatchModeChange }: any = {}) {
     batchBusy,
     pendingDeleteIds,
     setPendingDeleteIds,
-    pendingBlockedDelete,
-    setPendingBlockedDelete,
     collections,
     toggleSelect,
     handleSelectAllToggle,
     handleBatchDelete,
     confirmBatchDelete,
-    confirmClearFavoritesBatchDelete,
     handleBatchAddToCollection,
-    blockedFavoriteTotal,
   } = useRecentJobsBatchSelection({
     visibleItems,
     onBatchModeChange,
@@ -89,21 +86,22 @@ export function RecentJobsLibrary({ onBatchModeChange }: any = {}) {
     actions,
   });
 
-  const { mode, loadMoreLoading, emptyMessage, errorMessage } =
-    deriveLibraryPageState({
-      items,
-      loadingState: homeState.recentJobsLoadingState,
-      error: homeState.recentJobsError,
-      query: view.query,
-      viewMode: view.mode,
-      viewMessage: view.message,
-    });
+  const {
+    mode,
+    loadMoreLoading,
+    emptyMessage,
+    errorMessage,
+  } = deriveLibraryPageState({
+    items,
+    loadingState: homeState.recentJobsLoadingState,
+    error: homeState.recentJobsError,
+    query: view.query,
+    viewMode: view.mode,
+    viewMessage: view.message,
+  });
   const hasItems = mode === "list";
 
-  const summary = buildRecentJobsSummaryViewModel(
-    recentJobs.invocationSummary,
-    items,
-  );
+  const summary = buildRecentJobsSummaryViewModel(recentJobs.invocationSummary, items);
 
   useLibraryAutoLoad({
     scrollBodyRef,
@@ -121,17 +119,8 @@ export function RecentJobsLibrary({ onBatchModeChange }: any = {}) {
 
   return (
     <section id="library-view" className="library-view" aria-label="图书馆">
-      <div
-        id="recent-jobs-scroll-body"
-        className="library-scroll-body"
-        ref={scrollBodyRef}
-      >
-        <div
-          id="recent-jobs-summary"
-          className="status-panel-note library-summary"
-        >
-          {summary.text}
-        </div>
+      <div id="recent-jobs-scroll-body" className="library-scroll-body" ref={scrollBodyRef}>
+        <div id="recent-jobs-summary" className="status-panel-note library-summary">{summary.text}</div>
         <RecentJobsLibraryEmpty
           mode={mode}
           errorMessage={errorMessage}
@@ -147,16 +136,13 @@ export function RecentJobsLibrary({ onBatchModeChange }: any = {}) {
             setSortMode={setSortMode}
             batchMode={batchMode}
             onToggleBatchMode={setBatchMode}
-            filterSlot={
+            filterSlot={(
               <LibraryFilterMenu
                 statusFilter={statusFilter}
                 setStatusFilter={setStatusFilter}
-                tagFilter={tagFilter}
-                setTagFilter={setTagFilter}
-                tags={tags}
                 statusCounts={statusCounts}
               />
-            }
+            )}
           />
         ) : null}
         <RecentJobsLibraryGrid
@@ -169,15 +155,15 @@ export function RecentJobsLibrary({ onBatchModeChange }: any = {}) {
           toggleSelect={toggleSelect}
         />
         <div className="recent-jobs-more-row">
-          <button
+          <Button
             id="load-more-jobs-btn"
-            className={`secondary${recentJobs.hasMore ? "" : " hidden"}`}
-            type="button"
-            disabled={loadMoreLoading}
+            variant="secondary"
+            className={recentJobs.hasMore ? undefined : "hidden"}
+            pending={loadMoreLoading}
             onClick={handleLoadMoreClick}
           >
             {loadMoreLoading ? VIEW_TEXT.loadMoreLoading : VIEW_TEXT.loadMore}
-          </button>
+          </Button>
         </div>
       </div>
       {batchMode ? (
@@ -209,13 +195,9 @@ export function RecentJobsLibrary({ onBatchModeChange }: any = {}) {
       />
       <RecentJobsLibraryBatchDialogs
         pendingDeleteIds={pendingDeleteIds}
-        pendingBlockedDelete={pendingBlockedDelete}
-        blockedFavoriteTotal={blockedFavoriteTotal}
         batchBusy={batchBusy}
         onCancelDelete={() => setPendingDeleteIds(null)}
         onConfirmDelete={confirmBatchDelete}
-        onCancelBlocked={() => setPendingBlockedDelete(null)}
-        onConfirmBlocked={confirmClearFavoritesBatchDelete}
       />
     </section>
   );

@@ -85,6 +85,121 @@ describe("文档结构", () => {
     assert.ok(!documentXml.includes("<v:textbox"), "还在用 VML 文本框");
     assert.ok(documentXml.includes("<wps:txbx>"), "没有 DrawingML 文本框");
     assert.ok(documentXml.includes('vertOverflow="clip"'), "文本框没设裁切，会糊到相邻块");
+    });
+
+    it("装不下时让 Word 自己缩，而不是直接裁掉", () => {
+      // 字号行距是导出时按 resources/fonts/SourceHanSerifSC-Regular.otf 的字形宽度
+      // 算的，而 docx 只声明这个字体名、**没嵌入**它（24.5MB，33 倍于已嵌入的公式
+      // 字体）。打开的机器上没装就会被替换，字形宽度一变就换行成更多行 → 总高超框
+      // → 被上面那个 vertOverflow="clip" 裁掉。这就是「有些块被截断」。
+      //
+      // noAutofit 是明确告诉 Word「别缩，裁」。normAutofit 让它宁可字小一点也别少字。
+      assert.ok(
+        documentXml.includes("<a:normAutofit"),
+        "文本框是 noAutofit —— 字体被替换后装不下的块会被直接截断",
+      );
+      assert.ok(!documentXml.includes("<a:noAutofit"), "还留着 noAutofit");
+    });
+
+    it("字号半磅取整只会变小，不会变大", async () => {
+      // Python 侧按**未取整**的字号判「装得下」，而 Math.round 会把 9.8pt 写成 10pt ——
+      // 判定按 9.8 做、Word 按 10 排，多出来的 0.2pt 就可能多断一行。
+      // 实测用户那个 job：54 个块里 35 个（65%）被取整取大。
+      const one = spec();
+      one.pages[0].blocks = [{ ...one.pages[0].blocks[0], id: "sz", fontSizePt: 9.8 }];
+      const dir = await mkdtemp(path.join(tmpdir(), "retainpdf2doc-sz-"));
+      await writeFile(path.join(dir, "page-001.png"), PNG);
+      const built = await buildLayoutDocx(one, { baseDir: dir });
+      const xml = strFromU8(unzipSync(built.bytes)["word/document.xml"]);
+      // 9.8pt → 19 半磅（9.5pt），不是 20（10pt）。
+      assert.ok(xml.includes('<w:sz w:val="19"/>'), "9.8pt 没有向下取整到 19 半磅");
+      assert.ok(!xml.includes('<w:sz w:val="20"/>'), "9.8pt 被取整成了 10pt —— 比判定时用的还大");
+    });
+
+    it("允许西文词中间断行 —— 否则长化学名会把半行浪费掉", () => {
+      // Word 默认不在西文词中间断行，Typst 会。化学正文里全是
+      // `2-(4-methoxyphenyl)`、`1-s2.0-S2468823121003047` 这种长词，一个断不开的词
+      // 就能浪费半行。按「西文不断词」估算真实 job 的前 6 页，20 个块里 12 个超框，
+      // 而同样内容在 PDF 里一个都不超（最挤的 0.90×）。
+      assert.ok(
+        documentXml.includes('<w:wordWrap w:val="0"/>'),
+        "没开「西文词中间可断」—— Word 会比 PDF 多断出好几行，然后超框被裁",
+      );
+    });
+
+    it("没有底数的上标（引文标记）不走 OMML —— 空数学元素会画成虚线方框", async () => {
+      // 译文里的引文标记是 `$^{[1]}$`：LaTeX 上标，**底数是空的**。MathJax 转出来是
+      // `<m:sSup>` 且 `<m:e></m:e>` 为空，而 Word 对空的数学元素画一个虚线占位框 ——
+      // 用户看到的是每个引文标记前面多一个空方框。
+      //
+      // 实测 19 个 job 的前 6 页共 1561 个公式，369 个（23.6%）是这种，分布在 13 本书。
+      // 而且那个占位框**占横向宽度**，是 Word 比 PDF 多断行的原因之一。
+      const one = spec();
+      one.pages[0].blocks = [{
+        ...one.pages[0].blocks[0],
+        id: "cite",
+        text: "重要方向之一 $^{[1]}$ 。生成五元环 $^{[2,3]}$ 或更大的杂环。",
+      }];
+      const dir = await mkdtemp(path.join(tmpdir(), "retainpdf2doc-cite-"));
+      await writeFile(path.join(dir, "page-001.png"), PNG);
+      const built = await buildLayoutDocx(one, { baseDir: dir });
+      const xml = strFromU8(unzipSync(built.bytes)["word/document.xml"]);
+
+      assert.ok(!xml.includes("<m:e></m:e>"), "还有空的数学元素 —— Word 会画虚线方框");
+      assert.ok(!xml.includes("<m:oMath"), "引文上标仍然走了 OMML");
+      assert.ok(
+        xml.includes('<w:vertAlign w:val="superscript"/>'),
+        "上标没有用 w:vertAlign 表达",
+      );
+      // 内容不能丢。
+      assert.ok(xml.includes(">[1]<"), "[1] 不见了");
+      assert.ok(xml.includes(">[2,3]<"), "[2,3] 不见了");
+    });
+
+    it("有底数的上标仍然走 OMML —— 正对照", async () => {
+      // 否则上面那条可能在守「所有公式都别走 OMML」。
+      const one = spec();
+      const dir = await mkdtemp(path.join(tmpdir(), "retainpdf2doc-math-"));
+      await writeFile(path.join(dir, "page-001.png"), PNG);
+      const built = await buildLayoutDocx(one, { baseDir: dir });
+      const xml = strFromU8(unzipSync(built.bytes)["word/document.xml"]);
+      assert.ok(xml.includes("<m:oMath"), "真正的公式也不走 OMML 了");
+    });
+
+    it("markdown 的 **强调** 变成加粗，不是把星号印出来", async () => {
+      // page_specs 给的是 `plain_text if render_kind == "plain" else markdown_text`
+      // —— 非 plain 的块交的是**原始 markdown**。而 inlineRuns 原来只解析 `$...$`，
+      // 于是 `**1k**` 被原样印成带星号的文本：既没加粗，又多了四个字符。
+      // 实测 19 个 job 的前 8 页 820 个块里有 44 个（5.4%）带 `**`，分布在 6 本书上。
+      const one = spec();
+      one.pages[0].blocks = [{
+        ...one.pages[0].blocks[0],
+        id: "strong",
+        text: "底物 **1k** 与 **2j** 反应",
+        bold: false,
+      }];
+      const dir = await mkdtemp(path.join(tmpdir(), "retainpdf2doc-strong-"));
+      await writeFile(path.join(dir, "page-001.png"), PNG);
+      const built = await buildLayoutDocx(one, { baseDir: dir });
+      const xml = strFromU8(unzipSync(built.bytes)["word/document.xml"]);
+
+      assert.ok(!xml.includes("**"), "星号被原样印进了文档");
+      assert.ok(xml.includes("<w:t xml:space=\"preserve\">1k</w:t>"), "强调里的文字没了");
+      // 正对照：整块 bold:false，所以文档里出现的 <w:b/> 只能来自这两处强调。
+      const bolds = (xml.match(/<w:b\/>/g) || []).length;
+      assert.ok(bolds >= 2, `强调没变成加粗，文档里只有 ${bolds} 个 <w:b/>`);
+      // 强调之外的正文不该被加粗带上。
+      assert.ok(xml.includes("底物 "), "强调之外的正文丢了");
+    });
+
+    it("行距仍然是 exact —— 不要改成 auto", () => {
+      // exact 让「N 行占 N×行距」这个账算得准，是框内布局的前提。auto 会让行高跟着
+      // 替换字体的自然行距走，而 CJK 字体行间距很大，1.289 倍可能变成 1.8 倍字号。
+      assert.ok(
+        documentXml.includes('w:lineRule="exact"'),
+        "行距改成了 auto —— 行高会跟着替换字体漂，比固定值更糟",
+      );
+      assert.ok(!documentXml.includes('w:lineRule="auto"'), "出现了 auto 行距");
   });
 
   it("块按规格里的坐标绝对定位（相对页面）", () => {
@@ -213,53 +328,5 @@ describe("公式边界", () => {
     display.pages[0].blocks[0].text = "行间 $$x^2+y^2=z^2$$ 结束";
     const result = await buildLayoutDocx(display, { baseDir: dir });
     assert.equal(result.formulaCount, 1, `认成了 ${result.formulaCount} 个公式`);
-  });
-});
-
-async function inlineDocument(text, overrides = {}) {
-  const input = spec();
-  input.pages = [input.pages[1]];
-  Object.assign(input.pages[0].blocks[0], { text, bold: false, ...overrides });
-  const result = await buildLayoutDocx(input);
-  return strFromU8(unzipSync(result.bytes)["word/document.xml"]);
-}
-
-describe("文本框拟合与行内文本", () => {
-  it("半磅字号向下取整，不超过已拟合字号", async () => {
-    const xml = await inlineDocument("plain", { fontSizePt: 9.8 });
-    assert.match(xml, /<w:sz w:val="19"\/>/);
-    assert.match(xml, /<w:szCs w:val="19"\/>/);
-  });
-
-  it("成对双星号产生粗体，单星号与未配对双星号保留", async () => {
-    const xml = await inlineDocument("A **bold** and **strong** * literal **unpaired");
-    const runs = [...xml.matchAll(/<w:r>(<w:rPr>[\s\S]*?<\/w:rPr>)<w:t[^>]*>(.*?)<\/w:t><\/w:r>/g)];
-    assert.deepEqual(runs.map((m) => m[2]), ["A ", "bold", " and ", "strong", " * literal **unpaired"]);
-    assert.deepEqual(runs.map((m) => m[1].includes("<w:b/>")), [false, true, false, true, false]);
-  });
-
-  it("粗体跨公式边界，换行与公式内容保持", async () => {
-    const xml = await inlineDocument("**before $x^{2}$ after**\nnext * literal");
-    assert.ok(!xml.includes("**"));
-    assert.match(xml, /<m:sSup>/);
-    assert.match(xml, /<w:t[^>]*>next \* literal<\/w:t>/);
-    const runs = [...xml.matchAll(/<w:r>(<w:rPr>[\s\S]*?<\/w:rPr>)<w:t[^>]*>(.*?)<\/w:t><\/w:r>/g)];
-    assert.deepEqual(runs.map((m) => m[1].includes("<w:b/>")), [true, true, false]);
-    assert.equal((xml.match(/<wps:txbx>/g) || []).length, 1);
-    assert.equal((xml.match(/<w:wordWrap w:val="0"\/>/g) || []).length, 2);
-  });
-
-  it("空底数字引用是文本上标，普通幂与数学脚标保留 OMML", async () => {
-    const xml = await inlineDocument("Cite $^{[1]}$ $^{[2,3]}$ $^{[4–6]}$; $x^{2}$ $^{\\alpha}$");
-    assert.equal((xml.match(/<w:vertAlign w:val="superscript"\/>/g) || []).length, 3);
-    assert.match(xml, /<w:t[^>]*>\[2,3\]<\/w:t>/);
-    assert.equal((xml.match(/<m:sSup>/g) || []).length, 2);
-  });
-
-  it("文本框允许西文按字断行，并给字体替换保留自动拟合", async () => {
-    const xml = await inlineDocument("supercalifragilisticexpialidocious");
-    assert.match(xml, /<w:wordWrap w:val="0"\/>/);
-    assert.match(xml, /<a:normAutofit\/>/);
-    assert.ok(!xml.includes("<a:noAutofit/>"));
   });
 });

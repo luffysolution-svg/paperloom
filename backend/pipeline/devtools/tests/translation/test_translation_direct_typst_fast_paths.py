@@ -6,7 +6,7 @@ from unittest import mock
 
 def _translate_direct_typst_for_test(module, item: dict, *, context, request_label: str = "test"):
     direct_typst = import_module(
-        "retainpdf_pipeline.translate.llm.shared.orchestration.direct_typst"
+        "retainpdf_translation.llm.shared.orchestration.direct_typst"
     )
     return direct_typst.translate_direct_typst_plain_text_with_retries(
         item,
@@ -28,16 +28,16 @@ class TranslationDirectTypstFastPathTests(unittest.TestCase):
     def setUp(self):
         # Content/windowing tests replace the remote translator, including its
         # ancillary DNS warmup; DNS behavior has dedicated transport tests.
-        prewarm = mock.patch("retainpdf_pipeline.translate.llm.providers.deepseek.client._prewarm_dns")
+        prewarm = mock.patch("retainpdf_translation.llm.providers.deepseek.client._prewarm_dns")
         prewarm.start()
         self.addCleanup(prewarm.stop)
 
     def test_direct_typst_protocol_shell_degrades_for_cjk_body_text(self):
         module = import_module(
-            "retainpdf_pipeline.translate.llm.shared.orchestration.fallbacks"
+            "retainpdf_translation.llm.shared.orchestration.fallbacks"
         )
         context_module = import_module(
-            "retainpdf_pipeline.translate.llm.shared.control_context"
+            "retainpdf_translation.llm.shared.control_context"
         )
         context = context_module.build_translation_control_context(mode="sci")
         item = {
@@ -79,16 +79,16 @@ class TranslationDirectTypstFastPathTests(unittest.TestCase):
 
     def test_direct_typst_short_empty_translation_uses_short_retry(self):
         retry_module = import_module(
-            "retainpdf_pipeline.translate.llm.shared.orchestration.direct_typst"
+            "retainpdf_translation.llm.shared.orchestration.direct_typst"
         )
         module = import_module(
-            "retainpdf_pipeline.translate.llm.shared.orchestration.fallbacks"
+            "retainpdf_translation.llm.shared.orchestration.fallbacks"
         )
         context_module = import_module(
-            "retainpdf_pipeline.translate.llm.shared.control_context"
+            "retainpdf_translation.llm.shared.control_context"
         )
         short_retry_module = import_module(
-            "retainpdf_pipeline.translate.llm.shared.orchestration.short_text_retry"
+            "retainpdf_translation.llm.shared.orchestration.short_text_retry"
         )
         context = context_module.build_translation_control_context(mode="sci")
         item = {
@@ -134,10 +134,10 @@ class TranslationDirectTypstFastPathTests(unittest.TestCase):
 
     def test_direct_typst_long_text_is_split_before_remote_translation(self):
         module = import_module(
-            "retainpdf_pipeline.translate.llm.shared.orchestration.fallbacks"
+            "retainpdf_translation.llm.shared.orchestration.fallbacks"
         )
         context_module = import_module(
-            "retainpdf_pipeline.translate.llm.shared.control_context"
+            "retainpdf_translation.llm.shared.control_context"
         )
         context = context_module.build_translation_control_context(mode="sci")
         long_source = " ".join(f"This is sentence {i} describing a long legal disclaimer." for i in range(1, 180))
@@ -173,10 +173,10 @@ class TranslationDirectTypstFastPathTests(unittest.TestCase):
 
     def test_formula_english_residue_marks_failed_after_all_fallbacks_fail(self):
         module = import_module(
-            "retainpdf_pipeline.translate.llm.shared.orchestration.fallbacks"
+            "retainpdf_translation.llm.shared.orchestration.fallbacks"
         )
         control_context = import_module(
-            "retainpdf_pipeline.translate.llm.shared.control_context"
+            "retainpdf_translation.llm.shared.control_context"
         )
         item = {
             "item_id": "p009-b067",
@@ -219,10 +219,10 @@ class TranslationDirectTypstFastPathTests(unittest.TestCase):
 
     def test_english_residue_after_raw_fallback_continues_to_sentence_level(self):
         module = import_module(
-            "retainpdf_pipeline.translate.llm.shared.orchestration.fallbacks"
+            "retainpdf_translation.llm.shared.orchestration.fallbacks"
         )
         control_context = import_module(
-            "retainpdf_pipeline.translate.llm.shared.control_context"
+            "retainpdf_translation.llm.shared.control_context"
         )
         item = {
             "item_id": "p001-b002",
@@ -267,10 +267,10 @@ class TranslationDirectTypstFastPathTests(unittest.TestCase):
 
     def test_direct_typst_english_residue_does_not_enter_sentence_level_fallback(self):
         module = import_module(
-            "retainpdf_pipeline.translate.llm.shared.orchestration.fallbacks"
+            "retainpdf_translation.llm.shared.orchestration.fallbacks"
         )
         control_context = import_module(
-            "retainpdf_pipeline.translate.llm.shared.control_context"
+            "retainpdf_translation.llm.shared.control_context"
         )
         item = {
             "item_id": "p001-b002",
@@ -314,10 +314,10 @@ class TranslationDirectTypstFastPathTests(unittest.TestCase):
 
     def test_direct_typst_body_protocol_failure_falls_back_to_sentence_level(self):
         module = import_module(
-            "retainpdf_pipeline.translate.llm.shared.orchestration.fallbacks"
+            "retainpdf_translation.llm.shared.orchestration.fallbacks"
         )
         control_context = import_module(
-            "retainpdf_pipeline.translate.llm.shared.control_context"
+            "retainpdf_translation.llm.shared.control_context"
         )
         item = {
             "item_id": "p021-b005",
@@ -383,10 +383,10 @@ class TranslationDirectTypstFastPathTests(unittest.TestCase):
 
     def test_direct_typst_validation_failure_does_not_enter_tagged_placeholder_retry(self):
         module = import_module(
-            "retainpdf_pipeline.translate.llm.shared.orchestration.fallbacks"
+            "retainpdf_translation.llm.shared.orchestration.fallbacks"
         )
         control_context = import_module(
-            "retainpdf_pipeline.translate.llm.shared.control_context"
+            "retainpdf_translation.llm.shared.control_context"
         )
         item = {
             "item_id": "p001-b002",
@@ -426,8 +426,8 @@ class TranslationDirectTypstFastPathTests(unittest.TestCase):
 
 
 def test_long_text_split_partially_accepts_when_one_chunk_fails() -> None:
-    from retainpdf_pipeline.translate.llm.shared.control_context import build_translation_control_context
-    from retainpdf_pipeline.translate.llm.shared.orchestration.direct_typst_long_text import (
+    from retainpdf_translation.llm.shared.control_context import build_translation_control_context
+    from retainpdf_translation.llm.shared.orchestration.direct_typst_long_text import (
         translate_direct_typst_long_text_chunks,
     )
 
@@ -471,8 +471,8 @@ def test_long_text_split_partially_accepts_when_one_chunk_fails() -> None:
 
 
 def test_long_text_split_still_fails_when_all_chunks_fail() -> None:
-    from retainpdf_pipeline.translate.llm.shared.control_context import build_translation_control_context
-    from retainpdf_pipeline.translate.llm.shared.orchestration.direct_typst_long_text import (
+    from retainpdf_translation.llm.shared.control_context import build_translation_control_context
+    from retainpdf_translation.llm.shared.orchestration.direct_typst_long_text import (
         translate_direct_typst_long_text_chunks,
     )
 

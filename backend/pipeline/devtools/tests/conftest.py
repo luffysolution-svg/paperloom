@@ -2,17 +2,31 @@ from __future__ import annotations
 
 import os
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 
 import pytest
 
 # ---------------------------------------------------------------------------
+# 把 backend/pipeline 放上 sys.path，全套测试只在这里做一次。
+#
+# `retainpdf_pipeline` 是 editable 安装的，本来就能 import；但 editable finder
+# 只认这一个包，`devtools.*`（架构检查、promptfoo、测试自己的 support 模块）
+# 不在里面。以前是两百来个测试文件各自在开头抄一遍 `sys.path.insert`，这里收拢
+# 之后测试文件直接 `from devtools... import` 即可。conftest 一定先于测试模块
+# 加载，所以单独跑某一个文件也照样生效。
+# ---------------------------------------------------------------------------
+PIPELINE_ROOT = Path(__file__).resolve().parents[2]
+if str(PIPELINE_ROOT) not in sys.path:
+    sys.path.insert(0, str(PIPELINE_ROOT))
+
+# ---------------------------------------------------------------------------
 # 必须排在任何 `retainpdf_pipeline` 的 import 之前。
 #
 # `foundation/config/paths.py` 在 import 时就把 OUTPUT_DIR 定下来，再由它派生出
 # TRANSLATIONS_DIR / TRANSLATION_UNIT_CACHE_DIR / ... 一串模块级常量，`foundation
-# /config/__init__.py`、`foundation/shared/config.py`、`typography_memory/store.py`
+# /config/__init__.py`、`foundation/shared/config.py`
 # 又把这些常量按值再导出一遍。也就是说，等测试跑起来再 monkeypatch
 # `paths.OUTPUT_DIR`，那些副本一个都跟不上——产物照旧落进仓库的 `data/`。
 #
@@ -25,7 +39,7 @@ os.environ["OUTPUT_ROOT"] = str(_SESSION_OUTPUT_ROOT)
 os.environ.pop("RUST_API_OUTPUT_ROOT", None)
 
 from retainpdf_pipeline.foundation.config import layout  # noqa: E402
-from retainpdf_pipeline.foundation.config import paths  # noqa: E402
+from retainpdf_base import paths  # noqa: E402
 
 # 仓库里那个真正的 data/：守卫用它，不受 OUTPUT_ROOT 影响。
 REPO_DATA_DIR = paths.ROOT_DIR / "data"
@@ -36,7 +50,8 @@ _OUTPUT_DIR_DERIVED = {
     "TRANSLATIONS_DIR": "translations",
     "TRANSLATION_UNIT_CACHE_DIR": "_translation_unit_cache",
     "DOMAIN_CONTEXT_CACHE_DIR": "_domain_context_cache",
-    "RENDER_TYPOGRAPHY_MEMORY_DIR": "_render_typography_memory",
+    "AGENT_REQUEST_CACHE_DIR": "_agent_request_cache",
+    "GLM_OCR_CHUNK_CACHE_DIR": "_glm_ocr_chunk_cache",
 }
 
 
@@ -56,9 +71,6 @@ def pytest_unconfigure(config: pytest.Config) -> None:
 
 @pytest.fixture(autouse=True)
 def _isolate_render_state(monkeypatch: pytest.MonkeyPatch):
-    # Offline tests must neither learn from nor write to real job history.
-    # Memory-specific tests explicitly enable their own temporary store.
-    monkeypatch.setenv("RETAIN_RENDER_TYPOGRAPHY_MEMORY", "0")
     # render_only applies tuning in-process. Restore it after each test so a
     # workflow test cannot change the baseline of subsequent layout tests.
     for name, value in vars(layout).items():
@@ -84,12 +96,20 @@ def _isolate_output_root(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
         monkeypatch.setattr(paths, name, output_root / child)
 
 
+# 本机开着开发栈时，rust_api 和测试共用这个 data/，它会定时把路由计数刷进
+# diagnostics/route-usage.json。流水线从不写这个文件；不排除的话，哪次全量跑
+# 碰上一次刷盘，守卫就把账记在会话最后一条用例头上（偶发 ERROR at teardown）。
+_SERVICE_OWNED = frozenset({os.path.join("diagnostics", "route-usage.json")})
+
+
 def _snapshot(root: Path) -> dict[str, tuple[int, int]]:
     """(相对路径 -> (mtime_ns, size))。目录不存在就返回空表。"""
     rows: dict[str, tuple[int, int]] = {}
     for dirpath, _dirnames, filenames in os.walk(root):
         for name in filenames:
             path = Path(dirpath) / name
+            if str(path.relative_to(root)) in _SERVICE_OWNED:
+                continue
             try:
                 stat = path.lstat()
             except OSError:

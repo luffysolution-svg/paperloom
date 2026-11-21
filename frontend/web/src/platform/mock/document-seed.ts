@@ -29,7 +29,6 @@ function buildMockDocuments(): MockDocument[] {
       bytes: 2_621_440,
       active_job_id: MOCK_JOB_ID,
       reading_status: "reading",
-      tags: ["化学", "有机合成"],
       added_at: "2026-06-01T10:00:00Z",
       updated_at: "2026-06-01T12:00:00Z",
     },
@@ -41,7 +40,6 @@ function buildMockDocuments(): MockDocument[] {
       bytes: 1_843_200,
       active_job_id: "20260520-att-001",
       reading_status: "done",
-      tags: ["机器学习"],
       added_at: "2026-05-20T08:00:00Z",
       updated_at: "2026-05-21T09:30:00Z",
     },
@@ -53,7 +51,6 @@ function buildMockDocuments(): MockDocument[] {
       bytes: 4_115_000,
       active_job_id: "20260601-scl-002",
       reading_status: "unread",
-      tags: [],
       added_at: "2026-06-08T14:00:00Z",
       updated_at: "2026-06-08T14:00:00Z",
     },
@@ -67,7 +64,6 @@ function buildMockDocuments(): MockDocument[] {
       bytes: 3_200_000,
       active_job_id: null,
       reading_status: "unread",
-      tags: ["工具书"],
       added_at: "2026-06-10T09:00:00Z",
       updated_at: "2026-06-10T09:00:00Z",
     },
@@ -79,7 +75,6 @@ function buildMockDocuments(): MockDocument[] {
       bytes: 5_600_000,
       active_job_id: "",
       reading_status: "reading",
-      tags: [],
       added_at: "2026-06-12T15:30:00Z",
       updated_at: "2026-06-12T15:30:00Z",
     },
@@ -168,7 +163,7 @@ export const READING_STATUSES: MockReadingStatus[] = ["unread", "reading", "done
 
 export function patchMockDocument(
   documentId: string,
-  { title, reading_status: readingStatus, tags }: MockDocumentPatch = {},
+  { title, reading_status: readingStatus }: MockDocumentPatch = {},
 ): MockDocumentWithMedia {
   const found = documents().find((item) => item.document_id === documentId);
   if (!found) {
@@ -182,10 +177,6 @@ export function patchMockDocument(
   }
   if (readingStatus !== undefined) {
     found.reading_status = readingStatus;
-  }
-  if (tags !== undefined) {
-    // 整体替换语义
-    found.tags = Array.isArray(tags) ? tags.map((item) => `${item}`) : [];
   }
   found.updated_at = nowIso();
   return withMockDocumentMediaUrls(found);

@@ -7,10 +7,13 @@ from retainpdf_pipeline.foundation.config import fonts
 from retainpdf_pipeline.foundation.config import runtime
 from retainpdf_pipeline.render.render_plan import build_render_plan
 from retainpdf_pipeline.render.render_execution import execute_render_plan
-from retainpdf_pipeline.services.pipeline_shared.events import emit_stage_progress
-from retainpdf_pipeline.services.pipeline_shared.events import emit_stage_transition
-from retainpdf_pipeline.services.pipeline_shared.events import reset_render_page_progress
+from retainpdf_base.events import emit_stage_progress
+from retainpdf_base.events import emit_stage_transition
+from retainpdf_base.events import reset_render_page_progress
 from retainpdf_pipeline.render.source.prewarm import prewarm_manifest_path_from_translations_dir
+from retainpdf_pipeline.render.workflow.fit_report import fit_report_result
+from retainpdf_pipeline.render.workflow.fit_report import render_fit_report_scope
+from retainpdf_pipeline.render.workflow.engine_dispatch import render_engine_summary
 
 
 def render_no_cache_enabled() -> bool:
@@ -40,6 +43,7 @@ def build_book_from_translations(
     pdf_compress_dpi: int = runtime.DEFAULT_PDF_COMPRESS_DPI,
     source_cleanup_strategy: str | None = None,
     render_prewarm_manifest_path: Path | None = None,
+    render_engine: str = "typst",
 ) -> int:
     render_plan = build_render_plan(
         source_pdf_path=source_pdf_path,
@@ -71,6 +75,7 @@ def build_book_from_translations(
         pdf_compress_dpi=pdf_compress_dpi,
         source_cleanup_strategy=source_cleanup_strategy,
         render_prewarm_manifest_path=prewarm_manifest_path,
+        render_engine=render_engine,
     )
     build_book_from_translations.last_render_diagnostics = dict(
         getattr(execute_render_plan, "last_render_diagnostics", {}) or {}
@@ -96,6 +101,7 @@ def build_book_pipeline(
     pdf_compress_dpi: int = runtime.DEFAULT_PDF_COMPRESS_DPI,
     source_cleanup_strategy: str | None = None,
     render_prewarm_manifest_path: Path | None = None,
+    render_engine: str = "typst",
 ) -> dict:
     pages_rendered = build_book_from_translations(
         source_pdf_path=source_pdf_path,
@@ -114,6 +120,7 @@ def build_book_pipeline(
         pdf_compress_dpi=pdf_compress_dpi,
         source_cleanup_strategy=source_cleanup_strategy,
         render_prewarm_manifest_path=render_prewarm_manifest_path,
+        render_engine=render_engine,
     )
     return {
         "output_pdf_path": output_pdf_path,
@@ -142,7 +149,11 @@ def run_render_stage(
     pdf_compress_dpi: int = runtime.DEFAULT_PDF_COMPRESS_DPI,
     source_cleanup_strategy: str | None = None,
     render_prewarm_manifest_path: Path | None = None,
+    artifacts_dir: Path | None = None,
+    render_engine: str = "typst",
+    document_path: Path | None = None,
 ) -> dict:
+    """artifacts_dir 给了就在其中写排版 fit 报告（fit_report.v1.json）；报告只读不改排版。"""
     render_plan = build_render_plan(
         source_pdf_path=source_pdf_path,
         output_pdf_path=output_pdf_path,
@@ -152,14 +163,19 @@ def run_render_stage(
         end_page=end_page,
         render_mode=render_mode,
         translated_pages_map=translated_pages_map,
+        document_path=document_path,
     )
     reset_render_page_progress()
     emit_stage_transition(
         stage="rendering",
         message="开始渲染翻译 PDF",
-        progress_current=0,
-        progress_total=render_plan.render_total,
-        payload={"effective_render_mode": render_plan.effective_render_mode},
+        # No page counters here: the API prefers the latest render page
+        # progress, so a 0/N page event would pin the UI at 0% during the
+        # render_prepare steps that follow.
+        payload={
+            "effective_render_mode": render_plan.effective_render_mode,
+            "render_total": render_plan.render_total,
+        },
     )
     prewarm_manifest_path = (
         None
@@ -168,21 +184,23 @@ def run_render_stage(
             render_plan.render_inputs.translations_dir
         )
     )
-    pages_rendered = execute_render_plan(
-        render_plan=render_plan,
-        output_pdf_path=output_pdf_path,
-        start_page=start_page,
-        end_page=end_page,
-        compile_workers=compile_workers,
-        extract_selected_pages=extract_selected_pages,
-        api_key=api_key,
-        model=model,
-        base_url=base_url,
-        typst_font_family=typst_font_family,
-        pdf_compress_dpi=pdf_compress_dpi,
-        source_cleanup_strategy=source_cleanup_strategy,
-        render_prewarm_manifest_path=prewarm_manifest_path,
-    )
+    with render_fit_report_scope(artifacts_dir) as fit_report_target:
+        pages_rendered = execute_render_plan(
+            render_plan=render_plan,
+            output_pdf_path=output_pdf_path,
+            start_page=start_page,
+            end_page=end_page,
+            compile_workers=compile_workers,
+            extract_selected_pages=extract_selected_pages,
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
+            typst_font_family=typst_font_family,
+            pdf_compress_dpi=pdf_compress_dpi,
+            source_cleanup_strategy=source_cleanup_strategy,
+            render_prewarm_manifest_path=prewarm_manifest_path,
+            render_engine=render_engine,
+        )
     emit_stage_progress(
         stage="rendering",
         message="渲染页面完成",
@@ -196,4 +214,9 @@ def run_render_stage(
         "effective_render_mode": render_plan.effective_render_mode,
         "extract_selected_pages": extract_selected_pages,
         "render_diagnostics": dict(getattr(execute_render_plan, "last_render_diagnostics", {}) or {}),
+        "fit_report": fit_report_result(fit_report_target),
+        "render_engine": render_engine_summary(
+            requested=render_engine,
+            diagnostics=getattr(execute_render_plan, "last_render_diagnostics", {}) or {},
+        ),
     }

@@ -1,0 +1,130 @@
+/* 状态面板（status-panel / status-panel-head，状态详情各页签在用）与旧版状态头 / 轨道动画。
+ * status-note / status-kicker / status-visual / status-orbit / status-core 已搜不到，留待确认删除。
+ *
+ * @owns status, advanced-content
+ * @uses detail-tab-panel */
+
+@utility status-head {
+  margin-bottom: 10px;
+}
+
+
+@utility status-note {
+  .status-card & {
+    color: var(--ink);
+  }
+
+  .status-card & {
+    color: var(--muted);
+  }
+}
+
+
+@utility status-kicker {
+  .status-card & {
+    color: var(--ink);
+  }
+}
+
+
+@utility status-head-actions {
+  @apply flex flex-wrap gap-2;
+}
+
+
+@utility status-panel {
+  @apply rounded-[24px] border p-4;
+  border-color: var(--line);
+  background: var(--bg);
+
+  & .info-list {
+    @apply grid gap-2;
+    background: transparent;
+  }
+
+  .detail-tab-panel & {
+    min-height: 100%;
+  }
+}
+
+
+@utility status-panel-head {
+  @apply mb-3 flex items-center justify-between gap-3;
+
+  & h3 {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+}
+
+
+@utility status-visual {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  flex: 0 0 auto;
+}
+
+
+@utility status-orbit {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  transform: scale(0.72);
+  opacity: 0;
+
+  .status-card[data-status='queued'] & {
+    animation: orbitPulse 1.8s ease-out infinite;
+  }
+
+  .status-card[data-status='running'] & {
+    animation: orbitPulse 1.8s ease-out infinite;
+  }
+}
+
+
+@utility status-core {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  inset: 19px;
+  background: var(--ink);
+  box-shadow: 0 0 0 10px color-mix(in srgb, var(--ink) 6%, transparent);
+
+  .status-card[data-status='queued'] & {
+    animation: coreBreath 1.8s ease-in-out infinite;
+  }
+
+  .status-card[data-status='running'] & {
+    animation: coreBreath 1.8s ease-in-out infinite;
+  }
+
+  .status-card[data-status='succeeded'] & {
+    background: var(--ink);
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--ok) 12%, transparent);
+  }
+
+  .status-card[data-status='failed'] & {
+    background: var(--ink);
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--danger) 12%, transparent);
+  }
+}
+
+
+@utility status-orbit-delayed {
+  .status-card[data-status='queued'] & {
+    animation-delay: 0.9s;
+  }
+
+  .status-card[data-status='running'] & {
+    animation-delay: 0.9s;
+  }
+}
+
+
+@utility advanced-content {
+  @apply py-1;
+}

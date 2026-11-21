@@ -5,7 +5,7 @@ use axum::Json;
 
 use crate::error::AppError;
 use crate::models::api::ApiResponse;
-use crate::routes::common::{ok_json, ApiJson, ApiPath};
+use crate::routes::common::{build_backup_route_deps, ok_json, ApiJson, ApiPath};
 use crate::routes::job_helpers::stream_file;
 use crate::services::backups::{
     BackupItem, BackupStatus, CreateBackupInput, RemoteItem, RestoreInput, RestoreView,
@@ -16,14 +16,16 @@ use crate::AppState;
 pub(crate) async fn status(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<BackupStatus>>, AppError> {
-    Ok(ok_json(state.backups.status().await?))
+    Ok(ok_json(build_backup_route_deps(&state).status().await?))
 }
 
 pub(crate) async fn create(
     State(state): State<AppState>,
     ApiJson(input): ApiJson<CreateBackupInput>,
 ) -> Result<Json<ApiResponse<BackupItem>>, AppError> {
-    Ok(ok_json(state.backups.create(input, false).await?))
+    Ok(ok_json(
+        build_backup_route_deps(&state).create(input, false).await?,
+    ))
 }
 
 pub(crate) async fn download(
@@ -32,7 +34,7 @@ pub(crate) async fn download(
     headers: HeaderMap,
 ) -> Result<Response, AppError> {
     let mut response = stream_file(
-        state.backups.download_path(&name)?,
+        build_backup_route_deps(&state).download_path(&name)?,
         "application/zip",
         Some(name),
         Some(&headers),
@@ -63,8 +65,7 @@ pub(crate) async fn import(
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.parse().ok());
     Ok(ok_json(
-        state
-            .backups
+        build_backup_route_deps(&state)
             .import(request.into_body().into_data_stream(), total)
             .await?,
     ))
@@ -74,13 +75,17 @@ pub(crate) async fn restore_local(
     State(state): State<AppState>,
     ApiJson(input): ApiJson<RestoreInput>,
 ) -> Result<Json<ApiResponse<RestoreView>>, AppError> {
-    Ok(ok_json(state.backups.restore(input, false).await?))
+    Ok(ok_json(
+        build_backup_route_deps(&state)
+            .restore(input, false)
+            .await?,
+    ))
 }
 
 pub(crate) async fn cancel(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, AppError> {
-    state.backups.cancel().await?;
+    build_backup_route_deps(&state).cancel().await?;
     Ok(ok_json(serde_json::json!({ "cancelled": true })))
 }
 
@@ -88,33 +93,40 @@ pub(crate) async fn save_settings(
     State(state): State<AppState>,
     ApiJson(input): ApiJson<SettingsInput>,
 ) -> Result<Json<ApiResponse<SettingsView>>, AppError> {
-    Ok(ok_json(state.backups.save_settings(input).await?))
+    Ok(ok_json(
+        build_backup_route_deps(&state).save_settings(input).await?,
+    ))
 }
 
 pub(crate) async fn test_webdav(
     State(state): State<AppState>,
     ApiJson(input): ApiJson<SettingsInput>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, AppError> {
-    state.backups.test_webdav(input).await?;
+    build_backup_route_deps(&state).test_webdav(input).await?;
     Ok(ok_json(serde_json::json!({ "connected": true })))
 }
 
 pub(crate) async fn list_remote(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<Vec<RemoteItem>>>, AppError> {
-    Ok(ok_json(state.backups.list_remote().await?))
+    Ok(ok_json(
+        build_backup_route_deps(&state).list_remote().await?,
+    ))
 }
 
 pub(crate) async fn sync_remote(
     State(state): State<AppState>,
     ApiPath(name): ApiPath<String>,
 ) -> Result<Json<ApiResponse<BackupItem>>, AppError> {
-    Ok(ok_json(state.backups.sync_remote(name).await?))
+    Ok(ok_json(
+        build_backup_route_deps(&state).sync_remote(name).await?,
+    ))
 }
 
 pub(crate) async fn restored_config(State(state): State<AppState>) -> Result<Response, AppError> {
     use axum::response::IntoResponse;
-    let mut response = ok_json(state.backups.restored_config().await?).into_response();
+    let mut response =
+        ok_json(build_backup_route_deps(&state).restored_config().await?).into_response();
     response
         .headers_mut()
         .insert(header::CACHE_CONTROL, "no-store".parse().unwrap());
@@ -125,21 +137,25 @@ pub(crate) async fn backup_remote(
     State(state): State<AppState>,
     ApiJson(input): ApiJson<CreateBackupInput>,
 ) -> Result<Json<ApiResponse<BackupItem>>, AppError> {
-    Ok(ok_json(state.backups.create(input, true).await?))
+    Ok(ok_json(
+        build_backup_route_deps(&state).create(input, true).await?,
+    ))
 }
 
 pub(crate) async fn restore_remote(
     State(state): State<AppState>,
     ApiJson(input): ApiJson<RestoreInput>,
 ) -> Result<Json<ApiResponse<RestoreView>>, AppError> {
-    Ok(ok_json(state.backups.restore(input, true).await?))
+    Ok(ok_json(
+        build_backup_route_deps(&state).restore(input, true).await?,
+    ))
 }
 
 pub(crate) async fn delete_local(
     State(state): State<AppState>,
     ApiPath(name): ApiPath<String>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, AppError> {
-    state.backups.delete(name, false).await?;
+    build_backup_route_deps(&state).delete(name, false).await?;
     Ok(ok_json(serde_json::json!({ "deleted": true })))
 }
 
@@ -147,6 +163,6 @@ pub(crate) async fn delete_remote(
     State(state): State<AppState>,
     ApiPath(name): ApiPath<String>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, AppError> {
-    state.backups.delete(name, true).await?;
+    build_backup_route_deps(&state).delete(name, true).await?;
     Ok(ok_json(serde_json::json!({ "deleted": true })))
 }

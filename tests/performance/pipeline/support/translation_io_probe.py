@@ -1,10 +1,10 @@
 """Only external model transports are replaced; all business stages remain real."""
 from contextlib import ExitStack
+from importlib import import_module
 import json
 import os
 import re
 from pathlib import Path
-import socket
 import sys
 import threading
 import time
@@ -14,7 +14,7 @@ from unittest.mock import Mock, patch
 import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from support.translation_io_support import SOURCES, TRANSLATIONS
+from support.translation_io_support import CROSS_PAGE_GROUP, SOURCES, TRANSLATIONS
 from support.offline import network_guard, forbid_private_data
 
 
@@ -32,9 +32,9 @@ def main():
         stack.enter_context(network_guard(forbidden))
         forbid_private_data()
         from retainpdf_pipeline.translate.translation_stage import translate_book_pipeline
-        from retainpdf_pipeline.translate.llm.shared import executor_context
-        from retainpdf_pipeline.translate.llm.shared.rust_executor import ExecutorError
-        from retainpdf_pipeline.translate.llm.providers.deepseek import client
+        from retainpdf_translation.llm.shared import executor_context
+        from retainpdf_translation.llm.shared.rust_executor import ExecutorError
+        from retainpdf_translation.llm.providers.deepseek import client
 
         def _answer(messages, **kwargs):
             user = messages[-1]["content"]
@@ -68,15 +68,6 @@ def main():
                 content = json.dumps({"decisions": [{"pair_id": pair["pair_id"],
                     "decision": "join" if (pair["prev_item_id"], pair["next_item_id"]) ==
                     ("p001-b003", "p002-b000") else "break"} for pair in pairs]})
-            elif "group" in payload:
-                protocol = "group"
-                members = payload["group"]["members"]
-                ids = [member["item_id"] for member in members]
-                if any(member["source_text"] != SOURCES.get(member["item_id"]) for member in members):
-                    violations.append("unknown group member source")
-                    raise AssertionError(violations[-1])
-                content = json.dumps({"member_translations": [
-                    {"item_id": key, "translated_text": TRANSLATIONS[key]} for key in ids]})
             elif re.search(r"^原文 p\d+-b\d+:", user, re.M):
                 protocol = "batch"
                 members = re.findall(r"^原文 (p\d+-b\d+):\n([^\n]+)", user, re.M)
@@ -112,10 +103,16 @@ def main():
                     violations.append("unrecognized model protocol")
                     raise AssertionError(violations[-1])
                 ids = [key for key, source in SOURCES.items() if source == current and key in TRANSLATIONS]
-                if len(ids) != 1:
+                if not ids and current == " ".join(SOURCES[key] for key in CROSS_PAGE_GROUP):
+                    # 续接组整段一次请求，程序再按原文比例切回各框。
+                    protocol = "group"
+                    ids = list(CROSS_PAGE_GROUP)
+                    content = "".join(TRANSLATIONS[key] for key in ids)
+                elif len(ids) != 1:
                     violations.append("unrecognized model source")
                     raise AssertionError(violations[-1])
-                content = TRANSLATIONS[ids[0]]
+                else:
+                    content = TRANSLATIONS[ids[0]]
             if spec["outcome"] == "block_after_commit" and kind == "translation":
                 checkpoint_path = Path(spec["output"]) / "translation-checkpoint.v1.json"
                 if checkpoint_path.exists():
@@ -182,6 +179,14 @@ def main():
         stack.enter_context(patch.object(client, "get_session", return_value=SimpleNamespace(post=post)))
         stack.enter_context(patch.object(client, "_prewarm_dns"))
         stack.enter_context(patch.object(client, "should_use_stream_responses", return_value=False))
+        # 和 production_translation_probe 一样只换各模块自己的时钟：截止时间照旧按真时间算，
+        # 现有流程的重试退避（direct_typst 的 min(8, 2*attempt)）只记下、不真睡（以前每个探针白睡几秒）
+        clock = SimpleNamespace(sleep=lambda _seconds: None, monotonic=time.monotonic,
+                                perf_counter=time.perf_counter, time=time.time)
+        for name in ("plain_text_retry", "segment_windows", "segment_executor", "sentence_level", "direct_typst"):
+            module = import_module("retainpdf_translation.llm.shared.orchestration." + name)
+            stack.enter_context(patch.object(module, "time", clock))
+        stack.enter_context(patch.object(client, "time", clock))
         result = {"ok": False}
         try:
             translate_book_pipeline(source_json_path=Path(spec["source"]), output_dir=Path(spec["output"]),

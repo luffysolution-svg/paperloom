@@ -8,7 +8,7 @@ import requests
 import sys
 
 sys.path.append(str(Path(__file__).resolve().parents[2]))
-from retainpdf_pipeline.foundation.shared.local_env import get_secret
+from retainpdf_base.local_env import get_secret
 
 
 DEFAULT_BASE_URL = "https://mineru.net/api/v4"
@@ -67,7 +67,7 @@ def get_token(explicit_token: str) -> str:
         env_file_name=DEFAULT_ENV_FILE,
     )
     if not token:
-        raise RuntimeError(f"Missing MinerU token. Set --token, scripts/.env/{DEFAULT_ENV_FILE}, or env {DEFAULT_TOKEN_ENV}.")
+        raise RuntimeError(f"Missing MinerU token. Set --token, backend/pipeline/.env/{DEFAULT_ENV_FILE}, or env {DEFAULT_TOKEN_ENV}.")
     return token
 
 

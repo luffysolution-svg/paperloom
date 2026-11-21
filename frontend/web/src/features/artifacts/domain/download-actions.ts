@@ -5,8 +5,22 @@ export {
 import {
   DOWNLOAD_ACTION_IDS,
 } from "@/platform/contracts/download-action-contract.js";
+import type { ArtifactRuntimeState } from "@retainpdf/domain/job";
 
-const DOWNLOAD_ACTIONS = {
+/** 文件名解析器：PDF 类动作按任务状态解析建议文件名。 */
+export type DownloadNameResolver = {
+  resolveSourcePdfName: (state: ArtifactRuntimeState, fallbackName: string) => string;
+  resolveTranslatedPdfName: (state: ArtifactRuntimeState, fallbackName: string) => string;
+};
+
+/** 下载动作描述：fallbackName 必有，preferredName 可选（只有 PDF 类动作会给）。 */
+export type DownloadActionSpec = {
+  fallbackName: (jobId: string) => string;
+  preferredName?: (state: ArtifactRuntimeState, fallbackName: string, resolver: DownloadNameResolver) => string | undefined;
+  preferSuggestedName?: boolean;
+};
+
+const DOWNLOAD_ACTIONS: Record<string, DownloadActionSpec> = {
   [DOWNLOAD_ACTION_IDS.BUNDLE]: {
     fallbackName: (jobId) => `${jobId}.zip`,
   },
@@ -34,7 +48,7 @@ const DOWNLOAD_ACTIONS = {
   },
 };
 
-export function downloadActionForLink(link) {
+export function downloadActionForLink(link: { id?: string } | null | undefined) {
   return DOWNLOAD_ACTIONS[link?.id || ""] || null;
 }
 
@@ -43,7 +57,12 @@ export function resolveDownloadActionTarget({
   state,
   jobId,
   nameResolver = defaultDownloadNameResolver,
-}: any) {
+}: {
+  action: DownloadActionSpec | null | undefined;
+  state: ArtifactRuntimeState;
+  jobId?: string;
+  nameResolver?: DownloadNameResolver;
+}) {
   return resolveDownloadActionTargetWithResolver({
     action,
     state,
@@ -52,9 +71,9 @@ export function resolveDownloadActionTarget({
   });
 }
 
-export const defaultDownloadNameResolver = Object.freeze({
-  resolveSourcePdfName: (_state, fallbackName) => fallbackName,
-  resolveTranslatedPdfName: (_state, fallbackName) => fallbackName,
+export const defaultDownloadNameResolver: DownloadNameResolver = Object.freeze({
+  resolveSourcePdfName: (_state: unknown, fallbackName: string) => fallbackName,
+  resolveTranslatedPdfName: (_state: unknown, fallbackName: string) => fallbackName,
 });
 
 export function resolveDownloadActionTargetWithResolver({
@@ -62,7 +81,12 @@ export function resolveDownloadActionTargetWithResolver({
   state,
   jobId,
   nameResolver = defaultDownloadNameResolver,
-}: any) {
+}: {
+  action: DownloadActionSpec | null | undefined;
+  state: ArtifactRuntimeState;
+  jobId?: string;
+  nameResolver?: DownloadNameResolver;
+}) {
   const normalizedJobId = `${jobId || "result"}`.trim() || "result";
   const fallbackName = action?.fallbackName?.(normalizedJobId) || `${normalizedJobId}.json`;
   const preferredName = action?.preferredName?.(state, fallbackName, nameResolver) || fallbackName;

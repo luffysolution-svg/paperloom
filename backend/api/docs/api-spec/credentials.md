@@ -10,13 +10,32 @@ The backend-owned credential vault is exposed through authenticated endpoints:
 - `GET|PUT|DELETE /api/v1/credentials/:credential_ref`
 
 Create/update accepts a secret once and returns only metadata plus an opaque
-`credential_ref`. List/get responses never return the secret or a reversible
-masked value. Metadata includes a per-record `revision`. Updates should send
+`credential_ref`. No credential response ever returns the secret or a reversible
+masked value; the metadata view has no `secret` member at all. `GET
+/api/v1/credentials` accepts no query parameters: the former
+`include_values=true` switch, which returned every stored secret, was removed on
+2026-10-22 and any query parameter (including `include_values`) is now rejected
+with `400 BAD_REQUEST` (``unknown field `include_values`, … in the query
+string``). Metadata includes a per-record `revision`. Updates should send
 `expected_credential_revision`; this rejects concurrent changes to the same
 credential without treating unrelated vault changes as conflicts. The
 vault-wide `expected_revision` compare-and-swap remains supported for older
 clients and for create/delete flows. Stale writes return `409` with
-`CREDENTIAL_REVISION_CONFLICT` or `CREDENTIAL_VAULT_REVISION_CONFLICT`. The vault is atomically persisted below the configured
+`CREDENTIAL_REVISION_CONFLICT` or `CREDENTIAL_VAULT_REVISION_CONFLICT`.
+
+A credential's `kind` is fixed at creation. `PUT` may repeat the current kind
+(compared after trim and lower-casing, so clients can send their whole payload),
+but a different `kind` is rejected with `400 BAD_REQUEST` before any revision
+check and leaves the record unchanged: jobs that reference the credential would
+otherwise fail later with `CREDENTIAL_KIND_MISMATCH`. Create a new credential
+instead. The update order is: unknown reference `404`, kind change `400`, stale
+vault revision `409`, stale record revision `409`. `provider`, `label` and
+`secret` remain updatable.
+
+All five handlers run their vault file IO, the process and cross-process locks,
+`fsync` and the delete-time SQLite reference count on a blocking thread
+(`spawn_blocking`), not on the async workers; responses and errors are unchanged.
+The vault is atomically persisted below the configured
 data root with `0700` directory and `0600` file permissions on POSIX systems.
 On POSIX systems, mutations are serialized across backend processes through a
 private file lock; publishing fsyncs both the replacement file and its parent
@@ -26,10 +45,8 @@ the in-process mutation lock and atomic replacement behavior.
 `DELETE /api/v1/credentials/:credential_ref` accepts `expected_revision` and
 an optional `force` query flag. By default, deletion is rejected while any
 persisted job request references the credential, including terminal jobs: retry
-and rerun can still need that reference. Agent runtime configuration references
-(`llm_credential_ref` and `fx_gateway_credential_ref`) are protected as well.
-The matching AI startup environment references are also checked when the Rust
-API and AI sidecar share their normal launch environment.
+and rerun can still need that reference.（以前还查 AI 运行时配置 `secrets/ai-runtime.json` 和 AI 启动环境变量里的引用，
+2026-11-03 跟 AI 服务一起删了。）
 After explicitly accepting that recovery impact, a caller may repeat the request
 with `force=true`. The conflict response never discloses referencing job IDs,
 counts, runtime fields, or credential values.
@@ -40,6 +57,36 @@ backend processes on POSIX. Therefore a coordinated concurrent delete cannot
 slip between those two steps: either the job is persisted first and deletion
 returns `CREDENTIAL_IN_USE`, or deletion finishes first and task creation
 returns `CREDENTIAL_REF_NOT_FOUND`.
+
+### When credentials imported by job creation are removed
+
+Clients that still send inline secrets (`ocr.mineru_token`, `ocr.paddle_token`,
+`translation.api_key`; the web app does this with the keys kept in the browser)
+do not leave those secrets in the job: before the job is persisted the backend
+imports each one into this vault as a *managed* credential
+(`managed_by: legacy_job_import`, not shown in responses) and stores only the
+reference. Identical managed secrets of the same kind and provider are reused
+rather than duplicated. A managed copy is removed automatically — only when no
+persisted job references it any more —
+after:
+
+- the job is deleted (`DELETE /api/v1/jobs/{job_id}`);
+- the document is deleted (`DELETE /api/v1/documents/{document_id}`), covering
+  all of its jobs;
+- a rerun discards the old `<job_id>-ocr` child job that referenced it.
+
+A retry override that sends a new inline secret imports that one too. The copy
+it superseded is not collected by the retry itself; it can stay behind until it
+is removed with `DELETE` (or until every job referencing it is deleted).
+
+Until then the secret stays on the server even if the user deletes the key in
+the browser, because retry and resume of that job still need it. Any explicit
+`PUT` of a managed credential transfers it to the user (it is then never
+garbage-collected). To remove secrets from the machine without deleting jobs,
+`GET /api/v1/credentials` lists them and `DELETE
+/api/v1/credentials/{credential_ref}` removes one (`force=true` if jobs still
+reference it; those jobs then cannot be retried). User-created credentials are
+never removed automatically.
 
 Translation jobs and document-scoped translation accept
 `translation.credential_ref`. OCR jobs and full workflows accept
@@ -83,6 +130,17 @@ Credential-reference resolution owns these machine-readable codes:
 | `CREDENTIAL_VAULT_REVISION_CONFLICT` | 409 | A legacy vault-wide compare-and-swap revision is stale. |
 | `CREDENTIAL_VAULT_UNAVAILABLE` | 500 | The backend cannot safely read or validate the credential vault. |
 
+Since 2026-10-22 the three `409` responses also carry a stable lowercase
+`error.details.reason` (only added; `code` and `error.code` are unchanged):
+
+| `error.code` | `error.details.reason` |
+| --- | --- |
+| `CREDENTIAL_IN_USE` | `credential_in_use` |
+| `CREDENTIAL_REVISION_CONFLICT` | `credential_revision_conflict` |
+| `CREDENTIAL_VAULT_REVISION_CONFLICT` | `credential_vault_revision_conflict` |
+
+The other credential errors keep `details: {}`.
+
 For example, a missing reference returns the unified error object while
 retaining the existing top-level domain code and message:
 
@@ -105,8 +163,9 @@ for compatibility and currently have no declared removal date. Error bodies
 never include the secret, a masked reversible value, vault path, or persisted
 credential record.
 
-Credential JSON bodies, typed credential paths, and mutation query parameters
-also use the shared safe extractor-error contract. Malformed input therefore
+Credential JSON bodies, typed credential paths, and all query parameters
+(list and delete) reject unknown fields with `400` and otherwise use the shared
+safe extractor-error contract. Malformed input therefore
 returns the unified error object with fixed public messages instead of Axum or
 Serde parsing details. Unsupported methods on a matched credential route are
 still authenticated before the backend returns `METHOD_NOT_ALLOWED`.

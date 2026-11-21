@@ -40,7 +40,8 @@ fn latest_translated_pdf_job_id(
         };
         if job.status == JobStatusKind::Succeeded
             && job.workflow != WorkflowKind::Ocr
-            && resolve_output_pdf(&job, data_root).is_some_and(|path| path.is_file())
+            && stored_path(&job, data_root, StoredFile::TranslatedPdf)
+                .is_some_and(|path| path.is_file())
         {
             return Ok(Some(job_id));
         }

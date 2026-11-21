@@ -11,10 +11,9 @@
 - `chinese_body_fit.py`
 - `fit_decision/`
 - `title_fit.py`
+- `title_source_size.py`：标题的原文字号（原 PDF 文字层，读不到按原文塞满框反推）。标题不超过它、排不下才缩，Typst 路线和 rpr_fit 引擎（随条目传 `source_font_size_pt`）同一个值（2026-11-09）
 - `payload/`
 - `typography/`
-- `typography_memory/`
-  跨书字体/行距经验库。只缓存量化几何特征对应的 `font_size_pt`、`leading_em` 统计值，用作渲染 seed 的快速先验。
 
 ## 不该做什么
 
@@ -23,18 +22,3 @@
 - 不调用 OCR provider 或翻译模型。
 - 不决定整页 redaction/background 路线。
 
-## typography memory
-
-`typography_memory/` 是全局、增量学习的排版标量库，默认存放在 `data/_render_typography_memory/typography_memory.sqlite3`。
-
-边界：
-
-- 只允许记录字体大小、行间距这类标量决策。
-- key 只能由量化后的 bbox、页面尺寸、角色、行数、公式比例、译文密度等结构特征生成。
-- 不缓存原文、译文、公式内容、颜色、删除策略、page spec 或 PDF 对象。
-- 命中条件必须保守；样本数不足或方差过大时回退原算法。
-
-开关：
-
-- 默认关闭读写；`RETAIN_RENDER_TYPOGRAPHY_MEMORY=1` 可显式启用学习，`=0` 可关闭。重复渲染默认使用源文档排版种子，避免历史最终字号反馈导致逐次缩小。
-- `RETAIN_RENDER_TYPOGRAPHY_MEMORY_MIN_OBS` 可调命中所需最小样本数。

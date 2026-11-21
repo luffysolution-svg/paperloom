@@ -53,7 +53,7 @@ test("选页码翻译只发 ocr.page_ranges，不发会错位的 start_page/end_
   );
 
   // 真正驱动 hook，捕获它交给后端的 payload——不去匹配源码文本。
-  async function submitWith({ reusableOcrJob }) {
+  async function submitWith({ reusableOcrJob, spec = "3-5" }) {
     let captured = null;
     let api = null;
     function Probe() {
@@ -75,18 +75,17 @@ test("选页码翻译只发 ocr.page_ranges，不发会错位的 start_page/end_
     const root = createRoot(host);
     root.render(React.createElement(Probe));
     // 必须等挂载副作用跑完，不能只等首次渲染：usePageRange 的作用域 effect 会把
-    // rangeOn/startPage/endPage 清成初值，随后另一个 effect 按 pageCount 回填
-    // endPage。在回填之前设值会被这次重置整个抹掉，后面就永远等不到选页状态。
-    await waitUntil(() => api !== null && api.endPage === "20", "页码范围初始回填完成");
+    // rangeOn/pageSpec 清成初值，随后另一个 effect 按 pageCount 回填 `1-N`。
+    // 在回填之前设值会被这次重置整个抹掉，后面就永远等不到选页状态。
+    await waitUntil(() => api !== null && api.pageSpec === "1-20", "页码范围初始回填完成");
     api.setRangeOn(true);
-    api.setStartPage("3");
-    api.setEndPage("5");
+    api.setPageSpec(spec);
     // 等选页状态真的落到下一次渲染，而不是赌一个固定毫秒数：三个 setter 各触发
     // 一次更新，CI 上负载高时 30ms 未必够，handleTranslate 就会读到旧状态、
     // 什么都不提交，captured 保持 null，最后炸在一个与本用例断言无关的
     // "Cannot read properties of undefined"。
     await waitUntil(
-      () => api.rangeOn === true && api.startPage === "3" && api.endPage === "5",
+      () => api.rangeOn === true && api.pageSpec === spec,
       "选页状态落到下一次渲染",
     );
     await api.handleTranslate();
@@ -115,6 +114,25 @@ test("选页码翻译只发 ocr.page_ranges，不发会错位的 start_page/end_
     "复用分支用原文 1 基页号",
   );
   assert.equal(reused.ocr, undefined, "复用分支不裁页");
+
+  // 混合范围（摘要 + 第 3 章 + 附录的某张表）。两条路都要把它原样、正确地交出去：
+  //   - 无可复用 OCR：规范化成 `1-3,7,12-13` 交给 ocr.page_ranges（MinerU 原生支持）
+  //   - 复用 OCR：展开成 1 起的文档页号交给 translation.page_ranges
+  const mixedFresh = await submitWith({ reusableOcrJob: null, spec: "12-13, 1-3, 7" });
+  assert.equal(
+    mixedFresh.ocr.page_ranges, "1-3,7,12-13",
+    "混合范围没有规范化（乱序/空格会让服务商解析失败或翻错页）",
+  );
+  assert.equal(mixedFresh.translation?.start_page, undefined, "混合范围也不能发 start_page");
+
+  const mixedReused = await submitWith({
+    reusableOcrJob: { job_id: "job_ocr_1", workflow: "ocr", status: "succeeded" },
+    spec: "12-13, 1-3, 7",
+  });
+  assert.deepEqual(
+    mixedReused.translation.page_ranges, [1, 2, 3, 7, 12, 13],
+    "复用分支的混合范围没有展开成升序的 1 起文档页号",
+  );
 });
 
 // --- 2. 详情页「翻译整本」不得受上传弹窗的 OCR Tab 影响 ----------------------
@@ -124,7 +142,7 @@ test("选页码翻译只发 ocr.page_ranges，不发会错位的 start_page/end_
 // （close 不重置 ocrOnly），之后任何一本书的「翻译整本」都会整段丢掉 translation，
 // 被后端以 "base_url is required" 拒掉——而凭据其实配得好好的。
 
-function makeAssembly(ocrOnly) {
+function makeAssembly(ocrOnly, extraSubmitValues = {}) {
   return createWorkflowPayloadAssembly({
     constants: WORKFLOW_CONSTANTS || { WORKFLOW_BOOK: "book", WORKFLOW_OCR: "ocr", WORKFLOW_RENDER: "render" },
     developerConfigWithDefaults: () => ({
@@ -156,9 +174,15 @@ function makeAssembly(ocrOnly) {
       translationCredentialRef: "",
       modelApiKey: "sk-test",
       selectedGlossaryId: "",
+      ...extraSubmitValues,
     }),
   });
 }
+
+test("上传弹窗选的排版引擎进 render.engine；默认不发", () => {
+  assert.equal(makeAssembly(false, { preferences: { renderEngine: "rpr_fit" } }).collectRunPayload().render.engine, "rpr_fit");
+  assert.equal("engine" in makeAssembly(false).collectRunPayload().render, false);
+});
 
 test("详情页翻译配置始终带 translation 段，不受上传弹窗 OCR Tab 影响", () => {
   for (const ocrOnly of [false, true]) {

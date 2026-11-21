@@ -1,14 +1,7 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 
-
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-
-from retainpdf_pipeline.translate.services.policy import translation_policy_verdict
+from retainpdf_translation.services.policy import translation_policy_verdict
 
 
 def _item(item_id: str, source_text: str, **overrides) -> dict:

@@ -13,19 +13,16 @@
 // HomeShell 承载 tabs 本地态 + AppTopBar/BottomBar + home-paper-stage。
 // tabs 切页只改本地 state + URL ?tab=(replaceState,不导航、不碰 store)。
 
-import { useCallback, useEffect, useState } from "react";
-import { BookDetailDialog } from "@/features/book-detail/index.js";
-import type { ReactNode } from "react";
+import { Suspense, lazy, useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   HomeShellProviders,
   HomeTabsProvider,
   useHomeTabs,
-  useHomeAppUpdate,
+  useHomeBookDetail,
   useHomeCollections,
   useHomeCredentials,
   useHomeCredentialsStatePort,
   useHomeGlossaries,
-  useHomeLibrary,
   useHomeSettingsHub,
   useHomeWorkflowDialog,
 } from "./home-services-context.js";
@@ -37,25 +34,24 @@ import {
   HOME_ZOTERO_IMPORT_OPEN_EVENT,
 } from "./shell/AppBottomBar.jsx";
 import { MockModeBanner } from "./shell/MockModeBanner.jsx";
-import { IngestDialog } from "@/features/ingest/index.js";
+import { SettingsDialogSlot } from "./shell/SettingsDialogSlot.jsx";
+import { IngestDialog, IngestServicesProvider, IngestWorkflowViewProvider } from "@/features/ingest/index.js";
 import {
+  LibraryServicesProvider,
   RecentJobsLibrary,
+  useLibraryServices,
 } from "@/features/library/index.js";
-import { AppUpdateBanner } from "@/features/app-update/index.js";
-import { TaskCenter } from "@/features/task-center/index.js";
 import { ZoteroImportDialog } from "@/features/zotero/index.js";
 import { GlossariesDialog } from "@/features/glossaries/index.js";
-import { FavoritesView } from "@/features/favorites/index.js";
 import {
   CredentialsProvider,
-  CredentialsWorkbench,
   HiddenCredentialInputs,
 } from "@/features/credentials/index.js";
 import { useDialogState } from "@/ui/hooks/use-dialog-state.js";
-import { SettingsDialog } from "@/features/settings/index.js";
-import { useAppEvent } from "@/ui/hooks/use-app-event.js";
+import { JobFinishNotifier, type FinishedJob } from "@/features/notify/index.js";
+import { AuthSessionProvider, useVisibleHomeTab } from "@/features/auth/index.js";
+import type { AuthSessionView } from "@retainpdf/api/auth";
 import { APP_EVENTS } from "@/platform/contracts/app-contract.js";
-import { CREDENTIAL_DOM_IDS } from "@/features/credentials/ui/credentials-dom-ids.js";
 import { StatusDetailDialog } from "@/features/job-detail/index.js";
 import { ReaderNavigation, SoftReaderHost } from "@/features/reader/index.js";
 import {
@@ -75,7 +71,17 @@ import {
 // 显式接管注册，避免 pages 层直连 src/js（门禁：home features/pages → external）。
 import "@/features/library/ui/island/index.js";
 
-const HOME_TABS = ["library", "categories", "favorites"] as const;
+// ---- 按需加载 ----
+//
+// 这几块只在用户点过去时才出现，代码不该跟着首屏一起下载：
+// - 任务中心：底部栏点开才显示；
+// - 书籍详情：点开一本书才显示（见 BookDetailDialogSlot）。
+// 两者都只被本文件引用，走各自 index 的动态 import，不破坏「index 是唯一出口」。
+// （以前还有「AI 问答」：2026-11-03 RetainPDF 自己的 AI 删了。）
+const TaskCenter = lazy(() => import("@/features/task-center/index.js").then((m) => ({ default: m.TaskCenter })));
+const BookDetailDialog = lazy(() => import("@/features/book-detail/index.js").then((m) => ({ default: m.BookDetailDialog })));
+
+const HOME_TABS = ["library", "categories"] as const;
 type HomeTab = (typeof HOME_TABS)[number];
 
 function isHomeTab(tab: string): tab is HomeTab {
@@ -123,19 +129,9 @@ function HomeTabsRoot({ children }: { children: ReactNode }) {
 // 由页面在这里把自己的服务上下文接到功能的 props 上。功能因此可以被
 // detail/reader 或测试独立复用。每迁入一个功能就在这里加一个对应的 Slot。
 
-function AppUpdateBannerSlot() {
-  const appUpdate = useHomeAppUpdate();
-  return <AppUpdateBanner view={appUpdate.view} handlersRef={appUpdate.handlersRef} />;
-}
-
-function FavoritesViewSlot() {
-  const workflowDialog = useHomeWorkflowDialog();
-  return <FavoritesView onRequestUpload={() => workflowDialog.requestOpenUpload()} />;
-}
-
 function CollectionsViewSlot() {
   const collections = useHomeCollections();
-  const library = useHomeLibrary();
+  const library = useLibraryServices();
   return (
     <CollectionsView
       controller={collections.controller}
@@ -160,18 +156,17 @@ function CollectionDialogSlot() {
 // 任务中心浮层插槽：点任务卡片走同一套书籍详情（job_id 兜底开详情壳，
 // 见 library/domain/documents/navigation-actions），与网格行为一致。
 function TaskCenterSlot() {
-  const library = useHomeLibrary();
+  const library = useLibraryServices();
   return (
     <TaskCenter
       onOpenBookDetail={(input) => {
-        (library.actions.openBookDetail as (item: any) => void)(input);
+        library.actions.openBookDetail(input);
       }}
     />
   );
 }
-// Zotero 导入插槽：导入后经书库同一条「翻译此文档」路径提交（带当前翻译设置与进度跟踪）。
 function ZoteroImportSlot() {
-  const library = useHomeLibrary();
+  const library = useLibraryServices();
   const [open, setOpen] = useState(false);
   useEffect(() => {
     const show = () => setOpen(true);
@@ -191,35 +186,35 @@ function ZoteroImportSlot() {
     />
   );
 }
-function SettingsDialogSlot() {
-  const settingsHub = useHomeSettingsHub();
-  const glossaries = useHomeGlossaries();
-  const credentials = useHomeCredentials();
-  const prepareCredentialPanels = useCallback(
-    (options?: { setupMode?: boolean }) => credentials?.feature?.prepareCredentialsPanels?.(options),
-    [credentials?.feature],
-  );
-
-  // 「打开接口设置」只有这一个落点了。首次配置门曾经另开一个独立弹窗
-  // （CredentialsDialog），于是同一件事有两个长得不一样的壳；现在两条路都是
-  // 本弹窗停在 api tab，区别只在 payload.setupMode。
-  useAppEvent(APP_EVENTS.openBrowserCredentials, (event) => {
-    const detail = event?.detail || {};
-    settingsHub?.dialogStore?.open?.({ tab: "api", setupMode: Boolean(detail.setupMode) });
-  });
-
+// 书籍详情第一次打开时才下载并挂载；之后一直挂着，关闭动画、再次打开都和以前一样。
+function BookDetailDialogSlot() {
+  const { dialogStore } = useHomeBookDetail();
+  const dialogState = useDialogState(dialogStore);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    if (dialogState.open) setMounted(true);
+  }, [dialogState.open]);
+  if (!mounted && !dialogState.open) return null;
   return (
-    <SettingsDialog
-      dialogStore={settingsHub.dialogStore}
-      onOpenGlossaries={() => glossaries.dialogStore.open()}
-      onPrepareCredentialPanels={prepareCredentialPanels}
-      credentialsWorkbenchSlot={<CredentialsWorkbench />}
-      apiPaneSetupHintSlot={
-        <p id={CREDENTIAL_DOM_IDS.browser.subtitle} className="muted">先配好接口再开始</p>
-      }
-      appUpdateBannerSlot={<AppUpdateBannerSlot />}
-    />
+    <Suspense fallback={null}>
+      <BookDetailDialog />
+    </Suspense>
   );
+}
+
+// 任务跑完的提醒：点「去阅读」进阅读器，失败的点「查看」打开书籍详情（和点网格卡片同一条路）。
+function JobFinishNotifierSlot() {
+  const library = useLibraryServices();
+  const openJob = useCallback((job: FinishedJob) => {
+    if (job.status === "succeeded") {
+      globalThis.document.dispatchEvent(new globalThis.CustomEvent(APP_EVENTS.openReaderRequested, {
+        detail: { jobId: job.jobId, pageIdx: null, blockId: "" },
+      }));
+      return;
+    }
+    library.actions.openBookDetail({ job_id: job.jobId, status: "failed" });
+  }, [library]);
+  return <JobFinishNotifier onOpenJob={openJob} />;
 }
 
 function GlossariesDialogSlot() {
@@ -237,12 +232,11 @@ function GlossariesDialogSlot() {
 
 function HomeShell() {
   // tabs 来自窄口,不再由 Shell 自持 useState(状态上移到 HomeTabsRoot)。
-  const { activeTab } = useHomeTabs();
+  const activeTab = useVisibleHomeTab(useHomeTabs().activeTab);
   const isLibraryTab = activeTab === "library";
   // 历史契约 key "categories" == 领域 collections（见 LibraryTopTabs/COLLECTIONS_TAB_KEY 映射）
   const isCategoriesTab = activeTab === "categories";
   const isCollectionsTab = isCategoriesTab; // 统一别名，领域语义用 collections
-  const isFavoritesTab = activeTab === "favorites";
   // #31 批量选择工具栏和底部栏都固定在底部居中,批量模式期间底部栏用 CSS
   // 隐藏(不卸载——搜索 input 卸载会让 library-search-island 的引用失效)让位
   // 给批量工具栏,两者不同时可见。
@@ -255,15 +249,14 @@ function HomeShell() {
     document.addEventListener(HOME_TASK_CENTER_OPEN_EVENT, open);
     return () => document.removeEventListener(HOME_TASK_CENTER_OPEN_EVENT, open);
   }, []);
+  // 任务中心开着时切顶栏 tab：URL 和顶栏都换了，舞台也要跟着换，不能还停在任务中心。
+  useEffect(() => setTasksOpen(false), [activeTab]);
 
-  // 合集/收藏 tab：视图挂载即可尝试恢复 panel 滚动（图书馆由 RecentJobsLibrary 在有列表后恢复）
-  useHomeReturnRestore(isCategoriesTab || isFavoritesTab);
+  // 合集 tab：视图挂载即可尝试恢复 panel 滚动（图书馆由 RecentJobsLibrary 在有列表后恢复）
+  useHomeReturnRestore(isCategoriesTab);
 
-  // 这里曾挂一张页面级状态卡 #job-status-card。已下线：进度主场是书籍详情的
-  // 「进度」Tab（#book-detail-job-status-card），图书馆卡片与任务中心也各自
-  // 显示进度——主页这张只是重复的遗留界面，实测还会留在详情弹窗背后讲同一份
-  // 进度、并被视口左缘截掉一半。statusArea 状态机本身保留（工作流弹窗靠
-  // statusAreaPort.isVisible() 算 upload/status 模式）。
+  // 主页的页面级状态卡 #job-status-card 已下线：进度看书籍详情的「进度」Tab、图书馆卡片和任务中心。
+  // statusArea 状态机保留（工作流弹窗靠 statusAreaPort.isVisible() 算 upload/status 模式）。
 
   return (
     <>
@@ -285,23 +278,20 @@ function HomeShell() {
                   ← 返回
                 </button>
               </div>
-              <TaskCenterSlot />
+              <Suspense fallback={null}>
+                <TaskCenterSlot />
+              </Suspense>
               <AppBottomBar showSearch={false} />
             </>
           ) : isLibraryTab ? (
             <>
-              <RecentJobsLibrary {...({ onBatchModeChange: setBatchModeActive } as any)} />
+              <RecentJobsLibrary onBatchModeChange={setBatchModeActive} />
               <AppBottomBar showSearch hidden={batchModeActive} />
               <library-search-island></library-search-island>
             </>
           ) : isCollectionsTab ? (
             <>
               <CollectionsViewSlot />
-              <AppBottomBar showSearch={false} />
-            </>
-          ) : isFavoritesTab ? (
-            <>
-              <FavoritesViewSlot />
               <AppBottomBar showSearch={false} />
             </>
           ) : null}
@@ -319,12 +309,13 @@ function HomeShell() {
       {/* 软打开阅读器：全屏层，主页不卸载（关 × 不刷新） */}
       <SoftReaderHost />
       <CollectionDialogSlot />
-      <BookDetailDialog />
+      <BookDetailDialogSlot />
       <ZoteroImportSlot />
       {/* sonner 全局宿主：DownloadToastHost 内含 <Toaster/>，任务中心取消/重试、
           收藏等处的 toast.success/error 都经它渲染——TaskCenter 不自带 Toaster，
           挂载在 HomeApp 下即接入现有宿主，不另起第二个（sonner 双宿主会重影）。 */}
       <DownloadToastHost />
+      <JobFinishNotifierSlot />
     </>
   );
 }
@@ -352,14 +343,24 @@ function CredentialsProviderSlot({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function HomeApp({ services }: { services: HomeServices }) {
+
+export function HomeApp({ services, authSession = null }: { services: HomeServices; authSession?: AuthSessionView | null }) {
   return (
+    <AuthSessionProvider session={authSession}>
     <HomeShellProviders services={services}>
-      <HomeTabsRoot>
-        <CredentialsProviderSlot>
-          <HomeShell />
-        </CredentialsProviderSlot>
-      </HomeTabsRoot>
+      {/* 「添加 PDF」的用户选项走 ingest 自带的 context，同 CredentialsProviderSlot。 */}
+      <IngestWorkflowViewProvider value={services.workflowView}>
+        <IngestServicesProvider value={{ uploadViewStore: services.stores.uploadView, features: services.features }}>
+          <LibraryServicesProvider value={services.library}>
+            <HomeTabsRoot>
+              <CredentialsProviderSlot>
+                <HomeShell />
+              </CredentialsProviderSlot>
+            </HomeTabsRoot>
+          </LibraryServicesProvider>
+        </IngestServicesProvider>
+      </IngestWorkflowViewProvider>
     </HomeShellProviders>
+    </AuthSessionProvider>
   );
 }

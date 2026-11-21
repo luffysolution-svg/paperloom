@@ -24,7 +24,7 @@ from common import resolve_job_root
 from common import write_fixture_rows
 from retainpdf_pipeline.foundation.shared.stage_specs import TranslateStageSpec
 from devtools.replay_translation_item import replay_translation_item
-from retainpdf_pipeline.translate.core.payload import load_translations
+from retainpdf_translation.core.payload import load_translations
 
 
 def parse_args() -> argparse.Namespace:

@@ -5,38 +5,39 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 
+from retainpdf_translation.llm.shared.model_wire import register_stage_connections
 from retainpdf_pipeline.foundation.shared.job_dirs import job_dirs_from_explicit_args
 from retainpdf_pipeline.foundation.shared.stage_specs import build_stage_invocation_metadata
-from retainpdf_pipeline.foundation.shared.stage_specs import resolve_credential_ref
+from retainpdf_base.credentials import resolve_credential_ref
 from retainpdf_pipeline.foundation.shared.stage_specs import TranslateStageSpec
 from retainpdf_pipeline.foundation.shared.tee_output import enable_job_log_capture
 from retainpdf_pipeline.translate.entrypoints.report_files import build_normalization_summary
 from retainpdf_pipeline.translate.entrypoints.report_files import build_validation_report_from_path
 from retainpdf_pipeline.translate.entrypoints.report_files import DOCUMENT_SCHEMA_REPORT_FILE_NAME
 from retainpdf_pipeline.translate.entrypoints.report_files import load_normalization_report
-from retainpdf_pipeline.services.pipeline_shared.contracts import format_stdout_kv
-from retainpdf_pipeline.services.pipeline_shared.contracts import PIPELINE_SUMMARY_FILE_NAME
-from retainpdf_pipeline.services.pipeline_shared.contracts import STDOUT_LABEL_JOB_ROOT
-from retainpdf_pipeline.services.pipeline_shared.contracts import STDOUT_LABEL_LAYOUT_JSON
-from retainpdf_pipeline.services.pipeline_shared.contracts import STDOUT_LABEL_NORMALIZATION_REPORT_JSON
-from retainpdf_pipeline.services.pipeline_shared.contracts import STDOUT_LABEL_NORMALIZED_DOCUMENT_JSON
-from retainpdf_pipeline.services.pipeline_shared.contracts import STDOUT_LABEL_SOURCE_JSON_USED
-from retainpdf_pipeline.services.pipeline_shared.contracts import STDOUT_LABEL_SOURCE_PDF
-from retainpdf_pipeline.services.pipeline_shared.contracts import STDOUT_LABEL_EVENTS_JSONL
-from retainpdf_pipeline.services.pipeline_shared.contracts import STDOUT_LABEL_SUMMARY
-from retainpdf_pipeline.services.pipeline_shared.contracts import STDOUT_LABEL_TRANSLATIONS_DIR
-from retainpdf_pipeline.services.pipeline_shared.events import emit_artifact_published
-from retainpdf_pipeline.services.pipeline_shared.events import emit_stage_transition
-from retainpdf_pipeline.services.pipeline_shared.events import PipelineEventWriter
-from retainpdf_pipeline.services.pipeline_shared.events import pipeline_event_writer_scope
-from retainpdf_pipeline.services.pipeline_shared.io import save_json
-from retainpdf_pipeline.translate.artifacts import write_translation_debug_index
-from retainpdf_pipeline.translate.artifacts import write_translation_diagnostics
-from retainpdf_pipeline.translate.artifacts import blocking_untranslated_items
-from retainpdf_pipeline.translate.llm.shared.provider_runtime import DEFAULT_BASE_URL
-from retainpdf_pipeline.translate.llm.shared.provider_runtime import get_api_key
-from retainpdf_pipeline.translate.llm.shared.provider_runtime import normalize_base_url
-from retainpdf_pipeline.translate.services.terms import parse_glossary_json
+from retainpdf_base.contracts import format_stdout_kv
+from retainpdf_base.contracts import PIPELINE_SUMMARY_FILE_NAME
+from retainpdf_base.contracts import STDOUT_LABEL_JOB_ROOT
+from retainpdf_base.contracts import STDOUT_LABEL_LAYOUT_JSON
+from retainpdf_base.contracts import STDOUT_LABEL_NORMALIZATION_REPORT_JSON
+from retainpdf_base.contracts import STDOUT_LABEL_NORMALIZED_DOCUMENT_JSON
+from retainpdf_base.contracts import STDOUT_LABEL_SOURCE_JSON_USED
+from retainpdf_base.contracts import STDOUT_LABEL_SOURCE_PDF
+from retainpdf_base.contracts import STDOUT_LABEL_EVENTS_JSONL
+from retainpdf_base.contracts import STDOUT_LABEL_SUMMARY
+from retainpdf_base.contracts import STDOUT_LABEL_TRANSLATIONS_DIR
+from retainpdf_base.events import emit_artifact_published
+from retainpdf_base.events import emit_stage_transition
+from retainpdf_base.events import PipelineEventWriter
+from retainpdf_base.events import pipeline_event_writer_scope
+from retainpdf_base.io import save_json
+from retainpdf_translation.artifacts import write_translation_debug_index
+from retainpdf_translation.artifacts import write_translation_diagnostics
+from retainpdf_translation.artifacts import blocking_untranslated_items
+from retainpdf_translation.llm.shared.provider_runtime import DEFAULT_BASE_URL
+from retainpdf_translation.llm.shared.provider_runtime import get_api_key
+from retainpdf_translation.llm.shared.provider_runtime import normalize_base_url
+from retainpdf_translation.services.terms import parse_glossary_json
 from retainpdf_pipeline.translate.translation_stage import translate_book_pipeline
 
 
@@ -49,6 +50,16 @@ def parse_args() -> argparse.Namespace:
 
 
 def _args_from_spec(spec: TranslateStageSpec) -> SimpleNamespace:
+    register_stage_connections(
+        model=spec.params.model,
+        base_url=spec.params.base_url,
+        api_protocol=spec.params.api_protocol,
+        thinking=spec.params.thinking,
+        reviewer_model=spec.params.reviewer_model,
+        reviewer_base_url=spec.params.reviewer_base_url,
+        reviewer_api_protocol=spec.params.reviewer_api_protocol,
+        reviewer_thinking=spec.params.reviewer_thinking,
+    )
     job_dirs = spec.job_dirs
     return SimpleNamespace(
         job_root=str(job_dirs.root),
@@ -61,6 +72,7 @@ def _args_from_spec(spec: TranslateStageSpec) -> SimpleNamespace:
         source_json=str(spec.inputs.source_json),
         source_pdf=str(spec.inputs.source_pdf),
         layout_json=str(spec.inputs.layout_json or ""),
+        ocr_stream_dir=str(spec.inputs.ocr_stream_dir or ""),
         start_page=spec.params.start_page,
         end_page=spec.params.end_page,
         batch_size=spec.params.batch_size,
@@ -83,8 +95,11 @@ def _args_from_spec(spec: TranslateStageSpec) -> SimpleNamespace:
         api_key=resolve_credential_ref(spec.params.credential_ref),
         model=spec.params.model,
         base_url=spec.params.base_url,
-        api_protocol=spec.params.api_protocol,
-        thinking=spec.params.thinking,
+        preparation=spec.params.preparation,
+        reviewer_model=spec.params.reviewer_model,
+        reviewer_base_url=spec.params.reviewer_base_url,
+        reviewer_api_key=resolve_credential_ref(spec.params.reviewer_credential_ref),
+        engine=spec.params.engine,
     )
 
 
@@ -99,8 +114,6 @@ def main() -> None:
     spec = TranslateStageSpec.load(Path(args.spec))
     stage_spec_schema_version = spec.schema_version
     args = _args_from_spec(spec)
-    from retainpdf_pipeline.translate.llm.shared.model_wire import register_connection
-    register_connection(base_url=args.base_url, model=args.model, protocol=args.api_protocol, thinking=args.thinking)
     job_dirs = job_dirs_from_explicit_args(args)
     enable_job_log_capture(job_dirs.logs_dir, prefix="translate-only")
     event_writer = PipelineEventWriter(
@@ -159,6 +172,12 @@ def main() -> None:
             context_mode=args.context_mode,
             glossary_mode=args.glossary_mode,
             memory_mode=args.memory_mode,
+            preparation=args.preparation,
+            reviewer_model=args.reviewer_model,
+            reviewer_base_url=args.reviewer_base_url,
+            reviewer_api_key=args.reviewer_api_key,
+            engine=getattr(args, "engine", "legacy"),
+            ocr_stream_dir=Path(args.ocr_stream_dir) if args.ocr_stream_dir else None,
             invocation=build_stage_invocation_metadata(
                 stage="translate",
                 stage_spec_schema_version=stage_spec_schema_version,

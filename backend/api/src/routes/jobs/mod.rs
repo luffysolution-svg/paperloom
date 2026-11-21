@@ -1,30 +1,27 @@
-mod control;
-mod create;
-mod download;
-mod json_response;
-mod query;
-mod translation_debug;
+//! `/jobs` 的处理函数，按 8 类分文件，和 app/router/jobs/ 一一对应
+//! （分类见 docs/ops/planning/api-reorg/20261015-任务与文件接口整理.md）：
+//!
+//! | 文件 | 前缀 | 回答什么 |
+//! |---|---|---|
+//! | `lifecycle` | `/jobs`、`/jobs/:id` | 有哪些任务、建一个、看一个 |
+//! | `actions` | `/jobs/:id/actions/…` | 能对它做什么、去做 |
+//! | `progress` | `/jobs/:id/progress/…` | 跑到哪了 |
+//! | `files` | `/jobs/:id/files/…` | 产出了哪些文件、取一个 |
+//! | `reports` | `/jobs/:id/reports/…` | 跑完结果怎么样 |
+//! | `reader` | `/jobs/:id/reader/…` | 阅读页要的东西 |
+//! | `translations` | `/jobs/:id/translations/…` | 逐条看、人工改、重翻一条 |
+//! | `data` | `/jobs/:id/data/…` | 通用查询 |
+//!
+//! 旧地址 2026-10-18 全删了；以后再改地址，旧地址在 app/router/jobs/ 各类的登记表里紧跟新地址，行尾写 `old "<新地址>"`。
 
-pub use control::{cancel_job, cancel_ocr_job};
-pub use create::{create_job, create_ocr_job, translate_bundle};
-pub use download::{
-    download_artifact_by_key, download_bundle, download_cover, download_layout_docx,
-    download_markdown, download_markdown_export, download_markdown_image,
-    download_normalization_report, download_normalized_document, download_ocr_artifact_by_key,
-    download_ocr_normalization_report, download_ocr_normalized_document, download_page_preview,
-    download_pdf, download_side_by_side_pdf, download_thumbnail, get_markdown_document,
-};
-pub use query::{
-    get_job, get_job_artifacts, get_job_artifacts_manifest, get_job_diagnostics, get_job_events,
-    get_live_translation_events, get_live_translation_layout, get_live_translation_page,
-    get_ocr_job, get_ocr_job_artifacts, get_ocr_job_artifacts_manifest, get_ocr_job_events,
-    get_reader_metadata, get_reader_regions, get_resume_plan, get_stage_actions, list_jobs,
-    list_ocr_jobs, rerun_job, resolve_ocr_ambiguity, resume_job, retry_stage,
-};
-pub use translation_debug::{
-    get_translation_diagnostics, get_translation_item, list_translation_items,
-    replay_translation_item_route,
-};
+pub mod actions;
+pub mod data;
+pub mod files;
+pub mod lifecycle;
+pub mod progress;
+pub mod reader;
+pub mod reports;
+pub mod translations;
 
 #[cfg(test)]
 mod tests {

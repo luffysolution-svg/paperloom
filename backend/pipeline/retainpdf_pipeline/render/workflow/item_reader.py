@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """Render-local item reader (file-contract duplicate).
 
-Duplicated from retainpdf_pipeline.translate.core.item_reader
+Duplicated from retainpdf_translation.core.item_reader
 (stage-decouple: render must not import translate; duplicate wins over cross-package).
 """
 

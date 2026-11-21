@@ -13,24 +13,28 @@ function resolvedResourceUrl(resource: ArtifactResourceLink | undefined, fallbac
   return text(resource?.url || resource?.path || fallback);
 }
 
-function sideBySideUrl(pdfUrl: string): string {
-  const clean = pdfUrl.split("?")[0].replace(/\/$/, "");
-  return clean ? `${clean}/side-by-side` : "";
-}
-
 /**
- * Word 排版稿走的是 `/jobs/{id}/docx`，和译文 PDF 是兄弟路由而不是它的子路径——
- * 这里要把结尾的 `/pdf` 换掉，不能像 side-by-side 那样往后拼。
+ * 同一个任务的另一个成品文件（`/jobs/{id}/files/output/{name}`）：从后端给的译文 PDF 链接里找到
+ * `/jobs/{id}` 这一段、截到这里，后面接文件地址。旧链接（`…/jobs/{id}/pdf`）和新链接
+ * （`…/jobs/{id}/files/output/translated.pdf`）都能推对，域名 / 前缀和后端给的一致。
+ * 对照版和 Word 以前的旧地址默认就是下载，新地址默认在浏览器里打开，所以带 `?download=1`。
  */
-function layoutDocxUrl(pdfUrl: string): string {
+function jobOutputFileUrl(pdfUrl: string, jobId: string, name: string): string {
   const clean = pdfUrl.split("?")[0].replace(/\/$/, "");
-  return clean.endsWith("/pdf") ? `${clean.slice(0, -"/pdf".length)}/docx` : "";
+  if (!clean || !jobId) return "";
+  const marker = `/jobs/${encodeURIComponent(jobId)}`;
+  const at = clean.indexOf(`${marker}/`);
+  if (at < 0) return "";
+  return `${clean.slice(0, at + marker.length)}/files/output/${name}?download=1`;
 }
 
-/** Obsidian 笔记包同样是 `/pdf` 的兄弟路由：`/jobs/{id}/markdown/export`。 */
-function obsidianNotesUrl(pdfUrl: string): string {
+function obsidianNotesUrl(pdfUrl: string, jobId: string): string {
   const clean = pdfUrl.split("?")[0].replace(/\/$/, "");
-  return clean.endsWith("/pdf") ? `${clean.slice(0, -"/pdf".length)}/markdown/export` : "";
+  if (!clean || !jobId) return "";
+  const marker = `/jobs/${encodeURIComponent(jobId)}`;
+  const at = clean.indexOf(`${marker}/`);
+  if (at < 0) return "";
+  return `${clean.slice(0, at + marker.length)}/markdown/export`;
 }
 
 /**
@@ -124,21 +128,21 @@ export function mergeArtifactLinksIntoManifest(
   add(
     "side_by_side_pdf",
     isTranslation && pdfReady,
-    sideBySideUrl(pdfUrl),
+    jobOutputFileUrl(pdfUrl, jobId, "side-by-side.pdf"),
     `${jobId || "document"}-side-by-side.pdf`,
     "application/pdf",
   );
   add(
     "layout_docx",
     isTranslation && pdfReady,
-    layoutDocxUrl(pdfUrl),
+    jobOutputFileUrl(pdfUrl, jobId, "translated.docx"),
     `${jobId || "document"}-layout.docx`,
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   );
   add(
     "obsidian_notes_zip",
     isTranslation && pdfReady,
-    obsidianNotesUrl(pdfUrl),
+    obsidianNotesUrl(pdfUrl, jobId),
     `${jobId || "document"}-obsidian.zip`,
     "application/zip",
   );

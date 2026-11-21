@@ -2,6 +2,16 @@
 
 `devtools/` holds local diagnostics, migration helpers, probes, and other scripts that are useful while developing RetainPDF but are not part of the production pipeline.
 
+## OCR 分类查看器
+
+`devtools/ocr_viewer/`：RetainPDF 自己的块分类草案、一份按分类记好标准答案的 2 页复杂论文 PDF、把它们画出来的离线查看器。
+用法见 [ocr_viewer/README.md](ocr_viewer/README.md)。
+
+## 翻译 agent 测试系统
+
+`devtools/agent_lab/`：一次送一整页给翻译 agent、逐块校验、生成离线报告（原文页上叠译文，标出放不下的块）。
+用法见 [agent_lab/README.md](agent_lab/README.md)。
+
 ## Offline translation regression
 
 From the repository root (uses the selected Python environment):
@@ -138,7 +148,7 @@ normal retry chain takes over 30 seconds.
   request or quality review, and reports touched pages (including diagnostic-only
   rejections) for persistence. The legacy outcome-only entrypoint is retained;
   candidate budgets, group application and request scheduling are unchanged.
-- Placeholder syntax and text helpers live in `translate/core/placeholder_tokens.py`
+- Placeholder syntax and text helpers live in `retainpdf_translation/core/placeholder_tokens.py`
   with standard-library-only dependencies. Policy and formula protection use
   this owner; the previous LLM validation module remains a compatibility export
   of the same objects. The two policy-to-LLM frozen import exceptions are removed.
@@ -176,3 +186,18 @@ Useful options:
 - `--all` relaxes the default source and directory filters while still skipping `.git`, binary files, and files larger than 2 MiB.
 
 The default scan skips obvious dependencies, caches, build outputs, temporary data, and job data such as `node_modules/`, `target/`, `dist/`, `build/`, `__pycache__/`, `.venv/`, `data/jobs/`, and `tmp/`.
+
+## Render engine comparison (`render_compare/`)
+
+Renders sample jobs with `render.engine = typst` and `rpr` on copies (refine off, LLM credentials cleared,
+original job dirs hash-checked before/after) and writes side-by-side PNGs, a metrics table
+(`report/metrics.md` + `metrics.json`), line-count agreement and the most divergent blocks with crops.
+Samples / variants live in `render_compare/cases.json`. From the repo root:
+
+```bash
+UV_PROJECT_ENVIRONMENT=$HOME/Code/retain-pdf/backend/.venv \
+  uv run --no-sync --project backend python backend/pipeline/devtools/render_compare/render_compare.py \
+  --workdir <scratch dir> [--cases quantum-chem] [--report-only] [--all-pages]
+```
+
+Needs `backend/rendering-engine/node_modules` (`npm ci --omit=dev --ignore-scripts`), Node ≥ 22.8 and Typst on PATH.

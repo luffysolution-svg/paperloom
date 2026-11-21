@@ -16,7 +16,11 @@ REQUIRED_PATHS = (
     "pyproject.toml",
     "uv.lock",
     "api/Cargo.toml",
+    "base/pyproject.toml",
+    "math/pyproject.toml",
     "pipeline/pyproject.toml",
+    "translation/pyproject.toml",
+    "translation-agent/pyproject.toml",
     "config/ocr_providers.json",
 )
 

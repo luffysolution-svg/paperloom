@@ -1,193 +1,43 @@
-import sys
+"""渲染源预热：source 预热 manifest 的复用与失效、render plan 跳过同步分析、二次预热刷新 payload。
+
+首行缩进、payload manifest、指纹、背景页 spec 各自拆到了
+test_prewarm_first_line_indent.py / test_payload_prewarm_manifest.py /
+test_render_prewarm_fingerprint.py / test_prewarm_background_specs.py。
+"""
+
 import tempfile
 import json
 from pathlib import Path
-from types import SimpleNamespace
 from unittest import mock
 
 import fitz
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-
 from devtools.tests.rendering_support.prewarm_fixtures import empty_region_page_payload as _empty_region_page_payload
 from devtools.tests.rendering_support.prewarm_fixtures import page_payload as _page_payload
 from devtools.tests.rendering_support.prewarm_fixtures import source_document_analysis
-from devtools.tests.rendering_support.prewarm_fixtures import tight_gap_page_payload as _tight_gap_page_payload
 from devtools.tests.rendering_support.prewarm_fixtures import translated_page_payload as _translated_page_payload
-from devtools.tests.rendering_support.prewarm_fixtures import write_document_v1 as _document_v1
 from devtools.tests.rendering_support.prewarm_fixtures import write_pseudo_editable_scan_pdf as _pseudo_editable_scan_pdf
 from devtools.tests.rendering_support.prewarm_fixtures import write_source_pdf as _source_pdf
 from retainpdf_pipeline.render.render_plan import RenderPlan
 from retainpdf_pipeline.render.render_inputs import RenderInputs
-from retainpdf_pipeline.foundation.config import layout
 from retainpdf_pipeline.render.source.prewarm import RenderPrewarmSpec
-from retainpdf_pipeline.render.source.prewarm import PAYLOAD_RENDER_ALGORITHM_VERSION
 from retainpdf_pipeline.render.source.prewarm import build_render_prewarm_fingerprint
 from retainpdf_pipeline.render.source.prewarm import prewarm_manifest_path_from_artifacts_dir
 from retainpdf_pipeline.render.source.prewarm import start_render_source_prewarm
 from retainpdf_pipeline.render.source.prewarm import try_load_render_payload_prewarm
 from retainpdf_pipeline.render.source.prewarm import try_load_prewarmed_render_source_pdf
 from retainpdf_pipeline.render.source.prewarm import _pages_for_prewarm_mode_probe
-from retainpdf_pipeline.render.source.prewarm_payload import collect_first_line_indent_lookup
-from retainpdf_pipeline.render.source.prewarm_payload import first_line_indent_from_item_lines
-from retainpdf_pipeline.render.source.prewarm_payload import build_payload_prewarm
-from retainpdf_pipeline.render.source.prewarm_page_specs import render_page_specs_from_manifest
 from retainpdf_pipeline.render.pdf_structure_profile import pdf_structure_profile_path_from_prewarm_manifest
-from retainpdf_pipeline.render.visual_profile import visual_profile_path_from_prewarm_manifest
-from retainpdf_pipeline.render.visual_profile.contracts import VISUAL_PROFILE_ALGORITHM_VERSION
 from retainpdf_pipeline.render.workflow.executor import execute_render_plan
 from retainpdf_pipeline.render.workflow.prewarm_cache import merge_payload_prewarm
-from retainpdf_pipeline.render.workflow.prewarm_entry import run_ocr_render_preprocess
 
 
-def test_first_line_indent_from_item_lines_uses_structured_line_bboxes() -> None:
-    item = {
-        "lines": [
-            {"bbox": [42.0, 10.0, 180.0, 20.0]},
-            {"bbox": [24.0, 22.0, 180.0, 32.0]},
-            {"bbox": [24.5, 34.0, 180.0, 44.0]},
-        ]
-    }
-
-    assert first_line_indent_from_item_lines(item, font_size_pt=12.0) == 17.75
-
-
-def test_first_line_indent_from_item_lines_ignores_small_offsets() -> None:
-    item = {
-        "lines": [
-            {"bbox": [29.0, 10.0, 180.0, 20.0]},
-            {"bbox": [24.0, 22.0, 180.0, 32.0]},
-        ]
-    }
-
-    assert first_line_indent_from_item_lines(item, font_size_pt=12.0) == 0.0
-
-
-def _pixmap_indent_candidate_item() -> dict:
-    return {
-        "item_id": "p001-b001",
-        "block_type": "text",
-        "block_kind": "text",
-        "layout_role": "paragraph",
-        "semantic_role": "body",
-        "structure_role": "body",
-        "bbox": [18.0, 30.0, 210.0, 88.0],
-        "source_text": "First line second line third line",
-        "protected_source_text": "First line second line third line",
-        "lines": [],
-    }
-
-
-def _pixmap_indent_metrics() -> SimpleNamespace:
-    return SimpleNamespace(base_metrics={0: (10.0, 1.2)}, page_text_width_med=160.0)
-
-
-def test_pixmap_first_line_indent_defaults_disabled_for_larger_prewarm(monkeypatch) -> None:
-    monkeypatch.delenv("RETAIN_RENDER_PIXMAP_INDENT", raising=False)
-    doc = fitz.open()
-    for _ in range(3):
-        doc.new_page(width=240, height=180)
-    stats: dict[str, object] = {
-        "pixmap_candidates": 0,
-        "pixmap_checked": 0,
-        "pixmap_hits": 0,
-        "pixmap_disabled_candidates": 0,
-    }
-    sink: dict[str, float] = {}
-
-    with mock.patch(
-        "retainpdf_pipeline.render.source.prewarm_payload.detect_first_line_indent_pt_with_displaylist",
-        side_effect=AssertionError("pixmap indent should be opt-in for larger documents"),
-    ):
-        collect_first_line_indent_lookup(
-            source_doc=doc,
-            page_idx=0,
-            items=[_pixmap_indent_candidate_item()],
-            metrics=_pixmap_indent_metrics(),
-            sink=sink,
-            stats=stats,
-        )
-    doc.close()
-
-    assert sink == {}
-    assert stats["pixmap_candidates"] == 1
-    assert stats["pixmap_disabled_candidates"] == 1
-    assert stats["pixmap_checked"] == 0
-    assert stats["pixmap_enabled"] is False
-    assert stats["pixmap_reason"] == "default_disabled"
-
-
-def test_pixmap_first_line_indent_env_opt_in_runs_detector(monkeypatch) -> None:
-    monkeypatch.setenv("RETAIN_RENDER_PIXMAP_INDENT", "1")
-    doc = fitz.open()
-    for _ in range(3):
-        doc.new_page(width=240, height=180)
-    stats: dict[str, object] = {
-        "pixmap_candidates": 0,
-        "pixmap_checked": 0,
-        "pixmap_hits": 0,
-        "pixmap_disabled_candidates": 0,
-    }
-    sink: dict[str, float] = {}
-
-    with mock.patch(
-        "retainpdf_pipeline.render.source.prewarm_payload.detect_first_line_indent_pt_with_displaylist",
-        return_value=12.5,
-    ) as detector:
-        collect_first_line_indent_lookup(
-            source_doc=doc,
-            page_idx=0,
-            items=[_pixmap_indent_candidate_item()],
-            metrics=_pixmap_indent_metrics(),
-            sink=sink,
-            stats=stats,
-        )
-    doc.close()
-
-    assert sink == {"p001-b001": 12.5}
-    assert detector.call_count == 1
-    assert stats["pixmap_candidates"] == 1
-    assert stats["pixmap_disabled_candidates"] == 0
-    assert stats["pixmap_checked"] == 1
-    assert stats["pixmap_hits"] == 1
-    assert stats["pixmap_enabled"] is True
-    assert stats["pixmap_reason"] == "env_enabled"
-
-
-def test_pixmap_first_line_indent_auto_enabled_for_tiny_documents(monkeypatch) -> None:
-    monkeypatch.delenv("RETAIN_RENDER_PIXMAP_INDENT", raising=False)
-    doc = fitz.open()
-    doc.new_page(width=240, height=180)
-    stats: dict[str, object] = {
-        "pixmap_candidates": 0,
-        "pixmap_checked": 0,
-        "pixmap_hits": 0,
-        "pixmap_disabled_candidates": 0,
-    }
-    sink: dict[str, float] = {}
-
-    with mock.patch(
-        "retainpdf_pipeline.render.source.prewarm_payload.detect_first_line_indent_pt_with_displaylist",
-        return_value=9.25,
-    ):
-        collect_first_line_indent_lookup(
-            source_doc=doc,
-            page_idx=0,
-            items=[_pixmap_indent_candidate_item()],
-            metrics=_pixmap_indent_metrics(),
-            sink=sink,
-            stats=stats,
-        )
-    doc.close()
-
-    assert sink == {"p001-b001": 9.25}
-    assert stats["pixmap_enabled"] is True
-    assert stats["pixmap_reason"] == "small_document_auto_enabled"
-
-
-def test_render_source_prewarm_manifest_is_reused_without_temp_cleanup() -> None:
+def test_render_source_prewarm_manifest_is_reused_without_temp_cleanup(monkeypatch) -> None:
+    # These render stubs intentionally do not produce a PDF.
+    monkeypatch.setattr(
+        "retainpdf_pipeline.render.workflow.executor.relocate_translated_links",
+        lambda *args: {"moved": 0, "unchanged": 0, "unresolved": []},
+    )
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         source_pdf = root / "source.pdf"
@@ -291,7 +141,12 @@ def test_render_source_prewarm_accepts_absolute_page_keys_for_partial_ranges() -
         assert manifest_path.exists()
 
 
-def test_render_plan_persists_sync_overlay_source_cleanup_for_next_render() -> None:
+def test_render_plan_persists_sync_overlay_source_cleanup_for_next_render(monkeypatch) -> None:
+    # These render stubs intentionally do not produce a PDF.
+    monkeypatch.setattr(
+        "retainpdf_pipeline.render.workflow.executor.relocate_translated_links",
+        lambda *args: {"moved": 0, "unchanged": 0, "unresolved": []},
+    )
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         source_pdf = root / "source.pdf"
@@ -393,7 +248,12 @@ def test_render_plan_persists_sync_overlay_source_cleanup_for_next_render() -> N
         assert diagnostics["bbox_text_strip_candidate_pages"] > 0
 
 
-def test_render_plan_reuses_source_prewarm_without_sync_document_analysis() -> None:
+def test_render_plan_reuses_source_prewarm_without_sync_document_analysis(monkeypatch) -> None:
+    # These render stubs intentionally do not produce a PDF.
+    monkeypatch.setattr(
+        "retainpdf_pipeline.render.workflow.executor.relocate_translated_links",
+        lambda *args: {"moved": 0, "unchanged": 0, "unresolved": []},
+    )
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         source_pdf = root / "source.pdf"
@@ -455,6 +315,92 @@ def test_render_plan_reuses_source_prewarm_without_sync_document_analysis() -> N
         assert pages == 1
 
 
+def test_cold_sync_render_prepare_emits_main_lane_steps_and_warm_render_skips_them(monkeypatch) -> None:
+    # These render stubs intentionally do not produce a PDF.
+    monkeypatch.setattr(
+        "retainpdf_pipeline.render.workflow.executor.relocate_translated_links",
+        lambda *args: {"moved": 0, "unchanged": 0, "unresolved": []},
+    )
+    from retainpdf_base.events import PipelineEventWriter
+    from retainpdf_base.events import pipeline_event_writer_scope
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source_pdf = root / "source.pdf"
+        output_pdf = root / "rendered" / "out.pdf"
+        artifacts_dir = root / "artifacts"
+        translations_dir = root / "translated"
+        output_pdf.parent.mkdir()
+        translations_dir.mkdir()
+        _source_pdf(source_pdf)
+        manifest_path = prewarm_manifest_path_from_artifacts_dir(artifacts_dir)
+        render_plan = RenderPlan(
+            render_inputs=RenderInputs(
+                source_pdf_path=source_pdf,
+                translations_dir=translations_dir,
+                translation_manifest_path=None,
+            ),
+            selected_pages=_translated_page_payload(),
+            effective_render_mode="overlay",
+        )
+
+        def _fake_overlay(*, source_pdf_path, translated_pages, context):
+            return 1, {"route": "render-prepare-events-test"}
+
+        def _render_and_collect(job_id: str) -> list[dict]:
+            logs_dir = root / job_id / "logs"
+            writer = PipelineEventWriter(job_id=job_id, job_root=root / job_id, logs_dir=logs_dir)
+            with pipeline_event_writer_scope(writer), mock.patch.dict(
+                "retainpdf_pipeline.render.workflow.modes.RENDER_MODE_HANDLERS",
+                {"overlay": _fake_overlay},
+            ):
+                execute_render_plan(
+                    render_plan=render_plan,
+                    output_pdf_path=output_pdf,
+                    start_page=0,
+                    end_page=0,
+                    pdf_compress_dpi=0,
+                    source_cleanup_strategy="bbox_text_strip",
+                    render_prewarm_manifest_path=manifest_path,
+                )
+            events_path = logs_dir / "pipeline_events.jsonl"
+            if not events_path.exists():
+                return []
+            return [
+                json.loads(line)
+                for line in events_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+
+        cold_rows = _render_and_collect("cold")
+        prepare_rows = [row for row in cold_rows if row["substage"] == "render_prepare"]
+        assert [(row["progress_current"], row["progress_total"]) for row in prepare_rows] == [
+            (0, 4),
+            (1, 4),
+            (2, 4),
+            (3, 4),
+            (4, 4),
+        ]
+        assert [row["payload"]["render_prepare_step"] for row in prepare_rows] == [
+            "document_analysis",
+            "source_cleanup",
+            "payload_layout_color",
+            "background_specs",
+            "done",
+        ]
+        assert {row["stage"] for row in prepare_rows} == {"rendering"}
+        assert {row["user_stage"] for row in prepare_rows} == {"render"}
+        assert {row["progress_unit"] for row in prepare_rows} == {"step"}
+        assert all(row["event_type"] == "stage_progress" for row in prepare_rows)
+        # Preparation progress must not masquerade as a 0/N render page event.
+        assert not any(
+            row["substage"] == "render_pages" and row["progress_current"] == 0 for row in cold_rows
+        )
+
+        warm_rows = _render_and_collect("warm")
+        assert [row for row in warm_rows if row["substage"] == "render_prepare"] == []
+
+
 def test_legacy_fast_cover_source_manifest_is_ignored() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -505,7 +451,12 @@ def test_legacy_fast_cover_source_manifest_is_ignored() -> None:
         assert prepared is None
 
 
-def test_sync_source_prewarm_preserves_existing_payload_prewarm() -> None:
+def test_sync_source_prewarm_preserves_existing_payload_prewarm(monkeypatch) -> None:
+    # These render stubs intentionally do not produce a PDF.
+    monkeypatch.setattr(
+        "retainpdf_pipeline.render.workflow.executor.relocate_translated_links",
+        lambda *args: {"moved": 0, "unchanged": 0, "unresolved": []},
+    )
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         source_pdf = root / "source.pdf"
@@ -623,167 +574,6 @@ def test_sync_payload_algorithm_change_replaces_stale_geometry() -> None:
     assert merged["effective_inner_bbox_by_item_id"]["p001-abstract"] == [20.0, 40.0, 220.0, 130.0]
 
 
-def test_ocr_render_preprocess_manifest_matches_translated_payload() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        source_pdf = root / "source.pdf"
-        source_json = root / "ocr" / "normalized" / "document.v1.json"
-        output_pdf = root / "rendered" / "out.pdf"
-        artifacts_dir = root / "artifacts"
-        output_pdf.parent.mkdir()
-        _source_pdf(source_pdf)
-        _document_v1(source_json)
-
-        manifest_path = run_ocr_render_preprocess(
-            source_json_path=source_json,
-            source_pdf_path=source_pdf,
-            output_pdf_path=output_pdf,
-            artifacts_dir=artifacts_dir,
-            render_mode="overlay",
-            start_page=0,
-            end_page=0,
-            pdf_compress_dpi=0,
-            source_cleanup_strategy="bbox_text_strip",
-            math_mode="direct_typst",
-        )
-
-        translated_payload = _translated_page_payload()
-        translated_payload[0][0]["item_id"] = "p001-b000"
-        translated_payload[0][0]["translation_unit_id"] = "p001-b000"
-        translated_payload[0][0]["translation_unit_member_ids"] = ["p001-b000"]
-        translated_payload[0][0]["raw_block_type"] = "text"
-        translated_payload[0][0]["normalized_sub_type"] = "text"
-
-        assert manifest_path == prewarm_manifest_path_from_artifacts_dir(artifacts_dir)
-        assert try_load_prewarmed_render_source_pdf(
-            manifest_path=manifest_path,
-            source_pdf_path=source_pdf,
-            translated_pages=translated_payload,
-            effective_render_mode="overlay",
-            start_page=0,
-            end_page=0,
-            pdf_compress_dpi=0,
-            source_cleanup_strategy="bbox_text_strip",
-        ) is None
-        payload = try_load_render_payload_prewarm(
-            manifest_path=manifest_path,
-            source_pdf_path=source_pdf,
-            translated_pages=translated_payload,
-            effective_render_mode="overlay",
-            start_page=0,
-            end_page=0,
-            pdf_compress_dpi=0,
-            source_cleanup_strategy=layout.SOURCE_CLEANUP_TYPST_FILL,
-        )
-        assert payload is not None
-        assert payload.render_colors_by_item_id
-        assert payload.document_analysis is not None
-
-
-def test_payload_prewarm_writes_visual_profile_color_manifest() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        source_pdf = root / "source.pdf"
-        manifest_path = root / "artifacts" / "render_prewarm" / "render_source_prewarm_manifest.json"
-        manifest_path.parent.mkdir(parents=True)
-        _source_pdf(source_pdf)
-
-        payload = build_payload_prewarm(
-            source_pdf_path=source_pdf,
-            translated_pages=_translated_page_payload(),
-            manifest_path=manifest_path,
-            effective_render_mode="overlay",
-            source_cleanup_strategy=layout.SOURCE_CLEANUP_TYPST_FILL,
-        )
-
-        color_profile = payload["render_color_profile"]
-        assert color_profile["algorithm"] == "render_color_profile_v3_visual_profile"
-        assert payload["pdf_structure_profile_path"] == "pdf_structure_profile.v1.json"
-        assert payload["visual_profile_path"] == "visual_profile.v1.json"
-        assert color_profile["visual_profile_path"] == "visual_profile.v1.json"
-        assert color_profile["colors_by_item_id"]
-        visual_profile_path = visual_profile_path_from_prewarm_manifest(manifest_path)
-        visual_profile = json.loads(visual_profile_path.read_text(encoding="utf-8"))
-        assert visual_profile["algorithm"] == VISUAL_PROFILE_ALGORITHM_VERSION
-        assert "p001-b001" in visual_profile["pages"]["0"]["items"]
-        structure_profile_path = pdf_structure_profile_path_from_prewarm_manifest(manifest_path)
-        structure_profile = json.loads(structure_profile_path.read_text(encoding="utf-8"))
-        assert structure_profile["algorithm"] == "pdf_structure_profile_v1"
-        assert structure_profile["pages"]["0"]["text_objects"]
-
-
-def test_payload_prewarm_records_default_pixmap_indent_diagnostics(monkeypatch) -> None:
-    monkeypatch.delenv("RETAIN_RENDER_PIXMAP_INDENT", raising=False)
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        source_pdf = root / "source.pdf"
-        manifest_path = root / "artifacts" / "render_prewarm" / "render_source_prewarm_manifest.json"
-        manifest_path.parent.mkdir(parents=True)
-        doc = fitz.open()
-        for _ in range(3):
-            doc.new_page(width=200, height=200)
-        doc.save(source_pdf)
-        doc.close()
-
-        payload = build_payload_prewarm(
-            source_pdf_path=source_pdf,
-            translated_pages={0: [_pixmap_indent_candidate_item()]},
-            manifest_path=manifest_path,
-            effective_render_mode="overlay",
-            source_cleanup_strategy=layout.SOURCE_CLEANUP_TYPST_FILL,
-        )
-
-    diagnostics = payload["first_line_indent_diagnostics"]
-    assert diagnostics["pixmap_enabled"] is False
-    assert diagnostics["pixmap_reason"] == "default_disabled"
-    assert diagnostics["pixmap_candidates"] == 1
-    assert diagnostics["pixmap_disabled_candidates"] == 1
-    assert diagnostics["pixmap_checked"] == 0
-
-
-def test_payload_prewarm_loads_visual_profile_path_from_manifest() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        source_pdf = root / "source.pdf"
-        output_pdf = root / "rendered" / "out.pdf"
-        artifacts_dir = root / "artifacts"
-        output_pdf.parent.mkdir()
-        _source_pdf(source_pdf)
-
-        handle = start_render_source_prewarm(
-            RenderPrewarmSpec(
-                source_pdf_path=source_pdf,
-                output_pdf_path=output_pdf,
-                artifacts_dir=artifacts_dir,
-                translated_pages=_translated_page_payload(),
-                render_mode="overlay",
-                start_page=0,
-                end_page=0,
-                pdf_compress_dpi=0,
-                source_cleanup_strategy=layout.SOURCE_CLEANUP_TYPST_FILL,
-            )
-        )
-        manifest_path = handle.wait()
-
-        payload_prewarm = try_load_render_payload_prewarm(
-            manifest_path=manifest_path,
-            source_pdf_path=source_pdf,
-            translated_pages=_translated_page_payload(),
-            effective_render_mode="overlay",
-            start_page=0,
-            end_page=0,
-            pdf_compress_dpi=0,
-            source_cleanup_strategy=layout.SOURCE_CLEANUP_TYPST_FILL,
-        )
-
-        assert payload_prewarm is not None
-        assert payload_prewarm.visual_profile_path == visual_profile_path_from_prewarm_manifest(manifest_path)
-        assert payload_prewarm.visual_profile_path.exists()
-        assert payload_prewarm.pdf_structure_profile_path == pdf_structure_profile_path_from_prewarm_manifest(manifest_path)
-        assert payload_prewarm.pdf_structure_profile_path.exists()
-        assert payload_prewarm.render_colors_by_item_id
-
-
 def test_prewarm_mode_probe_uses_source_text_without_mutating_payload() -> None:
     pages = _page_payload()
     assert pages[0][0].get("render_protected_text") is None
@@ -850,89 +640,6 @@ def test_second_prewarm_reuses_existing_source_and_refreshes_payload() -> None:
         )
         assert payload_prewarm is not None
         assert payload_prewarm.render_colors_by_item_id
-
-
-def test_payload_prewarm_manifest_exposes_bbox_candidates() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        source_pdf = root / "source.pdf"
-        output_pdf = root / "rendered" / "out.pdf"
-        artifacts_dir = root / "artifacts"
-        output_pdf.parent.mkdir()
-        _source_pdf(source_pdf)
-
-        handle = start_render_source_prewarm(
-            RenderPrewarmSpec(
-                source_pdf_path=source_pdf,
-                output_pdf_path=output_pdf,
-                artifacts_dir=artifacts_dir,
-                translated_pages=_translated_page_payload(),
-                render_mode="overlay",
-                start_page=0,
-                end_page=0,
-                pdf_compress_dpi=0,
-                source_cleanup_strategy="bbox_text_strip",
-                document_analysis=source_document_analysis(source_pdf),
-            )
-        )
-        manifest_path = handle.wait()
-
-        payload_prewarm = try_load_render_payload_prewarm(
-            manifest_path=manifest_path,
-            source_pdf_path=source_pdf,
-            translated_pages=_translated_page_payload(),
-            effective_render_mode="overlay",
-            start_page=0,
-            end_page=0,
-            pdf_compress_dpi=0,
-            source_cleanup_strategy="bbox_text_strip",
-        )
-
-        assert payload_prewarm is not None
-        assert payload_prewarm.document_analysis is not None
-        assert payload_prewarm.document_analysis.page(0) is not None
-        assert payload_prewarm.bbox_text_strip_candidates is not None
-        assert payload_prewarm.bbox_text_strip_candidates.page_rects
-
-
-def test_payload_prewarm_pikepdf_text_strip_exposes_bbox_candidates() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        source_pdf = root / "source.pdf"
-        output_pdf = root / "rendered" / "out.pdf"
-        artifacts_dir = root / "artifacts"
-        output_pdf.parent.mkdir()
-        _source_pdf(source_pdf)
-
-        handle = start_render_source_prewarm(
-            RenderPrewarmSpec(
-                source_pdf_path=source_pdf,
-                output_pdf_path=output_pdf,
-                artifacts_dir=artifacts_dir,
-                translated_pages=_translated_page_payload(),
-                render_mode="overlay",
-                start_page=0,
-                end_page=0,
-                pdf_compress_dpi=0,
-                source_cleanup_strategy="pikepdf_text_strip",
-            )
-        )
-        manifest_path = handle.wait()
-
-        payload_prewarm = try_load_render_payload_prewarm(
-            manifest_path=manifest_path,
-            source_pdf_path=source_pdf,
-            translated_pages=_translated_page_payload(),
-            effective_render_mode="overlay",
-            start_page=0,
-            end_page=0,
-            pdf_compress_dpi=0,
-            source_cleanup_strategy="pikepdf_text_strip",
-        )
-
-        assert payload_prewarm is not None
-        assert payload_prewarm.bbox_text_strip_candidates is not None
-        assert payload_prewarm.bbox_text_strip_candidates.page_rects
 
 
 def test_render_source_prewarm_keeps_no_text_overlap_pages_as_precleaned() -> None:
@@ -1017,381 +724,3 @@ def test_pseudo_editable_scan_pages_keep_cover_fallback_without_physical_strip()
         assert prepared.bbox_text_strip_skipped_page_indices == frozenset({0})
         assert prepared.source_text_precleaned_page_indices == frozenset()
         assert prepared.source_cleanup_cover_fallback_page_indices == frozenset({0})
-
-
-def test_payload_prewarm_default_pikepdf_text_strip_exposes_bbox_candidates() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        source_pdf = root / "source.pdf"
-        output_pdf = root / "rendered" / "out.pdf"
-        artifacts_dir = root / "artifacts"
-        output_pdf.parent.mkdir()
-        _source_pdf(source_pdf)
-
-        handle = start_render_source_prewarm(
-            RenderPrewarmSpec(
-                source_pdf_path=source_pdf,
-                output_pdf_path=output_pdf,
-                artifacts_dir=artifacts_dir,
-                translated_pages=_translated_page_payload(),
-                render_mode="overlay",
-                start_page=0,
-                end_page=0,
-                pdf_compress_dpi=0,
-            )
-        )
-        manifest_path = handle.wait()
-
-        payload_prewarm = try_load_render_payload_prewarm(
-            manifest_path=manifest_path,
-            source_pdf_path=source_pdf,
-            translated_pages=_translated_page_payload(),
-            effective_render_mode="overlay",
-            start_page=0,
-            end_page=0,
-            pdf_compress_dpi=0,
-        )
-
-        assert payload_prewarm is not None
-        assert payload_prewarm.bbox_text_strip_candidates is not None
-        assert payload_prewarm.bbox_text_strip_candidates.page_rects
-
-
-def test_render_prewarm_fingerprint_tracks_payload_render_algorithm() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        source_pdf = root / "source.pdf"
-        _source_pdf(source_pdf)
-
-        fingerprint = build_render_prewarm_fingerprint(
-            source_pdf_path=source_pdf,
-            translated_pages=_translated_page_payload(),
-            effective_render_mode="overlay",
-            start_page=0,
-            end_page=0,
-            pdf_compress_dpi=0,
-        )
-
-    assert fingerprint["payload_render_algorithm"] == PAYLOAD_RENDER_ALGORITHM_VERSION
-    assert fingerprint["bbox_text_strip_algorithm"] == "bbox_text_strip"
-    assert len(str(fingerprint["bbox_text_strip_implementation_hash"])) == 64
-
-
-def test_render_prewarm_fingerprint_tracks_translated_text_changes() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        source_pdf = root / "source.pdf"
-        _source_pdf(source_pdf)
-
-        first_payload = _translated_page_payload()
-        second_payload = _translated_page_payload()
-        second_payload[0][0]["protected_translated_text"] = "另一版译文"
-
-        first = build_render_prewarm_fingerprint(
-            source_pdf_path=source_pdf,
-            translated_pages=first_payload,
-            effective_render_mode="typst_visual",
-            start_page=0,
-            end_page=0,
-            pdf_compress_dpi=0,
-        )
-        second = build_render_prewarm_fingerprint(
-            source_pdf_path=source_pdf,
-            translated_pages=second_payload,
-            effective_render_mode="typst_visual",
-            start_page=0,
-            end_page=0,
-            pdf_compress_dpi=0,
-        )
-
-    assert first["render_payload_hash"] != second["render_payload_hash"]
-    assert first != second
-
-
-def test_render_prewarm_fingerprint_tracks_formula_map_changes() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        source_pdf = root / "source.pdf"
-        _source_pdf(source_pdf)
-
-        first_payload = _translated_page_payload()
-        second_payload = _translated_page_payload()
-        first_payload[0][0]["formula_map"] = [{"placeholder": "<f0-abc/>", "formula_text": "c_{\\kappa}"}]
-        second_payload[0][0]["formula_map"] = [{"placeholder": "<f0-abc/>", "formula_text": "c_{\\lambda}"}]
-
-        first = build_render_prewarm_fingerprint(
-            source_pdf_path=source_pdf,
-            translated_pages=first_payload,
-            effective_render_mode="typst_visual",
-            start_page=0,
-            end_page=0,
-            pdf_compress_dpi=0,
-        )
-        second = build_render_prewarm_fingerprint(
-            source_pdf_path=source_pdf,
-            translated_pages=second_payload,
-            effective_render_mode="typst_visual",
-            start_page=0,
-            end_page=0,
-            pdf_compress_dpi=0,
-        )
-
-    assert first["render_payload_hash"] != second["render_payload_hash"]
-    assert first != second
-
-
-def test_background_page_specs_manifest_fails_closed_on_bad_block() -> None:
-    manifest = {
-        "algorithm": "background_render_page_specs_v4_visual_profile",
-        "page_count": 1,
-        "block_count": 1,
-        "block_ids_by_page": {"0": ["item-p001-b001"]},
-        "page_specs": [
-            {
-                "page_index": 0,
-                "page_width_pt": 200.0,
-                "page_height_pt": 200.0,
-                "block_count": 1,
-                "block_ids": ["item-p001-b001"],
-                "blocks": [
-                    {
-                        "block_id": "item-p001-b001",
-                        "page_index": 0,
-                        "background_rect": [10.0, 20.0, 150.0, 60.0],
-                        "content_rect": ["bad"],
-                        "content_kind": "markdown",
-                        "content_text": "译文",
-                        "plain_text": "译文",
-                        "math_map": [],
-                        "font_size_pt": 10.0,
-                        "leading_em": 0.56,
-                    }
-                ],
-            }
-        ],
-    }
-
-    assert render_page_specs_from_manifest(manifest) is None
-
-
-def test_payload_prewarm_exposes_background_render_page_specs() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        source_pdf = root / "source.pdf"
-        output_pdf = root / "rendered" / "out.pdf"
-        artifacts_dir = root / "artifacts"
-        output_pdf.parent.mkdir()
-        _source_pdf(source_pdf)
-
-        handle = start_render_source_prewarm(
-            RenderPrewarmSpec(
-                source_pdf_path=source_pdf,
-                output_pdf_path=output_pdf,
-                artifacts_dir=artifacts_dir,
-                translated_pages=_translated_page_payload(),
-                render_mode="typst_visual",
-                start_page=0,
-                end_page=0,
-                pdf_compress_dpi=0,
-            )
-        )
-        manifest_path = handle.wait()
-
-        payload_prewarm = try_load_render_payload_prewarm(
-            manifest_path=manifest_path,
-            source_pdf_path=source_pdf,
-            translated_pages=_translated_page_payload(),
-            effective_render_mode="typst_visual",
-            start_page=0,
-            end_page=0,
-            pdf_compress_dpi=0,
-        )
-
-        assert payload_prewarm is not None
-        assert payload_prewarm.background_render_page_specs is not None
-        assert len(payload_prewarm.background_render_page_specs) == 1
-        assert payload_prewarm.background_render_page_specs[0].blocks[0].plain_text
-
-
-def test_overlay_payload_prewarm_skips_background_specs_but_keeps_cover_fill() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        source_pdf = root / "source.pdf"
-        manifest_path = root / "artifacts" / "render_prewarm" / "render_source_prewarm_manifest.json"
-        _source_pdf(source_pdf)
-
-        payload = build_payload_prewarm(
-            source_pdf_path=source_pdf,
-            translated_pages=_translated_page_payload(),
-            manifest_path=manifest_path,
-            effective_render_mode="overlay",
-            source_cleanup_strategy="bbox_text_strip",
-        )
-
-        assert payload["background_render_page_specs"] == {}
-        prepared_pages = payload["prepared_overlay_pages"]
-        assert prepared_pages
-        first_page_items = prepared_pages["0"]
-        assert first_page_items
-        assert first_page_items[0].get("_render_cover_fill")
-
-
-def test_execute_typst_visual_uses_prewarmed_background_page_specs() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        source_pdf = root / "source.pdf"
-        output_pdf = root / "rendered" / "out.pdf"
-        artifacts_dir = root / "artifacts"
-        translations_dir = root / "translated"
-        output_pdf.parent.mkdir()
-        translations_dir.mkdir()
-        _source_pdf(source_pdf)
-
-        handle = start_render_source_prewarm(
-            RenderPrewarmSpec(
-                source_pdf_path=source_pdf,
-                output_pdf_path=output_pdf,
-                artifacts_dir=artifacts_dir,
-                translated_pages=_translated_page_payload(),
-                render_mode="typst_visual",
-                start_page=0,
-                end_page=0,
-                pdf_compress_dpi=0,
-            )
-        )
-        manifest_path = handle.wait()
-        render_plan = RenderPlan(
-            render_inputs=RenderInputs(
-                source_pdf_path=source_pdf,
-                translations_dir=translations_dir,
-                translation_manifest_path=None,
-            ),
-            selected_pages=_translated_page_payload(),
-            effective_render_mode="typst_visual",
-        )
-
-        def _fake_background(*, source_pdf_path, translated_pages, context):
-            assert context.background_render_page_specs is not None
-            assert context.background_render_page_specs[0].blocks[0].plain_text
-            return 1, {"route": "prewarmed-background-specs"}
-
-        with mock.patch.dict(
-            "retainpdf_pipeline.render.workflow.modes.RENDER_MODE_HANDLERS",
-            {"typst_visual": _fake_background},
-        ):
-            pages = execute_render_plan(
-                render_plan=render_plan,
-                output_pdf_path=output_pdf,
-                start_page=0,
-                end_page=0,
-                pdf_compress_dpi=0,
-                source_cleanup_strategy="pikepdf_text_strip",
-                render_prewarm_manifest_path=manifest_path,
-            )
-
-        assert pages == 1
-
-
-def test_redact_restore_formula_strategy_is_runtime_alias_for_pikepdf_text_strip() -> None:
-    assert layout.normalize_source_cleanup_strategy("redact_restore_formulas") == "pikepdf_text_strip"
-    assert layout.use_bbox_text_strip_cleanup("redact_restore_formulas") is True
-    assert layout.use_redact_restore_formula_cleanup("redact_restore_formulas") is False
-
-
-def test_payload_prewarm_explicit_typst_fill_skips_bbox_candidates() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        source_pdf = root / "source.pdf"
-        output_pdf = root / "rendered" / "out.pdf"
-        artifacts_dir = root / "artifacts"
-        output_pdf.parent.mkdir()
-        _source_pdf(source_pdf)
-
-        handle = start_render_source_prewarm(
-            RenderPrewarmSpec(
-                source_pdf_path=source_pdf,
-                output_pdf_path=output_pdf,
-                artifacts_dir=artifacts_dir,
-                translated_pages=_translated_page_payload(),
-                render_mode="overlay",
-                start_page=0,
-                end_page=0,
-                pdf_compress_dpi=0,
-                source_cleanup_strategy="typst_fill",
-            )
-        )
-        manifest_path = handle.wait()
-
-        payload_prewarm = try_load_render_payload_prewarm(
-            manifest_path=manifest_path,
-            source_pdf_path=source_pdf,
-            translated_pages=_translated_page_payload(),
-            effective_render_mode="overlay",
-            start_page=0,
-            end_page=0,
-            pdf_compress_dpi=0,
-            source_cleanup_strategy="typst_fill",
-        )
-
-        assert payload_prewarm is not None
-        assert payload_prewarm.bbox_text_strip_candidates is None
-
-
-def test_payload_prewarm_manifest_exposes_geometry_adjustments() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        source_pdf = root / "source.pdf"
-        output_pdf = root / "rendered" / "out.pdf"
-        artifacts_dir = root / "artifacts"
-        output_pdf.parent.mkdir()
-        _source_pdf(source_pdf)
-
-        handle = start_render_source_prewarm(
-            RenderPrewarmSpec(
-                source_pdf_path=source_pdf,
-                output_pdf_path=output_pdf,
-                artifacts_dir=artifacts_dir,
-                translated_pages=_tight_gap_page_payload(),
-                render_mode="overlay",
-                start_page=0,
-                end_page=0,
-                pdf_compress_dpi=0,
-            )
-        )
-        manifest_path = handle.wait()
-
-        payload_prewarm = try_load_render_payload_prewarm(
-            manifest_path=manifest_path,
-            source_pdf_path=source_pdf,
-            translated_pages=_tight_gap_page_payload(),
-            effective_render_mode="overlay",
-            start_page=0,
-            end_page=0,
-            pdf_compress_dpi=0,
-        )
-
-        assert payload_prewarm is not None
-        adjusted = payload_prewarm.effective_inner_bbox_lookup["p001-b001"]
-        assert adjusted[1] > 20.0
-        assert adjusted[3] < 70.0
-
-
-def test_background_specs_manifest_builds_without_precomputed_color_pages() -> None:
-    from retainpdf_pipeline.render.source.prewarm_page_specs import build_background_render_page_specs_manifest
-
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        source_pdf = root / "source.pdf"
-        _source_pdf(source_pdf)
-
-        manifest = build_background_render_page_specs_manifest(
-            source_pdf_path=source_pdf,
-            translated_pages=_translated_page_payload(),
-            first_line_indent_lookup={},
-            effective_inner_bbox_lookup={},
-            prepared_translated_pages=None,
-            color_adapted_pages=None,
-        )
-
-        assert manifest.get("page_count") == 1
-        assert manifest.get("block_count", 0) >= 1

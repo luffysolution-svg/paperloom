@@ -1,8 +1,9 @@
 // 展示组件边界：只收 props 发回调，不直连 services/store；
 // 文件选择与拖拽预览均由 UploadTile 容器映射为 onFile* 回调。
-import type { ChangeEventHandler, DragEventHandler, MouseEventHandler, ReactNode, RefCallback } from "react";
+import type { ChangeEventHandler, MouseEventHandler, ReactNode, RefCallback } from "react";
 
 import type { UploadViewState } from "../../../domain/upload-store.js";
+import { FRONT_MAX_SIZE_TEXT } from "@/platform/config/upload-constants.js";
 
 type UploadDropzoneProps = {
   upload: UploadViewState;
@@ -10,8 +11,6 @@ type UploadDropzoneProps = {
   onFileInputClick: () => void;
   onFileChange: ChangeEventHandler<HTMLInputElement>;
   onTileClick: MouseEventHandler<HTMLDivElement>;
-  onDragOver: DragEventHandler<HTMLDivElement>;
-  onDrop: DragEventHandler<HTMLDivElement>;
   budgetSlot: ReactNode;
 };
 
@@ -21,8 +20,6 @@ export function UploadDropzone({
   onFileInputClick,
   onFileChange,
   onTileClick,
-  onDragOver,
-  onDrop,
   budgetSlot,
 }: UploadDropzoneProps) {
   const tileClasses = [
@@ -34,13 +31,14 @@ export function UploadDropzone({
   ].filter(Boolean).join(" ");
 
   return (
-    <div className={tileClasses} onClick={onTileClick} onDragOver={onDragOver} onDrop={onDrop}>
+    <div className={tileClasses} onClick={onTileClick}>
       <input
         id="file"
         name="file"
         type="file"
         accept="application/pdf,.pdf"
-        aria-label="选择 PDF 文件"
+        multiple
+        aria-label="选择 PDF 文件（可以一次选多个）"
         ref={fileInputRef}
         disabled={!upload.tileEnabled}
         onClick={onFileInputClick}
@@ -63,9 +61,9 @@ export function UploadDropzone({
         </strong>
         <em id="upload-help" className={upload.helpVisible ? "" : "hidden"}>{upload.help}</em>
         <div className={`upload-meta upload-meta-inline${upload.tileEnabled ? "" : " hidden"}`}>
-          <span>单个 PDF</span>
-          <span>最大 50MB</span>
-          <span>最多 999 页</span>
+          <span>可一次选多个 PDF</span>
+          <span>最大 {FRONT_MAX_SIZE_TEXT}</span>
+          <span>页数上限随所选 OCR</span>
         </div>
       </div>
 

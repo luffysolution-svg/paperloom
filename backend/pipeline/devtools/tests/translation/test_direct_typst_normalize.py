@@ -1,14 +1,10 @@
-import sys
-from pathlib import Path
 
 import pytest
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
-from retainpdf_pipeline.services.pipeline_shared.direct_typst_math import has_balanced_unescaped_dollars
-from retainpdf_pipeline.services.pipeline_shared.direct_typst_math import normalize_direct_typst_translation
-from retainpdf_pipeline.translate.llm.result_canonicalizer import canonicalize_batch_result
+from retainpdf_math.direct_typst import has_balanced_unescaped_dollars
+from retainpdf_math.direct_typst import normalize_direct_typst_translation
+from retainpdf_translation.llm.result_canonicalizer import canonicalize_batch_result
 
 
 NORMALIZE_CASES = [

@@ -41,8 +41,8 @@ assertEqual(
   "custom API base resource URL",
 );
 assertEqual(
-  resolveJobSourcePdfAction({ job_id: "job/1", source_pdf_ready: true }).url,
-  "https://retainpdf.example.test/custom/api/v1/jobs/job%2F1/artifacts/source_pdf",
+  resolveJobSourcePdfAction({ job_id: "job-1", document_id: "doc/1", source_pdf_ready: true }).url,
+  "https://retainpdf.example.test/custom/api/v1/documents/doc%2F1/files/source.pdf",
   "custom API base source fallback",
 );
 

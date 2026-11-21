@@ -10,8 +10,19 @@ requires-python = ">=3.11,<3.12"
 dependencies = [
   "Pillow==10.4.0",
   "PyMuPDF==1.26.5",
-  "pikepdf==7.2.0",
+  # 10.x 而不是 7.2.0：**7.2.0 的 macOS wheel 只有 x86_64**，Apple Silicon 上
+  # `uv sync --locked` 必须从源码编译，而那要 qpdf 头文件 —— 于是 dev_stack 起不来、
+  # test:api 跑不了，Word 导出（走 retainpdf-pipeline layout-docx）整个不可用。
+  #
+  # 代码本来就兼容：这个仓库实际装的一直是 10.13（建环境的人绕过了 lockfile），
+  # 而 devtools 全套 2236 条、Rust 全量 945 条、pikepdf 专项 66 条都在它上面绿。
+  # 用到的 API 面也只有 Pdf.open/new/save、Dictionary、Array、Name、String、
+  # Object、Page、Rectangle 和内容流解析，7→10 之间都没动过。
+  "pikepdf==10.13.0.post1",
   "requests==2.32.5",
+  "retainpdf-base",
+  "retainpdf-math",
+  "retainpdf-translation",
   "urllib3==2.5.0",
 ]
 
@@ -25,6 +36,11 @@ test = [
 [project.scripts]
 retainpdf-pipeline = "retainpdf_pipeline.entrypoints.console:main"
 
+[tool.uv.sources]
+retainpdf-base = { workspace = true }
+retainpdf-math = { workspace = true }
+retainpdf-translation = { workspace = true }
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = [
@@ -34,8 +50,4 @@ namespaces = true
 
 [tool.setuptools.package-data]
 "retainpdf_pipeline" = ["*.json", "*.md"]
-"retainpdf_pipeline.translate.prompts" = ["*.txt", "*.md"]
 "retainpdf_pipeline.ocr.document_schema" = ["*.json"]
-# latex_commands.py 用 Path(__file__).with_name("latex_commands.json") 读登记表，
-# 漏声明这一项会让 wheel 丢掉该 json，OCR worker 在 import 期就 FileNotFoundError。
-"retainpdf_pipeline.foundation.shared" = ["*.json"]

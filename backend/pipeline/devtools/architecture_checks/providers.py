@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from devtools.architecture_checks.common import PACKAGE_ROOT
 from devtools.architecture_checks.common import SCRIPTS_ROOT
+from devtools.architecture_checks.common import TRANSLATION_PACKAGE_ROOT
 from devtools.architecture_checks.common import read_text
 from devtools.architecture_checks.common import rel
 from devtools.architecture_checks.common import scan_py_files
@@ -10,7 +11,7 @@ from devtools.architecture_checks.common import scan_py_files
 PIPELINE_ROOT = PACKAGE_ROOT / "runtime" / "pipeline"
 OCR_PROVIDER_ROOT = PACKAGE_ROOT / "ocr" / "ocr_provider"
 MINERU_ROOT = PACKAGE_ROOT / "ocr" / "mineru_provider"
-TRANSLATION_ROOT = PACKAGE_ROOT / "translate"
+TRANSLATION_ROOT = TRANSLATION_PACKAGE_ROOT
 RENDERING_ROOT = PACKAGE_ROOT / "render"
 
 PROVIDER_PRIVATE_IMPORT_PATTERNS = (
@@ -33,6 +34,8 @@ OCR_PROVIDER_FORBIDDEN_IMPORT_PATTERNS = (
     "import retainpdf_pipeline.runtime.pipeline",
     "from retainpdf_pipeline.translate",
     "import retainpdf_pipeline.translate",
+    "from retainpdf_translation",
+    "import retainpdf_translation",
     "from retainpdf_pipeline.render",
     "import retainpdf_pipeline.render",
 )

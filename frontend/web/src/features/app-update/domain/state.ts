@@ -3,11 +3,21 @@ import { UPDATE_CHECK_CACHE_STORAGE_KEY as CACHE_KEY } from "@/platform/config/s
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
-function isObject(value) {
-  return value && typeof value === "object" && !Array.isArray(value);
+function isObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function normalizeCachedInfo(value) {
+type UpdateCacheInfoInput = {
+  currentVersion?: string;
+  latestVersion?: string;
+  hasUpdate?: boolean;
+  title?: string;
+  body?: string;
+  htmlUrl?: string;
+  publishedAt?: string;
+};
+
+function normalizeCachedInfo(value: unknown) {
   if (!isObject(value)) {
     return null;
   }
@@ -18,13 +28,13 @@ function normalizeCachedInfo(value) {
   }
   return {
     checkedAt,
-    currentVersion: value.currentVersion || APP_VERSION,
+    currentVersion: String(value.currentVersion || APP_VERSION),
     latestVersion,
     hasUpdate: Boolean(value.hasUpdate),
-    title: value.title || latestVersion,
-    body: value.body || "",
-    htmlUrl: value.htmlUrl || "",
-    publishedAt: value.publishedAt || "",
+    title: String(value.title || latestVersion),
+    body: String(value.body || ""),
+    htmlUrl: String(value.htmlUrl || ""),
+    publishedAt: String(value.publishedAt || ""),
   };
 }
 
@@ -48,20 +58,20 @@ export function createUpdateCachePort({
     }
   }
 
-  function write(info) {
-    if (!info) {
+  function write(info: unknown) {
+    if (!isObject(info)) {
       return;
     }
     try {
       const cached = {
         checkedAt: now(),
-        currentVersion: info.currentVersion || APP_VERSION,
-        latestVersion: info.latestVersion || "",
+        currentVersion: String(info.currentVersion || APP_VERSION),
+        latestVersion: String(info.latestVersion || ""),
         hasUpdate: Boolean(info.hasUpdate),
-        title: info.title || "",
-        body: info.body || "",
-        htmlUrl: info.htmlUrl || "",
-        publishedAt: info.publishedAt || "",
+        title: String(info.title || ""),
+        body: String(info.body || ""),
+        htmlUrl: String(info.htmlUrl || ""),
+        publishedAt: String(info.publishedAt || ""),
       };
       storage?.setItem(CACHE_KEY, JSON.stringify(cached));
     } catch {
@@ -81,6 +91,6 @@ export function readUpdateCache(now = Date.now()) {
   return createUpdateCachePort({ now: () => now }).read();
 }
 
-export function writeUpdateCache(info, now = Date.now()) {
+export function writeUpdateCache(info: unknown, now = Date.now()) {
   createUpdateCachePort({ now: () => now }).write(info);
 }

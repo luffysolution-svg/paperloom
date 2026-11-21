@@ -1,22 +1,16 @@
-import sys
 from dataclasses import replace
-from pathlib import Path
 from unittest import mock
 
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-
-from retainpdf_pipeline.translate.llm import placeholder_guard
-from retainpdf_pipeline.translate.llm.providers.deepseek.client import _extract_stream_delta_text
-from retainpdf_pipeline.translate.llm.shared import cache
-from retainpdf_pipeline.translate.llm.shared.orchestration import segment_routing
-from retainpdf_pipeline.translate.llm.shared.orchestration.intentional_keep_origin import (
+from retainpdf_translation.llm import placeholder_guard
+from retainpdf_translation.llm.providers.deepseek.client import _extract_stream_delta_text
+from retainpdf_translation.llm.shared import cache
+from retainpdf_translation.llm.shared.orchestration import segment_routing
+from retainpdf_translation.llm.shared.orchestration.intentional_keep_origin import (
     keep_origin_payload_for_repeated_empty_translation,
 )
-from retainpdf_pipeline.translate.core.payload.parts.apply import apply_translated_text_map
-from retainpdf_pipeline.translate.services.policy import should_fast_path_keep_origin
+from retainpdf_translation.core.payload.parts.apply import apply_translated_text_map
+from retainpdf_translation.services.policy import should_fast_path_keep_origin
 
 
 def test_citation_rich_body_text_still_forces_translation() -> None:
@@ -205,7 +199,7 @@ def test_special_long_numbered_affiliation_list_fast_paths_keep_origin() -> None
 
 def test_special_long_author_name_list_fast_paths_keep_origin() -> None:
     authors = ", ".join(
-        f"Firstname Lastname"
+        "Firstname Lastname"
         for index in range(1, 160)
     )
     item = {
@@ -244,7 +238,7 @@ def test_long_normal_body_paragraph_does_not_fast_path_keep_origin() -> None:
 
 
 def test_translation_cache_prompt_hash_includes_plain_text_prompt_files() -> None:
-    from retainpdf_pipeline.translate.core import engine_identity
+    from retainpdf_translation.core import engine_identity
 
     original_load_prompt = engine_identity.load_prompt
 
@@ -290,8 +284,8 @@ def test_formula_segment_route_prefers_plain_for_small_segment_count() -> None:
 
 
 def test_direct_typst_skips_heavy_formula_split_entry() -> None:
-    from retainpdf_pipeline.translate.llm.shared import control_context
-    from retainpdf_pipeline.translate.llm.shared.orchestration import route_selection
+    from retainpdf_translation.llm.shared import control_context
+    from retainpdf_translation.llm.shared.orchestration import route_selection
 
     item = {
         "item_id": "p001-b002",
@@ -312,8 +306,8 @@ def test_direct_typst_skips_heavy_formula_split_entry() -> None:
 
 
 def test_english_residue_degrades_to_keep_origin_after_sentence_fallback_failure() -> None:
-    from retainpdf_pipeline.translate.llm.shared import control_context
-    from retainpdf_pipeline.translate.llm.shared.orchestration import fallbacks
+    from retainpdf_translation.llm.shared import control_context
+    from retainpdf_translation.llm.shared.orchestration import fallbacks
 
     item = {
         "item_id": "p001-b002",

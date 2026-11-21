@@ -1,0 +1,60 @@
+/* 状态详情 · 完整错误日志弹窗。（FailureLogDialog）
+ *
+ * @owns status-detail, detail, stage-history, events, event, failure, info-list
+ * @uses status-panel-note */
+
+@utility status-detail-log-dialog {
+  --app-dialog-radius: 22px;
+}
+
+@utility status-detail-log-shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  max-height: min(76dvh, 680px);
+}
+
+@utility status-detail-log-heading {
+  @apply flex min-w-0 items-center gap-3;
+}
+
+@utility status-detail-log-icon {
+  @apply inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink);
+
+  & svg {
+    width: 17px;
+    height: 17px;
+  }
+}
+
+@utility status-detail-log-body {
+  min-height: 0;
+  overflow: hidden;
+  padding: 18px;
+}
+
+@utility status-detail-log-content {
+  max-height: min(48dvh, 430px);
+  margin: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--ink) 3%, var(--paper));
+  color: var(--ink);
+  padding: 14px 16px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  user-select: text;
+}
+
+@utility status-detail-log-footer {
+  justify-content: space-between;
+
+  & .status-panel-note {
+    min-width: 0;
+  }
+}

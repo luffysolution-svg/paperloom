@@ -1,0 +1,39 @@
+/* 状态详情 · 翻译摘要卡片。（TranslationSummary）
+ *
+ * @owns translation, info-value, info-row, detail-info-list, status-panel-note, ring */
+
+@utility translation-summary-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 28px;
+
+  @media (max-width: 720px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+
+@utility translation-summary-card {
+  display: grid;
+  gap: 2px;
+
+  & .info-value {
+    min-width: 0;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    overflow-wrap: anywhere;
+  }
+
+  /* Provider 是文本型指标(如 deepseek_official),比数字长,降一级字号 */
+  & #translation-provider-family {
+    font-size: 14px;
+    line-height: 1.6;
+  }
+}
+
+@utility translation-summary-notes {
+  padding-top: 6px;
+}

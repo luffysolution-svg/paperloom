@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "retainpdf/contracts/ocr-providers/v1",
+  "title": "OCR 提供方清单（OCR Providers）",
+  "description": "GET /api/v1/providers/ocr 的返回：后端认的 OCR 提供方，和每个提供方建任务时能在 ocr.options 里带的选项。数据来自 backend/config/ocr_providers.json（没有这份文件时用 retainpdf-core config/provider_config.rs 里写死的一份），能力和产物布局按提供方种类补上。生产者：backend/packages/retainpdf-core/src/models/ocr.rs（OcrProviderPublicDefinition 等）、backend/packages/retainpdf-data/src/ocr_provider/catalog.rs（provider_client_definitions）；Rust 侧由 backend/api/src/api_tests/providers.rs 对真实接口的返回钉键集合。消费者：@retainpdf/contracts/ocr-providers 生成 DTO（前端现在用自己写死的 frontend/web/src/platform/config/providers.ts，要不要换由前端定）。成功响应包在 {code, message, data} 里，本契约描述 data 部分。不分页，提供方就几个。选项分两类（2026-10-22，审计 A2）：client_settable=true 的建任务时可以在 ocr.options 里带；client_settable=false 的只能服务器定（本地 / 命令型 OCR 要执行的 command、原始结果的转换器名 raw_provider、配置里带 env 的），请求带了 400 `ocr.options.<键> is server-owned`，这里也不给默认值（default 恒为 null，运维写的命令通常带本机路径）。改契约先改本文件，再重新生成 DTO 并让两端测试变绿。",
+  "base_path": "/api/v1",
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/api/v1/providers/ocr",
+      "output": "OcrProviderListView",
+      "rust_view": "Vec<OcrProviderPublicDefinition>（retainpdf-data ocr_provider::provider_client_definitions）",
+      "ts_consumer": "@retainpdf/contracts/ocr-providers :: OcrProviderListView",
+      "note": "多用户模式下登录即可（signed）。顺序：mineru、paddle、glm_ocr、local，配置里另加的按键名排在后面。"
+    }
+  ],
+  "definitions": {
+    "OcrProviderListView": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/OcrProviderPublicDefinition" }
+    },
+    "OcrProviderPublicDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "display_name",
+        "provider_kind",
+        "credential",
+        "options",
+        "capabilities",
+        "artifact_layout"
+      ],
+      "properties": {
+        "key": { "type": "string", "description": "建任务时 ocr.provider 填它，例如 mineru、paddle、glm_ocr（智谱 GLM-OCR）、local。" },
+        "display_name": { "type": "string" },
+        "provider_kind": {
+          "type": "string",
+          "description": "remote（远端 API）、local_command（本机命令）、remote_command（命令型、可以读 source.source_url）。配置里没写时是 remote。"
+        },
+        "credential": {
+          "anyOf": [{ "$ref": "#/definitions/OcrProviderCredentialSpec" }, { "type": "null" }],
+          "description": "不需要密钥的提供方（local）是 null。"
+        },
+        "options": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/definitions/OcrProviderOptionSpec" },
+          "description": "按选项名（ocr.options 里的键）列出。没在这里列出的选项（例如 Paddle CLI 的 cli_timeout）除 command、raw_provider 外都算客户端可填。"
+        },
+        "capabilities": { "$ref": "#/definitions/OcrProviderCapabilities" },
+        "artifact_layout": { "$ref": "#/definitions/OcrProviderArtifactLayout" }
+      }
+    },
+    "OcrProviderCredentialSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["credential_kind", "reference_field", "legacy_inline_field", "field", "env", "required_for"],
+      "properties": {
+        "credential_kind": { "type": "string", "description": "ocr.credential_ref 引用的凭据种类，恒为 ocr_provider_token。" },
+        "reference_field": { "type": "string", "description": "建任务时放凭据引用的字段，恒为 credential_ref。" },
+        "legacy_inline_field": { "type": "string", "description": "老客户端直接放明文 key 的字段，例如 mineru_token、paddle_token。" },
+        "field": { "type": "string", "description": "legacy_inline_field 的旧名，值相同。" },
+        "env": { "type": "string", "description": "流水线读这个 key 的环境变量名；没配时是空串。" },
+        "required_for": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "哪些来源需要 key：remote_url、local_upload。"
+        }
+      }
+    },
+    "OcrProviderOptionSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "default", "aliases", "choices", "required", "client_settable"],
+      "properties": {
+        "type": { "type": "string", "description": "string、boolean、number……配置里没写时是 string。" },
+        "default": {
+          "type": ["string", "number", "boolean", "null"],
+          "description": "默认值，类型跟 type 走（标量）；配置里没写时是 null。client_settable=false 的恒为 null（不给出服务器上配的值）。"
+        },
+        "env": {
+          "type": "string",
+          "description": "运维用来设这个选项的环境变量名。配置里没写时整个键不出现（不是 null）；带 env 的选项默认只能服务器定。"
+        },
+        "aliases": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "取值的别名，例如 paddle_model 的 paddleocr-vl → PaddleOCR-VL-1.6。没有时是 {}。"
+        },
+        "choices": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "可选值；没有时是 []（不限）。"
+        },
+        "required": { "type": "boolean" },
+        "client_settable": {
+          "type": "boolean",
+          "description": "建任务时请求能不能在 ocr.options 里带它（2026-10-22 加）。false：command、raw_provider，以及配置里带 env 且没写 client_settable: true 的；请求带了 400 `ocr.options.<键> is server-owned`。"
+        }
+      }
+    },
+    "OcrProviderCapabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "supports_remote_url_submit",
+        "supports_local_file_upload",
+        "supports_polling",
+        "supports_download_bundle",
+        "supports_extra_formats",
+        "supports_formula_toggle",
+        "supports_table_toggle"
+      ],
+      "properties": {
+        "supports_remote_url_submit": { "type": "boolean", "description": "能不能直接交 source.source_url。" },
+        "supports_local_file_upload": { "type": "boolean" },
+        "supports_polling": { "type": "boolean" },
+        "supports_download_bundle": { "type": "boolean" },
+        "supports_extra_formats": { "type": "boolean" },
+        "supports_formula_toggle": { "type": "boolean", "description": "ocr.disable_formula 起不起作用。" },
+        "supports_table_toggle": { "type": "boolean", "description": "ocr.disable_table 起不起作用。" }
+      }
+    },
+    "OcrProviderArtifactLayout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider_result_json", "provider_bundle_zip", "provider_raw_dir", "layout_json"],
+      "properties": {
+        "provider_result_json": { "type": "string", "description": "任务 ocr/ 目录下提供方原始结果的文件名。内部布局，客户端不要拿它拼地址，文件走 /jobs/:job_id/files。" },
+        "provider_bundle_zip": { "type": "string" },
+        "provider_raw_dir": { "type": "string" },
+        "layout_json": { "type": "string" }
+      }
+    }
+  }
+}

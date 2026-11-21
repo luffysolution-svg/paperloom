@@ -20,9 +20,9 @@ from cold_import_test_support import run_cold_import_probe
 
 REPO_PIPELINE_ROOT = Path(__file__).resolve().parents[3]
 STORE_PATH = (
-    REPO_PIPELINE_ROOT
-    / "retainpdf_pipeline"
-    / "translate"
+    REPO_PIPELINE_ROOT.parent
+    / "translation"
+    / "retainpdf_translation"
     / "workflow"
     / "checkpoint"
     / "store.py"

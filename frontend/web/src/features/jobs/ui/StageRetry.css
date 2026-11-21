@@ -1,0 +1,63 @@
+/* 阶段失败后的重试区。（StageRetry）
+ *
+ * @owns status, progress-track, progress-bar, task-toolbar-btn-result */
+
+@utility status-stage-retry {
+  box-sizing: border-box;
+  position: absolute;
+  left: 50%;
+  bottom: max(12px, calc(var(--status-progress-hero-padding, 18px) * 0.62));
+  transform: translateX(-50%);
+  margin-top: 0;
+  height: var(--status-retry-slot-height, var(--status-retry-min-height, 26px));
+  min-height: var(--status-retry-min-height, 26px);
+  max-height: var(
+    --status-retry-slot-height,
+    var(--status-retry-min-height, 26px)
+  );
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  z-index: 2;
+}
+
+@utility is-empty {
+  .status-card &#status-stage-retry {
+    display: grid !important;
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
+
+@utility status-stage-retry-btn {
+  appearance: none;
+  height: var(--status-retry-btn-min-height, 24px);
+  min-height: var(--status-retry-btn-min-height, 24px);
+  max-height: var(--status-retry-btn-min-height, 24px);
+  padding: 0 var(--status-retry-btn-padding, 10px);
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: var(--status-retry-btn-font-size, 11px);
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: none;
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease;
+
+  &:hover:not(:disabled) {
+    border-color: var(--ink);
+    background: var(--bg);
+    color: var(--ink);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+}

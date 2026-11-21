@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -55,6 +56,30 @@ def _load_dependency_groups(pyproject_path: Path) -> tuple[list[str], list[str]]
     if not runtime:
         raise RuntimeError(f"No project.dependencies found in {pyproject_path}")
     return runtime, test
+
+
+_REQUIREMENT_NAME_RE = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)")
+
+
+def _workspace_package_names(workspace_pyproject: Path) -> set[str]:
+    """本仓库 uv workspace 里的包（[tool.uv.sources] 里 `workspace = true` 的）。
+
+    它们由打包脚本从源码装（Docker 的 pip install /app/services/math、桌面包的 pip install --no-deps），
+    PyPI 上没有——写进 requirements 会让 pip 去 PyPI 找一个不存在的包。
+    """
+    text = workspace_pyproject.read_text(encoding="utf-8")
+    names = re.findall(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)\s*=\s*\{[^}]*workspace\s*=\s*true", text, flags=re.M)
+    return {name.lower().replace("_", "-") for name in names}
+
+
+def _without_workspace_packages(requirements: list[str], workspace: set[str]) -> list[str]:
+    kept = []
+    for requirement in requirements:
+        match = _REQUIREMENT_NAME_RE.match(requirement)
+        if match and match.group(1).lower().replace("_", "-") in workspace:
+            continue
+        kept.append(requirement)
+    return kept
 
 
 def _load_dependency_groups_fallback(text: str, pyproject_path: Path) -> tuple[list[str], list[str]]:
@@ -143,7 +168,10 @@ def main() -> None:
     # Keep generated headers stable even when the backend is checked out beside
     # the product repository rather than inside the backend package.
     pipeline_source = "backend/pipeline/pyproject.toml"
-    pipeline_runtime, pipeline_test = _load_dependency_groups(pipeline_path)
+    workspace = _workspace_package_names(services_root / "pyproject.toml")
+    pipeline_runtime, pipeline_test = (
+        _without_workspace_packages(group, workspace) for group in _load_dependency_groups(pipeline_path)
+    )
     pipeline_with_test = pipeline_runtime + pipeline_test
 
     targets = {

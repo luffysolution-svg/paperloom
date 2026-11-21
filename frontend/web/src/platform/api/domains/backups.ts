@@ -1,8 +1,21 @@
+import * as MockBackups from "../mocks/backups.js";
+import {
+  fetchBackupStatus as _canonFetchBackupStatus,
+  createBackup as _canonCreateBackup,
+  restoreBackup as _canonRestoreBackup,
+  deleteBackup as _canonDeleteBackup,
+} from "@retainpdf/api/backups";
+import { mockable } from "./_mockable.js";
 import { API_PREFIX } from "@/platform/config/api-constants.js";
 import { isMockMode } from "@/platform/config/runtime.js";
 import { buildApiEndpoint, fetchProtected } from "./http.js";
 import { getDesktopHost } from "@/platform/desktop/host.js";
 import { backupClientConfig } from "@/platform/config/backup-client-config.js";
+
+export const fetchBackupStatusApi = mockable(_canonFetchBackupStatus, MockBackups.fetchBackupStatus);
+export const createBackupApi = mockable(_canonCreateBackup, MockBackups.createBackup);
+export const restoreBackupApi = mockable(_canonRestoreBackup, MockBackups.restoreBackup);
+export const deleteBackupApi = mockable(_canonDeleteBackup, MockBackups.deleteBackup);
 
 export type BackupItem = {
   id: string;
@@ -53,7 +66,6 @@ async function download(name: string, onProgress?: (progress: BackupProgress) =>
   const picker = (window as Window & {
     showSaveFilePicker?: (options: unknown) => Promise<{ createWritable(): Promise<WritableStream<Uint8Array>> }>;
   }).showSaveFilePicker;
-  // Ask for a destination while still in the user's click gesture, then stream to disk.
   const destination = picker ? await picker.call(window, { suggestedName: name, types: [{ description: "PaperLoom 迁移包", accept: { "application/zip": [".zip"] } }] }) : null;
   const response = await fetchProtected(buildApiEndpoint(API_PREFIX, `backups/download/${encodeURIComponent(name)}`));
   if (!response.ok) {

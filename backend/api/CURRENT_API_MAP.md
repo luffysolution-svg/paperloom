@@ -41,8 +41,8 @@
 代码主入口：
 
 - [`src/routes/jobs/mod.rs`](src/routes/jobs/mod.rs)
-- [`src/services/jobs/*`](src/services/jobs)
-- [`../packages/retain-jobs/src/job_runner/*`](../packages/retain-jobs/src/job_runner)
+- [`packages/retainpdf-jobs/src/*`](../packages/retainpdf-jobs/src)
+- [`../packages/retainpdf-runner/src/job_runner/*`](../packages/retainpdf-runner/src/job_runner)
 
 ### Python 层
 
@@ -62,7 +62,7 @@
 - `retainpdf-pipeline translate-only --spec <job_root>/specs/translate.spec.json`
 - `retainpdf-pipeline render-only --spec <job_root>/specs/render.spec.json`
 
-未安装 retainpdf-pipeline 的桌面兼容目录回退到 python services/pipeline/entrypoints/run_*.py --spec <job_root>/specs/<stage>.spec.json。
+Rust 层实际用 `python -m retainpdf_pipeline.<阶段> --spec <job_root>/specs/<stage>.spec.json` 启动 stage worker（`RUST_API_PYTHON_ENTRYPOINT_MODE` 已弃用并被忽略）；`backend/pipeline/retainpdf_pipeline/entrypoints/run_*.py` 只留给手工运行。
 
 ## 2. 当前正式 workflow
 
@@ -106,9 +106,9 @@
 关键代码：
 
 - Rust 写 spec：
-  - [`../packages/retain-data/src/worker_command.rs`](../packages/retain-data/src/worker_command.rs)
+  - [`../packages/retainpdf-data/src/worker_command.rs`](../packages/retainpdf-data/src/worker_command.rs)
 - Python 按 provider 分发：
-  - [`services/pipeline/retainpdf_pipeline/ocr/ocr_provider/provider_pipeline.py`](../pipeline/retainpdf_pipeline/ocr/ocr_provider/provider_pipeline.py)
+  - [`backend/pipeline/retainpdf_pipeline/ocr/ocr_provider/provider_pipeline.py`](../pipeline/retainpdf_pipeline/ocr/ocr_provider/provider_pipeline.py)
 
 注意：生产主链的 `book` job 不再以 `retainpdf-pipeline provider-case` 作为初始命令。`book` job 创建时只保存
 `book-workflow-rust-orchestrated` 占位命令，真正执行由 Rust `job_runner` 串联 OCR child、normalize、
@@ -122,7 +122,7 @@ Rust 和 Python worker 之间的正式协议已经不是长 CLI 参数，而是�
 retainpdf-pipeline <subcommand> --spec <job_root>/specs/<stage>.spec.json
 ```
 
-未安装 retainpdf-pipeline 的桌面兼容目录回退到 python services/pipeline/entrypoints/run_*.py --spec <job_root>/specs/<stage>.spec.json。
+Rust 层实际用 `python -m retainpdf_pipeline.<阶段> --spec <job_root>/specs/<stage>.spec.json` 启动 stage worker（`RUST_API_PYTHON_ENTRYPOINT_MODE` 已弃用并被忽略）；`backend/pipeline/retainpdf_pipeline/entrypoints/run_*.py` 只留给手工运行。
 
 当前正式 stage：
 
@@ -137,7 +137,7 @@ legacy/local helper stage：
 
 对应 Python loader：
 
-- [`services/pipeline/retainpdf_pipeline/foundation/shared/stage_specs.py`](../pipeline/retainpdf_pipeline/foundation/shared/stage_specs.py)
+- [`backend/pipeline/retainpdf_pipeline/foundation/shared/stage_specs.py`](../pipeline/retainpdf_pipeline/foundation/shared/stage_specs.py)
 
 ## 5. Rust 到 Python 的真实执行链
 
@@ -151,8 +151,8 @@ legacy/local helper stage：
 
 Rust 路由：
 
-- [`src/routes/jobs/create.rs`](src/routes/jobs/create.rs)
-- [`src/services/jobs/facade/mod.rs`](src/services/jobs/facade/mod.rs)
+- [`src/routes/jobs/lifecycle.rs`](src/routes/jobs/lifecycle.rs)
+- [`packages/retainpdf-jobs/src/facade.rs`](../packages/retainpdf-jobs/src/facade.rs)
 
 ### 第二步：Rust 创建 job
 
@@ -165,9 +165,9 @@ Rust 路由：
 
 主要代码：
 
-- [`src/services/jobs/creation`](src/services/jobs/creation)
-- [`src/services/job_snapshot_factory.rs`](src/services/job_snapshot_factory.rs)
-- [`src/services/job_launcher.rs`](src/services/job_launcher.rs)
+- [`packages/retainpdf-jobs/src/lifecycle/creation`](../packages/retainpdf-jobs/src/lifecycle/creation)
+- [`packages/retainpdf-jobs/src/lifecycle/snapshot_factory.rs`](../packages/retainpdf-jobs/src/lifecycle/snapshot_factory.rs)
+- [`packages/retainpdf-jobs/src/lifecycle/launcher.rs`](../packages/retainpdf-jobs/src/lifecycle/launcher.rs)
 
 注意：
 
@@ -186,10 +186,10 @@ Rust 根据 workflow 选择运行计划：
 
 主要代码：
 
-- [`../packages/retain-jobs/src/job_runner/lifecycle.rs`](../packages/retain-jobs/src/job_runner/lifecycle.rs)
-- [`../packages/retain-jobs/src/job_runner/translation_flow.rs`](../packages/retain-jobs/src/job_runner/translation_flow.rs)
-- [`../packages/retain-jobs/src/job_runner/ocr_flow/mod.rs`](../packages/retain-jobs/src/job_runner/ocr_flow/mod.rs)
-- [`../packages/retain-jobs/src/job_runner/render_flow.rs`](../packages/retain-jobs/src/job_runner/render_flow.rs)
+- [`../packages/retainpdf-runner/src/job_runner/lifecycle.rs`](../packages/retainpdf-runner/src/job_runner/lifecycle.rs)
+- [`../packages/retainpdf-runner/src/job_runner/translation_flow.rs`](../packages/retainpdf-runner/src/job_runner/translation_flow.rs)
+- [`../packages/retainpdf-runner/src/job_runner/ocr_flow/mod.rs`](../packages/retainpdf-runner/src/job_runner/ocr_flow/mod.rs)
+- [`../packages/retainpdf-runner/src/job_runner/render_flow.rs`](../packages/retainpdf-runner/src/job_runner/render_flow.rs)
 
 ### 第四步：Rust 按 stage 写 spec 并启动 worker
 
@@ -209,6 +209,7 @@ Rust 根据 workflow 选择运行计划：
 - 含义：默认先用 pikepdf 按 bbox 删除原 PDF content-stream text-op，再由 Typst 翻译块自带背景色做视觉覆盖
 - 可选值：`typst_fill | pikepdf_text_strip | bbox_text_strip | legacy | redact_restore_formulas`
 - `pikepdf_text_strip` 表示渲染前用 pikepdf 做路径级 content-stream text-op 删除，再由 Typst 背景块做视觉覆盖；`bbox_text_strip`、`legacy`、`redact_restore_formulas` 当前都是兼容别名，行为等同 `pikepdf_text_strip`
+- `render.engine = "rpr_fit"`（默认）| `"rpr"` | `"typst"`：`rpr_fit` / `rpr` 走自研排版引擎 retain-pdf-rendering，引擎直接写 PDF（`rpr_fit` 字号由引擎按测量决定，`rpr` 用 retain-pdf 的字号规则），`typst` 是原 Typst 路线；`dual` 模式、非思源宋体字体、Node 不可用（需 ≥ 22.8）、引擎依赖缺失或引擎失败时自动回退 `typst`，回退原因记进 `pipeline_summary` 的 warning 与 `fit_report.reason`。写进 `render.spec.json.params.engine` 与 `provider.spec.json.render.engine`；原地重渲染 / 精修沿用任务的值，retry-stage `overrides.render.engine` 可切换
 
 ### 第五步：job_runner 进入运行时主链
 
@@ -216,7 +217,7 @@ Rust 根据 workflow 选择运行计划：
 
 - [`src/app/jobs.rs`](src/app/jobs.rs)
   把 `AppState` 压缩成 `ProcessRuntimeDeps`
-- [`../packages/retain-jobs/src/job_runner/lifecycle.rs`](../packages/retain-jobs/src/job_runner/lifecycle.rs)
+- [`../packages/retainpdf-runner/src/job_runner/lifecycle.rs`](../packages/retainpdf-runner/src/job_runner/lifecycle.rs)
   负责 queued、执行槽位、workflow 分发
 
 ### 第六步：Rust 启动 Python worker
@@ -229,10 +230,10 @@ Rust 根据 workflow 选择运行计划：
 
 主要代码：
 
-- [`../packages/retain-jobs/src/job_runner/process_runner.rs`](../packages/retain-jobs/src/job_runner/process_runner.rs)
-- [`../packages/retain-jobs/src/job_runner/process_runner/startup.rs`](../packages/retain-jobs/src/job_runner/process_runner/startup.rs)
-- [`../packages/retain-jobs/src/job_runner/process_runner/execution.rs`](../packages/retain-jobs/src/job_runner/process_runner/execution.rs)
-- [`../packages/retain-jobs/src/job_runner/worker_process.rs`](../packages/retain-jobs/src/job_runner/worker_process.rs)
+- [`../packages/retainpdf-runner/src/job_runner/process_runner.rs`](../packages/retainpdf-runner/src/job_runner/process_runner.rs)
+- [`../packages/retainpdf-runner/src/job_runner/process_runner/startup.rs`](../packages/retainpdf-runner/src/job_runner/process_runner/startup.rs)
+- [`../packages/retainpdf-runner/src/job_runner/process_runner/execution.rs`](../packages/retainpdf-runner/src/job_runner/process_runner/execution.rs)
+- [`../packages/retainpdf-runner/src/job_runner/worker_process.rs`](../packages/retainpdf-runner/src/job_runner/worker_process.rs)
 
 ### 第七步：Python stage worker 执行
 
@@ -242,8 +243,8 @@ Rust 根据 workflow 选择运行计划：
 - `retainpdf-pipeline translate-only --spec specs/translate.spec.json`
 - `retainpdf-pipeline render-only --spec specs/render.spec.json`
 
-未安装 retainpdf-pipeline 的桌面兼容目录回退到 python services/pipeline/entrypoints/run_*.py --spec <job_root>/specs/<stage>.spec.json；两种启动方式
-消费同一份 stage spec，产物校验不依赖物理脚本路径。
+Rust 层实际用 `python -m retainpdf_pipeline.<阶段> --spec <job_root>/specs/<stage>.spec.json` 启动 stage worker（`RUST_API_PYTHON_ENTRYPOINT_MODE` 已弃用并被忽略）；
+`retainpdf-pipeline` 命令和 `run_*.py` 消费同一份 stage spec，产物校验不依赖物理脚本路径。
 
 `retainpdf-pipeline provider-case` 仍保留 legacy/local wrapper 用于本地一次性验证 provider-backed 全流程（`run_provider_case.py` 仅桌面兼容）；不要把它当成
 Rust API 生产主链入口。
@@ -308,7 +309,6 @@ Rust API 生产主链入口。
 保留的 local / legacy wrapper：
 
 - `retainpdf-pipeline provider-case`（`run_provider_case.py` 仅桌面兼容）
-- `run_document_flow.py`（script-mode，仅桌面兼容，无 console 等价物）
 
 当前原则：
 
@@ -323,7 +323,7 @@ Rust API 生产主链入口。
 
 - Python worker 写 `DATA_ROOT/jobs/<job_id>/logs/pipeline_events.jsonl`
 - Rust 查询层合并 DB events 和 `pipeline_events.jsonl`
-- 对 `book` / `translate` 这类会创建 OCR child 的主任务，`GET /api/v1/jobs/<job_id>/events` 还会合并 `{job_id}-ocr` 的 OCR 子任务事件
+- 对 `book` / `translate` 这类会创建 OCR child 的主任务，`GET /api/v1/jobs/<job_id>/progress/events`（2026-10-18 起旧地址 `/events` 已删除）还会合并 `{job_id}-ocr` 的 OCR 子任务事件
 - OCR 子任务事件会映射成主任务 `job_id`；原始来源放在 `payload.source_job_id` 和 `payload.source_event`
 - Rust detail/list 优先使用 live pipeline stage 快照，而不是陈旧的 DB `job.stage`
 
@@ -391,102 +391,21 @@ Rust API 生产主链入口。
 
 ### 看 Rust 到底起了哪个 Python 脚本
 
-- [`../packages/retain-data/src/worker_command.rs`](../packages/retain-data/src/worker_command.rs)
+- [`../packages/retainpdf-data/src/worker_command.rs`](../packages/retainpdf-data/src/worker_command.rs)
 
 ### 看 Python provider 总入口怎么分发
 
-- [`services/pipeline/retainpdf_pipeline/ocr/ocr_provider/provider_pipeline.py`](../pipeline/retainpdf_pipeline/ocr/ocr_provider/provider_pipeline.py)
+- [`backend/pipeline/retainpdf_pipeline/ocr/ocr_provider/provider_pipeline.py`](../pipeline/retainpdf_pipeline/ocr/ocr_provider/provider_pipeline.py)
 
 ### 看 stage spec 长什么样
 
-- [`services/pipeline/retainpdf_pipeline/foundation/shared/stage_specs.py`](../pipeline/retainpdf_pipeline/foundation/shared/stage_specs.py)
+- [`backend/pipeline/retainpdf_pipeline/foundation/shared/stage_specs.py`](../pipeline/retainpdf_pipeline/foundation/shared/stage_specs.py)
 
 ### 看最终主链结果
 
 - `DATA_ROOT/jobs/<job_id>/artifacts/pipeline_summary.json`
 
-## 12. 当前本地 Agent document-operation 链
+## 12. 本地 Agent document-operation 链（已删）
 
-后端已经有一条不经过 MCP、也不经过前端的本地控制链：
-
-```text
-retainpdf-agent CLI
-  <- RETAINPDF_AGENT_CAPABILITY (1..300 秒，conversation/document/action scoped)
-  -> /api/v1/internal/agent/operations/*
-  -> Rust document_operations service
-  -> SQLite operation/attempt/event/version tables
-  -> restricted_page_program_v1 executor
-  -> validated immutable candidate.pdf
-```
-
-模型可以提交 `retainpdf_page_program_v1`，按顺序组合 `select_pages` 与
-`rotate_pages`，实现整页删除、重排、复制和旋转。Rust 会持久化不可变源文件、
-规范化程序及 dispatch identity；固定 Python worker 只解释这套封闭数据协议，
-生成的 candidate 还会逐页按批准的页面映射和旋转规则进行 PyMuPDF 栅格化
-（整页等比例缩放，最长边最大 512px）；
-预期页与输出页的 RGB 像素必须一致。Rust 会复核 compact visual report 的 hash、
-页面计划、几何摘要和零 mismatch 结论，再结合大小、文件数、非 symlink、PDF
-可读性与页数验证，之后才进入 `result_ready`。任意 Python、Typst、Ghostscript
-等生成代码仍未开放，
-必须等独立 OS/container 隔离完成后再接入。
-
-`operation.run` 现在也承担显式重试，但不会增加一个新的模型工具：`failed`
-会保留旧 attempt 并创建新 attempt；`ambiguous` 只有在请求明确携带
-`accept_duplicate_risk=true` 时才允许。新 attempt 持久化 retry idempotency
-key，因此断网后重复同一请求只会回放原 attempt；活动文档版本已变化则 409
-拒绝，避免在过期 base 上继续执行。
-
-Rust 已实现 `POST /api/v1/internal/agent/capabilities`。完整 API key 只在可信
-后端签发阶段使用；CLI 优先发送短期 capability。token 不入库，API 重启或
-过期即失效，并且不能访问 runtime-session、不能再次签发、不能越过绑定的
-conversation/document/action。OpenAI-compatible / FX 模型进程都拿不到 token；
-共享宿主 broker 会验证精确命令并代执行，不能把 capability 放进模型环境变量
-或命令参数。每次实际调用只签发一个 action、60 秒的 capability，并在模型
-运行时之外启动真实 CLI。
-
-关键代码：
-
-- [`src/bin/retainpdf-agent.rs`](src/bin/retainpdf-agent.rs)
-- [`src/app/router/internal_agent.rs`](src/app/router/internal_agent.rs)
-- [`src/app/router/ai.rs`](src/app/router/ai.rs)
-- [`src/routes/document_operations.rs`](src/routes/document_operations.rs)
-- [`src/routes/public_document_operations.rs`](src/routes/public_document_operations.rs)
-- [`src/services/document_operations`](src/services/document_operations)
-- [`src/services/public_document_operations.rs`](src/services/public_document_operations.rs)
-- [`../../database/retain-db/src/db/document_operations.rs`](../../database/retain-db/src/db/document_operations.rs)
-
-对外入口与实际 runtime 链如下：
-
-```text
-POST /api/v1/ai/ask
-  -> Rust byte-stream proxy -> AI /v1/ask
-  -> AskOrchestrator selects python / openai / fx for this request
-     -> python: Markdown reading only
-     -> openai: host chat transport + shared exact-grammar broker
-     -> fx ACP: private HOME/workspace + single-use Unix-socket wrapper
-  -> host broker mints one-action capability and runs retainpdf-agent
-  -> Rust persists operation / attempt / event / candidate version
-  -> FX only: Rust runtime-session cursor API (revision CAS)
-```
-
-对应内部 cursor 接口：
-
-```text
-GET/PUT/DELETE /api/v1/internal/agent/runtime-sessions/:conversation_id
-```
-
-除严格匹配的 `document inspect` 和 operation lifecycle 命令外，broker
-仍全部 fail closed。当前用户消息会在启动 operation-capable runtime 前先写入
-Rust 对话，模型无法伪造 document/conversation/message scope；默认 explicit
-模式下 run/commit/retry 还需要请求级显式确认。
-这使模型可以管理并执行 durable 的受限整页变换，但仍不能直接执行任意 PDF
-代码。浏览器断线不取消 operation；API 重启后会从 run index、terminal result
-和 SQLite 事件恢复。candidate 只会在显式 commit 后成为文档的 active source，
-下一次文档操作和翻译都会以该版本为基础。
-
-浏览器不直接调用 internal capability/operation 路由。公开控制面使用
-`/api/v1/ai/conversations/:conversation_id/operations` 和
-`/api/v1/ai/operations/:operation_id/*`：查询只返回安全投影，run/retry/cancel/
-commit 请求必须回传最后观察到的 status、attempt、program SHA-256 和稳定
-idempotency key；状态被其他请求推进时返回 409。详细字段见
-[`docs/api-spec/ai-control-plane.md`](docs/api-spec/ai-control-plane.md)。
+2026-11-03 跟 RetainPDF 自己的 AI 服务一起删了（产品里只留 Studio 的 AI）：`/api/v1/ai/*`、
+`/api/v1/internal/agent/*`、文档操作、Agent 计算都没有了。库里的对话、操作、计算记录表留着没删。

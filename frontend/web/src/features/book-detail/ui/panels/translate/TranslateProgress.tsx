@@ -1,23 +1,20 @@
-// 处理 Tab 的翻译进度区：attachJobProgress（library domain）+ StatusCardEmbedded。
-//
-// 运行中挂载完整 StatusCard；终态由 WorkflowPanel 的紧凑过程条保留阶段历史，
-// 失败态在过程条下继续给出诊断入口。
+// 「进度」页状态行右边的任务动作：在跑时是「实时译文」+ 详情、取消两个图标（StatusCard）。
+// 同时它是轮询的主人：任务在跑或失败时把本书的任务挂到全局状态卡 store 上（attachJobProgress）。
+// 不在跑时只留一个隐藏的契约节点（#book-detail-translate-progress）。
 
 import { useEffect } from "react";
-import { ArrowUpRight, Radio } from "lucide-react";
-import {
-  useHomeLibrary,
-  useHomeStatusCard,
-  useHomeStatusDetail,
-} from "@/ui/context/home-services-context.js";
+import { Radio } from "lucide-react";
+import { Button } from "@retainpdf/ui";
+import { useHomeStatusCard } from "@/ui/context/home-services-context.js";
 import { useStoreSnapshot } from "@/ui/hooks/use-store.js";
 import { StatusCard } from "@/features/jobs/index.js";
 import type { LibraryCardItem } from "@/features/library/domain.js";
 import {
   isLibraryOnlyItem,
 } from "@/features/library/domain.js";
+import { isActiveJobStatus } from "@retainpdf/domain/job";
+import { useLibraryServices } from "@/features/library/index.js";
 
-const PROGRESS_STATUSES = new Set(["queued", "pending", "running", "validating"]);
 
 function resolveJobId(item: LibraryCardItem = {}) {
   const raw = `${item.job_id || item.active_job_id || ""}`.trim();
@@ -43,6 +40,8 @@ export interface BookTranslateProgressPanelProps {
   active?: boolean;
   dialogOpen?: boolean;
   onOpenLiveReader?: (jobId: string) => void;
+  /** 本书的任务 id（documentJobs.jobs）。全局卡片的 jobId 不在里面就不用它。 */
+  documentJobIds?: string[];
 }
 
 export function BookTranslateProgressPanel({
@@ -50,11 +49,11 @@ export function BookTranslateProgressPanel({
   active = true,
   dialogOpen = true,
   onOpenLiveReader,
+  documentJobIds = [],
 }: BookTranslateProgressPanelProps) {
-  const library = useHomeLibrary();
+  const library = useLibraryServices();
   const actions = library?.actions;
   const { store: statusCardStore } = useHomeStatusCard();
-  const statusDetail = useHomeStatusDetail();
   const statusCardState = useStoreSnapshot(statusCardStore);
   const cardJobId = `${statusCardState?.snapshot?.jobId || ""}`.trim();
 
@@ -64,8 +63,8 @@ export function BookTranslateProgressPanel({
   const itemStatus = `${item.status || ""}`.trim().toLowerCase();
 
   const cardStatus = `${statusCardState?.snapshot?.status || ""}`.trim().toLowerCase();
-  const cardPollingActive = PROGRESS_STATUSES.has(cardStatus);
-  const showDetailedProgress = showProgress && PROGRESS_STATUSES.has(itemStatus);
+  const cardPollingActive = isActiveJobStatus(cardStatus);
+  const showDetailedProgress = showProgress && isActiveJobStatus(itemStatus);
   const showFailure = showProgress && itemStatus === "failed";
   const shouldAttach = showDetailedProgress || showFailure;
 
@@ -93,94 +92,70 @@ export function BookTranslateProgressPanel({
 
   // 终态不挂完整大卡；WorkflowPanel 会展示紧凑四阶段过程条。
   if (!showDetailedProgress) {
+    // 失败的说法在「错误」页，「查看日志」和「从断点继续」在状态行上。
+    // 这里曾经再画一条「本次翻译失败 · 查看日志」，和卡片说同一件事。只留契约节点。
     if (showFailure) {
-      const snapshot: any = item.stage_snapshot || {};
-      const detail = `${snapshot.stage_detail || item.stage_detail || ""}`.trim();
       return (
-        <div
+        <span
           id="book-detail-translate-progress"
-          className="flex items-center justify-between gap-3 rounded-lg border border-foreground/20 bg-muted/30 px-3 py-2.5"
+          className="sr-only"
           data-job-id={jobId}
           data-state="failed"
           data-item-status={itemStatus}
-        >
-          <div className="min-w-0">
-            <p className="text-xs font-medium text-foreground">本次翻译失败</p>
-            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-              {detail && detail !== "任务失败" ? detail : "查看失败原因后可重新提交"}
-            </p>
-          </div>
-          <button
-            type="button"
-            className="shrink-0 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
-            onClick={() => statusDetail.controller.openStatusDetailDialog("failure")}
-          >
-            查看日志
-          </button>
-        </div>
+        />
       );
     }
     return <span id="book-detail-translate-progress" className="sr-only" data-state="succeeded" />;
   }
 
-  // fallback：优先跟 statusCard 正在播的 job（含重试新 id），避免用旧 item 盖回完成态
-  const liveFallback = cardJobId && cardJobId !== jobId
+  // 全局卡片可能在播另一本书的任务；只有它属于本书（如刚提交的重试）才跟它。
+  const ownCardJobId = cardJobId && documentJobIds.includes(cardJobId) ? cardJobId : "";
+  // fallback：优先跟 statusCard 正在播的本书 job（含重试新 id），避免用旧 item 盖回完成态。
+  // 卡片在播别的书时照旧用本书的 item，merge 会把那份快照隔离掉，不显示别的书的进度。
+  const liveFallback = ownCardJobId && ownCardJobId !== jobId
     ? {
         document_id: item.document_id,
         title: item.title,
         display_name: item.display_name,
-        source_filename: item.source_filename,
+        source_file_name: item.source_file_name,
         page_count: item.page_count,
         cover_url: item.cover_url,
         thumbnail_url: item.thumbnail_url,
-        job_id: cardJobId,
-        active_job_id: cardJobId,
+        job_id: ownCardJobId,
+        active_job_id: ownCardJobId,
         library_only: false,
         status: cardStatus || item.status,
       }
     : item;
 
-  // 只有运行中任务挂载完整 StatusCard。
-  // 父级 Tabs.Content 用 data-[state=inactive]:hidden 藏面板，节点仍在 DOM
-  // （开发者工具可搜 #book-detail-job-status-card）。
   return (
     <div
       id="book-detail-translate-progress"
       className="book-translate-progress"
-      data-job-id={cardJobId || jobId}
+      data-job-id={ownCardJobId || jobId}
       data-state={itemStatus === "succeeded" && !cardPollingActive ? "succeeded" : "ready"}
       data-item-status={itemStatus || ""}
       data-library-only={libraryOnly ? "true" : "false"}
       data-tab-active={active ? "true" : "false"}
     >
       {onOpenLiveReader ? (
-        <button
-          type="button"
-          className="home-book-live-translation-entry w-full rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background hover:opacity-90"
-          onClick={() => onOpenLiveReader(cardJobId || jobId)}
+        <Button
+          variant="primary"
+          className="home-book-live-translation-entry"
+          title="在原 PDF 上逐页看译文，不用等全部完成"
+          onClick={() => onOpenLiveReader(ownCardJobId || jobId)}
           aria-label="在阅读器中查看实时译文"
         >
-          <span className="home-book-live-translation-entry-icon" aria-hidden="true">
-            <Radio />
-          </span>
-          <span>
-            <strong>查看实时译文 →</strong>
-            <small>在原 PDF 上逐页显示</small>
-          </span>
-          <ArrowUpRight aria-hidden="true" />
-        </button>
+          <Radio aria-hidden="true" />
+          实时译文
+        </Button>
       ) : null}
-      <div className="book-detail-status-card-host">
-        {/* StatusCard 现在只有嵌入这一套形态（主页那张页面级卡已下线），
-            所以不再需要 embedded / showHiddenContract / showResultActions 这些
-            用来区分两套形态的开关。 */}
-        <StatusCard
-          visible={active}
-          idPrefix="book-detail-"
-          rootId="book-detail-job-status-card"
-          fallbackItem={liveFallback}
-        />
-      </div>
+      <StatusCard
+        visible={active}
+        idPrefix="book-detail-"
+        rootId="book-detail-job-status-card"
+        fallbackItem={liveFallback}
+      />
     </div>
   );
 }

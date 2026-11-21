@@ -1,14 +1,17 @@
 // 书架卡片右上角终态徽标。
 // 进行中（排队/OCR/翻译/渲染）不在角标写文案（易截断），改由封面中央加载动画表达。
+// 「已翻译」是书架上的常态（实测 16 本里 15 本），每张卡都挂一个等于没说，还把真正需要
+// 注意的「失败 / 存档 / OCR 完成」淹没了 —— 所以翻译成功不挂角标，只给例外状态挂。
 //
 // 决策表（status × stage → 中央转圈 / 右上角标 / 无）：
 // | status                | stage(stageKey/raw)              | 转圈 | 角标      |
 // | library_only 馆藏      | —                                | 无   | 馆藏      |
 // | failed                | failed                           | 无   | 失败      |
+// | failed + has_translation（旧译文可读） | failed              | 无   | 更新失败（次要样式） |
 // | canceled/cancelled    | canceled                         | 无   | 已取消    |
 // | queued/running/pending/processing/validating | ocr/translate/render/queued/processing/validating | 转圈 | 无（中央 loading 代替） |
 // | succeeded + OCR-only  | done                             | 无   | OCR 完成  |
-// | succeeded             | done                             | 无   | 已翻译    |
+// | succeeded             | done                             | 无   | 无（常态不标） |
 // | succeeded + 重试脏态   | 回到 ocr/translate/render        | 转圈 | 无        |
 // | 其余未知              | —（isRecentJobActive 兜底）      | 按 active 转圈 | 无 |
 
@@ -20,12 +23,20 @@ import {
   isRecentJobActive,
   stageKeyForRecentJobLabel,
 } from "./recent-job-card-presenter.js";
-import { isOcrOnlyItem } from "./library-card-semantics.js";
+import { hasReadableTranslation, isOcrOnlyItem } from "./library-card-semantics.js";
 import { isCanceledStatus, isFailedStatus } from "@/platform/contracts/job-status.js";
 
+function ocrDoneBadge(): LibraryCardBadge {
+  return {
+    label: "OCR 完成",
+    icon: "scan-text",
+    cls: "bg-secondary text-secondary-foreground",
+  };
+}
+
 /**
- * @returns 终态/馆藏徽标；进行中返回 null（用中央 loading 代替，见上表）。
- * 判定序：馆藏 → 失败/取消 → 进行中(null) → 成功(OCR 完成/已翻译) → 运行兜底(null)。
+ * @returns 终态/馆藏徽标；进行中和翻译成功返回 null（见上表）。
+ * 判定序：馆藏 → 失败/取消 → 进行中(null) → 成功(OCR 完成 / 已翻译=null) → 运行兜底(null)。
  */
 export function libraryCardBadge(item: LibraryCardItem = {}): LibraryCardBadge | null {
   if (isLibraryOnlyItem(item)) {
@@ -48,6 +59,15 @@ export function libraryCardBadge(item: LibraryCardItem = {}): LibraryCardBadge |
   const stageKey = stageKeyForRecentJobLabel(item);
 
   if (isFailedStatus(status) || stageKey === "failed") {
+    // 失败只说明「最近一次处理失败」。书本身还有能读的旧译文时，醒目的「失败」会让人以为
+    // 书坏了 —— 降成次要提示：白底、红字、细边框，阅读入口照旧是对照阅读。
+    if (hasReadableTranslation(item)) {
+      return {
+        label: "更新失败",
+        icon: "alert",
+        cls: "border border-destructive/25 bg-white/95 text-destructive",
+      };
+    }
     return {
       label: "失败",
       icon: "alert",
@@ -67,20 +87,9 @@ export function libraryCardBadge(item: LibraryCardItem = {}): LibraryCardBadge |
     return null;
   }
 
-  // 已完成
+  // 已完成：只有 OCR 完成（没有译文，阅读入口也不同）值得标出来；翻译成功是常态，不挂角标。
   if (status === "succeeded" || stageKey === "done") {
-    if (isOcrOnlyItem(item)) {
-      return {
-        label: "OCR 完成",
-        icon: "scan-text",
-        cls: "bg-secondary text-secondary-foreground",
-      };
-    }
-    return {
-      label: "已翻译",
-      icon: "languages",
-      cls: "bg-primary text-primary-foreground",
-    };
+    return isOcrOnlyItem(item) ? ocrDoneBadge() : null;
   }
 
   // 排队 / 运行中（兜底）：进行中不挂角标，中央 loading 表达
@@ -90,18 +99,7 @@ export function libraryCardBadge(item: LibraryCardItem = {}): LibraryCardBadge |
 
   // 兜底：有 done 阶段
   if (stageKey === "done") {
-    if (isOcrOnlyItem(item)) {
-      return {
-        label: "OCR 完成",
-        icon: "scan-text",
-        cls: "bg-secondary text-secondary-foreground",
-      };
-    }
-    return {
-      label: "已翻译",
-      icon: "languages",
-      cls: "bg-primary text-primary-foreground",
-    };
+    return isOcrOnlyItem(item) ? ocrDoneBadge() : null;
   }
 
   return null;
@@ -133,7 +131,7 @@ export function isLibraryCardProcessing(item: LibraryCardItem = {}): boolean {
   // 重试后偶发 status 未及时变、但 stage 已回到 ocr/翻译/渲染；
   // 列表投影只有原生 stage（live.rs，无 display_stage），一并看 item.stage。
   const stage = stageKeyForRecentJobLabel(item);
-  const rawStage = `${(item as any).stage || ""}`.trim().toLowerCase();
+  const rawStage = `${item.stage || ""}`.trim().toLowerCase();
   const normRawStage = rawStage === "translation" || rawStage === "translating" ? "translate" : rawStage;
   const effStage = stage || (RUNNING_STAGES.has(normRawStage) ? normRawStage : "");
   // succeeded 先看原生 stage：helper 会把 succeeded 统一收敛成 done，

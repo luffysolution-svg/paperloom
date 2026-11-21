@@ -1,13 +1,7 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 
 import fitz
-
-
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
 
 from retainpdf_pipeline.render.pdf_structure_profile import build_pdf_structure_page_profile

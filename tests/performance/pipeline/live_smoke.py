@@ -146,7 +146,7 @@ def _main(resources):
                RETAIN_TRANSLATION_OPTIMIZATION=args.strategy,
                PYTHON_BIN=str(ROOT / "backend/.venv/bin/python"),
                PYTHONPATH=str(ROOT / "backend/pipeline"), PATH=str(ROOT / "backend/.venv/bin") + os.pathsep + env.get("PATH", ""))
-    job_id = "smoke-" + secrets.token_hex(8)
+    job_id = None  # 任务编号由服务器分配，提交后从返回里取
     report = {"job_id": job_id, "pages": "all" if args.all_pages else [1, 2], "workers": args.workers, "model": translation["model"], "transport": "rust", "status": "starting"}
     report["strategy"] = args.strategy
     report_path = output / "report.json"
@@ -199,10 +199,12 @@ def _main(resources):
         )
         save()
         payload = {"workflow": "translate", "source": {"artifact_job_id": args.source_job}, "translation": translation,
-                   "runtime": {"job_id": job_id, "timeout_seconds": args.timeout, "render_after_translation": False}}
+                   "runtime": {"timeout_seconds": args.timeout, "render_after_translation": False}}
         started = time.monotonic()
         submitted = True
-        api(session, base, "POST", "/api/v1/jobs", json=payload)
+        job_id = api(session, base, "POST", "/api/v1/jobs", json=payload)["job_id"]
+        report["job_id"] = job_id
+        save()
         last = None
         while time.monotonic() - started < args.timeout + 20:
             state = api(session, base, "GET", f"/api/v1/jobs/{job_id}")
@@ -224,9 +226,9 @@ def _main(resources):
         print(f"Stopped: {type(error).__name__}; inspect local private logs, do not resubmit blindly.", flush=True)
         return 1
     finally:
-        if submitted:
+        if submitted and job_id:
             try:
-                api(session, base, "POST", f"/api/v1/jobs/{job_id}/cancel")
+                api(session, base, "POST", f"/api/v1/jobs/{job_id}/actions/cancel")
             except Exception:
                 pass
         if process is not None and process.poll() is None:

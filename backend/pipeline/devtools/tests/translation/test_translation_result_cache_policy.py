@@ -1,19 +1,7 @@
-import json
-import sys
 import unittest
-from dataclasses import replace
-from pathlib import Path
 
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
-
-from retainpdf_pipeline.translate.llm.result_payload import result_entry
-from retainpdf_pipeline.translate.llm.shared.orchestration.heavy_formula import heavy_formula_split_reason
-from retainpdf_pipeline.translate.llm.shared.orchestration.heavy_formula import translate_heavy_formula_block
-from retainpdf_pipeline.translate.llm.shared.orchestration.metadata import should_store_translation_result
-from retainpdf_pipeline.translate.llm.shared.orchestration.sentence_level import sentence_level_fallback
-from retainpdf_pipeline.translate.llm.shared.orchestration.transport import DeferredTransportRetry
+from retainpdf_translation.llm.shared.orchestration.metadata import should_store_translation_result
 
 
 from retrying_translator_test_support import load_retrying_translator

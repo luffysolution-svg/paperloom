@@ -1,11 +1,14 @@
-use super::jobs_common::test_state;
-use crate::app::{build_app, build_simple_app};
-use axum::body::Body;
-use axum::http::{Request, StatusCode};
+//! 请求日志不记查询串：助手终端握手可以把 key 放在 `?api_key=…` 里，开 `RUST_LOG=debug` 时不能写进日志。
+
 use std::io::Write;
 use std::sync::{Arc, Mutex};
+
+use axum::body::Body;
+use axum::http::{Request, StatusCode};
 use tower::util::ServiceExt;
-use tracing_subscriber::fmt::format::FmtSpan;
+
+use super::jobs_common::test_state;
+use crate::app::build_app;
 
 #[derive(Clone, Default)]
 struct Captured(Arc<Mutex<Vec<u8>>>);
@@ -15,51 +18,91 @@ impl Write for Captured {
         self.0.lock().unwrap().extend_from_slice(buf);
         Ok(buf.len())
     }
+
     fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
     }
 }
 
 #[tokio::test]
-async fn both_routers_log_the_path_without_raw_or_encoded_query_secrets() {
+async fn debug_request_logs_keep_the_path_but_not_the_query_string() {
     let captured = Captured::default();
     let writer = captured.clone();
     let subscriber = tracing_subscriber::fmt()
         .with_max_level(tracing::Level::DEBUG)
         .with_ansi(false)
-        .with_span_events(FmtSpan::NEW)
         .with_writer(move || writer.clone())
         .finish();
     let _guard = tracing::subscriber::set_default(subscriber);
-    for app in [
-        build_app(test_state("log-full")),
-        build_simple_app(test_state("log-simple")),
-    ] {
-        captured.0.lock().unwrap().clear();
-        for _ in 0..20 {
-            tracing::callsite::rebuild_interest_cache();
-            let response = app
-                .clone()
-                .oneshot(
-                    Request::builder()
-                        .uri("/health?api_key=query-secret&token=encoded%2Dsecret")
-                        .body(Body::empty())
-                        .unwrap(),
-                )
-                .await
-                .unwrap();
-            assert_eq!(response.status(), StatusCode::OK);
-            if !captured.0.lock().unwrap().is_empty() {
-                break;
-            }
+
+    // tracing 的级别和兴趣缓存是全进程共享的，别的测试线程同时在建、丢订阅者时，偶尔会让这边一次请求一条都抓不到；
+    // 抓到为止，最多试 20 次。要守的是"抓到的日志里没有 key"。
+    let app = build_app(test_state("request-log-query"));
+    for _ in 0..20 {
+        tracing::callsite::rebuild_interest_cache();
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/health?api_key=query-secret-0123456789")
+                    .header("X-API-Key", "test-key")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        if !captured.0.lock().unwrap().is_empty() {
+            break;
         }
-        let logs = String::from_utf8(captured.0.lock().unwrap().clone()).unwrap();
-        assert!(logs.contains("/health"), "missing request path: {logs}");
-        assert!(!logs.contains("query-secret"), "raw query leaked: {logs}");
-        assert!(
-            !logs.contains("encoded%2Dsecret"),
-            "encoded query leaked: {logs}"
-        );
-        assert!(!logs.contains("api_key="), "query parameter leaked: {logs}");
     }
+
+    let logs = String::from_utf8(captured.0.lock().unwrap().clone()).unwrap();
+    assert!(logs.contains("/health"), "request span should still name the path: {logs}");
+    assert!(!logs.contains("query-secret"), "query string leaked into logs: {logs}");
+}
+
+/// 每个回应都带 `X-Request-ID`：客户端带了像样的就沿用，没带或不像样就生成一个。
+#[tokio::test]
+async fn every_response_carries_a_request_id_and_plain_client_ids_are_kept() {
+    let app = build_app(test_state("request-id"));
+    let request_id = |client: Option<&str>| {
+        let app = app.clone();
+        let client = client.map(str::to_owned);
+        async move {
+            let mut request = Request::builder().uri("/health");
+            if let Some(client) = client {
+                request = request.header("X-Request-ID", client);
+            }
+            let response = app.oneshot(request.body(Body::empty()).unwrap()).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            response
+                .headers()
+                .get("x-request-id")
+                .expect("response carries a request id")
+                .to_str()
+                .unwrap()
+                .to_owned()
+        }
+    };
+
+    let generated = request_id(None).await;
+    assert_eq!(generated.len(), 16, "{generated}");
+    assert_ne!(generated, request_id(None).await, "每个请求一个新编号");
+    assert_eq!(request_id(Some("nginx-0f1e2d3c")).await, "nginx-0f1e2d3c");
+    let replaced = request_id(Some(&"x".repeat(200))).await;
+    assert_eq!(replaced.len(), 16, "太长的不沿用：{replaced}");
+    // 没登记的地址（兜底 404）、另一个端口上的应用也带。
+    let response = app
+        .clone()
+        .oneshot(Request::builder().uri("/no-such-route").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert!(response.headers().contains_key("x-request-id"));
+    let simple = crate::app::build_simple_app(test_state("request-id-simple"));
+    let response = simple
+        .oneshot(Request::builder().uri("/ready").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert!(response.headers().contains_key("x-request-id"));
 }

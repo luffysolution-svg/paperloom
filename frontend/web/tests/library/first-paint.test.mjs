@@ -5,12 +5,8 @@ import { createRecentJobsLoader } from '../../src/features/library/domain/recent
 import { createRecentJobsStatePort } from '../../src/features/library/domain/recent-jobs/state.js';
 import { libraryCardBadge } from '../../src/features/library/domain/card/library-card-badge.js';
 import { cardSignatureOf } from '../../src/features/library/ui/shell/book-card/format.js';
+import { deferred } from "../helpers/async.mjs";
 
-function deferred() {
-  let resolve, reject;
-  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
-  return { promise, resolve, reject };
-}
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 globalThis.window = { setTimeout, clearTimeout };
 const document = (id = 'one') => ({ document_id: id, active_job_id: `job-${id}`, title: `${id}.pdf`, page_count: 8 });
@@ -24,8 +20,7 @@ function fixture(dependencies) {
     runtimePatches: { apply: (items) => items, applyExisting: (items) => items },
     homeStatePort: { setRecentJobsLoadingState: (value) => loading.push(value) },
     recentJobActions: {}, activeRefreshLoop: () => ({ schedule() {}, stop() {} }),
-    viewPort: { hasView: () => true, renderLoading() {}, setLoadMoreLoading() {} },
-    storeDrivenRendering: true,
+    viewPort: { renderLoading() {}, setLoadMoreLoading() {} },
   });
   return { state, loading, loader };
 }
@@ -34,7 +29,7 @@ test('first paint: documents render before unresolved live/OCR requests', async 
   const books = deferred();
   const { state, loading, loader } = fixture({
     fetchDocumentList: async () => ({ documents: [document()], total: 1 }),
-    fetchLibraryBookList: () => books.promise,
+    fetchJobsByIds: () => books.promise,
   });
   const pending = loader.load({ reset: true });
   await tick();
@@ -54,7 +49,7 @@ test('first paint: documents render before unresolved live/OCR requests', async 
 test('first paint: enrichment failure preserves documents and usable pagination', async () => {
   const { state, loader } = fixture({
     fetchDocumentList: async () => ({ documents: [document()], total: 2 }),
-    fetchLibraryBookList: async () => { throw new Error('unavailable'); },
+    fetchJobsByIds: async () => { throw new Error('unavailable'); },
   });
   await loader.load({ reset: true });
   assert.equal(state.getSnapshot().items.length, 1);
@@ -68,7 +63,7 @@ test('first paint: disposed loader ignores late enrichment', async () => {
   const books = deferred();
   const { state, loader } = fixture({
     fetchDocumentList: async () => ({ documents: [document()], total: 1 }),
-    fetchLibraryBookList: () => books.promise,
+    fetchJobsByIds: () => books.promise,
   });
   const pending = loader.load({ reset: true });
   await tick();
@@ -85,7 +80,7 @@ test('first paint: superseded document response cannot flash an old search', { t
   const shown = [];
   const { state, loader } = fixture({
     fetchDocumentList: async (_, { q }) => q === 'old' ? old.promise : { documents: [document('new')], total: 1 },
-    fetchLibraryBookList: async (_, { jobIds }) => ({ items: jobIds.map((job_id) => ({ job_id, status: 'succeeded' })) }),
+    fetchJobsByIds: async (_, jobIds) => ({ items: jobIds.map((job_id) => ({ job_id, status: 'succeeded' })) }),
   });
   state.subscribe(({ items }) => {
     shown.push(items.map((item) => item.document_id).join(','));

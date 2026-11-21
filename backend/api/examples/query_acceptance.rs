@@ -1,5 +1,5 @@
 //! Isolated HTTP acceptance fixture. No provider/worker is started.
-//! Usage: cargo run -p rust_api --example query_acceptance -- <empty-temp-dir> [port]
+//! Usage: cargo run -p retainpdf-api --example query_acceptance -- <empty-temp-dir> [port]
 //! Fixture controls: <fixture-runtime> --resume-ui | --terminal
 use std::{
     fs,
@@ -11,7 +11,7 @@ use std::{
 use anyhow::{ensure, Context, Result};
 use chrono::{Duration, Utc};
 use rusqlite::{params, Connection};
-use rust_api::{
+use retainpdf_api::{
     build_app, build_state,
     config::AppConfig,
     db::Db,

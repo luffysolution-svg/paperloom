@@ -1,0 +1,804 @@
+"""单块译文修订写回:校验 → 原子改写页 payload → 推进 checkpoint → 追加修订记录。
+
+调用方(Rust)负责鉴权、「任务在跑就拒绝」和触发重渲染;这里只负责产物。
+校验用的是翻译时同一套 ``review_translation_item``(占位符、公式定界符、
+英文残留、协议壳……),不另写一份。
+
+一致性约定:
+- 所有页文件、checkpoint、修订日志都是「先写临时文件再 rename」。
+- 跨多个文件没有原子 rename,所以写盘顺序固定,并且**先写意图记录**
+  (``.translation-revision-intent.v1.json``,本身也是原子写)。一次写回的顺序:
+
+    0. 持锁后先恢复上一次没做完的写回(``recover_incomplete_revision``)
+    1. 确认当前 generation 的快照在(回退要用它)
+    2. 写意图记录:旧 checkpoint 的 sha256、新旧 generation、要追加的完整修订记录
+    3. 改页文件(每页一次 rename)
+    4. 为新 generation 建快照目录
+    5. 写 checkpoint(**提交点**:generation 前进)
+    6. 追加 ``revisions.v1.jsonl``
+    7. 删意图记录
+
+  进程在任何两步之间被杀(SIGKILL、断电),下次进来按 checkpoint 判定,只有两种结局:
+    - checkpoint 还是旧的(sha256 对得上意图里的)→ 回退:页文件按旧 generation 的快照
+      换回去、删新 generation 的快照目录和临时文件;
+    - checkpoint 已前进到意图里的 generation 且页哈希对得上 → 前滚:日志里没有这条
+      就补上。
+  都不是(翻译阶段重跑过)→ 意图记录作废。恢复本身幂等,恢复途中再被杀也能重来。
+- 进程内失败仍按内存里的旧字节原样写回(``_rollback``,最后一步才删意图记录);
+  SIGTERM 被转成异常走同一条路径。回滚不完整时意图记录还在,交给上面的恢复。
+- 没有意图记录但页文件领先 checkpoint(修这个问题之前被杀留下的现场):checkpoint 才是
+  提交权威,直接用快照把页文件换回去,不再永远 409。
+- checkpoint 的 generation 单调加一,新建这一 generation 的快照目录;旧的快照
+  保留(原因见 ``_revise_locked`` 末尾)。
+"""
+
+from __future__ import annotations
+
+import contextlib
+import copy
+import hashlib
+import json
+import os
+import shutil
+import signal
+import tempfile
+import uuid
+from collections.abc import Iterator
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from retainpdf_translation.core.item_reader import item_source_text
+from retainpdf_translation.core.payload.manifest import load_translation_manifest
+from retainpdf_translation.core.payload.parts.apply import apply_revised_member_text
+from retainpdf_translation.core.payload.parts.apply import apply_revised_unit_text
+from retainpdf_translation.core.payload.parts.apply import join_unit_text
+from retainpdf_translation.core.payload.parts.common import is_group_unit_id
+from retainpdf_translation.core.payload.parts.common import translation_unit_member_ids
+from retainpdf_translation.core.payload.parts.diagnostics import record_translation_diagnostics
+from retainpdf_translation.core.payload.formula_protection import re_protect_restored_formulas
+from retainpdf_translation.core.placeholder_tokens import placeholders
+from retainpdf_translation.llm.validation.quality import review_translation_item
+from retainpdf_translation.workflow.checkpoint.contract import advance_checkpoint
+from retainpdf_translation.workflow.checkpoint.contract import now_iso
+from retainpdf_translation.workflow.checkpoint.contract import project_progress
+from retainpdf_translation.workflow.checkpoint.contract import translation_checkpoint_path
+from retainpdf_translation.workflow.checkpoint.contract import validate_checkpoint
+from retainpdf_translation.workflow.checkpoint.store import CHECKPOINT_SNAPSHOTS_DIR_NAME
+from retainpdf_translation.workflow.checkpoint.store import CheckpointStore
+
+TRANSLATION_REVISIONS_FILE_NAME = "revisions.v1.jsonl"
+TRANSLATION_REVISION_SCHEMA = "translation_revision_v1"
+TRANSLATION_REVISION_SCHEMA_VERSION = 1
+TRANSLATION_REVISION_INTENT_FILE_NAME = ".translation-revision-intent.v1.json"
+TRANSLATION_REVISION_INTENT_SCHEMA = "translation_revision_intent_v1"
+REVISION_SOURCES = ("user", "agent", "refine")
+MAX_REVISION_TEXT_CHARS = 20000
+MAX_REVISION_REASON_CHARS = 2000
+
+
+
+class RevisionTerminated(SystemExit):
+    """收到 SIGTERM:当成异常往外抛,让 ``except BaseException`` 里的回滚跑完再退出。"""
+
+    def __init__(self) -> None:
+        super().__init__(143)
+
+
+@contextlib.contextmanager
+def _sigterm_rolls_back() -> Iterator[None]:
+    """写回期间把 SIGTERM 变成 ``RevisionTerminated``。
+
+    Rust 超时会先发 SIGTERM、宽限期后才 SIGKILL;默认的 SIGTERM 会直接带走进程、
+    不跑回滚。处理函数只触发一次(之后忽略),免得回滚途中再被打断。
+    只能在主线程装信号处理;别的线程里调用就原样跑,靠意图记录兜底。
+    """
+
+    def handler(_signum: int, _frame: object) -> None:
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        raise RevisionTerminated()
+
+    try:
+        previous = signal.signal(signal.SIGTERM, handler)
+    except (ValueError, OSError):
+        yield
+        return
+    try:
+        yield
+    finally:
+        try:
+            signal.signal(signal.SIGTERM, previous if previous is not None else signal.SIG_DFL)
+        except (ValueError, OSError):
+            pass
+
+
+class RevisionOutcome(Exception):
+    """可预期的拒绝(找不到、冲突、校验失败)。CLI 把它变成结构化输出。"""
+
+    def __init__(self, outcome: str, reason: str, message: str, **extra: Any) -> None:
+        super().__init__(message)
+        self.outcome = outcome
+        self.reason = reason
+        self.message = message
+        self.extra = extra
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "outcome": self.outcome,
+            "reason": self.reason,
+            "message": self.message,
+            **self.extra,
+        }
+
+
+@dataclass(frozen=True)
+class RevisionRequest:
+    item_id: str
+    translated_text: str
+    source: str
+    reason: str = ""
+    expected_generation: int | None = None
+
+
+def translation_revisions_path(translations_dir: Path) -> Path:
+    return Path(translations_dir) / TRANSLATION_REVISIONS_FILE_NAME
+
+
+def _sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _fsync_dir(path: Path) -> None:
+    try:
+        fd = os.open(path, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _atomic_write_bytes(path: Path, data: bytes) -> None:
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, path)
+        _fsync_dir(path.parent)
+    except BaseException:
+        try:
+            tmp_path.unlink()
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def _page_bytes(items: list[dict]) -> bytes:
+    # 与 core/payload/translations.py::save_translations 同一种序列化。
+    return json.dumps(items, ensure_ascii=False, indent=2).encode("utf-8")
+
+
+def _validation_summary(issues: list[dict[str, Any]]) -> dict[str, Any]:
+    errors = [issue for issue in issues if issue.get("severity") == "error"]
+    return {
+        "passed": not errors,
+        "error_count": len(errors),
+        "warning_count": len(issues) - len(errors),
+        "issues": issues,
+    }
+
+
+def _load_glossary_entries(job_root: Path) -> list[dict]:
+    spec_path = job_root / "specs" / "translate.spec.json"
+    try:
+        spec = json.loads(spec_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    entries = ((spec.get("params") or {}) if isinstance(spec, dict) else {}).get("glossary_entries")
+    return list(entries) if isinstance(entries, list) else []
+
+
+def _normalize_request(request: RevisionRequest) -> RevisionRequest:
+    if request.source not in REVISION_SOURCES:
+        raise RevisionOutcome(
+            "invalid", "invalid_source", f"source must be one of {', '.join(REVISION_SOURCES)}"
+        )
+    text = str(request.translated_text or "")
+    if len(text) > MAX_REVISION_TEXT_CHARS:
+        raise RevisionOutcome(
+            "invalid", "text_too_long", f"translated_text exceeds {MAX_REVISION_TEXT_CHARS} characters"
+        )
+    reason = str(request.reason or "").strip()
+    if len(reason) > MAX_REVISION_REASON_CHARS:
+        raise RevisionOutcome(
+            "invalid", "reason_too_long", f"reason exceeds {MAX_REVISION_REASON_CHARS} characters"
+        )
+    return RevisionRequest(
+        item_id=str(request.item_id or "").strip(),
+        translated_text=text.strip(),
+        source=request.source,
+        reason=reason,
+        expected_generation=request.expected_generation,
+    )
+
+
+def _load_committed_checkpoint(checkpoint_path: Path) -> dict[str, Any]:
+    if not checkpoint_path.is_file():
+        raise RevisionOutcome(
+            "conflict",
+            "translation_not_committed",
+            "Translation checkpoint is missing; only committed translations can be revised",
+        )
+    checkpoint = validate_checkpoint(
+        json.loads(checkpoint_path.read_text(encoding="utf-8")), path=checkpoint_path
+    )
+    if checkpoint.get("status") != "complete" or checkpoint.get("phase") != "committed":
+        raise RevisionOutcome(
+            "conflict",
+            "translation_not_committed",
+            "Translation is not committed yet; finish or resume translation before revising",
+        )
+    if not isinstance(checkpoint.get("generation"), int) or not isinstance(checkpoint.get("pages"), list):
+        raise RevisionOutcome(
+            "conflict", "translation_not_committed", "Translation checkpoint has no durable identity"
+        )
+    return checkpoint
+
+
+def _verify_publication(translations_dir: Path, checkpoint: dict[str, Any]) -> None:
+    for page in checkpoint["pages"]:
+        path = translations_dir / Path(str(page.get("path", "") or "")).name
+        expected = str(page.get("page_hash", "") or "")
+        if not path.is_file() or (expected and _sha256(path.read_bytes()) != expected):
+            raise RevisionOutcome(
+                "conflict",
+                "publication_inconsistent",
+                f"Translation page does not match its committed checkpoint: {path.name}",
+            )
+
+
+def _find_item(payloads: dict[int, list[dict]], item_id: str) -> tuple[int, dict]:
+    for page_idx in sorted(payloads):
+        for item in payloads[page_idx]:
+            if str(item.get("item_id", "") or "") == item_id:
+                return page_idx, item
+    raise RevisionOutcome("not_found", "item_not_found", f"translation item not found: {item_id}")
+
+
+def _unit_members(payloads: dict[int, list[dict]], item: dict) -> list[tuple[int, dict]]:
+    unit_id = str(item.get("translation_unit_id", "") or "")
+    member_ids = translation_unit_member_ids(item)
+    if not is_group_unit_id(unit_id) or len(member_ids) <= 1:
+        return []
+    by_id = {
+        str(candidate.get("item_id", "") or ""): (page_idx, candidate)
+        for page_idx, items in payloads.items()
+        for candidate in items
+        if str(candidate.get("translation_unit_id", "") or "") == unit_id
+    }
+    if set(member_ids) - set(by_id):
+        raise RevisionOutcome(
+            "conflict",
+            "group_members_missing",
+            f"Translation group {unit_id} has members outside the committed pages",
+        )
+    return [by_id[member_id] for member_id in member_ids]
+
+
+def _protected_form(item: dict, text: str, *, source_text: str) -> str:
+    # 修订者通常拿到的是展示文本。占位符模式下原文带占位符、修订文本里一个都
+    # 没有时,按公式表把公式换回占位符,再交给同一套占位符校验。
+    if not placeholders(source_text) or placeholders(text):
+        return text
+    formula_map = item.get("formula_map") or item.get("translation_unit_formula_map") or []
+    return re_protect_restored_formulas(text, formula_map) if formula_map else text
+
+
+def _review(item: dict, translated_text: str, glossary_entries: list[dict]) -> dict[str, Any]:
+    report = review_translation_item(
+        item,
+        {"decision": "translate", "translated_text": translated_text},
+        glossary_entries=glossary_entries,
+    )
+    return _validation_summary([issue.as_dict() for issue in report.issues])
+
+
+def _snapshot_dir(translations_dir: Path, generation: int) -> Path:
+    return translations_dir / CHECKPOINT_SNAPSHOTS_DIR_NAME / f"generation-{generation}"
+
+
+def _read_revision_lines(path: Path) -> bytes:
+    try:
+        return path.read_bytes()
+    except FileNotFoundError:
+        return b""
+
+
+def _intent_path(translations_dir: Path) -> Path:
+    return Path(translations_dir) / TRANSLATION_REVISION_INTENT_FILE_NAME
+
+
+def _remove_intent(path: Path) -> None:
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        return
+    _fsync_dir(path.parent)
+
+
+def _with_snapshot_paths(checkpoint: dict[str, Any]) -> dict[str, Any]:
+    """checkpoint 副本,缺 ``snapshot_path`` 的页按约定补上(旧 checkpoint 没写这个字段)。"""
+
+    result = copy.deepcopy(checkpoint)
+    generation = int(result.get("generation", 0) or 0)
+    for page in result.get("pages", []):
+        if isinstance(page, dict) and not page.get("snapshot_path"):
+            name = Path(str(page.get("path", "") or "")).name
+            page["snapshot_path"] = (
+                f"{CHECKPOINT_SNAPSHOTS_DIR_NAME}/generation-{generation}/{name}"
+            )
+    return result
+
+
+def _restore_pages(store: CheckpointStore, checkpoint: dict[str, Any]) -> None:
+    """把页文件换回 checkpoint 记录的那一版;已经对得上的页不动。"""
+
+    store.restore_committed_pages(_with_snapshot_paths(checkpoint))
+
+
+def _remove_stale_tmp_files(translations_dir: Path) -> None:
+    # 被杀时 mkstemp 留下的 ``.<name>.<random>.tmp``;持有 checkpoint 锁时没有别人在写。
+    for path in Path(translations_dir).glob(".*.tmp"):
+        if path.is_file() and not path.is_symlink():
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
+
+
+def _log_has_revision(revisions_path: Path, revision_id: str) -> bool:
+    for line in _read_revision_lines(revisions_path).decode("utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(record, dict) and record.get("revision_id") == revision_id:
+            return True
+    return False
+
+
+def _append_revision_record(revisions_path: Path, original: bytes, record: dict[str, Any]) -> None:
+    _atomic_write_bytes(
+        revisions_path,
+        original
+        + (b"" if not original or original.endswith(b"\n") else b"\n")
+        + json.dumps(record, ensure_ascii=False).encode("utf-8")
+        + b"\n",
+    )
+
+
+def recover_incomplete_revision(translations_dir: Path, store: CheckpointStore) -> str | None:
+    """处理上一次没写完的修订(意图记录还在)。调用方必须已持有 checkpoint 锁。
+
+    返回 ``rolled_forward`` / ``rolled_back`` / ``discarded``;没有意图记录返回 ``None``。
+    判定只看 checkpoint(提交点):见文件头注释。每一步都幂等。
+    """
+
+    translations_dir = Path(translations_dir)
+    intent_path = _intent_path(translations_dir)
+    try:
+        raw = intent_path.read_bytes()
+    except FileNotFoundError:
+        return None
+    try:
+        intent = json.loads(raw)
+        record = intent["record"]
+        revision_id = str(intent["revision_id"])
+        previous_sha = str(intent["previous_checkpoint_sha256"])
+        new_generation = int(intent["new_generation"])
+        record_hashes = dict(record["page_hashes"])
+        valid = intent.get("schema") == TRANSLATION_REVISION_INTENT_SCHEMA
+    except (ValueError, KeyError, TypeError):
+        valid = False
+    if not valid:
+        _remove_intent(intent_path)
+        return "discarded"
+
+    checkpoint_path = store.path
+    try:
+        checkpoint_bytes = checkpoint_path.read_bytes()
+        checkpoint = json.loads(checkpoint_bytes)
+    except (OSError, ValueError):
+        _remove_intent(intent_path)
+        return "discarded"
+    pages = [page for page in checkpoint.get("pages", []) if isinstance(page, dict)]
+    page_hashes = {Path(str(page.get("path", "") or "")).name: page.get("page_hash") for page in pages}
+    revisions_path = translation_revisions_path(translations_dir)
+
+    if (
+        checkpoint.get("generation") == new_generation
+        and all(page_hashes.get(name) == digest for name, digest in record_hashes.items())
+    ):
+        # 前滚:checkpoint 已提交,只差日志(和意图记录的清理)。
+        _restore_pages(store, checkpoint)
+        if not _log_has_revision(revisions_path, revision_id):
+            _append_revision_record(revisions_path, _read_revision_lines(revisions_path), record)
+        outcome = "rolled_forward"
+    elif _sha256(checkpoint_bytes) == previous_sha:
+        # 回退:checkpoint 没动过,页文件按它记录的那一版换回去。
+        _restore_pages(store, checkpoint)
+        new_snapshot_dir = _snapshot_dir(translations_dir, new_generation)
+        if new_snapshot_dir.is_dir() and not new_snapshot_dir.is_symlink():
+            shutil.rmtree(new_snapshot_dir)
+        outcome = "rolled_back"
+    else:
+        outcome = "discarded"
+    _remove_stale_tmp_files(translations_dir)
+    _remove_intent(intent_path)
+    return outcome
+
+
+@dataclass(frozen=True)
+class RevisionPreview:
+    """在内存里算出的修订结果：没有写任何文件。
+
+    ``revised_payloads`` 是整本书页 payload 的副本（只有 ``changed_pages`` 里的页有变化），
+    ``validation`` 与写回时同一套校验；未通过时 ``revise_translation_item`` 会拒绝。
+    """
+
+    page_idx: int
+    item: dict
+    members: list[tuple[int, dict]]
+    unit_source: str
+    new_text: str
+    previous_text: str
+    revised_payloads: dict[int, list[dict]]
+    revised_item: dict
+    validation: dict[str, Any]
+
+    @property
+    def changed_pages(self) -> list[int]:
+        return sorted({self.page_idx, *(member_page for member_page, _member in self.members)})
+
+
+def _prepare_revision(
+    payloads: dict[int, list[dict]],
+    item_id: str,
+    translated_text: str,
+    glossary_entries: list[dict],
+) -> RevisionPreview:
+    page_idx, item = _find_item(payloads, item_id)
+    if not item.get("should_translate", True):
+        raise RevisionOutcome(
+            "rejected",
+            "item_not_translatable",
+            "This block is kept as original by translation policy and cannot be revised",
+            validation=_validation_summary([]),
+        )
+
+    members = _unit_members(payloads, item)
+    unit_source = item_source_text(item)
+    new_text = _protected_form(item, translated_text, source_text=unit_source)
+    previous_text = str(item.get("protected_translated_text") or item.get("translated_text") or "")
+
+    # 在副本上算出修订后的状态再校验;校验不过就一个字节都不写。
+    revised = copy.deepcopy(payloads)
+    revised_item = _find_item(revised, item_id)[1]
+    apply_revised_member_text(revised_item, new_text, single_unit=not members)
+    if members:
+        revised_members = [_find_item(revised, str(member.get("item_id")))[1] for _idx, member in members]
+        unit_text = join_unit_text(
+            [str(member.get("protected_translated_text") or "") for member in revised_members]
+        )
+        apply_revised_unit_text(revised_members, unit_text)
+        reviewed_text = unit_text
+    else:
+        reviewed_text = new_text
+    validation = _review(revised_item, reviewed_text, glossary_entries)
+    if not validation["passed"]:
+        raise RevisionOutcome(
+            "rejected",
+            "validation_failed",
+            "Revised translation failed validation: "
+            + ", ".join(sorted({issue["kind"] for issue in validation["issues"] if issue["severity"] == "error"})),
+            validation=validation,
+        )
+    return RevisionPreview(
+        page_idx=page_idx,
+        item=item,
+        members=members,
+        unit_source=unit_source,
+        new_text=new_text,
+        previous_text=previous_text,
+        revised_payloads=revised,
+        revised_item=revised_item,
+        validation=validation,
+    )
+
+
+def preview_translation_revision(
+    job_root: Path,
+    payloads: dict[int, list[dict]],
+    item_id: str,
+    translated_text: str,
+) -> RevisionPreview:
+    """不落盘地预演一次修订：与 ``revise_translation_item`` 同一段代码、同一套校验。
+
+    精修（refine）用它在写回前跑「该块 QA 不新增违规」这类额外检查；校验不过同样抛
+    ``RevisionOutcome``。``payloads`` 不会被修改。
+    """
+
+    request = _normalize_request(
+        RevisionRequest(item_id=item_id, translated_text=translated_text, source="refine")
+    )
+    return _prepare_revision(
+        payloads, request.item_id, request.translated_text, _load_glossary_entries(Path(job_root))
+    )
+
+
+def revise_translation_item(job_root: Path, request: RevisionRequest) -> dict[str, Any]:
+    """校验并写回一个块的译文。返回结构化结果;可预期的拒绝抛 ``RevisionOutcome``。"""
+
+    request = _normalize_request(request)
+    job_root = Path(job_root).resolve()
+    translations_dir = job_root / "translated"
+    checkpoint_path = translation_checkpoint_path(translations_dir)
+    store = CheckpointStore(checkpoint_path)
+    try:
+        store.acquire()
+    except RuntimeError as exc:
+        raise RevisionOutcome("conflict", "checkpoint_locked", str(exc)) from exc
+    try:
+        with _sigterm_rolls_back():
+            return _revise_locked(job_root, translations_dir, store, request)
+    finally:
+        store.close()
+
+
+def _revise_locked(
+    job_root: Path,
+    translations_dir: Path,
+    store: CheckpointStore,
+    request: RevisionRequest,
+) -> dict[str, Any]:
+    checkpoint_path = store.path
+    try:
+        recover_incomplete_revision(translations_dir, store)
+    except (RuntimeError, OSError) as exc:
+        raise RevisionOutcome(
+            "conflict",
+            "publication_inconsistent",
+            f"Could not recover the interrupted translation revision: {exc}",
+        ) from exc
+    checkpoint = _load_committed_checkpoint(checkpoint_path)
+    generation = int(checkpoint["generation"])
+    if request.expected_generation is not None and request.expected_generation != generation:
+        raise RevisionOutcome(
+            "conflict",
+            "generation_mismatch",
+            f"Translation changed since generation {request.expected_generation}; current is {generation}",
+            current_generation=generation,
+        )
+    try:
+        _verify_publication(translations_dir, checkpoint)
+    except RevisionOutcome as inconsistent:
+        # 页文件领先 checkpoint(没有意图记录:修这个问题之前被杀留下的现场)。持着锁,
+        # 没有别的写者;checkpoint 才是提交权威,用它的快照把页文件换回去。
+        try:
+            _restore_pages(store, checkpoint)
+        except (RuntimeError, OSError):
+            raise inconsistent from None
+        _verify_publication(translations_dir, checkpoint)
+    translation_paths = load_translation_manifest(translations_dir)
+    original_bytes = {page_idx: path.read_bytes() for page_idx, path in translation_paths.items()}
+    payloads = {page_idx: json.loads(raw) for page_idx, raw in original_bytes.items()}
+    prepared = _prepare_revision(payloads, request.item_id, request.translated_text, _load_glossary_entries(job_root))
+    page_idx, item = prepared.page_idx, prepared.item
+    members = prepared.members
+    unit_source = prepared.unit_source
+    new_text = prepared.new_text
+    previous_text = prepared.previous_text
+    revised = prepared.revised_payloads
+    revised_item = prepared.revised_item
+    validation = prepared.validation
+
+    item_view = {
+        "item_id": request.item_id,
+        "page_idx": page_idx,
+        "translation_unit_id": str(revised_item.get("translation_unit_id", "") or ""),
+        "unit_source_text": unit_source,
+        "translated_text": str(revised_item.get("translated_text", "") or ""),
+        "protected_translated_text": new_text,
+        "final_status": str(revised_item.get("final_status", "") or ""),
+    }
+    if new_text == previous_text and str(item.get("final_status", "") or "") == item_view["final_status"]:
+        return {
+            "outcome": "unchanged",
+            "changed": False,
+            "item": item_view,
+            "generation": generation,
+            "validation": validation,
+            "revision": None,
+            "page_hashes": {},
+        }
+
+    revision_id = f"rev-{uuid.uuid4().hex}"
+    record_translation_diagnostics(
+        revised_item,
+        "manual_revision",
+        {"manual_revision_id": revision_id, "manual_revision_source": request.source},
+    )
+    changed_pages = sorted(
+        {page_idx, *(member_page for member_page, _member in members)}
+    )
+    new_bytes = {idx: _page_bytes(revised[idx]) for idx in changed_pages}
+    new_generation = generation + 1
+    revisions_path = translation_revisions_path(translations_dir)
+    original_checkpoint = checkpoint_path.read_bytes()
+    original_revisions = _read_revision_lines(revisions_path)
+    new_snapshot_dir = _snapshot_dir(translations_dir, new_generation)
+    snapshot_preexisted = new_snapshot_dir.exists()
+
+    record = {
+        "schema": TRANSLATION_REVISION_SCHEMA,
+        "schema_version": TRANSLATION_REVISION_SCHEMA_VERSION,
+        "revision_id": revision_id,
+        "item_id": request.item_id,
+        "page_idx": page_idx,
+        "translation_unit_id": item_view["translation_unit_id"],
+        "ts": now_iso(),
+        "source": request.source,
+        "reason": request.reason,
+        "previous_text": previous_text,
+        "new_text": new_text,
+        "previous_final_status": str(item.get("final_status", "") or ""),
+        "validation": {
+            key: validation[key] for key in ("passed", "error_count", "warning_count")
+        }
+        | {"issue_kinds": sorted({issue["kind"] for issue in validation["issues"]})},
+        "previous_generation": generation,
+        "generation": new_generation,
+        "page_hashes": {
+            translation_paths[idx].name: _sha256(new_bytes[idx]) for idx in changed_pages
+        },
+    }
+
+    # 回退要用当前 generation 的快照:没有就现在补(硬链接,几乎不花时间)。
+    store.snapshot_pages(copy.deepcopy(checkpoint))
+    intent_path = _intent_path(translations_dir)
+    _atomic_write_bytes(
+        intent_path,
+        json.dumps(
+            {
+                "schema": TRANSLATION_REVISION_INTENT_SCHEMA,
+                "revision_id": revision_id,
+                "previous_generation": generation,
+                "new_generation": new_generation,
+                "previous_checkpoint_sha256": _sha256(original_checkpoint),
+                "old_page_hashes": {
+                    translation_paths[idx].name: _sha256(original_bytes[idx]) for idx in changed_pages
+                },
+                "record": record,
+            },
+            ensure_ascii=False,
+        ).encode("utf-8"),
+    )
+
+    try:
+        for idx in changed_pages:
+            _atomic_write_bytes(translation_paths[idx], new_bytes[idx])
+        pages, progress = project_progress(
+            output_dir=translations_dir,
+            page_payloads=copy.deepcopy(revised),
+            translation_paths=translation_paths,
+        )
+        checkpoint = advance_checkpoint(checkpoint, phase="committed", pages=pages, progress=progress)
+        checkpoint["status"] = "complete"
+        checkpoint["generation"] = new_generation
+        checkpoint["committed_pages"] = []
+        checkpoint["committed_pages_event"] = {
+            **(checkpoint.get("committed_pages_event") or {}),
+            "schema": "pipeline_checkpoint_v1",
+            "schema_version": 1,
+            "stage": "translate",
+            "phase": "committed",
+            "status": "complete",
+            "producer_generation": new_generation,
+            "committed_pages": [],
+            "progress": progress,
+        }
+        store.snapshot_pages(checkpoint)
+        store.save(checkpoint)
+        _append_revision_record(revisions_path, original_revisions, record)
+    except BaseException:
+        _rollback(
+            translation_paths=translation_paths,
+            changed_pages=changed_pages,
+            original_bytes=original_bytes,
+            checkpoint_path=checkpoint_path,
+            original_checkpoint=original_checkpoint,
+            revisions_path=revisions_path,
+            original_revisions=original_revisions,
+            new_snapshot_dir=None if snapshot_preexisted else new_snapshot_dir,
+            intent_path=intent_path,
+        )
+        raise
+    # 已经提交。删不掉意图记录不算失败(下次恢复发现它已前滚完成,会清掉),
+    # 更不能因此回滚一次已提交的写回。
+    try:
+        _remove_intent(intent_path)
+    except OSError:
+        pass
+    # 旧 generation 的快照这里**不清理**。Rust 的实时译文读模型按数据库里登记的
+    # page_hash 去 .translation-checkpoints/ 下找快照(services/jobs/progress/live_translation.rs);
+    # 修订不经过 worker stdout,要等 Rust 在本命令返回后把新 page_hash 登记进数据库
+    # (live_translation/revisions.rs),登记成功前读模型要的还是旧快照。登记完成后
+    # 由 Rust 清掉不再被引用的旧 generation;登记失败时它们留着,读模型照旧可读。
+    return {
+        "outcome": "committed",
+        "changed": True,
+        "item": item_view,
+        "generation": new_generation,
+        "validation": validation,
+        "revision": record,
+        "page_hashes": record["page_hashes"],
+    }
+
+
+def _rollback(
+    *,
+    translation_paths: dict[int, Path],
+    changed_pages: list[int],
+    original_bytes: dict[int, bytes],
+    checkpoint_path: Path,
+    original_checkpoint: bytes,
+    revisions_path: Path,
+    original_revisions: bytes,
+    new_snapshot_dir: Path | None,
+    intent_path: Path,
+) -> None:
+    for idx in changed_pages:
+        _atomic_write_bytes(translation_paths[idx], original_bytes[idx])
+    _atomic_write_bytes(checkpoint_path, original_checkpoint)
+    if original_revisions:
+        _atomic_write_bytes(revisions_path, original_revisions)
+    elif revisions_path.exists():
+        revisions_path.unlink()
+    if new_snapshot_dir is not None and new_snapshot_dir.is_dir() and not new_snapshot_dir.is_symlink():
+        shutil.rmtree(new_snapshot_dir)
+    # 最后一步才删意图记录:回滚做到一半被杀,下次进来还能按意图记录收尾。
+    _remove_intent(intent_path)
+
+
+def load_item_revisions(translations_dir: Path, item_id: str) -> list[dict[str, Any]]:
+    path = translation_revisions_path(translations_dir)
+    records: list[dict[str, Any]] = []
+    for line in _read_revision_lines(path).decode("utf-8").splitlines():
+        if not line.strip():
+            continue
+        record = json.loads(line)
+        if isinstance(record, dict) and record.get("item_id") == item_id:
+            records.append(record)
+    return records
+
+
+__all__ = [
+    "REVISION_SOURCES",
+    "RevisionOutcome",
+    "RevisionPreview",
+    "RevisionRequest",
+    "RevisionTerminated",
+    "TRANSLATION_REVISIONS_FILE_NAME",
+    "TRANSLATION_REVISION_INTENT_FILE_NAME",
+    "load_item_revisions",
+    "preview_translation_revision",
+    "recover_incomplete_revision",
+    "revise_translation_item",
+    "translation_revisions_path",
+]

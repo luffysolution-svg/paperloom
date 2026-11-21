@@ -2,15 +2,13 @@ from __future__ import annotations
 
 import json
 import subprocess
-import sys
 from pathlib import Path
 
 import fitz
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from retainpdf_pipeline.foundation.config import paths
+from retainpdf_base import paths
 from retainpdf_pipeline.foundation.config.external_tools import ExternalToolNotFound
 from retainpdf_pipeline.render.output.typst import compiler
 from retainpdf_pipeline.render.output.typst.compiler import TypstCompileError

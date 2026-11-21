@@ -8,8 +8,7 @@ and document-history rules are maintained in the pages below.
 
 ## Shared Job Conventions
 
-- `/api/v1/jobs` owns `book`, `translate`, and `render` workflows.
-- `/api/v1/ocr/jobs` owns OCR-only workflows.
+- `/api/v1/jobs` owns the `book`, `translate`, `render`, and OCR-only (`ocr`) workflows. The former `/api/v1/ocr/jobs` family was removed on 2026-10-18.
 - A job's detail/list `stage_snapshot` is authoritative for current progress;
   historical events must not be used to infer the active stage.
 - Reusing OCR, translations, or render inputs is always validated against
@@ -32,31 +31,29 @@ and document-history rules are maintained in the pages below.
 
 ## Common Endpoint Map
 
+The `/jobs/{job_id}/…` addresses below are the new ones (eight categories). The old addresses
+(`/events`, `/diagnostics`, `/stage-actions`, `/resume-plan`, `/resume`, `/rerun`, `/retry-stage`,
+`/ocr/resolve-ambiguity`, `/cancel`, and the whole `/ocr/jobs` family) were removed on 2026-10-18 and return 404; see
+[`docs/api/01-任务/04-任务接口分类.md`](../../../../docs/api/01-任务/04-任务接口分类.md) and [`docs/api/00-接口目录.md`](../../../../docs/api/00-接口目录.md).
+
 ```text
 POST /api/v1/uploads
-POST /api/v1/translate/bundle
 POST /api/v1/jobs
 GET  /api/v1/jobs
 GET  /api/v1/jobs/{job_id}
-GET  /api/v1/jobs/{job_id}/events
-GET  /api/v1/jobs/{job_id}/diagnostics
-GET  /api/v1/jobs/{job_id}/resume-plan
-GET  /api/v1/jobs/{job_id}/stage-actions
-POST /api/v1/jobs/{job_id}/resume
-POST /api/v1/jobs/{job_id}/rerun
-POST /api/v1/jobs/{job_id}/retry-stage
-POST /api/v1/jobs/{job_id}/ocr/resolve-ambiguity
-POST /api/v1/jobs/{job_id}/cancel
-POST /api/v1/ocr/jobs
-GET  /api/v1/ocr/jobs
-GET  /api/v1/ocr/jobs/{job_id}
-GET  /api/v1/ocr/jobs/{job_id}/events
-POST /api/v1/ocr/jobs/{job_id}/cancel
+GET  /api/v1/jobs/{job_id}/progress/events
+GET  /api/v1/jobs/{job_id}/reports/failure
+GET  /api/v1/jobs/{job_id}/actions
+GET  /api/v1/jobs/{job_id}/actions/resume
+POST /api/v1/jobs/{job_id}/actions/resume
+POST /api/v1/jobs/{job_id}/actions/rerun        (old name of actions/resume)
+POST /api/v1/jobs/{job_id}/actions/retry-stage
+POST /api/v1/jobs/{job_id}/actions/resolve-ocr-ambiguity
+POST /api/v1/jobs/{job_id}/actions/cancel
 POST /api/v1/documents/:document_id/translate
 POST /api/v1/documents/:document_id/ocr
 GET  /api/v1/documents
 GET  /api/v1/documents/:document_id/jobs
-GET  /api/v1/documents/:document_id/agent-versions
 POST /api/v1/documents/:document_id/metadata-suggestions
 GET  /api/v1/documents/:document_id/metadata-suggestions
 POST /api/v1/documents/:document_id/metadata-suggestions/:suggestion_id/apply

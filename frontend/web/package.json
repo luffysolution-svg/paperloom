@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "css:equivalence": "node ./scripts/css-equivalence.mjs",
     "prepare:workspace": "node ./scripts/build-workspace-packages.mjs",
     "prebuild": "npm run prepare:workspace",
     "build": "npm run prepare:vendor && npm run generate:version && npm run bundle:css && npm run bundle:js",
@@ -31,11 +32,13 @@
     "watch:css": "node ./scripts/build-css.mjs --watch",
     "watch:js": "node ./scripts/build-js-bundle.mjs --watch",
     "visual:check": "node ./scripts/visual-check.mjs",
-    "visual:update": "node ./scripts/visual-check.mjs --update"
+    "visual:update": "node ./scripts/visual-check.mjs --update",
+    "verify": "npm run build && npm run typecheck --ignore-scripts && npm test --ignore-scripts"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.3.2",
     "@types/node": "^26.1.1",
+    "@types/papaparse": "^5.5.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "esbuild": "^0.28.0",
@@ -43,6 +46,7 @@
     "pixelmatch": "^7.2.0",
     "playwright": "^1.61.1",
     "pngjs": "^7.0.0",
+    "postcss": "^8.5.6",
     "tailwindcss": "^4.3.2",
     "typescript": "^7.0.2"
   },
@@ -54,10 +58,12 @@
     "@retainpdf/ui": "0.1.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "fflate": "^0.8.3",
     "lottie-web": "^5.13.0",
     "lucide-react": "^1.24.0",
     "marked": "^18.0.10",
     "mathjax-full": "^3.2.1",
+    "papaparse": "5.5.3",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^4.8.69",
     "radix-ui": "^1.6.2",
@@ -65,6 +71,7 @@
     "react-dom": "^19.2.7",
     "react-pdf": "^9.2.1",
     "react-resizable-panels": "4.12.1",
+    "read-excel-file": "9.3.12",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0"
   },

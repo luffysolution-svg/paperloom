@@ -11,7 +11,7 @@
 - `translated/{domain-context.json, translation-manifest.json, page-*-deepseek.json (10)}` — 翻译结果与 manifest
 - `artifacts/pipeline_summary.json` — 期望的 pages_processed/render_mode 等
 
-不包含：`source/*.pdf`（大文件，用 `tests/fixtures/pdfs/*.pdf` 或运行时拷贝）、`rendered/*.pdf`（渲染产物由 harness 产出后校验）。
+不包含：`source/*.pdf`（大文件；对应的源 PDF 是 `tests/fixtures/pdfs/yakubenko-halogen-lithium-10p.pdf`，或运行时拷贝）、`rendered/*.pdf`（渲染产物由 harness 产出后校验）。
 
 不变量阈值（harness 断言）：
 - manifest `pages.length == 10`
@@ -25,7 +25,7 @@
 
 `specs/translate.spec.json` 的 `params` key 集合被两边同时钉死：
 
-- Rust：`retain-data` 的 `stage_specs_keep_python_loader_contract_keys` 断言今天写出的
+- Rust：`retainpdf-data` 的 `stage_specs_keep_python_loader_contract_keys` 断言今天写出的
   translate spec params 和这份 fixture **完全一致**（不是子集）。
 - Python：`backend/pipeline/devtools/tests/test_stage_spec_contract.py` 断言这份
   fixture 的 params key 集合和 `TranslateStageParams` 的字段集合完全一致，并用

@@ -1,13 +1,7 @@
-import sys
-from pathlib import Path
 
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-if str(REPO_SCRIPTS_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
-
-from retainpdf_pipeline.translate.services.continuation import orchestrator
+from retainpdf_translation.services.continuation import orchestrator
 
 
 def test_continuation_review_short_circuits_high_confidence_pairs() -> None:

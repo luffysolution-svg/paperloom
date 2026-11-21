@@ -119,9 +119,9 @@ export function createLibraryController({
     getDocumentByJobId: jobActions.getDocumentByJobId,
     getJobStageActions: jobActions.getJobStageActions,
     retryJobStage: jobActions.retryJobStage,
+    resumeJob: jobActions.resumeJob,
     cancelJob: jobActions.cancelJob,
     deleteDocument: deleteActions.deleteDocument,
-    clearFavorites: deleteActions.clearFavorites,
     deleteDocuments: deleteActions.deleteDocuments,
     deleteCard: deleteActions.deleteCard,
     openBookDetail: navigation.openBookDetail,
@@ -131,5 +131,5 @@ export function createLibraryController({
     /** 详情内嵌进度：静默轮询，不弹 #translation-workflow-dialog */
     attachJobProgress,
   };
-  return { ...controller, submitDocument: submit.submitDocument } as LibraryController;
+  return { ...controller, submitDocument: submit.submitDocument } satisfies LibraryController;
 }

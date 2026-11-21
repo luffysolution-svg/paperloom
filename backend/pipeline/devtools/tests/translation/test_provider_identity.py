@@ -6,10 +6,10 @@
 """
 import pytest
 
-from retainpdf_pipeline.translate.artifacts import classify_provider_family
-from retainpdf_pipeline.translate.core.provider_identity import is_deepseek_family_provider
-from retainpdf_pipeline.translate.core.provider_identity import is_deepseek_official_endpoint
-from retainpdf_pipeline.translate.workflow.phases.repair import _is_deepseek_provider
+from retainpdf_translation.artifacts import classify_provider_family
+from retainpdf_translation.core.provider_identity import is_deepseek_family_provider
+from retainpdf_translation.core.provider_identity import is_deepseek_official_endpoint
+from retainpdf_translation.workflow.phases.repair import _is_deepseek_provider
 
 
 # (base_url, model, 期望 family 标签, 期望是否 deepseek 系)

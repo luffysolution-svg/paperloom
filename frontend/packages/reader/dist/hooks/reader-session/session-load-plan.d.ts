@@ -49,12 +49,23 @@ export declare function planJobLoad(input: {
  * document 链路 stale active job 的 404 回退判定。
  * 仅当 sessionJobId 确实来自 document 解析（sessionJobId === documentJobId）
  * 且当前 route 是 document 链路（!jobId 有显式 job）时成立。
+ * 404 带 reason=not_ready 说明任务还在、只是产物还没产出（比如译文 PDF），不算 stale。
  */
 export declare function isStaleDocumentJobFailure(input: {
     status: number;
+    reason?: string;
     jobId: string;
     routeDocumentId: string;
     documentJobId: string;
     sessionJobId: string;
 }): boolean;
+/**
+ * 合并阅读的虚拟任务目录被清理了（超过一天没人读）：后端 404 带 reason=merged_reading_expired。
+ * 是的话返回这本书的编号（重新问阅读入口要用），不是返回空串。只认显式打开的 `merged-…` 编号。
+ */
+export declare function expiredMergedReadingDocumentId(input: {
+    status: number;
+    reason?: string;
+    sessionJobId: string;
+}): string;
 //# sourceMappingURL=session-load-plan.d.ts.map

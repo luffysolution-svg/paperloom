@@ -9,10 +9,12 @@ from typing import Any
 import fitz
 
 from retainpdf_pipeline.foundation.config import layout
-from retainpdf_pipeline.services.pipeline_shared.events import emit_stage_progress
+from retainpdf_base.events import emit_stage_progress
 from retainpdf_pipeline.render.layout.payload.block_seed_metrics import collect_page_seed_metrics
 from retainpdf_pipeline.render.layout.payload.first_line_indent import MAX_INDENT_EM
 from retainpdf_pipeline.render.layout.payload.first_line_indent import detect_first_line_indent_pt_with_displaylist
+from retainpdf_pipeline.render.layout.payload.first_line_indent import detect_first_line_indent_pt_from_text_lines
+from retainpdf_pipeline.render.layout.payload.first_line_indent import page_text_line_boxes
 from retainpdf_pipeline.render.layout.payload.first_line_indent import is_first_line_indent_candidate
 from retainpdf_pipeline.render.layout.payload.render_item import get_render_first_line_indent_pt
 from retainpdf_pipeline.render.layout.payload.render_item import seed_render_fields
@@ -31,13 +33,19 @@ from retainpdf_pipeline.render.source.prewarm_contracts import GEOMETRY_ADJUSTME
 from retainpdf_pipeline.render.source.prewarm_contracts import PAYLOAD_RENDER_ALGORITHM_VERSION
 from retainpdf_pipeline.render.source.prewarm_manifest_io import bbox_candidates_to_manifest
 from retainpdf_pipeline.render.source.prewarm_page_specs import build_background_render_page_specs_manifest
+from retainpdf_pipeline.render.contracts.prepare_hooks import RenderPrepareHooks
+from retainpdf_pipeline.render.source.intermediate_paths import link_or_copy_file
 from retainpdf_pipeline.render.visual_profile import build_document_visual_profile
 from retainpdf_pipeline.render.visual_profile import visual_profile_path_from_prewarm_manifest
 from retainpdf_pipeline.render.visual_profile import write_document_visual_profile
 
-PIXMAP_INDENT_DEFAULT_MAX_CANDIDATES_PER_PAGE = 10
-PIXMAP_INDENT_DEFAULT_MAX_SECONDS = 8.0
-PIXMAP_INDENT_AUTO_ENABLE_MAX_PAGES = 2
+# 看墨迹量首行缩进（扫描件、文字层没盖住的块才走这条路）：默认打开（2026-11-02）。以前只给 2 页以内的文档开，
+# 每页最多 10 块、总共 8 秒，481 页的扫描书一块缩进都没有、译文全部顶格；实测全书 1972 块都看一遍 16.6 秒
+# （每块约 8 毫秒），测出 603 块缩进，和原书逐段对得上。时间上限按页数给（每页 0.1 秒，至少 8 秒），
+# RETAIN_RENDER_PIXMAP_INDENT=0 关掉，*_MAX_SECONDS / *_MAX_CANDIDATES_PER_PAGE 覆盖上限。
+PIXMAP_INDENT_DEFAULT_MAX_CANDIDATES_PER_PAGE = 40
+PIXMAP_INDENT_MIN_SECONDS = 8.0
+PIXMAP_INDENT_SECONDS_PER_PAGE = 0.1
 
 
 def build_payload_prewarm(
@@ -48,57 +56,22 @@ def build_payload_prewarm(
     effective_render_mode: str = "",
     source_cleanup_strategy: str = "pikepdf_text_strip",
     bbox_text_strip_candidates: BBoxTextStripCandidates | None = None,
+    prepare_hooks: RenderPrepareHooks | None = None,
 ) -> dict[str, Any]:
     started = time.perf_counter()
     timings: dict[str, float] = {}
-    prepared_pages = seed_pages_for_payload_prewarm(translated_pages)
-    first_line_indent_by_item_id: dict[str, float] = {}
-    effective_inner_bbox_by_item_id: dict[str, list[float]] = {}
-    indent_stats: dict[str, Any] = {
-        "line_hits": 0,
-        "pixmap_candidates": 0,
-        "pixmap_checked": 0,
-        "pixmap_hits": 0,
-        "pixmap_budget_exhausted": 0,
-        "pixmap_disabled_candidates": 0,
-    }
     geometry_started = time.perf_counter()
-    pixmap_indent_deadline = geometry_started + _pixmap_first_line_indent_max_seconds()
-    page_widths = page_widths_by_index(source_pdf_path)
-    with fitz.open(source_pdf_path) as source_doc:
-        pixmap_policy = _pixmap_first_line_indent_policy(page_count=len(source_doc))
-        indent_stats["pixmap_enabled"] = pixmap_policy["enabled"]
-        indent_stats["pixmap_reason"] = pixmap_policy["reason"]
-        indent_stats["pixmap_auto_max_pages"] = PIXMAP_INDENT_AUTO_ENABLE_MAX_PAGES
-        for page_idx, items in prepared_pages.items():
-            page_width = page_widths.get(page_idx)
-            try:
-                metrics = collect_page_seed_metrics(items, page_width=page_width)
-            except Exception as exc:
-                print(f"render payload prewarm: geometry build failed page={page_idx + 1} {type(exc).__name__}: {exc}", flush=True)
-                continue
-            for index, bbox in metrics.effective_inner_bboxes.items():
-                if index < 0 or index >= len(items):
-                    continue
-                item_id = str(items[index].get("item_id", "") or "")
-                if item_id:
-                    effective_inner_bbox_by_item_id[item_id] = [round(float(value), 3) for value in bbox]
-            collect_first_line_indent_lookup(
-                source_doc=source_doc,
-                page_idx=page_idx,
-                items=items,
-                metrics=metrics,
-                sink=first_line_indent_by_item_id,
-                stats=indent_stats,
-                pixmap_deadline=pixmap_indent_deadline,
-                pixmap_policy=pixmap_policy,
-            )
+    prepared_pages, first_line_indent_by_item_id, effective_inner_bbox_by_item_id, indent_stats = build_payload_geometry(
+        source_pdf_path=source_pdf_path,
+        translated_pages=translated_pages,
+    )
     timings["geometry_indent"] = time.perf_counter() - geometry_started
     structure_started = time.perf_counter()
     pdf_structure_profile_path, pdf_structure_profile = ensure_pdf_structure_profile(
         source_pdf_path=source_pdf_path,
         translated_pages=prepared_pages,
         manifest_path=manifest_path,
+        prepare_hooks=prepare_hooks,
     )
     timings["pdf_structure_profile"] = time.perf_counter() - structure_started
     mode = str(effective_render_mode or "").strip()
@@ -143,7 +116,8 @@ def build_payload_prewarm(
     if prepared_for_render is not None:
         try:
             color_adapt_started = time.perf_counter()
-            visual_profile = build_document_visual_profile(source_pdf_path, prepared_for_render)
+            visual_profile_builder = prepare_hooks.visual_profile if prepare_hooks is not None else None
+            visual_profile = (visual_profile_builder or build_document_visual_profile)(source_pdf_path, prepared_for_render)
             visual_profile_path = visual_profile_path_from_prewarm_manifest(manifest_path)
             write_document_visual_profile(visual_profile_path, visual_profile)
             color_adapted_pages = apply_page_color_adapt_for_prewarm(
@@ -239,13 +213,78 @@ def build_payload_prewarm(
     }
 
 
+def build_payload_geometry(
+    *,
+    source_pdf_path: Path,
+    translated_pages: dict[int, list[dict]],
+) -> tuple[dict[int, list[dict]], dict[str, float], dict[str, list[float]], dict[str, Any]]:
+    """版式几何：每块的有效内框与首行缩进（种子估算 + 必要时看像素）。
+
+    返回 (种子化的页面, 首行缩进, 有效内框, 缩进统计)。payload 预热与只要底色 / 字色的路线共用。
+    """
+    prepared_pages = seed_pages_for_payload_prewarm(translated_pages)
+    first_line_indent_by_item_id: dict[str, float] = {}
+    effective_inner_bbox_by_item_id: dict[str, list[float]] = {}
+    indent_stats: dict[str, Any] = {
+        "line_hits": 0,
+        "pixmap_candidates": 0,
+        "pixmap_checked": 0,
+        "pixmap_hits": 0,
+        "pixmap_budget_exhausted": 0,
+        "pixmap_disabled_candidates": 0,
+    }
+    geometry_started = time.perf_counter()
+    page_widths = page_widths_by_index(source_pdf_path)
+    with fitz.open(source_pdf_path) as source_doc:
+        pixmap_policy = _pixmap_first_line_indent_policy(page_count=len(source_doc))
+        pixmap_max_seconds = _pixmap_first_line_indent_max_seconds(page_count=len(translated_pages))
+        pixmap_indent_deadline = geometry_started + pixmap_max_seconds
+        indent_stats["pixmap_enabled"] = pixmap_policy["enabled"]
+        indent_stats["pixmap_reason"] = pixmap_policy["reason"]
+        indent_stats["pixmap_max_seconds"] = round(pixmap_max_seconds, 1)
+        for page_idx, items in prepared_pages.items():
+            page_width = page_widths.get(page_idx)
+            try:
+                metrics = collect_page_seed_metrics(items, page_width=page_width)
+            except Exception as exc:
+                print(f"render payload prewarm: geometry build failed page={page_idx + 1} {type(exc).__name__}: {exc}", flush=True)
+                continue
+            for index, bbox in metrics.effective_inner_bboxes.items():
+                if index < 0 or index >= len(items):
+                    continue
+                item_id = str(items[index].get("item_id", "") or "")
+                if item_id:
+                    effective_inner_bbox_by_item_id[item_id] = [round(float(value), 3) for value in bbox]
+            collect_first_line_indent_lookup(
+                source_doc=source_doc,
+                page_idx=page_idx,
+                items=items,
+                metrics=metrics,
+                sink=first_line_indent_by_item_id,
+                stats=indent_stats,
+                pixmap_deadline=pixmap_indent_deadline,
+                pixmap_policy=pixmap_policy,
+            )
+    return prepared_pages, first_line_indent_by_item_id, effective_inner_bbox_by_item_id, indent_stats
+
+
 def ensure_pdf_structure_profile(
     *,
     source_pdf_path: Path,
     translated_pages: dict[int, list[dict]],
     manifest_path: Path,
+    prepare_hooks: RenderPrepareHooks | None = None,
 ) -> tuple[Path | None, PdfStructureDocumentProfile | None]:
     pdf_structure_profile_path = pdf_structure_profile_path_from_prewarm_manifest(manifest_path)
+    if prepare_hooks is not None and prepare_hooks.pdf_structure_profile is not None:
+        # 准备步骤（有指纹）说了算；文件放到原来的位置给 manifest / 下游读。
+        try:
+            profile, cached_path = prepare_hooks.pdf_structure_profile(source_pdf_path, translated_pages)
+            link_or_copy_file(cached_path, pdf_structure_profile_path)
+            return pdf_structure_profile_path, profile
+        except Exception as exc:
+            print(f"render payload prewarm: pdf structure profile failed {type(exc).__name__}: {exc}", flush=True)
+            return None, None
     if pdf_structure_profile_path.exists():
         profile = read_pdf_structure_profile(pdf_structure_profile_path)
         if profile is not None:
@@ -303,6 +342,7 @@ def collect_first_line_indent_lookup(
         stats.setdefault("pixmap_enabled", pixmap_enabled)
         stats.setdefault("pixmap_reason", str(policy.get("reason", "")))
         stats.setdefault("pixmap_disabled_candidates", 0)
+    text_lines: list[tuple[float, float, float, float]] | None = None
     for index, item in enumerate(items):
         item_id = str(item.get("item_id", "") or "")
         if not item_id:
@@ -322,6 +362,24 @@ def collect_first_line_indent_lookup(
             sink[item_id] = line_indent
             if stats is not None:
                 stats["line_hits"] = int(stats.get("line_hits", 0)) + 1
+            continue
+        # 可复制的 PDF：直接读文字层每行的起点。一页只取一次；读不到这一块（扫描件、
+        # 文字层没盖住）才往下走渲染灰度图那条贵的路。
+        if text_lines is None:
+            text_lines = page_text_line_boxes(source_doc[page_idx])
+        text_indent = detect_first_line_indent_pt_from_text_lines(
+            item,
+            text_lines,
+            font_size_pt=font_size_pt,
+            page_text_width_med=metrics.page_text_width_med,
+        )
+        if text_indent is not None:
+            if stats is not None:
+                stats["text_layer_checked"] = int(stats.get("text_layer_checked", 0)) + 1
+            if text_indent > 0:
+                sink[item_id] = text_indent
+                if stats is not None:
+                    stats["text_layer_hits"] = int(stats.get("text_layer_hits", 0)) + 1
             continue
         if stats is not None:
             stats["pixmap_candidates"] = int(stats.get("pixmap_candidates", 0)) + 1
@@ -403,9 +461,7 @@ def _pixmap_first_line_indent_policy(*, page_count: int) -> dict[str, Any]:
         return {"enabled": True, "reason": "env_enabled"}
     if value in {"0", "false", "no", "off"}:
         return {"enabled": False, "reason": "env_disabled"}
-    if 0 <= int(page_count) <= PIXMAP_INDENT_AUTO_ENABLE_MAX_PAGES:
-        return {"enabled": True, "reason": "small_document_auto_enabled"}
-    return {"enabled": False, "reason": "default_disabled"}
+    return {"enabled": True, "reason": "default_enabled"}
 
 
 def _pixmap_first_line_indent_max_candidates_per_page() -> int:
@@ -416,12 +472,13 @@ def _pixmap_first_line_indent_max_candidates_per_page() -> int:
         return PIXMAP_INDENT_DEFAULT_MAX_CANDIDATES_PER_PAGE
 
 
-def _pixmap_first_line_indent_max_seconds() -> float:
+def _pixmap_first_line_indent_max_seconds(*, page_count: int = 0) -> float:
+    default = max(PIXMAP_INDENT_MIN_SECONDS, PIXMAP_INDENT_SECONDS_PER_PAGE * max(0, int(page_count)))
     raw = str(os.environ.get("RETAIN_RENDER_PIXMAP_INDENT_MAX_SECONDS", "") or "").strip()
     try:
-        return max(0.0, float(raw)) if raw else PIXMAP_INDENT_DEFAULT_MAX_SECONDS
+        return max(0.0, float(raw)) if raw else default
     except ValueError:
-        return PIXMAP_INDENT_DEFAULT_MAX_SECONDS
+        return default
 
 
 __all__ = [

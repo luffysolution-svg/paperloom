@@ -13,6 +13,15 @@ const REMOVED_SHARDS = [
   "chrome-legacy.css",
   "layout-legacy.css",
   "markdown-legacy.css",
+  // AI 问答面板（含 ReaderAgentOperationPanel）删掉之后留下的四份皮肤，共 1428 行，
+  // 仍然被 entry.css import 进产物，而**一条选择器都命不中**（逐条核过：复合
+  // 选择器里只要有一个类零写入者，整条就永远不匹配）。
+  //
+  // 这个清单原来不含它们，所以没有任何门禁会红。
+  "float-ai.css",
+  "float-ai-aui.css",
+  "float-ai-composer.css",
+  "float-ai-operations.css",
 ];
 
 function cssFilesUnder(root) {

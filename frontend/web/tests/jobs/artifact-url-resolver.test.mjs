@@ -185,26 +185,48 @@ test("artifact runtime port supplies uploaded file name for download naming", ()
   );
 });
 
-test("job source pdf fallback is encoded and absolute", () => {
+test("job source pdf fallback uses the book address, encoded and absolute", () => {
   const action = jobActions.resolveJobSourcePdfAction({
-    job_id: "job 1/2",
+    job_id: "job-1",
+    document_id: "doc 1/2",
   });
   assert.equal(action.ready, false);
   assert.equal(
     action.url,
-    "http://retainpdf.local:41000/api/v1/jobs/job%201%2F2/artifacts/source_pdf",
+    "http://retainpdf.local:41000/api/v1/documents/doc%201%2F2/files/source.pdf",
   );
+});
+
+test("job source pdf fallback reads the book id from book_summary", () => {
+  const action = jobActions.resolveJobSourcePdfAction({
+    job_id: "job-1",
+    book_summary: { document_id: "doc-2" },
+  });
+  assert.equal(
+    action.url,
+    "http://retainpdf.local:41000/api/v1/documents/doc-2/files/source.pdf",
+  );
+});
+
+test("job source pdf has no url without a book id, never the old artifacts address", () => {
+  const action = jobActions.resolveJobSourcePdfAction({
+    job_id: "job-orphan",
+    source_pdf_ready: true,
+  });
+  assert.equal(action.url, "");
+  assert.doesNotMatch(action.url, /artifacts\/source_pdf/);
 });
 
 test("job source pdf action becomes ready only from explicit readiness signals", () => {
   const action = jobActions.resolveJobSourcePdfAction({
     job_id: "job-ready",
+    document_id: "doc-ready",
     source_pdf_ready: true,
   });
   assert.equal(action.ready, true);
   assert.equal(
     action.url,
-    "http://retainpdf.local:41000/api/v1/jobs/job-ready/artifacts/source_pdf",
+    "http://retainpdf.local:41000/api/v1/documents/doc-ready/files/source.pdf",
   );
 });
 
@@ -228,4 +250,15 @@ test("markdown asset resolver keeps special URLs and resolves relative images", 
   assert.equal(artifacts.resolveMarkdownAssetUrl("", "data:image/png;base64,abc"), "data:image/png;base64,abc");
   assert.equal(artifacts.resolveMarkdownAssetUrl("", "blob:abc"), "blob:abc");
   assert.equal(artifacts.resolveMarkdownAssetUrl("", "#anchor"), "#anchor");
+});
+
+test("续跑能不能点看 actions.resume，没有时退回旧名 actions.rerun；不再给出 rerun 地址", () => {
+  const { resolveJobActions } = jobActions;
+  assert.equal(resolveJobActions({ actions: { resume: { enabled: true }, rerun: { enabled: false } } }).resumeEnabled, true);
+  assert.equal(resolveJobActions({ actions: { resume: { enabled: false }, rerun: { enabled: true } } }).resumeEnabled, false, "resume 说了算");
+  assert.equal(resolveJobActions({ actions: { rerun: { enabled: true, url: "/api/v1/jobs/j/actions/rerun" } } }).resumeEnabled, true, "后端还没给 resume 时看 rerun");
+  assert.equal(resolveJobActions({ actions: {} }).resumeEnabled, false);
+  const resolved = resolveJobActions({ actions: { rerun: { enabled: true, url: "/api/v1/jobs/j/actions/rerun" } } });
+  assert.equal("rerun" in resolved, false);
+  assert.equal("rerunEnabled" in resolved, false);
 });

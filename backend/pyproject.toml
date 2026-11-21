@@ -4,20 +4,36 @@ version = "0.2.8"
 description = "RetainPDF backend Python workspace"
 requires-python = ">=3.11,<3.12"
 dependencies = [
+  "retainpdf-base",
+  "retainpdf-math",
   "retainpdf-pipeline",
+  "retainpdf-translation",
+  "retainpdf-translation-agent",
 ]
 
 [project.optional-dependencies]
 test = [
+  "retainpdf-base[test]",
+  "retainpdf-math[test]",
   "retainpdf-pipeline[test]",
+  "retainpdf-translation[test]",
+  "retainpdf-translation-agent[test]",
 ]
 
 [tool.uv.sources]
+retainpdf-base = { workspace = true }
+retainpdf-math = { workspace = true }
 retainpdf-pipeline = { workspace = true }
+retainpdf-translation = { workspace = true }
+retainpdf-translation-agent = { workspace = true }
 
 [tool.uv.workspace]
 members = [
+  "base",
+  "math",
   "pipeline",
+  "translation",
+  "translation-agent",
 ]
 
 [tool.retain_pdf.external-binaries]

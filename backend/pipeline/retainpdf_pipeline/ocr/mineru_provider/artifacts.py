@@ -28,7 +28,7 @@ from retainpdf_pipeline.ocr.mineru_provider.contracts import (
     MINERU_UNPACK_DIR_NAME,
 )
 from retainpdf_pipeline.ocr.mineru_provider.mineru_api import request_mineru
-from retainpdf_pipeline.services.pipeline_shared.io import save_json
+from retainpdf_base.io import save_json
 from retainpdf_pipeline.ocr.source_json import (
     resolve_preferred_source_json_path,
     resolve_translation_source_json_path,

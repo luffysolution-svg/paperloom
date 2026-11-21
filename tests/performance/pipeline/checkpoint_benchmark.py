@@ -20,8 +20,8 @@ from unittest.mock import patch
 from support.paths import PIPELINE
 
 sys.path.insert(0, str(PIPELINE))
-from retainpdf_pipeline.translate.core.payload import save_translations
-from retainpdf_pipeline.translate.workflow.checkpoint.session import TranslationCheckpointSession
+from retainpdf_translation.core.payload import save_translations
+from retainpdf_translation.workflow.checkpoint.session import TranslationCheckpointSession
 
 
 def measure(pages: int, dirty_pages: int, rounds: int, items_per_page: int = 10, text_bytes: int = 2048):

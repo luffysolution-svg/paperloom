@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
+import { wait, waitFor } from "../helpers/async.mjs";
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", {
   url: "http://localhost/reader.html?document_id=doc-ocr",
@@ -20,23 +21,51 @@ const React = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { setReaderAdapters } = await import("../../../../frontend/packages/reader/src/adapters.ts");
 const { useReaderSession } = await import("../../../../frontend/packages/reader/src/hooks/use-reader-session.ts");
+const { isStaleDocumentJobFailure } = await import("../../../../frontend/packages/reader/src/hooks/reader-session/session-load-plan.ts");
 
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+// 按书编号读书（GET /documents/:id）只在 sessionData 端口上（web 宿主走 API 层的生成函数），
+// 旧式的扁平适配器没有这一项。这里照 web 宿主的形状给一个端口，其余能力沿用扁平的那份。
+function sessionDataWith(data, fetchDocument) {
+  return {
+    loadReaderPayload: data.loadReaderPayload,
+    loadJobPayload: async () => null,
+    fetchDocumentByJobId: async () => null,
+    fetchDocument,
+    fetchProtected: data.fetchProtected,
+    resolveResourceUrl: (url) => url,
+    resolveReaderSourcePdf: () => "",
+    resolveReaderTranslatedPdfUrl: () => "",
+    resolveReaderArtifactUrl: () => "",
+  };
 }
 
-async function waitFor(predicate, description) {
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    if (predicate()) return;
-    await wait(10);
-  }
-  assert.fail(`等待超时：${description}`);
-}
+test("产物还没产出的 404（reason=not_ready）不算文档挂着的任务没了", () => {
+  const base = { status: 404, jobId: "", routeDocumentId: "doc-1", documentJobId: "job-1", sessionJobId: "job-1" };
+  assert.equal(isStaleDocumentJobFailure(base), true, "不带 reason 的 404：任务不存在");
+  assert.equal(isStaleDocumentJobFailure({ ...base, reason: "" }), true);
+  assert.equal(isStaleDocumentJobFailure({ ...base, reason: "not_ready" }), false, "任务还在，只是产物没好");
+});
 
 test("document active_job becomes the effective reader job and keeps the document source PDF", async () => {
   const calls = [];
   const pdfBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
+  const data = {
+    fetchProtected: async (url) => {
+      calls.push(url);
+      assert.equal(url, "/api/v1/documents/doc-ocr/files/source.pdf");
+      return {
+        ok: true,
+        arrayBuffer: async () => pdfBytes.buffer.slice(0),
+      };
+    },
+    loadReaderPayload: async (jobId) => {
+      calls.push(`payload:${jobId}`);
+      return {
+        jobPayload: { title: "OCR document" },
+        manifestPayload: {},
+      };
+    },
+  };
   setReaderAdapters({
     isMockMode: () => false,
     resolveResourceUrl: (url) => url,
@@ -48,29 +77,11 @@ test("document active_job becomes the effective reader job and keeps the documen
     defaultReaderPageConfigPort: {
       messageTargetOrigin: () => "*",
     },
-    defaultReaderDataPort: {
-      fetchProtected: async (url) => {
-        calls.push(url);
-        if (url === "/api/v1/documents/doc-ocr") {
-          return {
-            ok: true,
-            json: async () => ({ data: { active_job_id: "job-ocr" } }),
-          };
-        }
-        assert.equal(url, "/api/v1/documents/doc-ocr/source.pdf");
-        return {
-          ok: true,
-          arrayBuffer: async () => pdfBytes.buffer.slice(0),
-        };
-      },
-      loadReaderPayload: async (jobId) => {
-        calls.push(`payload:${jobId}`);
-        return {
-          jobPayload: { title: "OCR document" },
-          manifestPayload: {},
-        };
-      },
-    },
+    defaultReaderDataPort: data,
+    sessionData: sessionDataWith(data, async (documentId) => {
+      calls.push(`/api/v1/documents/${documentId}`);
+      return { active_job_id: "job-ocr" };
+    }),
   });
 
   const sessions = [];
@@ -96,14 +107,14 @@ test("document active_job becomes the effective reader job and keeps the documen
   assert.equal(session.jobId, "job-ocr");
   assert.equal(session.documentId, "doc-ocr");
   assert.equal(session.sourceOnly, false, "真实 active job 不应继续被标记为纯源文档");
-  assert.equal(session.sourceUrl, "/api/v1/documents/doc-ocr/source.pdf");
+  assert.equal(session.sourceUrl, "/api/v1/documents/doc-ocr/files/source.pdf");
   assert.equal(session.download.jobId, "job-ocr");
   assert.equal(session.download.sourceOnly, false);
   assert.ok(session.sourceFile, "OCR-only 没有 PDF artifact 时仍应加载馆藏源 PDF");
   assert.deepEqual(calls, [
     "/api/v1/documents/doc-ocr",
     "payload:job-ocr",
-    "/api/v1/documents/doc-ocr/source.pdf",
+    "/api/v1/documents/doc-ocr/files/source.pdf",
   ]);
 
   root.unmount();
@@ -131,7 +142,7 @@ test("explicit in-progress translation job falls back to its document source bef
     defaultReaderDataPort: {
       fetchProtected: async (url) => {
         calls.push(url);
-        assert.equal(url, "/api/v1/documents/doc-live-ocr/source.pdf");
+        assert.equal(url, "/api/v1/documents/doc-live-ocr/files/source.pdf");
         return {
           ok: true,
           arrayBuffer: async () => pdfBytes.buffer.slice(0),
@@ -171,10 +182,10 @@ test("explicit in-progress translation job falls back to its document source bef
   );
   const session = sessions.at(-1);
   assert.equal(session.boot.failed, false);
-  assert.equal(session.sourceUrl, "/api/v1/documents/doc-live-ocr/source.pdf");
+  assert.equal(session.sourceUrl, "/api/v1/documents/doc-live-ocr/files/source.pdf");
   assert.equal(session.translatedUrl, "");
   assert.ok(session.sourceFile);
-  assert.deepEqual(calls, ["/api/v1/documents/doc-live-ocr/source.pdf"]);
+  assert.deepEqual(calls, ["/api/v1/documents/doc-live-ocr/files/source.pdf"]);
 
   root.unmount();
   host.remove();
@@ -184,6 +195,19 @@ test("explicit in-progress translation job falls back to its document source bef
 test("stale document active_job falls back to the source PDF instead of a fatal 404", async () => {
   const pdfBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
   const calls = [];
+  const data = {
+    fetchProtected: async (url) => {
+      calls.push(url);
+      assert.equal(url, "/api/v1/documents/doc-ocr/files/source.pdf");
+      return {
+        ok: true,
+        arrayBuffer: async () => pdfBytes.buffer.slice(0),
+      };
+    },
+    loadReaderPayload: async () => {
+      throw Object.assign(new Error("未找到该任务，请检查 job_id 是否正确。"), { status: 404 });
+    },
+  };
   setReaderAdapters({
     isMockMode: () => false,
     resolveResourceUrl: (url) => url,
@@ -193,25 +217,11 @@ test("stale document active_job falls back to the source PDF instead of a fatal 
     resolveReaderTranslatedPdfUrl: () => "",
     resolveReaderArtifactUrl: () => "",
     defaultReaderPageConfigPort: { messageTargetOrigin: () => "*" },
-    defaultReaderDataPort: {
-      fetchProtected: async (url) => {
-        calls.push(url);
-        if (url === "/api/v1/documents/doc-ocr") {
-          return {
-            ok: true,
-            json: async () => ({ data: { active_job_id: "job-deleted" } }),
-          };
-        }
-        assert.equal(url, "/api/v1/documents/doc-ocr/source.pdf");
-        return {
-          ok: true,
-          arrayBuffer: async () => pdfBytes.buffer.slice(0),
-        };
-      },
-      loadReaderPayload: async () => {
-        throw Object.assign(new Error("未找到该任务，请检查 job_id 是否正确。"), { status: 404 });
-      },
-    },
+    defaultReaderDataPort: data,
+    sessionData: sessionDataWith(data, async (documentId) => {
+      calls.push(`/api/v1/documents/${documentId}`);
+      return { active_job_id: "job-deleted" };
+    }),
   });
 
   const sessions = [];
@@ -236,7 +246,7 @@ test("stale document active_job falls back to the source PDF instead of a fatal 
   assert.equal(session.jobId, "");
   assert.equal(session.sourceOnly, true);
   assert.equal(session.mode, "source");
-  assert.equal(session.sourceUrl, "/api/v1/documents/doc-ocr/source.pdf");
+  assert.equal(session.sourceUrl, "/api/v1/documents/doc-ocr/files/source.pdf");
   assert.equal(session.boot.failed, false);
   assert.ok(calls.filter((url) => url === "/api/v1/documents/doc-ocr").length >= 2);
 
@@ -301,7 +311,7 @@ test("committed Agent operation reloads the authoritative document source instea
   before.refreshCommittedDocument({ documentId: "doc-agent", revision: "version-2" });
   await waitFor(
     () => sessions.some((session) => session.assetsReady
-      && session.sourceUrl === "/api/v1/documents/doc-agent/source.pdf?version=version-2"),
+      && session.sourceUrl === "/api/v1/documents/doc-agent/files/source.pdf?version=version-2"),
     "committed document source ready",
   );
 
@@ -313,7 +323,7 @@ test("committed Agent operation reloads the authoritative document source instea
   assert.equal(after.translatedUrl, "", "旧 job 的译文不能继续与新源版本并排显示");
   assert.deepEqual(after.regions, [], "旧页序的区域坐标应失效");
   assert.equal(after.readerMetadata.source, null, "旧页序的 reader metadata 应失效");
-  assert.ok(calls.includes("/api/v1/documents/doc-agent/source.pdf?version=version-2"));
+  assert.ok(calls.includes("/api/v1/documents/doc-agent/files/source.pdf?version=version-2"));
 
   root.unmount();
   host.remove();
@@ -451,7 +461,7 @@ test("reopening the current active job restores its committed Agent document sou
   await waitFor(
     () => sessions.some((session) => session.assetsReady
       && session.documentId === "doc-current"
-      && session.sourceUrl === "/api/v1/documents/doc-current/source.pdf?version=agent-version-9"),
+      && session.sourceUrl === "/api/v1/documents/doc-current/files/source.pdf?version=agent-version-9"),
     "committed source restored after reopening current job",
   );
   const session = sessions.at(-1);
@@ -681,7 +691,7 @@ test("same mounted Reader fences stale job loads, backfills document identity, a
   current.refreshCommittedDocument({ documentId: "doc-job-b", revision: "commit-b" });
   await waitFor(
     () => sessions.some((session) => session.assetsReady
-      && session.sourceUrl === "/api/v1/documents/doc-job-b/source.pdf?version=commit-b"),
+      && session.sourceUrl === "/api/v1/documents/doc-job-b/files/source.pdf?version=commit-b"),
     "job B committed source loaded",
   );
 

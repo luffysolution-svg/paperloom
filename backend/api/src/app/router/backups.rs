@@ -1,63 +1,53 @@
+//! 备份，以及模型用量（和备份一样是「设置」页的数据；一个任务的用量在 jobs 的 reports 里）。
+
 use std::sync::atomic::Ordering;
 
 use axum::body::Body;
-use axum::extract::{DefaultBodyLimit, Request, State};
+use axum::extract::{Request, State};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
-use axum::Router;
 use futures_util::StreamExt;
 
 use crate::app::AppState;
 use crate::error::AppError;
-use crate::routes::backups;
+use crate::routes::{backups, token_usage};
 
-pub(super) fn routes() -> Router<AppState> {
-    Router::new()
-        .route(
-            "/api/v1/backups",
-            get(backups::status).post(backups::create),
-        )
-        .route(
-            "/api/v1/backups/import",
-            post(backups::import).layer(DefaultBodyLimit::disable()),
-        )
-        .route("/api/v1/backups/download/:name", get(backups::download))
-        .route(
-            "/api/v1/backups/restored-config",
-            get(backups::restored_config),
-        )
-        .route(
-            "/api/v1/backups/webdav/files/:name/sync",
-            post(backups::sync_remote),
-        )
-        .route(
-            "/api/v1/backups/files/:name",
-            axum::routing::delete(backups::delete_local),
-        )
-        .route("/api/v1/backups/restore", post(backups::restore_local))
-        .route(
-            "/api/v1/backups/pending",
-            axum::routing::delete(backups::cancel),
-        )
-        .route(
-            "/api/v1/backups/webdav/settings",
-            axum::routing::put(backups::save_settings),
-        )
-        .route("/api/v1/backups/webdav/test", post(backups::test_webdav))
-        .route("/api/v1/backups/webdav/files", get(backups::list_remote))
-        .route(
-            "/api/v1/backups/webdav/files/:name",
-            axum::routing::delete(backups::delete_remote),
-        )
-        .route(
-            "/api/v1/backups/webdav/backup",
-            post(backups::backup_remote),
-        )
-        .route(
-            "/api/v1/backups/webdav/restore",
-            post(backups::restore_remote),
-        )
+crate::endpoints! {
+    state: AppState;
+    /// 全部模型用量
+    GET "/api/v1/usage" => token_usage::all_usage_route, signed;
+    /// 一本书的模型用量
+    GET "/api/v1/documents/:document_id/usage" => token_usage::document_usage_route, signed;
+    /// 备份与恢复状态
+    GET "/api/v1/backups" => backups::status, admin;
+    /// 创建本地迁移包备份
+    POST "/api/v1/backups" => backups::create, admin;
+    /// 导入迁移包备份
+    POST "/api/v1/backups/import" => backups::import, admin [unlimited_body];
+    /// 下载本地迁移包备份
+    GET "/api/v1/backups/download/:name" => backups::download, admin;
+    /// 读取刚恢复的前端配置
+    GET "/api/v1/backups/restored-config" => backups::restored_config, admin;
+    /// 把云端 WebDAV 备份同步到本地
+    POST "/api/v1/backups/webdav/files/:name/sync" => backups::sync_remote, admin;
+    /// 删除本地迁移包备份
+    DELETE "/api/v1/backups/files/:name" => backups::delete_local, admin;
+    /// 从本地迁移包恢复
+    POST "/api/v1/backups/restore" => backups::restore_local, admin;
+    /// 取消待恢复的迁移包
+    DELETE "/api/v1/backups/pending" => backups::cancel, admin;
+    /// 保存 WebDAV 备份设置
+    PUT "/api/v1/backups/webdav/settings" => backups::save_settings, admin;
+    /// 测试 WebDAV 连接
+    POST "/api/v1/backups/webdav/test" => backups::test_webdav, admin;
+    /// 列出 WebDAV 云端备份
+    GET "/api/v1/backups/webdav/files" => backups::list_remote, admin;
+    /// 删除 WebDAV 云端备份
+    DELETE "/api/v1/backups/webdav/files/:name" => backups::delete_remote, admin;
+    /// 备份并上传到 WebDAV
+    POST "/api/v1/backups/webdav/backup" => backups::backup_remote, admin;
+    /// 从 WebDAV 下载并恢复备份
+    POST "/api/v1/backups/webdav/restore" => backups::restore_remote, admin;
 }
 
 pub(super) async fn maintenance_access(
@@ -72,18 +62,18 @@ pub(super) async fn maintenance_access(
     }
     let guard = state.backups.gate.clone().read_owned().await;
     if state.backups.pending.load(Ordering::SeqCst) {
-        return AppError::ServiceUnavailable(
-            "迁移包已暂存，请重启应用完成恢复，或在设置中取消恢复后继续操作".into(),
+        return AppError::service_unavailable(
+            "迁移包已暂存，请重启应用完成恢复，或在设置中取消恢复后继续操作",
         )
         .into_response();
     }
     let response = next.run(request).await;
     let (parts, body) = response.into_parts();
-    // POST chat responses keep writing while their body streams. Keep the guard
-    // until the stream ends or the client disconnects, not just until its headers.
     let stream = futures_util::stream::unfold(
         (body.into_data_stream(), guard),
-        |(mut stream, guard)| async move { stream.next().await.map(|chunk| (chunk, (stream, guard))) },
+        |(mut stream, guard)| async move {
+            stream.next().await.map(|chunk| (chunk, (stream, guard)))
+        },
     );
     Response::from_parts(parts, Body::from_stream(stream))
 }

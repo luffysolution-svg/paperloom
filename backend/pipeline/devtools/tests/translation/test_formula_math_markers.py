@@ -1,8 +1,4 @@
-import sys
-from pathlib import Path
 
-REPO_SCRIPTS_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_SCRIPTS_ROOT))
 
 from retainpdf_pipeline.render.layout.inline_content.core.markdown import build_markdown_from_direct_text
 from retainpdf_pipeline.render.layout.inline_content.core.markdown import build_direct_typst_passthrough_text

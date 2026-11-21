@@ -1,16 +1,14 @@
 from copy import deepcopy
 import json
-from pathlib import Path
 import socket
-import sys
 
 import pytest
 
 from tools.analysis import replay_capture as replay
-from retainpdf_pipeline.translate.llm.shared import request_capture as capture
-from retainpdf_pipeline.translate.llm.shared.control_context import TranslationControlContext
-from retainpdf_pipeline.translate.llm.shared.prompt_building import (
-    build_messages, build_group_member_messages, build_single_item_fallback_messages,
+from retainpdf_translation.llm.shared import request_capture as capture
+from retainpdf_translation.llm.shared.control_context import TranslationControlContext
+from retainpdf_translation.llm.shared.prompt_building import (
+    build_messages, build_single_item_fallback_messages,
 )
 
 
@@ -42,7 +40,7 @@ def snapshot(tmp_path, monkeypatch):
                          context=TranslationControlContext(rule_guidance="STATIC_RULE"))
     messages = [build_single_item_fallback_messages(single, domain_guidance="RUNTIME_TERMS_A"),
                 build_messages(batch, domain_guidance="RUNTIME_MEMORY_B"),
-                build_group_member_messages(group, domain_guidance="RUNTIME_TERMS_C")]
+                build_single_item_fallback_messages(group, domain_guidance="RUNTIME_TERMS_C")]
     # Capture out of order to ensure replay uses the plan, not directory/hash order.
     for index in (2, 0, 1):
         unit = replay.batch_identity(batches[index])

@@ -6,8 +6,7 @@ import {
   resolveResourceUrl,
 } from "./artifacts.js";
 import { firstNonEmpty } from "./core.js";
-
-const API_PREFIX = "/api/v1";
+import { documentSourcePdfPath } from "./file-paths.js";
 
 function artifactDisplayItem(job, ...keys) {
   const items = Array.isArray(job?.artifacts_display) ? job.artifacts_display : [];
@@ -63,10 +62,17 @@ export function resolveJobActions(job) {
     || markdownContract.ready
     || artifactDisplayReady(job, "markdown")
   );
-  const rerunEnabled = Boolean(actions.rerun?.enabled ?? artifactActions.rerun?.enabled);
+  // 续跑一律发 POST /jobs/:id/actions/resume（resumeJob），这里只判断能不能点。
+  // actions.rerun 是同一个动作的旧名（后端为兼容留着），只在 actions.resume 还没有时拿来判断。
+  const resumeEnabled = Boolean(
+    actions.resume?.enabled
+    ?? artifactActions.resume?.enabled
+    ?? actions.rerun?.enabled
+    ?? artifactActions.rerun?.enabled,
+  );
   return {
     cancelEnabled: Boolean(actions.cancel?.enabled ?? artifactActions.cancel?.enabled ?? (job.status === "queued" || job.status === "running")),
-    rerunEnabled,
+    resumeEnabled,
     bundleEnabled,
     pdfEnabled,
     markdownJsonEnabled,
@@ -77,15 +83,6 @@ export function resolveJobActions(job) {
       actions.cancel_url,
       links.cancel_url,
       links.cancel_path,
-    )),
-    rerun: resolveResourceUrl(firstNonEmpty(
-      actions.rerun?.url,
-      artifactActions.rerun?.url,
-      actions.rerun?.path,
-      artifactActions.rerun?.path,
-      actions.rerun_url,
-      links.rerun_url,
-      links.rerun_path,
     )),
     bundle: resolveResourceUrl(firstNonEmpty(
       actions.download_bundle?.url,
@@ -187,9 +184,10 @@ export function resolveJobMarkdownBundleAction(job, manifestPayload = null) {
 export function resolveJobSourcePdfAction(job, manifestPayload = null) {
   const artifacts = job?.artifacts || {};
   const manifestUrl = resolveManifestArtifactUrl(manifestPayload, "source_pdf");
-  const fallbackUrl = job?.job_id
-    ? `${API_PREFIX}/jobs/${encodeURIComponent(job.job_id)}/artifacts/source_pdf`
-    : "";
+  // 原文 PDF 存在书上：知道书编号就走 /documents/{书}/files/source.pdf；不知道就当没有原文，
+  // 不再拼旧地址 /jobs/{id}/artifacts/source_pdf。
+  const documentId = firstNonEmpty(job?.document_id, job?.book_summary?.document_id);
+  const fallbackUrl = documentId ? documentSourcePdfPath(documentId) : "";
   const url = resolveResourceUrl(firstNonEmpty(
     manifestUrl,
     artifacts.source_pdf?.url,

@@ -1,0 +1,25 @@
+[package]
+name = "retainpdf-ingest"
+version = "0.1.0"
+edition = "2021"
+description = "入口：上传 PDF（校验、页数、修复、落盘）"
+
+[features]
+# 测试用的 PDF 生成函数；rust_api 的 dev-dependencies 打开它，生产构建不带。
+test-fixtures = []
+
+[dependencies]
+retainpdf-accounts = { path = "../retainpdf-accounts" }
+retainpdf-api-base = { path = "../retainpdf-api-base" }
+retainpdf-core = { path = "../retainpdf-core" }
+retainpdf-data = { path = "../retainpdf-data" }
+fastrand = "2"
+lopdf = "0.32"
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.11.0"
+thiserror = "1"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+
+[dev-dependencies]
+serde_json = "1"

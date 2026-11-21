@@ -20,12 +20,11 @@ DEFAULT_URL = "http://127.0.0.1:40001/?v=homepage-smoke"
 
 # 首页冷启动真正拉书架数据的两个 list 端点。
 #
-# 这里以前断言的是 /api/v1/jobs——那是书架还按 job 建模时代的端点。书架迁到
-# document-first（fetchDocumentList + fetchLibraryBookList）之后首页一次冷启动
-# 一个 /api/v1/jobs 都不会发，于是这条断言从「后端联通性门禁」退化成了必然失败。
-# 带 `?` 是为了只认 list 请求，把 /api/v1/documents/<id>/thumbnail 这类逐卡片的
-# 附属请求排除在外（一次冷启动有上百个，命中它们等于白断言）。
-LIBRARY_LIST_URL_MARKERS = ("/api/v1/documents?", "/api/v1/library/books?")
+# 书架是 document-first：先 fetchDocumentList 拿文档，再 fetchJobsByIds
+#（GET /api/v1/jobs?job_ids=…）给有任务的文档叠加活态。书架列表 /api/v1/library/books
+# 后端已删（2026-10-22）。带 `?` 是为了只认 list 请求，把 /api/v1/documents/<id>/thumbnail
+# 这类逐卡片的附属请求排除在外（一次冷启动有上百个，命中它们等于白断言）。
+LIBRARY_LIST_URL_MARKERS = ("/api/v1/documents?", "/api/v1/jobs?")
 
 
 def is_library_list_url(url):

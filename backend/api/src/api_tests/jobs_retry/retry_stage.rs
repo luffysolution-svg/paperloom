@@ -9,7 +9,7 @@ use crate::models::{JobArtifacts, JobStatusKind};
 
 use super::common::{
     seed_ambiguous_ocr_dispatch, seed_ambiguous_translation_request_journal,
-    seed_ocr_checkpoint_files, seed_ocr_upload, seed_translation_result_files,
+    hold_job_drivers, seed_ocr_checkpoint_files, seed_ocr_upload, seed_translation_result_files,
     source_job_with_artifacts,
 };
 
@@ -32,7 +32,7 @@ async fn rust_model_retry_cannot_bypass_receipt_recovery_with_risk_acceptance() 
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri(format!("/api/v1/jobs/{id}/retry-stage"))
+                    .uri(format!("/api/v1/jobs/{id}/actions/retry-stage"))
                     .header("X-API-Key", "test-key")
                     .header("Content-Type", "application/json")
                     .body(Body::from(
@@ -44,6 +44,10 @@ async fn rust_model_retry_cannot_bypass_receipt_recovery_with_risk_acceptance() 
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert_eq!(
+            read_json(response).await["error"]["details"]["reason"],
+            "model_executor_unsupported"
+        );
     }
 }
 
@@ -58,13 +62,18 @@ async fn ambiguous_ocr_requires_explicit_resolution_and_can_bind_existing_receip
     source_job.request_payload.ocr.provider = "mineru".to_string();
     source_job.request_payload.ocr.mineru_token = "mineru-test-token".to_string();
     state.db.save_job(&source_job).expect("save source job");
+    // upload 没有 content_hash，恢复任务又只带 upload_id：归属只能从源任务继承。
+    state
+        .db
+        .set_job_document_id(source_job_id, "doc-sha-ambiguous-ocr")
+        .expect("link source job");
     seed_ambiguous_ocr_dispatch(&state, source_job_id, "mineru", "apply_upload_url");
 
     let diagnostics = build_app(state.clone())
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(format!("/api/v1/jobs/{source_job_id}/diagnostics"))
+                .uri(format!("/api/v1/jobs/{source_job_id}/reports/failure"))
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("OCR ambiguity diagnostics request"),
@@ -118,7 +127,7 @@ async fn ambiguous_ocr_requires_explicit_resolution_and_can_bind_existing_receip
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(format!("/api/v1/jobs/{source_job_id}/retry-stage"))
+                .uri(format!("/api/v1/jobs/{source_job_id}/actions/retry-stage"))
                 .header("X-API-Key", "test-key")
                 .header("Content-Type", "application/json")
                 .body(Body::from(json!({ "stage": "ocr" }).to_string()))
@@ -127,6 +136,10 @@ async fn ambiguous_ocr_requires_explicit_resolution_and_can_bind_existing_receip
         .await
         .expect("blocked response");
     assert_eq!(blocked.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        read_json(blocked).await["error"]["details"]["reason"],
+        "ambiguous_ocr_dispatch"
+    );
 
     let upload_url = "https://signed.example/upload?token=must-not-leak";
     let stale = build_app(state.clone())
@@ -134,7 +147,7 @@ async fn ambiguous_ocr_requires_explicit_resolution_and_can_bind_existing_receip
             Request::builder()
                 .method("POST")
                 .uri(format!(
-                    "/api/v1/jobs/{source_job_id}/ocr/resolve-ambiguity"
+                    "/api/v1/jobs/{source_job_id}/actions/resolve-ocr-ambiguity"
                 ))
                 .header("X-API-Key", "test-key")
                 .header("Content-Type", "application/json")
@@ -152,7 +165,9 @@ async fn ambiguous_ocr_requires_explicit_resolution_and_can_bind_existing_receip
         .await
         .expect("stale receipt response");
     assert_eq!(stale.status(), StatusCode::CONFLICT);
-    assert!(!serde_json::to_string(&read_json(stale).await)
+    let stale = read_json(stale).await;
+    assert_eq!(stale["error"]["details"]["reason"], "stale_resolution");
+    assert!(!serde_json::to_string(&stale)
         .expect("stale response json")
         .contains("must-not-leak"));
 
@@ -161,7 +176,7 @@ async fn ambiguous_ocr_requires_explicit_resolution_and_can_bind_existing_receip
             Request::builder()
                 .method("POST")
                 .uri(format!(
-                    "/api/v1/jobs/{source_job_id}/ocr/resolve-ambiguity"
+                    "/api/v1/jobs/{source_job_id}/actions/resolve-ocr-ambiguity"
                 ))
                 .header("X-API-Key", "test-key")
                 .header("Content-Type", "application/json")
@@ -187,12 +202,18 @@ async fn ambiguous_ocr_requires_explicit_resolution_and_can_bind_existing_receip
     let recovery_job_id = payload["data"]["submission"]["job_id"]
         .as_str()
         .expect("recovery job id");
+    // 恢复任务是 book，OCR 在 `<恢复任务>-ocr` 子任务里跑：回执种在子任务名下。
     let receipt = state
         .db
-        .latest_pipeline_dispatch(recovery_job_id, "ocr-submit")
+        .latest_pipeline_dispatch(&format!("{recovery_job_id}-ocr"), "ocr-submit")
         .expect("recovery dispatch")
         .expect("seeded dispatch");
     assert_eq!(receipt.status, "receipted");
+    assert_eq!(
+        state.db.document_id_for_job(recovery_job_id).expect("lookup"),
+        Some("doc-sha-ambiguous-ocr".to_string()),
+        "绑定已有回执建出来的恢复任务没归到源任务那本书下"
+    );
     assert_eq!(
         receipt
             .receipt
@@ -234,7 +255,7 @@ async fn ambiguous_ocr_requires_explicit_resolution_and_can_bind_existing_receip
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(format!("/api/v1/jobs/{source_job_id}/diagnostics"))
+                .uri(format!("/api/v1/jobs/{source_job_id}/reports/failure"))
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("resolved diagnostics request"),
@@ -266,7 +287,7 @@ async fn ambiguous_ocr_duplicate_risk_is_explicit_audited_and_single_use() {
             Request::builder()
                 .method("POST")
                 .uri(format!(
-                    "/api/v1/jobs/{source_job_id}/ocr/resolve-ambiguity"
+                    "/api/v1/jobs/{source_job_id}/actions/resolve-ocr-ambiguity"
                 ))
                 .header("X-API-Key", "test-key")
                 .header("Content-Type", "application/json")
@@ -289,7 +310,7 @@ async fn ambiguous_ocr_duplicate_risk_is_explicit_audited_and_single_use() {
             Request::builder()
                 .method("POST")
                 .uri(format!(
-                    "/api/v1/jobs/{source_job_id}/ocr/resolve-ambiguity"
+                    "/api/v1/jobs/{source_job_id}/actions/resolve-ocr-ambiguity"
                 ))
                 .header("X-API-Key", "test-key")
                 .header("Content-Type", "application/json")
@@ -314,10 +335,16 @@ async fn ambiguous_ocr_duplicate_risk_is_explicit_audited_and_single_use() {
     let recovery_job_id = payload["data"]["submission"]["job_id"]
         .as_str()
         .expect("recovery job id");
+    // 种下的 ocr attempt 在真正跑 OCR 的 `<恢复任务>-ocr` 子任务名下（driver 可能已经在跑它，
+    // 所以只看有没有，不看是不是还在 running）；父任务名下不留。
     assert!(state
         .db
-        .has_running_pipeline_attempt(recovery_job_id)
+        .has_pipeline_attempt(&format!("{recovery_job_id}-ocr"))
         .expect("recovery attempt"));
+    assert!(!state
+        .db
+        .has_pipeline_attempt(recovery_job_id)
+        .expect("parent attempt"));
     assert_eq!(
         state
             .db
@@ -348,7 +375,7 @@ async fn ambiguous_ocr_duplicate_risk_is_explicit_audited_and_single_use() {
             Request::builder()
                 .method("POST")
                 .uri(format!(
-                    "/api/v1/jobs/{source_job_id}/ocr/resolve-ambiguity"
+                    "/api/v1/jobs/{source_job_id}/actions/resolve-ocr-ambiguity"
                 ))
                 .header("X-API-Key", "test-key")
                 .header("Content-Type", "application/json")
@@ -388,7 +415,7 @@ async fn translation_retry_requires_explicit_duplicate_risk_acceptance() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(format!("/api/v1/jobs/{source_job_id}/diagnostics"))
+                .uri(format!("/api/v1/jobs/{source_job_id}/reports/failure"))
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("diagnostics request"),
@@ -425,7 +452,7 @@ async fn translation_retry_requires_explicit_duplicate_risk_acceptance() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(format!("/api/v1/jobs/{source_job_id}/stage-actions"))
+                .uri(format!("/api/v1/jobs/{source_job_id}/actions"))
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("stage actions request"),
@@ -440,6 +467,9 @@ async fn translation_retry_requires_explicit_duplicate_risk_acceptance() {
         .find(|item| item["stage"] == "translation")
         .expect("translation action");
     assert_eq!(translation_action["danger"], true);
+    // 请求结果不确定：仍可重试（带 accept_duplicate_risk），disabled_code 说明为什么要确认。
+    assert_eq!(translation_action["can_retry"], true);
+    assert_eq!(translation_action["disabled_code"], "ambiguous_translation_request");
     assert_eq!(
         translation_action["action"]["body"]["ambiguous_request_policy"],
         "block"
@@ -449,7 +479,7 @@ async fn translation_retry_requires_explicit_duplicate_risk_acceptance() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(format!("/api/v1/jobs/{source_job_id}/retry-stage"))
+                .uri(format!("/api/v1/jobs/{source_job_id}/actions/retry-stage"))
                 .header("X-API-Key", "test-key")
                 .header("Content-Type", "application/json")
                 .body(Body::from(json!({ "stage": "translation" }).to_string()))
@@ -459,6 +489,7 @@ async fn translation_retry_requires_explicit_duplicate_risk_acceptance() {
         .expect("blocked retry response");
     assert_eq!(blocked.status(), StatusCode::CONFLICT);
     let blocked_payload = read_json(blocked).await;
+    assert_eq!(blocked_payload["error"]["details"]["reason"], "ambiguous_translation_request");
     assert!(blocked_payload["message"]
         .as_str()
         .unwrap_or_default()
@@ -468,7 +499,7 @@ async fn translation_retry_requires_explicit_duplicate_risk_acceptance() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(format!("/api/v1/jobs/{source_job_id}/rerun"))
+                .uri(format!("/api/v1/jobs/{source_job_id}/actions/rerun"))
                 .header("X-API-Key", "test-key")
                 .body(Body::empty())
                 .expect("generic rerun request"),
@@ -476,12 +507,16 @@ async fn translation_retry_requires_explicit_duplicate_risk_acceptance() {
         .await
         .expect("generic rerun response");
     assert_eq!(generic_rerun.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        read_json(generic_rerun).await["error"]["details"]["reason"],
+        "ambiguous_translation_request"
+    );
 
     let accepted = build_app(state.clone())
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(format!("/api/v1/jobs/{source_job_id}/retry-stage"))
+                .uri(format!("/api/v1/jobs/{source_job_id}/actions/retry-stage"))
                 .header("X-API-Key", "test-key")
                 .header("Content-Type", "application/json")
                 .body(Body::from(
@@ -527,7 +562,7 @@ async fn translation_retry_requires_explicit_duplicate_risk_acceptance() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(format!("/api/v1/jobs/{source_job_id}/retry-stage"))
+                .uri(format!("/api/v1/jobs/{source_job_id}/actions/retry-stage"))
                 .header("X-API-Key", "test-key")
                 .header("Content-Type", "application/json")
                 .body(Body::from(
@@ -542,6 +577,10 @@ async fn translation_retry_requires_explicit_duplicate_risk_acceptance() {
         .await
         .expect("corrupt retry response");
     assert_eq!(corrupt_retry.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        read_json(corrupt_retry).await["error"]["details"]["reason"],
+        "request_journal_corrupt"
+    );
 }
 
 #[tokio::test]
@@ -563,7 +602,7 @@ async fn retry_stage_route_creates_translation_recovery_job_with_overrides() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/jobs/job-retry-stage-translation-source/retry-stage")
+                .uri("/api/v1/jobs/job-retry-stage-translation-source/actions/retry-stage")
                 .header("X-API-Key", "test-key")
                 .header("Content-Type", "application/json")
                 .body(Body::from(
@@ -635,7 +674,7 @@ async fn retry_stage_route_creates_render_job_by_default() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/jobs/job-retry-stage-render-source/retry-stage")
+                .uri("/api/v1/jobs/job-retry-stage-render-source/actions/retry-stage")
                 .header("X-API-Key", "test-key")
                 .header("Content-Type", "application/json")
                 .body(Body::from(json!({ "stage": "render" }).to_string()))
@@ -658,9 +697,80 @@ async fn retry_stage_route_creates_render_job_by_default() {
     );
 }
 
+/// 重新渲染出来的任务要归到同一本书下。它没有 upload_id，lifecycle 补不上归属；不写的话
+/// 它不在 list_jobs_for_document 里，阅读页的打开计划看不见它，点「阅读」一直打开重新
+/// 渲染之前的旧任务（实测：连点两次重新渲染，阅读页始终停在旧任务上）。
+#[tokio::test]
+async fn retry_stage_render_jobs_inherit_the_source_document() {
+    let state = test_state("retry-stage-render-document");
+    let mut source_job = source_job_with_artifacts(
+        "job-retry-render-doc-source",
+        JobArtifacts {
+            source_pdf: Some("jobs/source/source/input.pdf".to_string()),
+            normalized_document_json: Some("jobs/source/ocr/document.v1.json".to_string()),
+            translations_dir: Some("jobs/source/translated".to_string()),
+            ..JobArtifacts::default()
+        },
+    );
+    source_job.status = JobStatusKind::Succeeded;
+    seed_translation_result_files(&state, &source_job);
+    state.db.save_job(&source_job).expect("save source job");
+    state
+        .db
+        .set_job_document_id("job-retry-render-doc-source", "doc-sha-render")
+        .expect("link source job");
+
+    let retry = |source: String| {
+        let state = state.clone();
+        async move {
+            let response = build_app(state)
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri(format!("/api/v1/jobs/{source}/actions/retry-stage"))
+                        .header("X-API-Key", "test-key")
+                        .header("Content-Type", "application/json")
+                        .body(Body::from(json!({ "stage": "render" }).to_string()))
+                        .expect("retry render request"),
+                )
+                .await
+                .expect("retry render response");
+            assert_eq!(response.status(), StatusCode::OK);
+            read_json(response).await["data"]["job_id"]
+                .as_str()
+                .expect("job id")
+                .to_string()
+        }
+    };
+    let first = retry("job-retry-render-doc-source".to_string()).await;
+    assert_eq!(
+        state.db.document_id_for_job(&first).expect("lookup"),
+        Some("doc-sha-render".to_string()),
+        "重新渲染的任务没归到源任务那本书下"
+    );
+
+    // 在重新渲染的结果上再重新渲染一次：源任务自己就是派生出来的，归属也要接得上。
+    let mut first_job = state.db.get_job(&first).expect("first retry job");
+    first_job.status = JobStatusKind::Succeeded;
+    first_job.artifacts = source_job.artifacts.clone();
+    state.db.save_job(&first_job).expect("finish first retry");
+    let second = retry(first.clone()).await;
+
+    let listed: Vec<String> = state
+        .db
+        .list_jobs_for_document("doc-sha-render", 50, 0)
+        .expect("list jobs")
+        .into_iter()
+        .map(|job| job.job_id.clone())
+        .collect();
+    assert!(listed.contains(&first), "第一次重新渲染不在这本书的任务里：{listed:?}");
+    assert!(listed.contains(&second), "第二次重新渲染不在这本书的任务里：{listed:?}");
+}
+
 #[tokio::test]
 async fn retry_stage_route_allows_in_place_render_when_requested() {
-    let state = test_state("retry-stage-render-in-place");
+    let mut state = test_state("retry-stage-render-in-place");
+    hold_job_drivers(&mut state);
     let mut source_job = source_job_with_artifacts(
         "job-retry-stage-render-in-place",
         JobArtifacts {
@@ -679,7 +789,7 @@ async fn retry_stage_route_allows_in_place_render_when_requested() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/jobs/job-retry-stage-render-in-place/retry-stage")
+                .uri("/api/v1/jobs/job-retry-stage-render-in-place/actions/retry-stage")
                 .header("X-API-Key", "test-key")
                 .header("Content-Type", "application/json")
                 .body(Body::from(
@@ -736,7 +846,7 @@ async fn retry_stage_route_applies_overrides_for_in_place_render() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/jobs/job-retry-stage-render-in-place-overrides/retry-stage")
+                .uri("/api/v1/jobs/job-retry-stage-render-in-place-overrides/actions/retry-stage")
                 .header("X-API-Key", "test-key")
                 .header("Content-Type", "application/json")
                 .body(Body::from(
@@ -784,4 +894,84 @@ async fn retry_stage_route_applies_overrides_for_in_place_render() {
         retry_job.request_payload.runtime.job_id,
         "job-retry-stage-render-in-place-overrides"
     );
+}
+
+/// 边识别边翻译的书翻译失败：以前 runner 没把 OCR 子任务的产物并回父任务，父任务记录里没有原文 PDF、规范化文档，
+/// 「重试翻译」灰着（2026-11-03，6574 页的书翻完 6.86 万条后失败）。现在从 OCR 子任务补回来：能做的操作里重试翻译
+/// 可用，提交重试时写回父任务，新任务能复用 OCR 结果。
+#[tokio::test]
+async fn translation_retry_recovers_ocr_artifacts_from_the_streamed_ocr_child() {
+    let state = test_state("retry-stage-streamed-ocr-child");
+    let parent_id = "job-streamed-ocr-parent";
+    let mut parent = source_job_with_artifacts(
+        parent_id,
+        JobArtifacts {
+            job_root: Some(format!("jobs/{parent_id}")),
+            ..JobArtifacts::default()
+        },
+    );
+    parent.status = JobStatusKind::Failed;
+    state.db.save_job(&parent).expect("save parent");
+    let mut child = source_job_with_artifacts(
+        &format!("{parent_id}-ocr"),
+        JobArtifacts {
+            source_pdf: Some(format!("jobs/{parent_id}/source/book.pdf")),
+            normalized_document_json: Some(format!("jobs/{parent_id}/ocr/normalized/document.v1.json")),
+            ..JobArtifacts::default()
+        },
+    );
+    child.workflow = crate::models::WorkflowKind::Ocr;
+    child.status = JobStatusKind::Succeeded;
+    seed_ocr_checkpoint_files(&state, &child);
+    state.db.save_job(&child).expect("save ocr child");
+    let app = build_app(state.clone());
+
+    let actions = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/jobs/{parent_id}/actions"))
+                .header("X-API-Key", "test-key")
+                .body(Body::empty())
+                .expect("actions request"),
+        )
+        .await
+        .expect("actions response");
+    assert_eq!(actions.status(), StatusCode::OK);
+    let actions = read_json(actions).await;
+    let translation = actions["data"]["stages"]
+        .as_array()
+        .expect("stages")
+        .iter()
+        .find(|stage| stage["stage"] == "translation")
+        .expect("translation stage")
+        .clone();
+    assert_eq!(translation["can_retry"], true, "{translation}");
+    // 只看不写：父任务的记录还没动
+    assert!(state.db.get_job(parent_id).unwrap().artifacts.unwrap().normalized_document_json.is_none());
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/jobs/{parent_id}/actions/retry-stage"))
+                .header("X-API-Key", "test-key")
+                .header("Content-Type", "application/json")
+                .body(Body::from(json!({ "stage": "translation" }).to_string()))
+                .expect("retry stage request"),
+        )
+        .await
+        .expect("retry stage response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload = read_json(response).await;
+    assert_eq!(payload["data"]["rerun_from_stage"], "translation");
+    let artifacts = state.db.get_job(parent_id).unwrap().artifacts.unwrap();
+    assert_eq!(
+        artifacts.normalized_document_json.as_deref(),
+        Some(format!("jobs/{parent_id}/ocr/normalized/document.v1.json").as_str())
+    );
+    assert_eq!(artifacts.source_pdf.as_deref(), Some(format!("jobs/{parent_id}/source/book.pdf").as_str()));
+    assert_eq!(artifacts.ocr_job_id.as_deref(), Some(format!("{parent_id}-ocr").as_str()));
+    let retry_job = state.db.get_job(payload["data"]["job_id"].as_str().unwrap()).unwrap();
+    assert_eq!(retry_job.request_payload.source.artifact_job_id, parent_id);
 }

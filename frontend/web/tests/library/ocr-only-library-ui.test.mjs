@@ -53,11 +53,8 @@ test("OCR-only 徽标和阅读语义与翻译成功明确区分", () => {
     icon: "scan-text",
     cls: "bg-secondary text-secondary-foreground",
   });
-  assert.deepEqual(libraryCardBadge(translatedDone), {
-    label: "已翻译",
-    icon: "languages",
-    cls: "bg-primary text-primary-foreground",
-  });
+  // 「已翻译」是书架常态，不挂角标；只有例外状态（OCR 完成 / 失败 / 存档…）才标出来
+  assert.equal(libraryCardBadge(translatedDone), null, "翻译成功不挂角标");
   assert.equal(isLibraryCardProcessing(ocrDone), false, "OCR succeeded + stage=ocr 是真实终态");
 
   const translatedRetryDirtyState = {
@@ -115,11 +112,11 @@ test("状态筛选将仅收藏、仅 OCR、已翻译和处理中分别计数", (
     active: 1,
     failed: 1,
   });
-  assert.equal(matchesLibraryFilter(ocrDone, "ocr", "", filterDependencies), true);
-  assert.equal(matchesLibraryFilter(ocrDone, "done", "", filterDependencies), false);
-  assert.equal(matchesLibraryFilter(translatedDone, "done", "", filterDependencies), true);
-  assert.equal(matchesLibraryFilter(ocrRunning, "active", "", filterDependencies), true);
-  assert.equal(matchesLibraryFilter(libraryOnly, "untranslated", "", filterDependencies), true);
+  assert.equal(matchesLibraryFilter(ocrDone, "ocr", filterDependencies), true);
+  assert.equal(matchesLibraryFilter(ocrDone, "done", filterDependencies), false);
+  assert.equal(matchesLibraryFilter(translatedDone, "done", filterDependencies), true);
+  assert.equal(matchesLibraryFilter(ocrRunning, "active", filterDependencies), true);
+  assert.equal(matchesLibraryFilter(libraryOnly, "untranslated", filterDependencies), true);
 });
 
 test("网格与列表输出 OCR 完成和查看 OCR，memo 签名包含 workflow/job_type", () => {
@@ -148,4 +145,21 @@ test("网格与列表输出 OCR 完成和查看 OCR，memo 签名包含 workflow
     cardSignatureOf({ ...ocrDone, workflow: "", job_type: "ocr" }),
     cardSignatureOf({ ...ocrDone, workflow: "", job_type: "book" }),
   );
+});
+
+test("网格与列表：翻译成功的书不挂状态角标，失败的照挂", () => {
+  for (const Component of [BookCard, BookListRow]) {
+    const doneMarkup = renderToStaticMarkup(React.createElement(Component, {
+      item: translatedDone,
+      onReader() {},
+      onReadSource() {},
+    }));
+    assert.doesNotMatch(doneMarkup, /book-card-status-badge|data-badge-label/, "已翻译是常态，不挂角标");
+    const failedMarkup = renderToStaticMarkup(React.createElement(Component, {
+      item: { ...translatedDone, status: "failed", stage: "failed" },
+      onReader() {},
+      onReadSource() {},
+    }));
+    assert.match(failedMarkup, /data-badge-label="失败"/, "例外状态仍然标出来");
+  }
 });

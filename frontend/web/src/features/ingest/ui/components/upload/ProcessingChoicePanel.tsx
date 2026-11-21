@@ -1,8 +1,10 @@
 // 展示组件边界：只收 props 发回调，不直连 services/store；
 // 提交禁用/文案由 UploadTile 容器按凭据·预算就绪态映射为 submit* props。
-// 提交按钮常显：不可提交时保持禁用，但用 title + 下方一行 submit-hint
-// 说明原因与下一步（选文件 / 补凭据 / 设术语表），hint 内的动作按钮用
-// DOM 级导航把用户带到缺失项（#file / 凭据设置事件），不新增 props。
+// 提交按钮常显：不可提交时保持禁用（样式上半透明 + not-allowed），用 title
+// 说明原因。只有「文件已就绪却被凭据拦住」时才在下方出一行 submit-hint
+// （补凭据 / 设术语表），hint 内的动作按钮派发凭据设置事件，不新增 props。
+// 缺文件 / 上传中不出 hint：上方拖放区（大加号 + 「单个 PDF / 最大 512MB」
+// / 上传进度）已经把这件事说清楚，再来一行等于同一屏说两遍。
 import type { ReactNode } from "react";
 import { Languages, Loader2, ScanSearch, SlidersHorizontal } from "lucide-react";
 import { APP_EVENTS } from "@/platform/contracts/app-contract.js";
@@ -43,27 +45,15 @@ export function ProcessingChoicePanel({
   let hintActionLabel = "";
   if (blocked && missingUpload) {
     submitTitle = "请先选择 PDF 文件并等待上传完成";
-    hintText = "请先选择 PDF 文件并等待上传完成，再提交任务。";
-    hintActionLabel = "选择文件";
   } else if (blocked) {
     submitTitle = "请先完成接口设置后再提交";
     hintText = "文件已就绪，提交前请先完成接口设置，也可在选项中设置术语表。";
     hintActionLabel = "打开设置";
   }
 
-  // hint 动作：把用户带到缺失项。缺文件 → 打开发布文件框；已就绪被拦 →
-  // 打开浏览器凭据设置（与 CredentialGateNotice 同一事件）。
+  // hint 动作：已就绪被拦 → 打开浏览器凭据设置（与 CredentialGateNotice 同一事件）。
   function handleHintAction() {
     if (typeof document === "undefined") return;
-    if (missingUpload) {
-      const input = document.getElementById("file");
-      if (input instanceof HTMLInputElement && !input.disabled) {
-        input.click();
-        return;
-      }
-      (input as HTMLElement | null)?.focus?.();
-      return;
-    }
     document.dispatchEvent(new CustomEvent(APP_EVENTS.openBrowserCredentials));
   }
 
@@ -114,7 +104,7 @@ export function ProcessingChoicePanel({
       {hintText ? (
         <p id="submit-hint" className="submit-hint" aria-live="polite">
           <span className="submit-hint-text">{hintText}</span>
-          <button type="button" className="submit-hint-action secondary" onClick={handleHintAction}>
+          <button type="button" className="submit-hint-action" onClick={handleHintAction}>
             {hintActionLabel}
           </button>
         </p>

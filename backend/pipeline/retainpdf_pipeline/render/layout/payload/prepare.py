@@ -14,6 +14,8 @@ from retainpdf_pipeline.render.layout.payload.metrics import box_capacity_units
 from retainpdf_pipeline.render.layout.payload.metrics import text_demand_units
 from retainpdf_pipeline.render.layout.inline_content.mode_router import is_direct_typst_math_mode
 from retainpdf_pipeline.render.layout.payload.first_line_indent import detect_first_line_indent_pt_with_displaylist
+from retainpdf_pipeline.render.layout.payload.first_line_indent import detect_first_line_indent_pt_from_text_lines
+from retainpdf_pipeline.render.layout.payload.first_line_indent import page_text_line_boxes
 from retainpdf_pipeline.render.layout.payload.first_line_indent import is_first_line_indent_candidate
 from retainpdf_pipeline.render.layout.payload.render_item import clear_render_fields
 from retainpdf_pipeline.render.layout.payload.render_item import group_render_unit_items
@@ -99,6 +101,7 @@ def _attach_first_line_indents(
             continue
         page_font_size, page_line_pitch, page_line_height, density_baseline, page_text_width_med = page_metrics[page_idx]
         displaylist: fitz.DisplayList | None = None
+        text_lines: list[tuple[float, float, float, float]] | None = None
         for item in items:
             item_id = str(item.get("item_id", "") or "")
             if first_line_indent_lookup is not None and item_id:
@@ -117,6 +120,19 @@ def _attach_first_line_indents(
                 page_text_width_med,
             )
             if not is_first_line_indent_candidate(item, page_text_width_med=page_text_width_med):
+                continue
+            # 可复制的 PDF 读文字层；读不到这一块（扫描件、文字层没盖住）才渲染灰度图数墨迹。
+            if text_lines is None:
+                text_lines = page_text_line_boxes(source_doc[page_idx])
+            text_indent = detect_first_line_indent_pt_from_text_lines(
+                item,
+                text_lines,
+                font_size_pt=font_size_pt,
+                page_text_width_med=page_text_width_med,
+            )
+            if text_indent is not None:
+                if text_indent > 0:
+                    item["_render_first_line_indent_pt"] = text_indent
                 continue
             if displaylist is None:
                 displaylist = source_doc[page_idx].get_displaylist()

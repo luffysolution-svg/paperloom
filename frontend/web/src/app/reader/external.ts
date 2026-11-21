@@ -1,4 +1,10 @@
 // RetainPDF Web 宿主能力出口（host capability exit）：方向是 Web → 包。
+// 这里汇总宿主提供给 @retainpdf/reader 的 API、配置、下载能力，
+// 由 src/app/reader/adapters/retainpdf.ts 显式注册进包的 ReaderAdapters。
+//
+// 不要与包内 frontend/packages/reader/src/external.ts 混淆：那个是包内
+// 「运行时访问层」（读取本出口注册的能力），方向相反。缺少宿主符号时，
+// 只扩展本文件和 adapters/retainpdf.ts，不要把包内访问层搬到这里。
 
 // —— config / mock / messaging ——
 export { isMockMode } from "@/platform/config/runtime.js";
@@ -13,7 +19,7 @@ export {
   resolveMarkedVendorUrl,
 } from "@/platform/runtime/vendor-url.js";
 
-// —— Reader 宿主 ports ——
+// —— Reader 宿主 ports：直连 shared/*，不经历史中转层 ——
 export { defaultReaderDataPort, liveTranslationPort, pdfPort, sessionDataPort } from "@/features/reader/domain.js";
 export {
   defaultReaderPageConfigPort,
@@ -43,16 +49,6 @@ export { failDownloadToast } from "@/platform/utils/download-feedback.js";
 export { resolveMarkdownAssetUrl } from "@retainpdf/domain/job";
 export { parseMarkdownWithMath } from "@/features/reader/domain.js";
 
-// —— 服务端收藏面板 ——
+// —— 文档身份（按 jobId 反查）——
 export { API_PREFIX } from "@/platform/config/api-constants.js";
 export { fetchDocumentByJobId } from "@/platform/api/index.js";
-export {
-  createFavorite,
-  deleteFavorite,
-  fetchFavorites,
-} from "@/platform/api/index.js";
-export {
-  createReaderServerFavoritesPort,
-  normalizeServerFavorite,
-} from "@/features/reader/domain.js";
-export type { ServerFavorite } from "@/features/reader/domain.js";
