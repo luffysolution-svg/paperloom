@@ -214,11 +214,17 @@
   background: none;
 }
 
+.reader-md-code-actions {
+  justify-content: flex-start;
+  margin-top: -5px;
+}
+
 .reader-markdown-content img {
   display: block;
   max-width: 100%;
   margin: 0.5em auto 0.85em;
   border-radius: 10px;
+  cursor: zoom-in;
 }
 
 .reader-markdown-content table {
@@ -235,6 +241,103 @@
   padding: 5px 10px;
   border: 1px solid var(--line);
   text-align: left;
+}
+
+.reader-md-copy-actions:not([hidden]) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  margin: 3px 0 8px;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: var(--ui-text-xs);
+  line-height: 1.3;
+}
+
+.reader-md-copy-actions button {
+  min-height: 24px;
+  padding: 2px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--ui-radius-pill);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.reader-md-copy-actions button:hover,
+.reader-md-copy-actions button:focus-visible {
+  border-color: var(--ink);
+}
+
+.reader-md-selection-actions,
+.reader-md-internal-back {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 0 8px;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--ui-radius-md);
+  background: color-mix(in srgb, var(--paper) 96%, transparent);
+  color: var(--muted);
+  font-size: var(--ui-text-xs);
+}
+
+.reader-md-selection-actions[hidden],
+.reader-md-internal-back[hidden] {
+  display: none;
+}
+
+.reader-md-selection-actions button,
+.reader-md-internal-back {
+  min-height: 24px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--ui-radius-pill);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.reader-md-selection-actions button:hover,
+.reader-md-selection-actions button:focus-visible,
+.reader-md-internal-back:hover,
+.reader-md-internal-back:focus-visible {
+  border-color: var(--ink);
+}
+
+.reader-md-image-preview {
+  position: fixed;
+  z-index: 3000;
+  inset: 0;
+  display: grid;
+  padding: 28px;
+  place-items: center;
+  background: color-mix(in srgb, #101217 78%, transparent);
+  cursor: zoom-out;
+}
+
+.reader-md-image-preview img {
+  max-width: min(94vw, 1400px);
+  max-height: 92vh;
+  margin: 0;
+  border-radius: var(--ui-radius-lg);
+  box-shadow: 0 20px 80px rgb(0 0 0 / 35%);
+  cursor: default;
+}
+
+.reader-md-internal-target {
+  border-radius: var(--ui-radius-sm);
+  outline: 2px solid color-mix(in srgb, #f6c453 65%, transparent);
+  background: color-mix(in srgb, #f6c453 20%, transparent);
+}
+
+.reader-markdown-content .reader-md-internal-link {
+  color: inherit;
 }
 
 .reader-markdown-content hr {

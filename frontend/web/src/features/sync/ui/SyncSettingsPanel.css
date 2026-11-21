@@ -8,7 +8,7 @@
 .sync-settings {
   display: grid;
   gap: 16px;
-  max-width: 560px;
+  margin-top: 14px;
 }
 
 .sync-settings-status {

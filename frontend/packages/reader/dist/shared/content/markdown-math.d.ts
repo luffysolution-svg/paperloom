@@ -52,10 +52,12 @@ export declare const mathFailureStats: {
     protectedTokens: number;
 };
 export declare function renderMathFallbackHtml(tex: string, display: boolean): string;
-export declare function wrapMathSvgHtml(svgHtml: string, display: boolean): string;
+export declare function wrapMathSvgHtml(svgHtml: string, display: boolean, tex?: string): string;
 export declare function normalizeMathTex(tex: string): string;
 /** 将 HTML 中的占位符替换为 MathJax SVG（失败则回退为代码片段）。 */
-export declare function materializeMarkdownMathHtml(html: string, slots: MarkdownMathSlot[]): Promise<string>;
+export declare function materializeMarkdownMathHtml(html: string, slots: MarkdownMathSlot[], options?: {
+    preserveSource?: boolean;
+}): Promise<string>;
 /** Fast first paint: keep every formula visible without waiting for MathJax. */
 export declare function materializeMarkdownMathFallbackHtml(html: string, slots: MarkdownMathSlot[]): string;
 /** 完整管线：保护公式 → marked.parse → 还原 SVG。 */

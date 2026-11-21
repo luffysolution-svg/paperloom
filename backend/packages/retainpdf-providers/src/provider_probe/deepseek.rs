@@ -8,6 +8,7 @@ use super::ocr::redirected_view;
 use super::policy::ProbePolicy;
 use super::types::{
     DeepSeekBalanceInfoView, DeepSeekBalanceView, DeepSeekTokenValidationRequest,
+    FetchModelsRequest, FetchModelsView,
     ProviderProbeView,
 };
 use super::url_policy::validate_probe_base_url;
@@ -32,6 +33,79 @@ pub async fn validate_deepseek_token_view(
     policy: ProbePolicy,
 ) -> Result<ProviderProbeView, AppError> {
     Ok(validate_deepseek_token_inner(payload, runtime, policy).await?.bounded())
+}
+
+/// Fetch model ids from the configured provider. This deliberately shares the
+/// same URL policy and auth headers as the connectivity probe so the settings
+/// UI cannot send a key to an unvalidated target.
+pub async fn fetch_models_view(
+    payload: FetchModelsRequest,
+    runtime: DeepSeekRuntimeConfig,
+    policy: ProbePolicy,
+) -> Result<FetchModelsView, AppError> {
+    let api_key = payload.api_key.trim();
+    if api_key.is_empty() {
+        return Err(AppError::bad_request("api_key is required"));
+    }
+    if reqwest::header::HeaderValue::from_str(api_key).is_err() {
+        return Err(AppError::bad_request("api_key contains invalid header characters"));
+    }
+
+    let protocol = payload.api_protocol.trim().to_ascii_lowercase();
+    let anthropic = protocol == "anthropic";
+    let base_url = if anthropic && payload.base_url.trim().is_empty() {
+        ANTHROPIC_DEFAULT_BASE_URL.to_string()
+    } else {
+        normalize_deepseek_base_url(&payload.base_url, &runtime)
+    };
+    validate_probe_base_url(&base_url, policy.private_targets)?;
+    let session_id = format!("provider-models-{}-{:016x}", now_iso(), fastrand::u64(..));
+    let client = policy
+        .http_client_builder()
+        .default_headers(crate::model_provider_headers::opencode_headers(&base_url, &session_id))
+        .build()
+        .map_err(|err| AppError::internal(format!("build model list client failed: {err}")))?;
+    let models_url = if anthropic {
+        format!("{}/models", anthropic_v1_root(&base_url))
+    } else {
+        format!("{}/models", base_url.trim_end_matches('/'))
+    };
+    let request = client.get(&models_url);
+    let request = if anthropic {
+        anthropic_auth(request, api_key)
+    } else {
+        request.bearer_auth(api_key)
+    };
+    let response = request
+        .send()
+        .await
+        .map_err(|err| AppError::bad_request(format!("拉取模型失败：{err}")))?;
+    let status = response.status();
+    let body = response
+        .text()
+        .await
+        .map_err(|err| AppError::bad_request(format!("读取模型列表失败：{err}")))?;
+    if !status.is_success() {
+        let detail = summarize_deepseek_error_payload(&body)
+            .unwrap_or_else(|| format!("HTTP {}", status.as_u16()));
+        return Err(AppError::bad_request(format!("拉取模型失败：{detail}")));
+    }
+    let parsed: Value = serde_json::from_str(&body)
+        .map_err(|_| AppError::bad_request("模型列表返回的不是有效 JSON"))?;
+    let models = parsed
+        .get("data")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.get("id").and_then(Value::as_str))
+                .map(str::trim)
+                .filter(|id| !id.is_empty())
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    Ok(FetchModelsView { models, base_url })
 }
 
 async fn validate_deepseek_token_inner(

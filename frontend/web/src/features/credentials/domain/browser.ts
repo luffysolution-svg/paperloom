@@ -27,6 +27,7 @@ import type {
   OpenCredentialDialogOptions,
   UpdateCredentialGateViewOptions,
 } from "@/features/credentials/domain/view-contracts.js";
+import { fetchTranslationModels as fetchTranslationModelsApi } from "@/platform/api/domains/providers.js";
 
 export interface CredentialDialogElements {
   dialog?: HTMLDialogElement | HTMLElement | boolean | null;
@@ -140,6 +141,10 @@ export interface MountBrowserCredentialsFeatureOptions {
     apiPrefix: string,
     payload: Record<string, unknown>,
   ) => Promise<ProviderValidationResult | unknown> | ProviderValidationResult | unknown;
+  fetchTranslationModels?: (
+    apiPrefix: string,
+    payload: { api_key: string; base_url: string; api_protocol: string },
+  ) => Promise<{ models?: string[] }>;
   // 挂载层只透传、不读取返回值，故返回值保持 unknown。
   createCredential?: (apiPrefix: string | undefined, payload: CreateCredentialInput) => Promise<CredentialMutationView>;
   updateCredential?: (
@@ -181,6 +186,7 @@ export function mountBrowserCredentialsFeature({
   validateOcrToken,
   validateDeepSeekToken,
   queryDeepSeekBalance,
+  fetchTranslationModels,
   createCredential,
   updateCredential,
   onCredentialStateChange,
@@ -284,6 +290,17 @@ export function mountBrowserCredentialsFeature({
     },
     validateOcr: validation.handleOcrValidate,
     validateDeepSeek: validation.handleDeepSeekValidate,
+    fetchTranslationModels: async () => {
+      const elements = dialogElementsPort.elements();
+      const apiKey = elements.apiKeyInput?.value?.trim() || "";
+      if (!apiKey) throw new Error("请先填写翻译 API Key");
+      const result = await (fetchTranslationModels || fetchTranslationModelsApi)(apiPrefix, {
+        api_key: apiKey,
+        base_url: elements.modelBaseUrlInput?.value?.trim() || "",
+        api_protocol: elements.translationProtocolSelect?.value || "openai_responses",
+      });
+      return Array.isArray(result?.models) ? result.models : [];
+    },
     save: saveFlow.handleSave,
     activateCredentialTab: dialogFlow.activateCredentialTab,
     changeProvider: (event) => {

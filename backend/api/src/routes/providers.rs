@@ -7,7 +7,7 @@ use crate::ocr_provider::{provider_client_definitions, OcrProviderPublicDefiniti
 use crate::routes::common::{build_provider_route_deps, ApiJson};
 use crate::services::providers::{
     self, DeepSeekBalanceView, DeepSeekTokenValidationRequest, MineruTokenValidationRequest,
-    ProviderProbeView, PaddleTokenValidationRequest,
+    ProviderProbeView, PaddleTokenValidationRequest, FetchModelsRequest, FetchModelsView,
 };
 use crate::AppState;
 
@@ -15,6 +15,15 @@ use crate::AppState;
 pub async fn list_ocr_providers(
 ) -> Result<Json<ApiResponse<Vec<OcrProviderPublicDefinition>>>, AppError> {
     Ok(Json(ApiResponse::ok(provider_client_definitions())))
+}
+
+pub async fn fetch_models(
+    State(state): State<AppState>,
+    ApiJson(payload): ApiJson<FetchModelsRequest>,
+) -> Result<Json<ApiResponse<FetchModelsView>>, AppError> {
+    let deps = build_provider_route_deps(&state);
+    let view = providers::fetch_models(&deps, payload).await?;
+    Ok(Json(ApiResponse::ok(view)))
 }
 
 pub async fn validate_mineru_token(

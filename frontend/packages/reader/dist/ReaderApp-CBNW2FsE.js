@@ -16,7 +16,7 @@ import { toast as Xt, Toaster as qo } from "sonner";
 import { X as vn, Radio as Ko, FileText as zr, Columns2 as xr, Languages as Or, FileCode2 as Zo, Keyboard as Yo, Download as Xo, ChevronDown as Qo, ListTree as ea, Search as ta } from "lucide-react";
 import { Button as Oe, Input as na } from "@retainpdf/ui";
 import { pdfjs as Fr, Page as ra, Document as oa } from "react-pdf";
-import { e as aa, m as sa, a as ia } from "./markdown-math-XkF5urpn.js";
+import { e as aa, m as sa, a as ia } from "./markdown-math-DN_X3M3x.js";
 const ca = (...e) => {
   var t, n;
   return ((n = (t = ye()) == null ? void 0 : t.isMockMode) == null ? void 0 : n.call(t, ...e)) ?? !1;
@@ -2353,26 +2353,7 @@ function Pi() {
   const e = mt().resolvePdfjsVendorUrl("build/pdf.worker.mjs");
   e && (Fr.GlobalWorkerOptions.workerSrc = e, nr = !0);
 }
-const Ri = /* @__PURE__ */ new Set(["text", "formula", "table"]);
-function Ii(e, t, n) {
-  return e.flatMap((r) => {
-    if (!Ri.has(Dr(r.region))) return [];
-    const o = yn(r, t, n);
-    return o ? [{ itemId: r.itemId, highlight: r, rect: o }] : [];
-  });
-}
-function rr(e, t, n) {
-  let r = null, o = Number.POSITIVE_INFINITY;
-  for (const a of e) {
-    const { rect: s } = a;
-    if (t < s.left || t > s.left + s.width || n < s.top || n > s.top + s.height)
-      continue;
-    const c = s.width * s.height;
-    c < o && (r = a, o = c);
-  }
-  return r;
-}
-async function Ei(e) {
+async function Ri(e) {
   var n;
   const t = `${e || ""}`;
   if (!t.trim()) return !1;
@@ -2389,6 +2370,25 @@ async function Ei(e) {
   } catch {
     return !1;
   }
+}
+const Ii = /* @__PURE__ */ new Set(["text", "formula", "table"]);
+function Ei(e, t, n) {
+  return e.flatMap((r) => {
+    if (!Ii.has(Dr(r.region))) return [];
+    const o = yn(r, t, n);
+    return o ? [{ itemId: r.itemId, highlight: r, rect: o }] : [];
+  });
+}
+function rr(e, t, n) {
+  let r = null, o = Number.POSITIVE_INFINITY;
+  for (const a of e) {
+    const { rect: s } = a;
+    if (t < s.left || t > s.left + s.width || n < s.top || n > s.top + s.height)
+      continue;
+    const c = s.width * s.height;
+    c < o && (r = a, o = c);
+  }
+  return r;
 }
 const Ti = "reader-text-hover-copy", Mi = "reader-text-hover-id", to = "reader-text-hover-tools";
 function or({
@@ -2432,7 +2432,7 @@ function Ai({
   }, [i]), !e) return null;
   const l = Ho(e.highlight.region, t), u = Dr(e.highlight.region), d = (g, f) => async (v) => {
     v.preventDefault(), v.stopPropagation();
-    const b = await Ei(g);
+    const b = await Ri(g);
     f(b ? "copied" : "failed"), c.current.push(window.setTimeout(() => f("idle"), 1200));
   }, m = u === "formula" ? "复制 LaTeX" : "复制", h = oo(e.rect);
   return /* @__PURE__ */ y("div", { className: "reader-text-hover-layer", children: /* @__PURE__ */ y(
@@ -2538,7 +2538,7 @@ function Di(e) {
   if (!r.length)
     return { fallbackHtml: a, richHtml: Promise.resolve(a), hasMath: !1 };
   let s = lt.get(t);
-  if (!s && (s = ia(o, r), lt.set(t, s), lt.size > Li)) {
+  if (!s && (s = ia(o, r, { preserveSource: !1 }), lt.set(t, s), lt.size > Li)) {
     const c = lt.keys().next().value;
     c !== void 0 && lt.delete(c);
   }
@@ -2767,7 +2767,7 @@ function Hi({
     o || Gt(L.current);
   }, [o]), x(() => () => Gt(L.current), []);
   const R = Math.max(120, Math.floor(t * p)), I = Math.max(R, Math.ceil(s || 0)), E = yn(d, t, R), M = Y(
-    () => Ii(m, t, R),
+    () => Ei(m, t, R),
     [R, m, t]
   ), [F, K] = N(null), D = typeof g == "function", G = D ? h ?? null : F, U = (j) => {
     D ? j !== (h ?? null) && (g == null || g(j)) : K((B) => B === j ? B : j);
@@ -6536,7 +6536,7 @@ function Jl({
     ] })
   ] });
 }
-const Gl = Lo(() => import("./ReaderMarkdownPanel-cDcXuWqb.js").then((e) => ({ default: e.ReaderMarkdownPanel })));
+const Gl = Lo(() => import("./ReaderMarkdownPanel-CLW0zDBY.js").then((e) => ({ default: e.ReaderMarkdownPanel })));
 function ql(e) {
   const t = e.sourceOnly || !e.translatedUrl, n = !!(e.overlayContentAvailable && e.liveTranslationVisible && !e.assistantOpen), o = e.assistantPdfPane || (e.assistantOpen && e.mode === "compare" ? "source" : e.mode), a = !t && (o === "translated" || o === "compare");
   return {
@@ -6729,9 +6729,10 @@ function pu() {
 export {
   pu as R,
   Zl as a,
+  Ri as c,
   mu as d,
   fu as f,
   hu as r,
   De as u
 };
-//# sourceMappingURL=ReaderApp-C6FE9bMo.js.map
+//# sourceMappingURL=ReaderApp-CBNW2FsE.js.map

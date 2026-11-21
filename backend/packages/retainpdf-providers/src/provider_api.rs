@@ -12,7 +12,7 @@ use retainpdf_api_base::error::AppError;
 
 pub use super::provider_probe::{
     DeepSeekBalanceView, DeepSeekTokenValidationRequest, MineruTokenValidationRequest,
-    PaddleTokenValidationRequest, ProviderProbeView,
+    PaddleTokenValidationRequest, ProviderProbeView, FetchModelsRequest, FetchModelsView,
 };
 use super::provider_probe::{PrivateTargets, ProbePolicy};
 
@@ -68,6 +68,13 @@ pub async fn validate_deepseek_token(
         deps.probe,
     )
     .await
+}
+
+pub async fn fetch_models(
+    deps: &ProviderApiDeps,
+    payload: FetchModelsRequest,
+) -> Result<FetchModelsView, AppError> {
+    super::provider_probe::fetch_models_view(payload, deps.deepseek_runtime.clone(), deps.probe).await
 }
 
 pub async fn query_deepseek_balance(

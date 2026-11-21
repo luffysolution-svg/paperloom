@@ -1,3 +1,4 @@
+export { copyReaderText } from "../shared/utils/clipboard.js";
 import { type ReaderRegionHighlight, type ReaderRegionRect } from "../shared/data/reader-regions.js";
 export type ReaderTextHoverTarget = {
     itemId: string;
@@ -6,11 +7,6 @@ export type ReaderTextHoverTarget = {
 };
 export declare function projectReaderTextHoverTargets(regions: readonly ReaderRegionHighlight[], width: number, height: number): ReaderTextHoverTarget[];
 export declare function hitTestReaderTextHoverTarget(targets: readonly ReaderTextHoverTarget[], x: number, y: number): ReaderTextHoverTarget | null;
-/**
- * 写剪贴板。`navigator.clipboard` 在非安全上下文（局域网 IP 打开的 http 页面）里不存在，
- * 退回 execCommand("copy")；两条都失败返回 false，不假装成功。
- */
-export declare function copyReaderText(text: string): Promise<boolean>;
 export declare const READER_TEXT_HOVER_COPY_CLASS = "reader-text-hover-copy";
 export declare const READER_TEXT_HOVER_ID_CLASS = "reader-text-hover-id";
 export declare const READER_TEXT_HOVER_TOOLS_CLASS = "reader-text-hover-tools";

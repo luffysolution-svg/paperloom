@@ -1,48 +1,78 @@
-/* 迁移与 WebDAV 备份面板及旧版主操作按钮样式（BackupPanel / AppUpdateBanner）。 */
-
+/* 整库迁移共用主题色、表单和按钮。 */
 @utility app-settings-backup {
   display: grid;
   gap: 12px;
+  margin-top: 14px;
   color: var(--ink);
   font-size: var(--ui-text-md);
-  line-height: 1.6;
+  line-height: 1.5;
 
-  & section { display: grid; gap: 12px; padding: 16px 0 24px; border-bottom: 1px solid var(--line); }
-  & section:last-child { border-bottom: 0; }
+  & section {
+    display: grid;
+    min-width: 0;
+    gap: 12px;
+    padding: 16px;
+    background: color-mix(in srgb, var(--bg) 65%, var(--paper));
+    border-radius: var(--ui-radius-lg);
+  }
+  & h4, & .app-backup-actions, & .app-backup-section-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
   & h4 { margin: 0; font-size: var(--ui-text-base); font-weight: 650; }
-  & p { margin: 0; color: var(--muted); }
-  & form { display: grid; gap: 12px; }
-  & label { display: grid; gap: 6px; }
-  & input:not([type="checkbox"]) { width: 100%; min-width: 0; min-height: 38px; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--ui-radius-sm); background: var(--paper); color: var(--ink); font: inherit; }
-  & input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--ink); flex: none; margin-top: 3px; }
-  & input::placeholder { color: var(--muted); }
-  & button { justify-self: start; min-height: 36px; padding: 6px 12px; border: 1px solid var(--line); border-radius: var(--btn-radius); background: var(--paper); color: var(--ink); font: inherit; cursor: pointer; }
-  & button.app-settings-action { background: var(--btn-primary-bg); color: var(--btn-primary-fg); border-color: transparent; }
-  & button:hover:enabled { filter: brightness(0.96); }
-  & button:disabled { opacity: 0.5; cursor: not-allowed; }
-  & button:focus-visible, & input:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-  & .app-backup-check { display: flex; align-items: start; gap: 8px; }
-  & .app-backup-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  & .app-backup-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-  & .app-backup-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  & h4 svg { width: 19px; height: 19px; stroke-width: 1.7; }
+  & .app-backup-actions, & .app-backup-section-head { flex-wrap: wrap; }
+  & .app-backup-section-head { justify-content: space-between; }
+  & p { margin: 0; color: var(--muted); font-size: var(--ui-text-sm); }
+  & button { justify-self: start; }
+  & .app-backup-option, & .app-backup-delete { display: grid; gap: 6px; }
+  & .app-backup-picker {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 12px;
+    border: 1px dashed var(--line);
+    border-radius: var(--ui-radius-md);
+    background: var(--paper);
+  }
+  & .app-backup-picker span { flex: 1; overflow-wrap: anywhere; }
+  & .app-backup-picker svg { flex: none; color: var(--muted); }
+  & .app-backup-picker input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+  }
+  & .app-backup-picker:focus-within { outline: 2px solid var(--ink); outline-offset: 2px; }
+  & .app-backup-picker:hover { border-color: var(--muted); }
+  & .app-backup-feedback, & .app-backup-notice { display: grid; gap: 8px; }
   & .app-backup-status:empty { display: none; }
-  & .app-backup-progress { width: 100%; height: 8px; accent-color: var(--ink); }
-  & .app-backup-feedback { position: sticky; top: 0; z-index: 1; display: grid; gap: 8px; padding-block: 8px; background: var(--paper); }
-  & .app-backup-status, & .app-backup-error { color: var(--ink); overflow-wrap: anywhere; }
-  & .app-backup-error, & .app-backup-notice { padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--ui-radius-sm); background: var(--bg); }
-  & .app-backup-notice button { margin-top: 8px; }
+  & .app-backup-progress { width: 100%; height: 6px; accent-color: var(--ink); }
+  & .app-backup-error { color: var(--danger); }
   & .app-backup-file-list { margin: 0; padding: 0; list-style: none; }
-  & .app-backup-file-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
-  & .app-backup-file-list li > div:first-child { min-width: 0; }
-  & small { display: block; color: var(--muted); font-size: var(--ui-text-sm); font-variant-numeric: tabular-nums; }
-  & .app-backup-path { overflow-wrap: anywhere; }
-  & .app-backup-location-path { display: block; margin-top: 4px; user-select: text; }
-  & .app-backup-location { display: grid; gap: 8px; min-width: 0; }
-  & .app-backup-delete { display: grid; gap: 6px; max-width: 240px; }
+  & .app-backup-file-list li, & .app-backup-location {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+  }
+  & .app-backup-file-list li + li { margin-top: 10px; }
+  & .app-backup-file-list li > div:first-child { flex: 1 1 180px; min-width: 0; }
+  & .app-backup-location p { flex: 1 1 200px; }
+  & .app-backup-path, & .app-backup-error { overflow-wrap: anywhere; }
+  & .app-backup-location-path { user-select: text; }
+  & small { display: block; color: var(--muted); font-size: var(--ui-text-sm); }
 
   @media (max-width: 520px) {
-    & .app-backup-fields { grid-template-columns: minmax(0, 1fr); }
-    & .app-backup-file-list li { flex-wrap: wrap; }
+    & section { padding: 12px; }
   }
 }
 

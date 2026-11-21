@@ -306,10 +306,10 @@ export function ZoteroImportDialog({
 
             {loadError ? <p className="home-zotero-error" role="alert">{loadError}</p> : null}
           </DialogBody>
-          <DialogFooter>
+          <DialogFooter className="flex-wrap">
             {summary ? (
               <DialogClose asChild>
-                <Button type="button">完成</Button>
+                <Button variant="primary">完成</Button>
               </DialogClose>
             ) : (
               <>
@@ -320,17 +320,20 @@ export function ZoteroImportDialog({
                   onChange={(event) => setTranslate(event.target.checked)}
                   label="导入后立即翻译"
                 />
-                <DialogClose asChild>
-                  <Button type="button" variant="secondary">取消</Button>
-                </DialogClose>
-                <Button
-                  type="button"
-                  disabled={busy || !ready || selected.size === 0}
-                  onClick={() => void submit()}
-                >
-                  {busy ? <LoaderCircle className="is-spinning" aria-hidden="true" /> : <BookOpen aria-hidden="true" />}
-                  导入 {selected.size || ""} 个 PDF
-                </Button>
+                <div className="flex items-center gap-2">
+                  <DialogClose asChild>
+                    <Button variant="secondary">取消</Button>
+                  </DialogClose>
+                  <Button
+                    variant="primary"
+                    pending={busy}
+                    disabled={!ready || selected.size === 0}
+                    onClick={() => void submit()}
+                  >
+                    {!busy && <BookOpen aria-hidden="true" />}
+                    {busy ? "正在导入…" : selected.size ? `导入 ${selected.size} 个 PDF` : "导入 PDF"}
+                  </Button>
+                </div>
               </>
             )}
           </DialogFooter>

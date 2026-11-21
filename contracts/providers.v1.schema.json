@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "retainpdf/contracts/providers/v1",
+  "title": "模型服务商（Providers）",
+  "description": "POST /api/v1/providers/models 的模型列表请求和返回。",
+  "base_path": "/api/v1",
+  "endpoints": [
+    {
+      "method": "POST",
+      "path": "/api/v1/providers/models",
+      "client_name": "fetchTranslationModels",
+      "transport": "json",
+      "input": "FetchTranslationModelsInput",
+      "output": "FetchTranslationModelsView",
+      "rust_view": "FetchModelsView",
+      "ts_consumer": "@retainpdf/contracts/providers :: FetchTranslationModelsView",
+      "note": "读取 OpenAI 兼容或 Anthropic 服务商公开的模型列表。"
+    }
+  ],
+  "definitions": {
+    "FetchTranslationModelsInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["api_key"],
+      "properties": {
+        "api_key": { "type": "string" },
+        "base_url": { "type": "string" },
+        "api_protocol": { "type": "string" }
+      }
+    },
+    "FetchTranslationModelsView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["models", "base_url"],
+      "properties": {
+        "models": { "type": "array", "items": { "type": "string" } },
+        "base_url": { "type": "string" }
+      }
+    }
+  }
+}

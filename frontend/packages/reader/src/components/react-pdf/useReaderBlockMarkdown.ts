@@ -87,7 +87,6 @@ export function useReaderBlockMarkdown(
             element.dataset.mdBlock = block.key;
             element.dataset.mdPage = `${block.page}`;
             element.tabIndex = 0;
-            element.setAttribute("role", "button");
             element.setAttribute("aria-label", `跳到第 ${block.page} 页的这一块`);
             const bilingual = view === "bilingual" && block.hasTranslation;
             const languages: ReaderMdLanguage[] = bilingual
@@ -100,6 +99,7 @@ export function useReaderBlockMarkdown(
               if (cancelled) return;
               element.appendChild(host);
             }
+            element.setAttribute("role", element.querySelector("button") ? "group" : "button");
             for (const itemId of block.itemIds) elements.set(itemId, element);
             fragment.appendChild(element);
           }

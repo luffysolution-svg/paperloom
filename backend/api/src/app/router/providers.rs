@@ -13,6 +13,8 @@ crate::endpoints! {
     POST "/api/v1/providers/paddle/validate-token" => providers::validate_paddle_token, admin;
     /// 校验 DeepSeek 的 API 密钥
     POST "/api/v1/providers/deepseek/validate-token" => providers::validate_deepseek_token, admin;
+    /// 拉取翻译服务商提供的模型列表
+    POST "/api/v1/providers/models" => providers::fetch_models, admin;
     /// 查 DeepSeek 余额
     POST "/api/v1/providers/deepseek/balance" => providers::query_deepseek_balance, admin;
 }

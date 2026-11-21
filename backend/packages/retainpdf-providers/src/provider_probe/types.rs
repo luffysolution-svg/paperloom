@@ -53,6 +53,23 @@ pub struct DeepSeekTokenValidationRequest {
     pub api_protocol: String,
 }
 
+/// Fetch the models exposed by an OpenAI-compatible or Anthropic endpoint.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FetchModelsRequest {
+    pub api_key: String,
+    #[serde(default)]
+    pub base_url: String,
+    #[serde(default)]
+    pub api_protocol: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FetchModelsView {
+    pub models: Vec<String>,
+    pub base_url: String,
+}
+
 #[derive(Debug, Serialize)]
 pub struct DeepSeekBalanceInfoView {
     pub currency: String,

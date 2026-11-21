@@ -149,7 +149,7 @@ export function prepareLiveTranslationMathHtml(text: string): {
   }
   let richHtml = mathHtmlCache.get(source);
   if (!richHtml) {
-    richHtml = materializeMarkdownMathHtml(escaped, slots);
+    richHtml = materializeMarkdownMathHtml(escaped, slots, { preserveSource: false });
     mathHtmlCache.set(source, richHtml);
     if (mathHtmlCache.size > MATH_HTML_CACHE_LIMIT) {
       const oldest = mathHtmlCache.keys().next().value;

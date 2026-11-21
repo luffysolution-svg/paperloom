@@ -33,6 +33,7 @@ import { createHomeStatePort } from "./state/home-store.js";
 import {
   validateDeepSeekToken,
   queryDeepSeekBalance,
+  fetchTranslationModels,
   createCredential,
   updateCredential,
   fetchGlossariesApi,
@@ -99,6 +100,7 @@ export function createHomeComposition({
   validateOcrToken: validateOcrTokenOverride = null,
   validateDeepSeekToken: validateDeepSeekTokenOverride = validateDeepSeekToken,
   queryDeepSeekBalance: queryDeepSeekBalanceOverride = queryDeepSeekBalance,
+  fetchTranslationModels: fetchTranslationModelsOverride = fetchTranslationModels,
   createCredential: createCredentialOverride = createCredential,
   updateCredential: updateCredentialOverride = updateCredential,
   checkApiConnectivity: checkApiConnectivityOverride = null,
@@ -187,6 +189,7 @@ export function createHomeComposition({
     validateOcrTokenOverride,
     validateDeepSeekTokenOverride,
     queryDeepSeekBalanceOverride,
+    fetchTranslationModelsOverride,
     createCredentialOverride,
     updateCredentialOverride,
     checkApiConnectivityOverride,

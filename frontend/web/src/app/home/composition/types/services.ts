@@ -8,6 +8,7 @@ import type {
   fetchGlossaryApi,
   parseGlossaryCsvApi,
   queryDeepSeekBalance,
+  fetchTranslationModels,
   submitUploadRequestHttp,
   updateCredential,
   updateGlossaryApi,
@@ -222,6 +223,7 @@ export type CreateHomeCompositionOptions = {
   validateOcrToken?: CredentialsMountOptions["validateOcrToken"] | null;
   validateDeepSeekToken?: typeof validateDeepSeekToken;
   queryDeepSeekBalance?: typeof queryDeepSeekBalance;
+  fetchTranslationModels?: typeof fetchTranslationModels;
   createCredential?: typeof createCredential;
   updateCredential?: typeof updateCredential;
   checkApiConnectivity?: (() => Promise<unknown>) | null;

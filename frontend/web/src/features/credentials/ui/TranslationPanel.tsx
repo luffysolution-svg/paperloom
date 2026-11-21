@@ -1,4 +1,5 @@
 import { CREDENTIAL_DOM_IDS } from "./credentials-dom-ids.js";
+import { useState } from "react";
 import { useCredentialsController } from "./useCredentialsController.js";
 import {
   getTranslationProviderDefinition,
@@ -8,7 +9,8 @@ import {
   TRANSLATION_PROVIDER_OPTIONS,
 } from "@/platform/config/providers.js";
 import { validationIcon } from "../domain/validation-icon.js";
-import { Box, Brain, Cable, Check, ChevronDown, Code2, ExternalLink, Gauge, KeyRound, Languages, Link2, PlugZap, Server, TriangleAlert } from "lucide-react";
+import { Box, Brain, Cable, Check, ChevronDown, Code2, ExternalLink, Gauge, KeyRound, Languages, Link2, PlugZap, RefreshCw, Server, TriangleAlert } from "lucide-react";
+import { Button } from "@retainpdf/ui";
 import { Select as SelectPrimitive } from "radix-ui";
 import { SecretInput } from "./SecretInput.js";
 import { FieldLabel } from "./FieldLabel.jsx";
@@ -37,6 +39,9 @@ function TranslationProviderMark({ provider, compact = false }: { provider: Tran
 
 export function TranslationPanel({ footerAction = null }: { footerAction?: React.ReactNode } = {}) {
   const { credentials, view, handlers, elementsRef } = useCredentialsController();
+  const [models, setModels] = useState<string[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelsMessage, setModelsMessage] = useState("");
   const translationProvider = `${view.translationProvider || "custom"}`;
   const providerDefinition = getTranslationProviderDefinition(translationProvider);
   const fixedBaseUrl = providerDefinition.id !== "custom";
@@ -129,15 +134,49 @@ export function TranslationPanel({ footerAction = null }: { footerAction?: React
         </label>
         <label className="credential-translation-model-field">
           <FieldLabel icon={<Box />}>模型</FieldLabel>
-          <input
-            id={BROWSER_IDS.modelName}
-            type="text"
-            autoComplete="off"
-            placeholder="模型名称"
-            defaultValue=""
-            ref={(node) => { elementsRef.modelNameInput = node || null; }}
-            onInput={() => handlers?.resetDeepSeekValidation?.()}
-          />
+          <div className="credential-translation-model-control">
+            <input
+              id={BROWSER_IDS.modelName}
+              type="text"
+              autoComplete="off"
+              list={models.length ? "credential-translation-model-options" : undefined}
+              placeholder="模型名称（可手动填写）"
+              defaultValue=""
+              ref={(node) => { elementsRef.modelNameInput = node || null; }}
+              onInput={() => handlers?.resetDeepSeekValidation?.()}
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="credential-model-fetch"
+              onClick={async () => {
+                setModelsLoading(true);
+                setModelsMessage("");
+                try {
+                  const next = await handlers?.fetchTranslationModels?.();
+                  const unique = [...new Set((next || []).map((value) => `${value}`.trim()).filter(Boolean))].sort();
+                  setModels(unique);
+                  setModelsMessage(unique.length ? `已拉取 ${unique.length} 个模型` : "接口未返回模型");
+                } catch (error) {
+                  setModelsMessage(error instanceof Error ? error.message : "拉取模型失败");
+                } finally {
+                  setModelsLoading(false);
+                }
+              }}
+              disabled={modelsLoading}
+              aria-label="拉取模型列表"
+            >
+              <RefreshCw aria-hidden="true" className={modelsLoading ? "is-spinning" : ""} />
+              拉取模型
+            </Button>
+          </div>
+          {models.length ? (
+            <datalist id="credential-translation-model-options">
+              {models.map((model) => <option key={model} value={model} />)}
+            </datalist>
+          ) : null}
+          {modelsMessage ? <span className="credential-model-fetch-message" role="status">{modelsMessage}</span> : null}
         </label>
         <label className="credential-translation-key-field">
           <FieldLabel icon={<KeyRound />}>API Key</FieldLabel>

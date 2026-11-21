@@ -78,7 +78,8 @@ function extractBareMathFragments(
   text: string,
   push: (rawTex: string, display: boolean) => string,
 ): string {
-  const tokenPattern = new RegExp(`${TOKEN_PREFIX}\\d+${TOKEN_SUFFIX}`, "g");
+  // Bare TeX next to an HTML tag must not consume the tag as part of the formula.
+  const tokenPattern = new RegExp(`${TOKEN_PREFIX}\\d+${TOKEN_SUFFIX}|</?[a-z][\\w:-]*(?:\\s[^<>]*)?/?>`, "gi");
   const scan = (segment: string): string =>
     segment.replace(BARE_MATH_RUN, (run) =>
       BARE_MATH_TRIGGER.test(run) ? push(run, false) : run,
@@ -139,7 +140,12 @@ export function extractMarkdownMath(
       );
     }
   }
-  let text = revealed.text;
+  // MinerU uses <eq> inside HTML tables, including equations with no TeX command.
+  let text = revealed.text.replace(/<table\b[^>]*>[\s\S]*?<\/table\s*>/gi, (table) =>
+    table.replace(/<eq\b[^>]*>([\s\S]*?)<\/eq\s*>/gi, (_, body: string) => {
+      const tex = body.trim();
+      return !tex || (tex.startsWith("$") && tex.endsWith("$")) ? tex : "$" + tex + "$";
+    }));
 
   const push = (rawTex: string, display: boolean): string => {
     const tex = `${rawTex ?? ""}`.trim();
@@ -335,12 +341,13 @@ export function renderMathFallbackHtml(tex: string, display: boolean): string {
   return `<span class="reader-md-math reader-md-math-inline reader-md-math-failed">${body}</span>`;
 }
 
-export function wrapMathSvgHtml(svgHtml: string, display: boolean): string {
+export function wrapMathSvgHtml(svgHtml: string, display: boolean, tex?: string): string {
   const cls = display
     ? "reader-md-math reader-md-math-display"
     : "reader-md-math reader-md-math-inline";
   const tag = display ? "div" : "span";
-  return `<${tag} class="${cls}">${svgHtml}</${tag}>`;
+  const source = tex === undefined ? "" : ` data-reader-tex="${escapeHtml(tex)}"`;
+  return `<${tag} class="${cls}"${source}>${svgHtml}</${tag}>`;
 }
 
 /**
@@ -498,6 +505,7 @@ function mergeRepeatedScripts(tex: string): string {
 export async function materializeMarkdownMathHtml(
   html: string,
   slots: MarkdownMathSlot[],
+  options: { preserveSource?: boolean } = {},
 ): Promise<string> {
   if (!slots.length) {
     return html;
@@ -519,7 +527,11 @@ export async function materializeMarkdownMathHtml(
     let replacement: string;
     if (engine) {
       try {
-        replacement = wrapMathSvgHtml(engine.convert(normalizeMathTex(slot.tex), slot.display), slot.display);
+        replacement = wrapMathSvgHtml(
+          engine.convert(normalizeMathTex(slot.tex), slot.display),
+          slot.display,
+          options.preserveSource === false ? undefined : slot.tex,
+        );
       } catch (error) {
         replacement = renderMathFallbackHtml(slot.tex, slot.display);
         reportMathFailure("convert", error, slot.tex);

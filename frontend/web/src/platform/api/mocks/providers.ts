@@ -47,3 +47,9 @@ export async function queryDeepSeekBalance(apiPrefix: string, payload: unknown) 
     ],
   };
 }
+
+export async function fetchTranslationModels(apiPrefix: string, payload: unknown) {
+  void apiPrefix;
+  void payload;
+  return { models: ["mock-translation-model"], base_url: "" };
+}

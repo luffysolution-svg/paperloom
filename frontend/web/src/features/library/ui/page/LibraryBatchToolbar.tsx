@@ -59,19 +59,21 @@ export function LibraryBatchToolbar({
   const hasSelection = count > 0;
 
   return (
-    <div className="library-search-dock" aria-label="批量操作工具栏">
-      <div className="flex min-h-[52px] flex-wrap items-center gap-2 rounded-full border border-[color-mix(in_srgb,color-mix(in_srgb,var(--line)_85%,var(--muted))_82%,transparent)] bg-paper/82 p-2 pl-4 shadow-[0_18px_46px_color-mix(in_srgb,var(--shadow-color)_12%,transparent)] backdrop-blur-[18px]">
-        <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={onCancel}>取消</Button>
+    <div className="library-batch-dock" role="group" aria-label="批量操作工具栏">
+      <div className="flex min-h-[52px] flex-wrap items-center justify-center gap-2 rounded-[26px] border border-[color-mix(in_srgb,color-mix(in_srgb,var(--line)_85%,var(--muted))_82%,transparent)] bg-paper/82 p-2 shadow-[0_18px_46px_color-mix(in_srgb,var(--shadow-color)_12%,transparent)] backdrop-blur-[18px]">
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={onCancel}>取消</Button>
 
-        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-          已选 {count}{Number.isFinite(totalSelectable) ? ` / ${totalSelectable}` : ""}
-        </span>
+          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+            已选 {count}{Number.isFinite(totalSelectable) ? ` / ${totalSelectable}` : ""}
+          </span>
 
-        <Button variant="secondary" size="sm" disabled={busy || !totalSelectable} onClick={onSelectAll}>
-          {allSelected ? "取消全选" : `全选已加载${Number.isFinite(totalSelectable) ? `(${totalSelectable})` : ""}`}
-        </Button>
+          <Button variant="secondary" size="sm" disabled={busy || !totalSelectable} onClick={onSelectAll}>
+            {allSelected ? "取消全选" : `全选已加载${Number.isFinite(totalSelectable) ? `(${totalSelectable})` : ""}`}
+          </Button>
+        </div>
 
-        <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-center gap-2">
           <Button variant="secondary" size="sm" disabled={busy || !hasSelection} onClick={onExport}>
             <Download className="size-3.5 opacity-70" aria-hidden="true" />
             批量导出

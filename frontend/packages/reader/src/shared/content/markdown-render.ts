@@ -3,6 +3,8 @@
 // 宿主能力（资源 URL 解析）不再直接 import external，而是由调用方参数注入，
 // 避免 shared 层向上依赖运行时访问层。
 
+import { addMarkdownCopyActions } from "./markdown-copy.js";
+
 let markedModulePromise: Promise<typeof import("marked")> | null = null;
 
 export type MarkdownAssetResolver = (
@@ -38,11 +40,17 @@ export function sanitizeRenderedMarkdown(container: ParentNode) {
   });
   container.querySelectorAll("a[href]").forEach((anchor) => {
     const el = anchor as HTMLAnchorElement;
-    if (/^\s*javascript:/i.test(el.getAttribute("href") || "")) {
+    const href = el.getAttribute("href") || "";
+    if (/^\s*javascript:/i.test(href)) {
       el.removeAttribute("href");
+    } else if (/^\s*#/.test(href)) {
+      el.classList.add("reader-md-internal-link");
+      el.removeAttribute("target");
     }
-    el.setAttribute("target", "_blank");
-    el.setAttribute("rel", "noopener noreferrer");
+    if (!/^\s*#/.test(href)) {
+      el.setAttribute("target", "_blank");
+      el.setAttribute("rel", "noopener noreferrer");
+    }
   });
 }
 
@@ -64,6 +72,7 @@ export function mountRenderedMarkdown(
     img.removeAttribute("src");
   });
   container.replaceChildren(template.content);
+  addMarkdownCopyActions(container);
   container.classList.remove("hidden");
   return [...container.querySelectorAll<HTMLImageElement>("img[data-reader-md-src]")];
 }

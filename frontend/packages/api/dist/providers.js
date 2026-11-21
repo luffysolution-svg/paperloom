@@ -1,5 +1,6 @@
 // providers — pure
 import { buildApiEndpoint, submitJson } from "./http.js";
+import * as generated from "./generated/providers.js";
 // 凭据检测都是"用户点了按钮在等结果"的前台请求，必须有上限：后端探针自身
 // 超时 20s（RUST_API_DEEPSEEK_PROBE_TIMEOUT_SECS），这里留 10s 余量兜住
 // 后端处理与网络往返。没有它，对端挂起就会让面板的检测按钮永久停在"检测中"。
@@ -20,4 +21,11 @@ export async function validateDeepSeekToken(apiPrefix, payload) {
 }
 export async function queryDeepSeekBalance(apiPrefix, payload) {
     return submitJson(buildApiEndpoint(apiPrefix, "providers/deepseek/balance"), payload, probeOptions);
+}
+export async function fetchTranslationModels(apiPrefix, payload) {
+    return generated.fetchTranslationModels(apiPrefix, {
+        body: payload,
+    }, {
+        onError: (status, response) => new Error(`拉取模型失败：${status} ${response?.message || "服务商请求失败"}`),
+    });
 }

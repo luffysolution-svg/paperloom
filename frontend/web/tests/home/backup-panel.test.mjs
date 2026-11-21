@@ -26,10 +26,7 @@ function fixture() {
     import: async (file) => { calls.push(["import", file.name]); status.pending_restore = true; },
     restore: async (name, remote) => { calls.push(["restore", name, remote]); status.pending_restore = true; },
     cancel: async () => { calls.push(["cancel"]); status.pending_restore = false; },
-    saveSettings: async (input) => { calls.push(["settings", input]); return status.webdav; },
     test: async () => {},
-    listRemote: async () => [],
-    backupRemote: async () => { calls.push(["remote"]); },
     syncRemote: async (name) => { calls.push(["sync", name]); status.items.push({ ...status.items[0], id: "synced", name }); },
     delete: async (name, remote) => { calls.push(["delete", name, remote]); if (!remote) status.items = status.items.filter((item) => item.name !== name); },
     canOpenLocation: () => true,
@@ -44,7 +41,7 @@ function button(host, label) {
   return match;
 }
 
-async function mount(client, active = true) {
+async function mount(client, { active = true } = {}) {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
@@ -56,6 +53,8 @@ test("restoring needs explicit confirmation and a staged restore can be cancelle
   const { client, calls } = fixture();
   const view = await mount(client);
   try {
+    assert.equal(view.host.querySelector("#backup-webdav-url"), null);
+    assert.doesNotMatch(view.host.textContent, /WebDAV 备份|查看云端备份|立即备份/);
     assert.equal(button(view.host, "恢复").disabled, true);
     const confirm = [...view.host.querySelectorAll('input[type="checkbox"]')].find((input) => input.parentElement.textContent.includes("我确认"));
     await act(async () => confirm.click());
@@ -69,26 +68,22 @@ test("restoring needs explicit confirmation and a staged restore can be cancelle
   } finally { await view.close(); }
 });
 
-test("deletion needs a separate confirmation and local deletion leaves the cloud list intact", async () => {
+test("the migration panel downloads a local package and stages a selected ZIP after confirmation", async () => {
   const { client, calls } = fixture();
-  client.listRemote = async () => [{ name: "paperloom-backup-cloud.zip", bytes: 100, modified_at: "" }];
   const view = await mount(client);
   try {
-    await act(async () => button(view.host, "查看云端备份").click());
-    const local = view.host.querySelector('[aria-label="本地迁移包"]');
-    await act(async () => button(local, "删除").click());
-    assert.equal(calls.length, 0);
-    await act(async () => button(local, "取消").click());
-    assert.equal(calls.length, 0);
-    await act(async () => button(local, "删除").click());
-    await act(async () => button(local, "确认删除").click());
-    assert.deepEqual(calls, [["delete", "paperloom-backup-one.zip", false]]);
-    assert.equal(view.host.querySelector('[aria-label="本地迁移包"]'), null);
-    assert.match(view.host.querySelector('[aria-label="WebDAV 迁移包"]').textContent, /cloud/);
-    const remote = view.host.querySelector('[aria-label="WebDAV 迁移包"]');
-    await act(async () => button(remote, "删除").click());
-    await act(async () => button(remote, "确认删除").click());
-    assert.deepEqual(calls[1], ["delete", "paperloom-backup-cloud.zip", true]);
+    await act(async () => button(view.host, "下载").click());
+    const file = new dom.window.File(["zip"], "my-library.zip", { type: "application/zip" });
+    const picker = view.host.querySelector('input[type="file"]');
+    Object.defineProperty(picker, "files", { value: [file] });
+    await act(async () => picker.dispatchEvent(new dom.window.Event("change", { bubbles: true })));
+    assert.match(picker.parentElement.textContent, /my-library.zip/);
+    assert.equal(button(view.host, "校验并暂存恢复").disabled, true);
+    const consent = view.host.querySelector('[aria-labelledby="backup-import-title"] input[type="checkbox"]');
+    await act(async () => consent.click());
+    await act(async () => button(view.host, "校验并暂存恢复").click());
+    assert.deepEqual(calls, [["download", "paperloom-backup-one.zip"], ["import", "my-library.zip"]]);
+    assert.match(view.host.textContent, /重启后替换资料库/);
   } finally { await view.close(); }
 });
 
@@ -122,65 +117,18 @@ test("Windows paths hide the extended prefix and retain the full local and UNC a
   } finally { await view.close(); }
 });
 
-test("a failed cloud upload refreshes the retained local package and keeps its error visible", async () => {
-  const { client, status } = fixture();
-  client.backupRemote = async () => {
-    status.items.push({ ...status.items[0], id: "retained", name: "paperloom-backup-retained.zip" });
-    throw new Error("上传失败，本地迁移包已保留");
-  };
-  const view = await mount(client);
-  try {
-    await act(async () => button(view.host, "立即备份").click());
-    assert.match(view.host.querySelector('[role="alert"]').textContent, /本地迁移包已保留/);
-    assert.match(view.host.querySelector('[aria-label="本地迁移包"]').textContent, /retained/);
-    assert.equal(button(view.host, "立即备份").disabled, false);
-  } finally { await view.close(); }
-});
-
-test("credentials are opt in and an untouched saved WebDAV password is omitted", async () => {
-  const { client, calls } = fixture();
-  const view = await mount(client);
-  try {
-    await act(async () => button(view.host, "创建迁移包").click());
-    assert.deepEqual(calls[0], ["create", false]);
-    await act(async () => view.host.querySelector('input[type="checkbox"]').click());
-    await act(async () => button(view.host, "创建迁移包").click());
-    assert.deepEqual(calls[1], ["create", true]);
-    assert.match(view.host.textContent, /明文/);
-    await act(async () => view.host.querySelector("form").dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true })));
-    assert.deepEqual(calls[2], ["settings", { url: "https://example.com/dav/", username: "user" }]);
-    assert.equal(view.host.querySelector('input[type="password"]').value, "");
-  } finally { await view.close(); }
-});
-
 test("an inactive panel makes no requests; failed backups expose a retryable error", async () => {
   const { client } = fixture();
   let reads = 0;
   client.status = async () => { reads++; return fixture().status; };
   client.create = async () => { throw new Error("磁盘空间不足"); };
-  const view = await mount(client, false);
+  const view = await mount(client, { active: false });
   try {
     assert.equal(reads, 0);
     await act(async () => view.root.render(React.createElement(BackupPanel, { client, active: true })));
     await act(async () => button(view.host, "创建迁移包").click());
     assert.equal(view.host.querySelector('[role="alert"]').textContent, "磁盘空间不足");
     assert.equal(button(view.host, "创建迁移包").disabled, false);
-  } finally { await view.close(); }
-});
-
-test("a cloud backup can be synced locally without confirming a library replacement", async () => {
-  const { client, calls } = fixture();
-  client.listRemote = async () => [{ name: "paperloom-backup-cloud.zip", bytes: 100, modified_at: "" }];
-  const view = await mount(client);
-  try {
-    await act(async () => button(view.host, "查看云端备份").click());
-    const remote = view.host.querySelector('[aria-label="WebDAV 迁移包"]');
-    assert.equal(button(remote, "恢复").disabled, true);
-    await act(async () => button(remote, "同步到本地").click());
-    assert.deepEqual(calls, [["sync", "paperloom-backup-cloud.zip"]]);
-    assert.equal(button(remote, "已在本地").disabled, true);
-    assert.match(view.host.querySelector('[aria-label="本地迁移包"]').textContent, /cloud/);
-    assert.doesNotMatch(view.host.textContent, /重启后替换资料库/);
   } finally { await view.close(); }
 });
 

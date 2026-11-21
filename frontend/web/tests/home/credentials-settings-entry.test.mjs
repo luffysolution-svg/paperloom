@@ -22,7 +22,7 @@ const { defaultCredentialsStatePort } = await import("../../src/features/credent
 const createServices = (overrides) => createCredentialServices(createHomeComposition, overrides);
 const { waitFor, waitForDialogReady } = credentialsDialogWaits(dom);
 
-test("MinerU：Token 本机保存、明文回填，切回 Paddle 保留各自 Token", async () => {
+test("MinerU：Token 本机保存、遮蔽回填，切回 Paddle 保留各自 Token", async () => {
   const services = createServices();
   const { host, root } = await bootHomeApp(dom, { services });
   try {
@@ -44,7 +44,7 @@ test("MinerU：Token 本机保存、明文回填，切回 Paddle 保留各自 To
     pick("mineru");
     await waitFor(() => !byId(dom, "browser-mineru-token").closest("section").hidden, "显示 MinerU 面板");
     assert.equal(byId(dom, "browser-paddle-token").closest("section").hidden, true);
-    assert.equal(byId(dom, "browser-mineru-token").type, "text");
+    assert.equal(byId(dom, "browser-mineru-token").type, "password");
     assert.ok(byId(dom, "browser-mineru-validate-btn"), "显示 MinerU 独立检测按钮");
     assert.doesNotMatch(byId(dom, "browser-mineru-token").closest("section").textContent, /暂不支持单独检测|提交 OCR 任务时校验/);
     assert.equal(byId(dom, "browser-mineru-token").placeholder, "MinerU API Token");
@@ -126,7 +126,7 @@ test("MinerU：独立检测接入真实 API transport，显示缺失、过期、
     await waitFor(() => statusMessage().includes("Token 可用"), "Token 检测成功");
     assert.ok(status.classList.contains("is-valid"));
     assert.equal(button.disabled, false);
-    assert.equal(input.type, "text");
+    assert.equal(input.type, "password");
     assert.equal(input.value.trim(), "mineru-transport-fixture");
     assert.equal(calls.length, 3, "只调用检测接口，不提交 OCR 任务");
   } finally {
@@ -269,22 +269,15 @@ test("凭据入口：设置 API 区内嵌工作台；#credential-gate-action 也
   assert.equal(byId(dom, "browser-credentials-save-btn").textContent, "保存接口");
   assert.equal(byId(dom, "browser-job-math-mode"), null, "API 页面不再展示公式处理方式");
   const translationKeyInput = byId(dom, "browser-api-key");
-  const hideTranslationKey = dom.window.document.querySelector('[aria-label="隐藏翻译 API Key"]');
-  assert.ok(hideTranslationKey, "翻译 Key 默认可见，可手动隐藏");
-  assert.equal(
-    translationKeyInput.nextElementSibling,
-    hideTranslationKey,
-    "小眼睛按钮应紧跟输入框并显示在右侧",
-  );
-  assert.equal(translationKeyInput.type, "text");
-  typeInput(dom, translationKeyInput, "visibility-check");
-  assert.equal(hideTranslationKey.getAttribute("aria-pressed"), "true");
-  clickWithMouseDown(dom, hideTranslationKey);
-  await waitFor(() => translationKeyInput.type === "password", "手动隐藏翻译 Key");
   const showTranslationKey = dom.window.document.querySelector('[aria-label="显示翻译 API Key"]');
-  assert.ok(showTranslationKey);
+  assert.equal(translationKeyInput.nextElementSibling, showTranslationKey);
+  assert.equal(showTranslationKey.getAttribute("aria-pressed"), "false");
+  assert.equal(translationKeyInput.type, "password");
+  assert.equal(byId(dom, "browser-paddle-token").type, "password");
+  typeInput(dom, translationKeyInput, "visibility-check");
   clickWithMouseDown(dom, showTranslationKey);
-  await waitFor(() => translationKeyInput.type === "text", "重新显示翻译 Key");
+  await waitFor(() => translationKeyInput.type === "text", "手动显示翻译 Key");
+  assert.equal(showTranslationKey.getAttribute("aria-label"), "隐藏翻译 API Key");
   assert.equal(translationKeyInput.value, "visibility-check", "切换可见性不能清空用户输入");
   const apiCards = [...dom.window.document.querySelectorAll(".credential-api-grid > .credential-card")];
   assert.deepEqual(
@@ -315,6 +308,7 @@ test("凭据入口：设置 API 区内嵌工作台；#credential-gate-action 也
   clickWithMouseDown(dom, byId(dom, "credential-gate-action"));
   await waitFor(() => byId(dom, "app-settings-dialog") !== null, "credential-gate-action 打开设置中心");
   await waitFor(() => byId(dom, "browser-api-key") !== null, "落到接口设置工作台");
+  assert.equal(byId(dom, "browser-api-key").type, "password", "重新打开时恢复遮蔽");
   assert.equal(byId(dom, "browser-credentials-dialog"), null, "常规门禁不弹独立接口窗");
 
   root.unmount();

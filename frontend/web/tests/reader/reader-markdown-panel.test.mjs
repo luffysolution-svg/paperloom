@@ -1,4 +1,4 @@
-import test from "node:test";
+﻿import test from "node:test";
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 import { wait } from "../helpers/async.mjs";
@@ -55,6 +55,12 @@ const { retainPdfReaderAdapters } = await import(
 // 注册对象只应包含声明字段（避免 `...ext` 静默带入）。
 const { parseMarkdownWithMath } = await import(
   "../../../../frontend/packages/reader/src/external.ts"
+);
+const { addMarkdownCopyActions } = await import(
+  "../../../../frontend/packages/reader/src/shared/content/markdown-copy.ts"
+);
+const { sanitizeRenderedMarkdown } = await import(
+  "../../../../frontend/packages/reader/src/shared/content/markdown-render.ts"
 );
 
 async function waitFor(predicate, description) {
@@ -233,6 +239,204 @@ test("Markdown outline assigns stable duplicate-safe heading anchors", () => {
     [...article.querySelectorAll("h1, h2")].map((heading) => heading.id),
     ["reader-md-结果与讨论", "reader-md-energy-profile", "reader-md-energy-profile-2"],
   );
+});
+
+test("OCR table actions copy the rendered language, formulas and merged columns without navigating the PDF", async () => {
+  const { mountRenderedMarkdown } = await import("../../../../frontend/packages/reader/src/shared/content/markdown-render.ts");
+  const { extractMarkdownMath, materializeMarkdownMathHtml } = await import("../../../../frontend/packages/reader/src/shared/content/markdown-math.ts");
+  const { marked } = await import("marked");
+  const article = dom.window.document.createElement("article");
+  const { text, slots } = extractMarkdownMath(
+    "<table><tr><th rowspan=2>样本</th><th colspan=2>A &amp; B</th></tr>" +
+    "<tr><th>浓度 (%)</th><th>$x_i$</th></tr><tr><td>A|B</td><td><eq>CO_{2}</eq></td><td>m<sup>2</sup></td></tr></table>",
+    { bareLatex: true },
+  );
+  mountRenderedMarkdown(article, await materializeMarkdownMathHtml(marked.parse(text), slots), "");
+  let navigated = false;
+  article.addEventListener("click", () => { navigated = true; });
+  const writes = [];
+  const original = globalThis.navigator;
+  Object.defineProperty(globalThis, "navigator", {
+    value: { clipboard: { writeText: async (text) => { writes.push(text); } } }, configurable: true,
+  });
+  try {
+    article.querySelector("[aria-label='复制表格为 Markdown']").click();
+    article.querySelector("[aria-label='复制表格为 LaTeX']").click();
+    await waitFor(() => article.querySelector("[role='status']").textContent === "已复制", "复制状态");
+    assert.deepEqual(writes, [
+      "| 样本 | A & B |  |\n| --- | --- | --- |\n|  | 浓度 (%) | $x_i$ |\n| A\\|B | $CO_{2}$ | m<sup>2</sup> |",
+      "\\begin{tabular}{lll}\n样本 & A \\& B &  \\\\\n & 浓度 (\\%) & $x_i$ \\\\\nA|B & $CO_{2}$ & m\\textsuperscript{2} \\\\\n\\end{tabular}",
+    ]);
+    assert.equal(navigated, false);
+  } finally {
+    Object.defineProperty(globalThis, "navigator", { value: original, configurable: true });
+  }
+});
+
+
+test("table Word copy writes an HTML table with readable formula text", async () => {
+  const { addMarkdownCopyActions } = await import("../../../../frontend/packages/reader/src/shared/content/markdown-copy.ts");
+  const article = dom.window.document.createElement("article");
+  article.innerHTML = '<table><tr><th rowspan="2">样本</th><th colspan="2">结果</th></tr><tr><td><span data-reader-tex="x_i"><svg><path d="M0 0" /></svg></span></td><td>m<sup>2</sup></td></tr></table>';
+  addMarkdownCopyActions(article);
+  const writes = [];
+  const originalNavigator = globalThis.navigator;
+  const originalClipboardItem = globalThis.ClipboardItem;
+  globalThis.ClipboardItem = class ClipboardItem {
+    constructor(items) { this.items = items; this.types = Object.keys(items); }
+  };
+  Object.defineProperty(globalThis, "navigator", {
+    value: { clipboard: { write: async (items) => { writes.push(items[0]); } } }, configurable: true,
+  });
+  try {
+    article.querySelector("[aria-label='复制表格为 Word']").click();
+    await waitFor(() => article.querySelector("[role='status']").textContent === "已复制", "Word 复制状态");
+    assert.deepEqual(writes[0].types, ["text/html", "text/plain"]);
+    const html = await writes[0].items["text/html"].text();
+    assert.match(html, /rowspan="2"/);
+    assert.match(html, /\$x_i\$/);
+    assert.doesNotMatch(html, /<svg/);
+  } finally {
+    Object.defineProperty(globalThis, "navigator", { value: originalNavigator, configurable: true });
+    globalThis.ClipboardItem = originalClipboardItem;
+  }
+});
+
+test("selected Markdown text copies formula source with surrounding text", async () => {
+  const { addMarkdownCopyActions } = await import("../../../../frontend/packages/reader/src/shared/content/markdown-copy.ts");
+  const article = dom.window.document.createElement("article");
+  article.innerHTML = '<p>before <span class="reader-md-math reader-md-math-inline" data-reader-tex="x_i"><svg><path /></svg></span> after</p>';
+  addMarkdownCopyActions(article);
+  document.body.append(article);
+  const paragraph = article.querySelector("p");
+  const range = dom.window.document.createRange();
+  range.selectNodeContents(paragraph);
+  const selection = dom.window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+  const data = {};
+  const event = new dom.window.Event("copy", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "clipboardData", { value: { setData: (type, value) => { data[type] = value; } } });
+  article.dispatchEvent(event);
+  assert.equal(data["text/plain"], "before $x_i$ after");
+  assert.match(data["text/html"], /before \$x_i\$ after/);
+  selection.removeAllRanges();
+  article.remove();
+});
+
+test("selecting only a rendered formula copies its TeX source", async () => {
+  const { addMarkdownCopyActions } = await import("../../../../frontend/packages/reader/src/shared/content/markdown-copy.ts");
+  const article = dom.window.document.createElement("article");
+  article.innerHTML = '<p><span class="reader-md-math reader-md-math-inline" data-reader-tex="\\frac{a}{b}"><svg><path /></svg></span></p>';
+  addMarkdownCopyActions(article);
+  document.body.append(article);
+  const formula = article.querySelector("[data-reader-tex]");
+  const range = dom.window.document.createRange();
+  range.selectNodeContents(formula.querySelector("svg"));
+  const selection = dom.window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+  const data = {};
+  const event = new dom.window.Event("copy", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "clipboardData", { value: { setData: (type, value) => { data[type] = value; } } });
+  article.dispatchEvent(event);
+  assert.equal(data["text/plain"], "$\\frac{a}{b}$");
+  assert.match(data["text/html"], /\$\\frac\{a\}\{b\}\$/);
+  selection.removeAllRanges();
+  article.remove();
+});
+
+test("selected Markdown paragraphs keep readable line breaks", async () => {
+  const { addMarkdownCopyActions } = await import("../../../../frontend/packages/reader/src/shared/content/markdown-copy.ts");
+  const article = dom.window.document.createElement("article");
+  article.innerHTML = "<p>first</p><p>second</p>";
+  addMarkdownCopyActions(article);
+  document.body.append(article);
+  const range = dom.window.document.createRange();
+  range.selectNodeContents(article);
+  const selection = dom.window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+  const data = {};
+  const event = new dom.window.Event("copy", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "clipboardData", { value: { setData: (type, value) => { data[type] = value; } } });
+  article.dispatchEvent(event);
+  assert.equal(data["text/plain"], "first\nsecond");
+  assert.doesNotMatch(data["text/html"], /reader-md-selection-actions|reader-md-internal-back/);
+  selection.removeAllRanges();
+  article.remove();
+});
+
+test("Markdown code blocks expose a copy action", async () => {
+  const originalNavigator = globalThis.navigator;
+  Object.defineProperty(globalThis, "navigator", {
+    value: { clipboard: { writeText: async (value) => { globalThis.__readerCodeCopy = value; } } }, configurable: true,
+  });
+  const article = dom.window.document.createElement("article");
+  article.innerHTML = "<pre><code>const answer = 42;\nconsole.log(answer);</code></pre>";
+  addMarkdownCopyActions(article);
+  article.querySelector("button[aria-label='复制代码']").click();
+  await waitFor(() => article.querySelector(".reader-md-code-actions [role='status']")?.textContent === "已复制", "代码复制状态");
+  assert.equal(globalThis.__readerCodeCopy, "const answer = 42;\nconsole.log(answer);");
+  delete globalThis.__readerCodeCopy;
+  Object.defineProperty(globalThis, "navigator", { value: originalNavigator, configurable: true });
+});
+
+test("Markdown selection actions provide Markdown and excerpt formats", async () => {
+  const originalNavigator = globalThis.navigator;
+  const writes = [];
+  Object.defineProperty(globalThis, "navigator", {
+    value: { clipboard: { writeText: async (value) => { writes.push(value); } } }, configurable: true,
+  });
+  const article = dom.window.document.createElement("article");
+  article.innerHTML = '<div data-md-block="item-7" data-md-page="12"><p><strong>Important</strong> result</p></div>';
+  addMarkdownCopyActions(article);
+  document.body.append(article);
+  const range = dom.window.document.createRange();
+  range.selectNodeContents(article.querySelector("p"));
+  const selection = dom.window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+  dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+  const toolbar = article.querySelector(".reader-md-selection-actions");
+  assert.equal(toolbar.hidden, false);
+  toolbar.querySelector("button:nth-of-type(2)").click();
+  await waitFor(() => writes.at(-1) === "**Important** result", "Markdown 选区复制");
+  toolbar.querySelector("button:nth-of-type(4)").click();
+  await waitFor(() => writes.at(-1) === "Important result\n\n来源：第 12 页，块 item-7", "摘录复制");
+  selection.removeAllRanges();
+  article.remove();
+  Object.defineProperty(globalThis, "navigator", { value: originalNavigator, configurable: true });
+});
+
+test("Markdown image actions open a closable preview", () => {
+  const article = dom.window.document.createElement("article");
+  article.innerHTML = '<img data-reader-md-src="data:image/png;base64,AA==" src="data:image/png;base64,AA==" alt="figure">';
+  addMarkdownCopyActions(article);
+  document.body.append(article);
+  article.querySelector("img").click();
+  assert.ok(dom.window.document.querySelector(".reader-md-image-preview"));
+  dom.window.document.querySelector(".reader-md-image-preview").click();
+  assert.equal(dom.window.document.querySelector(".reader-md-image-preview"), null);
+  article.remove();
+});
+
+test("Markdown footnote links stay internal and are handled in the reader", () => {
+  const article = dom.window.document.createElement("article");
+  article.innerHTML = '<p>See <a href="#fn-1">[1]</a></p><p id="fn-1">Reference</p>';
+  sanitizeRenderedMarkdown(article);
+  const link = article.querySelector("a");
+  assert.ok(link.classList.contains("reader-md-internal-link"));
+  assert.equal(link.getAttribute("target"), null);
+  addMarkdownCopyActions(article);
+  document.body.append(article);
+  let prevented = false;
+  const event = new dom.window.MouseEvent("click", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "preventDefault", { value: () => { prevented = true; } });
+  link.dispatchEvent(event);
+  assert.equal(prevented, true);
+  assert.equal(article.querySelector(".reader-md-internal-back").hidden, false);
+  article.remove();
 });
 
 test("Markdown search marks leaf content blocks without duplicating parent matches", () => {

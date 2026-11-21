@@ -50,6 +50,7 @@ type CreateCredentialsArgs = {
   /** create-home-composition 总会给（默认就是平台的 validateDeepSeekToken）。 */
   validateDeepSeekTokenOverride: NonNullable<CreateHomeCompositionOptions["validateDeepSeekToken"]>;
   queryDeepSeekBalanceOverride?: CreateHomeCompositionOptions["queryDeepSeekBalance"];
+  fetchTranslationModelsOverride?: CreateHomeCompositionOptions["fetchTranslationModels"];
   createCredentialOverride?: CreateHomeCompositionOptions["createCredential"];
   updateCredentialOverride?: CreateHomeCompositionOptions["updateCredential"];
   checkApiConnectivityOverride?: CreateHomeCompositionOptions["checkApiConnectivity"];
@@ -64,6 +65,7 @@ export function createCredentials({
   validateOcrTokenOverride,
   validateDeepSeekTokenOverride,
   queryDeepSeekBalanceOverride,
+  fetchTranslationModelsOverride,
   createCredentialOverride,
   updateCredentialOverride,
   checkApiConnectivityOverride,
@@ -144,6 +146,7 @@ export function createCredentials({
     validateOcrToken: validateOcrTokenOverride || validateCredentialOcrToken,
     validateDeepSeekToken: validateDeepSeekTokenOverride,
     queryDeepSeekBalance: queryDeepSeekBalanceOverride,
+    fetchTranslationModels: fetchTranslationModelsOverride,
     createCredential: createCredentialOverride || createCredential,
     updateCredential: updateCredentialOverride || updateCredential,
     onCredentialStateChange: () => {

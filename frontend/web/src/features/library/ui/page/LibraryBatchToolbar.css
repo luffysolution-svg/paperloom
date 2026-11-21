@@ -1,23 +1,12 @@
-/* 底部悬浮搜索条 / 批量操作条。（LibraryBatchToolbar）
- *
- * @owns library-search
- * @uses is-batch-mode */
-
-/* 底部悬浮搜索条(LibrarySearchDock.jsx)——挪回底部后是唯一内容,不用再
-   和添加/设置按钮共享一条 pill,宽度收窄一档(min(420px, 视口-56px))。 */
-@utility library-search-dock {
+/* @owns library-batch-dock, library-search */
+@utility library-batch-dock {
   position: fixed;
   left: 50%;
   bottom: 16px;
   z-index: 20;
-  width: min(420px, calc(100vw - 56px));
-  width: min(420px, calc(100dvw - 56px));
+  width: max-content;
+  max-width: calc(100% - 28px);
   transform: translateX(-50%);
-
-  @media (max-width: 767px) {
-    width: calc(100vw - 28px);
-    width: calc(100dvw - 28px);
-  }
 }
 
 @utility library-search-bar {

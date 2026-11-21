@@ -47,6 +47,7 @@ export type BindCredentialViewEventsOptions = {
   resetDeepSeekValidation?: () => void;
   validateOcr?: () => void;
   validateDeepSeek?: () => void;
+  fetchTranslationModels?: () => Promise<string[]>;
   save?: () => void;
   open?: (options?: OpenCredentialDialogOptions) => void;
   activateCredentialTab?: (tabName: string) => void;

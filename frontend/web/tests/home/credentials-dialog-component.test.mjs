@@ -233,7 +233,7 @@ test("CredentialsDialog：保存(浏览器模式)——写隐藏 input、同步 
   assert.equal(credentials.paddleToken, "paddle-secret");
   assert.equal(credentials.modelApiKey, "deepseek-secret");
   assert.equal(credentials.translationCredentialRef, "");
-  assert.equal(byId(dom, "browser-api-key").type, "text", "保存后保持可见");
+  assert.equal(byId(dom, "browser-api-key").type, "password", "保存后仍遮蔽密钥");
   assert.equal(byId(dom, "browser-api-key").value, "deepseek-secret", "保存后回填翻译 Key");
   const persistedValues = Array.from({ length: dom.window.localStorage.length }, (_, index) => (
     dom.window.localStorage.getItem(dom.window.localStorage.key(index)) || ""
