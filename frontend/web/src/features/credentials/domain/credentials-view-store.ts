@@ -13,19 +13,19 @@ import type { DialogStore } from "@/platform/store/dialog-store.js";
 import { createStore } from "@/platform/store/store.js";
 import type { Store } from "@/platform/store/store.js";
 import { inferTranslationProvider } from "@/platform/config/providers.js";
+import type { BindCredentialViewEventsOptions } from "./view-contracts.js";
 
-/** 事件处理函数表（viewPort.bindEvents 写入 handlersRef）。 */
-export type HandlersBag = {
-  [key: string]: ((...args: unknown[]) => unknown) | undefined | null;
-};
+/** 事件处理函数表（viewPort.bindEvents 写入 handlersRef）。就是凭据功能绑定的那组事件。 */
+export type HandlersBag = BindCredentialViewEventsOptions;
 
 /** 凭据弹窗内受控输入的 ref 集合。 */
 export type CredentialsElementsRef = {
   apiKeyInput: HTMLInputElement | null;
   modelBaseUrlInput: HTMLInputElement | null;
-  translationProtocolSelect: HTMLSelectElement | null;
   modelNameInput: HTMLInputElement | null;
   translationWorkersInput: HTMLInputElement | null;
+  translationProtocolSelect: HTMLSelectElement | null;
+  translationThinkingSelect: HTMLSelectElement | null;
   mathModeSelect: HTMLSelectElement | null;
   tokenInputs: Record<string, HTMLInputElement | null | undefined>;
 };
@@ -42,15 +42,6 @@ export type CredentialGateState = {
   uploadReady: boolean;
 };
 
-export type TranslationModelsState = {
-  items: string[];
-  loading: boolean;
-  message: string;
-  tone: string;
-  provider: string;
-  baseUrl: string;
-};
-
 export type CredentialsViewState = {
   setupMode: boolean;
   activeTab: string;
@@ -59,8 +50,6 @@ export type CredentialsViewState = {
   deepSeek: CredentialsMessage;
   deepSeekTopUpVisible: boolean;
   translationProvider: string;
-  translationModels: TranslationModelsState;
-  dirty: boolean;
   dialogStatus: CredentialsMessage;
   /** 只读态,供 UploadTile 订阅决定上传瓦片锁定/credential-gate 可见性 */
   credentialGate: CredentialGateState;
@@ -79,11 +68,6 @@ export type CredentialsViewActions = {
   ): CredentialsViewState;
   setDeepSeekTopUpVisible(state: CredentialsViewState, visible?: boolean): CredentialsViewState;
   setTranslationProvider(state: CredentialsViewState, provider?: string): CredentialsViewState;
-  setTranslationModels(
-    state: CredentialsViewState,
-    payload?: Partial<TranslationModelsState>,
-  ): CredentialsViewState;
-  setDirty(state: CredentialsViewState, dirty?: boolean): CredentialsViewState;
   setDialogStatus(
     state: CredentialsViewState,
     payload?: { message?: string; tone?: string },
@@ -115,15 +99,6 @@ export function createCredentialsViewFeature({
       deepSeek: { message: "", tone: "" },
       deepSeekTopUpVisible: false,
       translationProvider: "deepseek",
-      translationModels: {
-        items: [],
-        loading: false,
-        message: "",
-        tone: "",
-        provider: "",
-        baseUrl: "",
-      },
-      dirty: false,
       dialogStatus: { message: "", tone: "" },
       // 只读态,供 UploadTile 订阅决定上传瓦片锁定/credential-gate 可见性
       // (蓝图 §2.2「upload 按钮锁定态移交 3a」——本域只写这份快照,不直接
@@ -161,21 +136,6 @@ export function createCredentialsViewFeature({
       setTranslationProvider(currentState, provider = "custom") {
         return { ...currentState, translationProvider: `${provider || "custom"}` };
       },
-      setTranslationModels(currentState, payload = {}) {
-        return {
-          ...currentState,
-          translationModels: {
-            ...currentState.translationModels,
-            ...payload,
-            items: Array.isArray(payload.items)
-              ? payload.items.filter((item): item is string => typeof item === "string")
-              : currentState.translationModels.items,
-          },
-        };
-      },
-      setDirty(currentState, dirty = false) {
-        return { ...currentState, dirty: Boolean(dirty) };
-      },
       setDialogStatus(currentState, { message = "", tone = "" } = {}) {
         return { ...currentState, dialogStatus: { message, tone } };
       },
@@ -195,9 +155,10 @@ export function createCredentialsViewFeature({
   const elementsRef: CredentialsElementsRef = {
     apiKeyInput: null,
     modelBaseUrlInput: null,
-    translationProtocolSelect: null,
     modelNameInput: null,
     translationWorkersInput: null,
+    translationProtocolSelect: null,
+    translationThinkingSelect: null,
     mathModeSelect: null,
     tokenInputs: {}, // { [providerId]: HTMLInputElement }
   };
@@ -206,11 +167,13 @@ export function createCredentialsViewFeature({
     return {
       paddleInput: elementsRef.tokenInputs.paddle || null,
       mineruInput: elementsRef.tokenInputs.mineru || null,
+      glmOcrInput: elementsRef.tokenInputs.glm_ocr || null,
       apiKeyInput: elementsRef.apiKeyInput,
       modelBaseUrlInput: elementsRef.modelBaseUrlInput,
-      translationProtocolSelect: elementsRef.translationProtocolSelect,
       modelNameInput: elementsRef.modelNameInput,
       translationWorkersInput: elementsRef.translationWorkersInput,
+      translationProtocolSelect: elementsRef.translationProtocolSelect,
+      translationThinkingSelect: elementsRef.translationThinkingSelect,
       mathModeSelect: elementsRef.mathModeSelect,
     };
   }
@@ -249,8 +212,6 @@ export function createCredentialsViewFeature({
     dialogElements: () => ({ dialog: true, ...elements() }),
     setDeepSeekTopUpVisible: (visible = false) => store.actions.setDeepSeekTopUpVisible(visible),
     setTranslationProvider: (provider = "custom") => store.actions.setTranslationProvider(provider),
-    setTranslationModels: (payload = {}) => store.actions.setTranslationModels(payload),
-    setDirty: (dirty = false) => store.actions.setDirty(dirty),
     setDeepSeekValidationMessage: (message = "", tone = "") => store.actions.setDeepSeek({ message, tone }),
     setDialogMode: ({
       setupMode = false,

@@ -7,45 +7,44 @@
 import { getOcrProviderDefinition, normalizeOcrProvider } from "@/platform/config/providers.js";
 import { syncCredentialDialogFields } from "./dialog-sync.js";
 import { ocrTokenFromCredentials } from "./state-selectors.js";
-import type { UpdateCredentialGateViewOptions } from "./view-contracts.js";
+import type { ProviderChangeEvent, UpdateCredentialGateViewOptions } from "./view-contracts.js";
+import type { CredentialsFields } from "./state.js";
 
 
-type UpdateCredentialGateOptions = {
-  workflowNeedsCredentials?: () => boolean;
-  workflowNeedsUpload?: () => boolean;
+export type UpdateCredentialGateOptions = {
+  workflowNeedsCredentials: () => boolean;
+  workflowNeedsUpload: () => boolean;
   hasCredentials?: () => boolean;
-  refreshSubmitControls?: () => void;
+  refreshSubmitControls: () => void;
 };
 
 type DialogFlowElements = {
   dialog?: HTMLDialogElement | HTMLElement | boolean | null;
   apiKeyInput?: { value?: string } | null;
-  translationProtocolSelect?: HTMLSelectElement | null;
   modelBaseUrlInput?: { value?: string } | null;
   modelNameInput?: { value?: string } | null;
   translationWorkersInput?: { value?: string } | null;
+  translationProtocolSelect?: { value?: string } | null;
+  translationThinkingSelect?: { value?: string } | null;
   mathModeSelect?: { value?: string } | null;
 };
 
 type DialogFlowViewPort = {
-  activateTab?: (tabName?: string) => void;
-  closeDialog?: () => void;
-  dialogElements?: () => DialogFlowElements;
-  openDialog?: () => void;
-  setDeepSeekTopUpVisible?: (visible?: boolean) => void;
-  setDeepSeekValidationMessage?: (message?: string, tone?: string) => void;
-  setDialogMode?: (options?: {
+  activateTab: (tabName?: string) => void;
+  closeDialog: () => void;
+  dialogElements: () => DialogFlowElements;
+  setDeepSeekTopUpVisible: (visible?: boolean) => void;
+  setDeepSeekValidationMessage: (message?: string, tone?: string) => void;
+  setDialogMode: (options?: {
     setupMode?: boolean;
     activateCredentialTab?: (tabName?: string) => void;
   }) => void;
-  setDialogStatus?: (message?: string, tone?: string) => void;
-  setDirty?: (dirty?: boolean) => void;
-  setHiddenOcrProvider?: (providerId?: string) => void;
-  setOcrValidationMessage?: (message?: string, tone?: string, providerId?: string) => void;
-  setTranslationProvider?: (provider?: string) => void;
-  setTranslationModels?: (payload?: Record<string, unknown>) => void;
-  syncOcrProviderControls?: (providerId?: string) => void;
-  updateCredentialGate?: (options?: UpdateCredentialGateViewOptions) => boolean | void;
+  setDialogStatus: (message?: string, tone?: string) => void;
+  setHiddenOcrProvider: (providerId?: string) => void;
+  setOcrValidationMessage: (message?: string, tone?: string, providerId?: string) => void;
+  setTranslationProvider: (provider?: string) => void;
+  syncOcrProviderControls: (providerId?: string) => void;
+  updateCredentialGate: (options?: UpdateCredentialGateViewOptions) => boolean | void;
 };
 
 type TranslationProfileManager = {
@@ -57,7 +56,7 @@ type TranslationProfileManager = {
 };
 
 type CredentialAccess = {
-  readCurrentCredentials: () => any;
+  readCurrentCredentials: () => CredentialsFields;
   currentOcrProvider: () => string;
   hasBrowserCredentials: () => boolean;
 };
@@ -84,13 +83,13 @@ export function createCredentialDialogFlow({
   dialogElementsPort: {
     elements: () => DialogFlowElements;
     syncTranslationProvider?: (baseUrl?: string) => void;
-    syncOcrProviderControls?: (providerId?: string) => void;
+    syncOcrProviderControls: (providerId?: string) => void;
   };
-  balanceState: { resetDeepSeekBalance?: () => unknown };
+  balanceState: { resetDeepSeekBalance: () => unknown };
   translation: TranslationProfileManager;
   access: CredentialAccess;
-  uploadState: { getSnapshot?: () => { uploadId?: string } };
-  runtimeEnv: { isDesktopMode?: () => boolean };
+  uploadState: { getSnapshot: () => { uploadId?: string } };
+  runtimeEnv: { isDesktopMode: () => boolean };
   onCredentialStateChange?: () => void;
 }) {
   function setCredentialDialogMode(setupMode = false) {
@@ -107,7 +106,7 @@ export function createCredentialDialogFlow({
   }
 
   function readUploadState() {
-    return uploadState.getSnapshot?.() || {};
+    return uploadState.getSnapshot() || {};
   }
 
   function syncOcrCredentialFeedback() {
@@ -132,13 +131,14 @@ export function createCredentialDialogFlow({
         baseUrl: profile.baseUrl,
         model: profile.model,
         workers: profile.workers,
+        apiProtocol: profile.apiProtocol,
+        thinking: profile.thinking,
       },
       defaultModelBaseUrl,
       defaultModelApiKey,
       elementsPort: dialogElementsPort,
     });
     viewPort.setTranslationProvider?.(translation.getCurrentProvider());
-    viewPort.setTranslationModels?.({ items: [], loading: false, tone: "", message: "" });
     syncOcrCredentialFeedback();
     viewPort.setDeepSeekValidationMessage("", "");
     if (profile.apiKey) {
@@ -147,7 +147,6 @@ export function createCredentialDialogFlow({
     viewPort.setDeepSeekTopUpVisible(false);
     balanceState.resetDeepSeekBalance();
     viewPort.setDialogStatus("", "");
-    viewPort.setDirty?.(false);
   }
 
   /**
@@ -160,11 +159,8 @@ export function createCredentialDialogFlow({
    * AI Agent 卡片，保存时写 firstRunCompleted。此前它另有一个独立外壳，
    * 同一件事两套壳，用户看到的是两个长得不一样的「接口设置」。
    */
-  function prepareCredentialsPanels({ setupMode = false, preserveDraft = false }: {
-    setupMode?: boolean;
-    preserveDraft?: boolean;
-  } = {}) {
-    if (!preserveDraft) syncBrowserDialogFromCredentialState();
+  function prepareCredentialsPanels({ setupMode = false }: { setupMode?: boolean } = {}) {
+    syncBrowserDialogFromCredentialState();
     setCredentialDialogMode(setupMode);
     activateCredentialTab("api");
   }
@@ -203,9 +199,8 @@ export function createCredentialDialogFlow({
     refreshSubmitControls();
   }
 
-  function handleOcrProviderChange(event: Event) {
-    const target = event.currentTarget as HTMLSelectElement | HTMLInputElement | null;
-    const provider = normalizeOcrProvider(target?.value);
+  function handleOcrProviderChange(event: ProviderChangeEvent) {
+    const provider = normalizeOcrProvider(event.currentTarget?.value);
     // A reference belongs to one provider. Clear it before the asynchronous lookup.
     if (provider !== access.currentOcrProvider()) {
       credentialsStatePort.patchCredentials?.({ ocrProvider: provider, ocrCredentialRef: "" });

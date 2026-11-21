@@ -32,7 +32,6 @@ import { createHomeStatePort } from "./state/home-store.js";
 import {
   validateDeepSeekToken,
   queryDeepSeekBalance,
-  listModels,
   createCredential,
   updateCredential,
   fetchGlossariesApi,
@@ -92,13 +91,13 @@ export function createHomeComposition({
     ocrCredentialRef: "",
     paddleToken: "",
     mineruToken: "",
+    glmOcrToken: "",
     translationCredentialRef: "",
     modelApiKey: "",
   }),
   validateOcrToken: validateOcrTokenOverride = null,
   validateDeepSeekToken: validateDeepSeekTokenOverride = validateDeepSeekToken,
   queryDeepSeekBalance: queryDeepSeekBalanceOverride = queryDeepSeekBalance,
-  listModels: listModelsOverride = listModels,
   createCredential: createCredentialOverride = createCredential,
   updateCredential: updateCredentialOverride = updateCredential,
   checkApiConnectivity: checkApiConnectivityOverride = null,
@@ -144,7 +143,6 @@ export function createHomeComposition({
     processingChoicePort: {
       resetProcessingChoice: () => {
         workflowView.setOcrOnly(false);
-        workflowView.setTaskServiceSelection(null);
         uploadView.closeTranslationOptions();
       },
     },
@@ -188,17 +186,10 @@ export function createHomeComposition({
     validateOcrTokenOverride,
     validateDeepSeekTokenOverride,
     queryDeepSeekBalanceOverride,
-    listModelsOverride,
     createCredentialOverride,
     updateCredentialOverride,
     checkApiConnectivityOverride,
     saveDesktopConfigOverride,
-    onSetupComplete: () => {
-      if (!dialogStatePort.getSnapshot().open || !uploadStatePort.getSnapshot().uploadId) return;
-      // 复用上传表单入口，让提交成功后的进度页跳转与手动点击保持一致。
-      const form = documentRef.getElementById("job-form") as HTMLFormElement | null;
-      form?.requestSubmit();
-    },
   });
   features.browserCredentialsFeature = credentials.browserCredentialsFeature;
 

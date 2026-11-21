@@ -34,8 +34,6 @@ import {
   useHomeLibrary,
   useHomeUploadStatePort,
   useHomeWorkflowDialog,
-  useHomeWorkflowViewActions,
-  useHomeFeatures,
 } from "@/ui/context/home-services-context.js";
 import { useDialogReturnFocus } from "@/ui/hooks/use-dialog-return-focus.js";
 import { WorkflowPanel } from "./WorkflowPanel.jsx";
@@ -51,18 +49,9 @@ export function IngestDialog({
   const library = useHomeLibrary();
   const workflowDialog = useHomeWorkflowDialog();
   const bridge = useHomeBridge();
-  const workflowActions = useHomeWorkflowViewActions();
-  const features = useHomeFeatures();
   const dialog = useStoreSnapshot(dialogStore);
   const open = Boolean(dialog.open);
   const { onCloseAutoFocus } = useDialogReturnFocus(open);
-
-  useEffect(() => {
-    if (!open) {
-      workflowActions.setTaskServiceSelection(null);
-      features.workflowFeature?.refreshSubmitControls?.();
-    }
-  }, [open, workflowActions, features]);
 
   // <html> 级样式钩子在 React 根之外，用 effect 同步（卸载时清理）。
   useEffect(() => {

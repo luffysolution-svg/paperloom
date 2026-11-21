@@ -73,6 +73,20 @@ test("buildTranslationPayload uses injected glossary and credential ref without 
   assert.equal(payload.model, "deepseek-chat");
   assert.equal(payload.base_url, "https://api.deepseek.com");
   assert.equal(payload.skip_title_translation, false);
+  // 没设置过时用默认协议（OpenAI Responses）和不思考。
+  assert.equal(payload.api_protocol, "openai_responses");
+  assert.equal(payload.thinking, "off");
+});
+
+test("buildTranslationPayload sends the configured protocol and thinking depth", () => {
+  const payload = buildTranslationPayload({
+    developerConfig: { ...developerConfig(), apiProtocol: "anthropic", thinking: "high" },
+    translationCredentialRef: "cred_translation",
+    selectedGlossaryId: "",
+    constants,
+  });
+  assert.equal(payload.api_protocol, "anthropic");
+  assert.equal(payload.thinking, "high");
 });
 
 // glossary_id 的空串是**用户的选择**：下拉里「不使用术语表」这个选项的 value
@@ -319,31 +333,6 @@ test("collectRunPayload builds book submit payload from resolved workflow inputs
   assert.equal("api_key" in payload.translation, false);
   assert.equal(payload.translation.glossary_id, "glossary-selected");
   assert.equal(payload.render.compile_workers, 5);
-});
-
-test("上传临时选择进入请求，馆藏翻译和全局默认配置不受影响", () => {
-  const saved = developerConfig();
-  let overrides = {
-    ocrProvider: "mineru", ocrToken: "temporary-ocr", ocrCredentialRef: "",
-    modelApiKey: "temporary-key", translationCredentialRef: "",
-    model: "temporary-model", baseUrl: "https://temporary.example/v1", workers: 3,
-  };
-  const feature = mountWorkflowHarness({ developerConfig: saved, getUploadServiceOverrides: () => overrides });
-  const payload = feature.collectRunPayload();
-  assert.equal(payload.ocr.provider, "mineru");
-  assert.equal(payload.ocr.mineru_token, "temporary-ocr");
-  assert.equal(payload.translation.api_key, "temporary-key");
-  assert.equal(payload.translation.model, "temporary-model");
-  assert.equal(payload.translation.base_url, "https://temporary.example/v1");
-  assert.equal(payload.translation.workers, 3);
-  assert.equal(feature.currentBudgetState().visible, false, "其他服务不显示 DeepSeek 余额");
-  const book = feature.buildTranslateJobConfig("");
-  assert.equal(book.ocr.provider, "paddle");
-  assert.equal(book.translation.model, saved.model);
-  assert.equal(book.translation.credential_ref, "cred_translation");
-  overrides = null;
-  assert.equal(feature.collectRunPayload().translation.model, saved.model);
-  assert.equal(saved.model, "deepseek-chat");
 });
 
 test("collectRunPayload builds render-only payload from artifact source", () => {

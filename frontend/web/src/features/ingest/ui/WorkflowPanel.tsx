@@ -41,7 +41,6 @@ import {
 import type { UploadViewStore } from "../domain/upload-store.js";
 import { HeroUpload } from "./components/UploadTile.jsx";
 import { InlineErrorBox } from "./InlineErrorBox.jsx";
-import { UploadServicePicker } from "./UploadServicePicker.jsx";
 
 export function WorkflowPanel({ hiddenInputsSlot = null }: { hiddenInputsSlot?: React.ReactNode | null }) {
   const workflowViewStore = useHomeWorkflowViewStore();
@@ -109,8 +108,6 @@ export function WorkflowPanel({ hiddenInputsSlot = null }: { hiddenInputsSlot?: 
           </TabsPrimitive.Trigger>
         </TabsPrimitive.List>
       </TabsPrimitive.Root>
-
-      <UploadServicePicker />
 
       <form
         id="job-form"

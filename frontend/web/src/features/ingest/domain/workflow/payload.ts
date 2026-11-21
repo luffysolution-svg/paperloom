@@ -16,7 +16,8 @@ export interface WorkflowDeveloperConfig {
   mathMode?: TranslationInput["math_mode"];
   model?: string;
   baseUrl?: string;
-  apiProtocol?: "openai" | "openai_responses" | "anthropic";
+  apiProtocol?: TranslationInput["api_protocol"];
+  thinking?: TranslationInput["thinking"];
   glossaryId?: string;
   workers?: number;
   batchSize?: number;
@@ -130,7 +131,8 @@ export function buildTranslationPayload({
     math_mode: developerConfig.mathMode,
     model: developerConfig.model,
     base_url: developerConfig.baseUrl,
-    api_protocol: developerConfig.apiProtocol || "openai",
+    api_protocol: developerConfig.apiProtocol || "openai_responses",
+    thinking: developerConfig.thinking || "off",
     ...(modelApiKey?.trim()
       ? { api_key: modelApiKey.trim() }
       : { credential_ref: `${translationCredentialRef || ""}`.trim() }),

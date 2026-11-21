@@ -4,4 +4,5 @@ export { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, Di
 export { Tabs, TabsContent, TabsList, TabsTrigger, tabsListVariants, } from "./components/ui/tabs.js";
 export { Toaster } from "./components/ui/sonner.js";
 export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, } from "./components/ui/tooltip.js";
+export { Checkbox, SegmentedControl, type CheckboxProps, type SegmentedControlProps, type SegmentedOption, } from "./primitives/choice.js";
 //# sourceMappingURL=index.d.ts.map

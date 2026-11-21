@@ -1,17 +1,20 @@
+import type {
+  CreateCredentialInput,
+  CredentialMutationView,
+  UpdateCredentialInput,
+} from "@/platform/api/domains/credentials.js";
 import { dialogDataset } from "./translation-profile.js";
 import {
   defaultCredentialsStatePort,
 } from "./default-state-port.js";
 import { createCredentialRuntimeEnvPort } from "./runtime-env-port.js";
 import { createCredentialUploadReadinessPort } from "./upload-readiness-port.js";
+import type { UploadReadinessSource } from "./upload-readiness-port.js";
 import { createCredentialAccess } from "./credential-access.js";
 import { createTranslationProfiles } from "./translation-profiles.js";
 import { createCredentialDialogFlow } from "./dialog-flow.js";
 import { createBrowserCredentialSaveFlow } from "./save-flow.js";
-import { createServiceProfiles } from "./service-profiles.js";
-import { createTaskServiceAccess } from "./task-service-catalog.js";
 import { createCredentialValidationFlow } from "./validation-flow.js";
-import { createTranslationModelListFlow } from "./model-list-flow.js";
 import type {
   ProviderValidationResult,
 } from "./validation.js";
@@ -29,64 +32,63 @@ export interface CredentialDialogElements {
   dialog?: HTMLDialogElement | HTMLElement | boolean | null;
   paddleInput?: HTMLInputElement | null;
   mineruInput?: HTMLInputElement | null;
+  glmOcrInput?: HTMLInputElement | null;
   apiKeyInput?: HTMLInputElement | null;
-  translationProtocolSelect?: HTMLSelectElement | null;
   modelBaseUrlInput?: HTMLInputElement | null;
   modelNameInput?: HTMLInputElement | null;
   translationWorkersInput?: HTMLInputElement | null;
+  translationProtocolSelect?: HTMLSelectElement | null;
+  translationThinkingSelect?: HTMLSelectElement | null;
   mathModeSelect?: HTMLSelectElement | null;
 }
 
 export interface CredentialDialogElementsPort {
   elements: () => CredentialDialogElements;
-  syncOcrProviderControls?: (providerId?: string) => void;
+  syncOcrProviderControls: (providerId?: string) => void;
   syncTranslationProvider?: (baseUrl?: string) => void;
 }
 
 export interface CredentialsViewPort {
-  activateTab?: (tabName?: string) => void;
-  bindEvents?: (handlers: BindCredentialViewEventsOptions) => void;
-  closeDialog?: () => void;
-  dialogElements?: () => CredentialDialogElements;
-  openDialog?: () => void;
-  setDeepSeekTopUpVisible?: (visible?: boolean) => void;
-  setTranslationProvider?: (provider?: string) => void;
-  setTranslationModels?: (payload?: Record<string, unknown>) => void;
-  setDirty?: (dirty?: boolean) => void;
-  setDeepSeekValidationMessage?: (message?: string, tone?: string) => void;
-  setDialogMode?: (options?: {
+  activateTab: (tabName?: string) => void;
+  bindEvents: (handlers: BindCredentialViewEventsOptions) => void;
+  closeDialog: () => void;
+  dialogElements: () => CredentialDialogElements;
+  setDeepSeekTopUpVisible: (visible?: boolean) => void;
+  setTranslationProvider: (provider?: string) => void;
+  setDeepSeekValidationMessage: (message?: string, tone?: string) => void;
+  setDialogMode: (options?: {
     setupMode?: boolean;
     activateCredentialTab?: (tabName?: string) => void;
   }) => void;
-  setDialogStatus?: (message?: string, tone?: string) => void;
-  setHiddenOcrProvider?: (providerId?: string) => void;
-  setOcrValidationMessage?: (message?: string, tone?: string, providerId?: string) => void;
-  syncOcrProviderControls?: (providerId?: string) => void;
-  updateCredentialGate?: (options?: UpdateCredentialGateViewOptions) => boolean | void;
+  setDialogStatus: (message?: string, tone?: string) => void;
+  setHiddenOcrProvider: (providerId?: string) => void;
+  setOcrValidationMessage: (message?: string, tone?: string, providerId?: string) => void;
+  syncOcrProviderControls: (providerId?: string) => void;
+  updateCredentialGate: (options?: UpdateCredentialGateViewOptions) => boolean | void;
 }
 
 export interface CredentialsRuntimeEnvPort {
-  isDesktopMode?: () => boolean;
+  isDesktopMode: () => boolean;
 }
 
 export interface CredentialsUploadStatePort {
-  getSnapshot?: () => {
+  getSnapshot: () => {
     uploadId?: string;
   };
 }
 
 export interface CredentialsBalanceStatePort {
-  resetDeepSeekBalance?: () => void;
+  resetDeepSeekBalance: () => void;
 }
 
 export interface CredentialsSetupModePort {
-  currentSetupMode?: () => boolean;
+  currentSetupMode: () => boolean;
 }
 
 export interface DeepSeekViewPort {
-  elements?: () => CredentialDialogElements;
-  setTopUpVisible?: (visible?: boolean) => void;
-  setValidationMessage?: (message?: string, tone?: string) => void;
+  elements: () => CredentialDialogElements;
+  setTopUpVisible: (visible?: boolean) => void;
+  setValidationMessage: (message?: string, tone?: string) => void;
 }
 
 export interface OpenBrowserCredentialsDialogOptions {
@@ -94,7 +96,6 @@ export interface OpenBrowserCredentialsDialogOptions {
 }
 
 export interface EnsureOcrCredentialsReadyOptions {
-  credentials?: CredentialsFields;
   onMissingToken?: () => void;
   onInvalidToken?: (result?: ProviderValidationResult | null) => void;
 }
@@ -111,55 +112,50 @@ export interface RefreshDeepSeekBalanceOptions {
 }
 
 export interface MountBrowserCredentialsFeatureOptions {
-  apiPrefix?: string;
+  apiPrefix: string;
   state?: unknown;
-  applyHiddenCredentialInputs?: (credentials?: Partial<CredentialsFields> | unknown) => unknown;
+  applyHiddenCredentialInputs?: (credentials?: Partial<CredentialsFields>) => unknown;
   defaultPaddleToken?: () => string;
   defaultModelApiKey?: () => string;
   defaultModelBaseUrl?: () => string;
   getTaskOptions?: () => Record<string, unknown> | unknown;
-  getServiceProfileSettings?: () => Record<string, unknown>;
-  saveTaskOptions?: (options?: Record<string, unknown> | unknown) => unknown;
-  saveBrowserStoredConfig?: (credentials?: CredentialsFields | Record<string, unknown> | unknown) => unknown;
+  saveTaskOptions?: (options?: Record<string, unknown>) => unknown;
+  saveBrowserStoredConfig?: (credentials?: Partial<CredentialsFields>) => unknown;
   readHiddenCredentialInputs?: () => CredentialsFields | Record<string, unknown> | unknown;
   saveDesktopConfig?: (
-    browserConfig?: Record<string, unknown> | unknown,
+    browserConfig?: Record<string, unknown>,
     afterSave?: () => unknown,
   ) => Promise<unknown> | unknown;
   checkApiConnectivity?: () => Promise<unknown> | unknown;
-  validateOcrToken?: (
-    apiPrefix?: unknown,
-    providerId?: unknown,
-    token?: unknown,
+  validateOcrToken: (
+    apiPrefix: string,
+    providerId: string,
+    token: string,
   ) => Promise<ProviderValidationResult | unknown> | ProviderValidationResult | unknown;
-  validateDeepSeekToken?: (
-    apiPrefix?: unknown,
-    payload?: unknown,
+  validateDeepSeekToken: (
+    apiPrefix: string,
+    payload: Record<string, unknown>,
   ) => Promise<ProviderValidationResult | unknown> | ProviderValidationResult | unknown;
   queryDeepSeekBalance?: (
-    apiPrefix?: unknown,
-    payload?: unknown,
+    apiPrefix: string,
+    payload: Record<string, unknown>,
   ) => Promise<ProviderValidationResult | unknown> | ProviderValidationResult | unknown;
-  listModels?: (
-    apiPrefix?: unknown,
-    payload?: unknown,
-  ) => Promise<unknown> | unknown;
-  createCredential?: (apiPrefix: string | undefined, payload: Record<string, unknown>) => Promise<any>;
+  // 挂载层只透传、不读取返回值，故返回值保持 unknown。
+  createCredential?: (apiPrefix: string | undefined, payload: CreateCredentialInput) => Promise<CredentialMutationView>;
   updateCredential?: (
     apiPrefix: string | undefined,
     credentialRef: string,
-    payload: Record<string, unknown>,
-  ) => Promise<any>;
+    payload: UpdateCredentialInput,
+  ) => Promise<CredentialMutationView>;
   onCredentialStateChange?: () => void;
-  onSetupComplete?: () => Promise<unknown> | unknown;
   uploadStatePort?: CredentialsUploadStatePort;
   credentialsStatePort?: CredentialsStatePort;
   runtimeEnvPort?: CredentialsRuntimeEnvPort;
   balanceStatePort?: CredentialsBalanceStatePort;
   legacyRuntimePort?: unknown;
   legacyValidationCachePort?: unknown;
-  viewPort?: CredentialsViewPort;
-  dialogElementsPort?: CredentialDialogElementsPort;
+  viewPort: CredentialsViewPort;
+  dialogElementsPort: CredentialDialogElementsPort;
   deepSeekViewPort?: DeepSeekViewPort;
   setupModePort?: CredentialsSetupModePort;
 }
@@ -177,7 +173,6 @@ export function mountBrowserCredentialsFeature({
   defaultModelApiKey,
   defaultModelBaseUrl,
   getTaskOptions,
-  getServiceProfileSettings,
   saveTaskOptions,
   saveBrowserStoredConfig,
   readHiddenCredentialInputs,
@@ -186,11 +181,9 @@ export function mountBrowserCredentialsFeature({
   validateOcrToken,
   validateDeepSeekToken,
   queryDeepSeekBalance,
-  listModels,
   createCredential,
   updateCredential,
   onCredentialStateChange,
-  onSetupComplete,
   uploadStatePort,
   credentialsStatePort = defaultCredentialsStatePort,
   runtimeEnvPort,
@@ -208,7 +201,8 @@ export function mountBrowserCredentialsFeature({
     currentSetupMode: () => Boolean(dialogDataset(viewPort.dialogElements()?.dialog)?.setupMode === "1"),
   },
 }: MountBrowserCredentialsFeatureOptions) {
-  const uploadState = uploadStatePort || createCredentialUploadReadinessPort(state);
+  // state 是调用方传入的宿主态（unknown），这里按上传门禁需要的字段切片读取。
+  const uploadState = uploadStatePort || createCredentialUploadReadinessPort(state as UploadReadinessSource);
   const runtimeEnv = runtimeEnvPort || createCredentialRuntimeEnvPort(state);
   const balanceState = balanceStatePort || {
     resetDeepSeekBalance: () => credentialsStatePort.resetDeepSeekBalance?.(),
@@ -249,7 +243,6 @@ export function mountBrowserCredentialsFeature({
     checkApiConnectivity,
     setupModePort,
     onCredentialStateChange,
-    onSetupComplete,
     dialogElementsPort,
     syncBrowserDialogFromCredentialState: dialogFlow.syncBrowserDialogFromCredentialState,
     runtimeEnv,
@@ -274,25 +267,6 @@ export function mountBrowserCredentialsFeature({
     legacyValidationCachePort,
   });
 
-  const modelList = createTranslationModelListFlow({
-    apiPrefix,
-    dialogElementsPort,
-    currentProvider: () => translation.getCurrentProvider(),
-    listModels,
-    viewPort,
-  });
-
-  const serviceProfiles = createServiceProfiles({
-    getSettings: getServiceProfileSettings || (() => (getTaskOptions?.() || {}) as Record<string, unknown>),
-    getTaskOptions: () => (getTaskOptions?.() || {}) as Record<string, unknown>,
-    saveSettings: async (settings) => saveTaskOptions?.(settings),
-    credentialsStatePort,
-    onApply: () => {
-      dialogFlow.syncBrowserDialogFromCredentialState();
-      onCredentialStateChange?.();
-    },
-  });
-
   viewPort.bindEvents({
     resetOcrValidation: () => {
       credentialsStatePort.resetOcrValidationCache?.();
@@ -310,24 +284,15 @@ export function mountBrowserCredentialsFeature({
     },
     validateOcr: validation.handleOcrValidate,
     validateDeepSeek: validation.handleDeepSeekValidate,
-    fetchModels: modelList.fetchModels,
     save: saveFlow.handleSave,
-    saveOcr: () => saveFlow.handleSave("ocr"),
-    saveTranslation: () => saveFlow.handleSave("translation"),
     activateCredentialTab: dialogFlow.activateCredentialTab,
     changeProvider: (event) => {
       if (saveFlow.isSaving()) return;
       dialogFlow.handleOcrProviderChange(event);
       credentialsStatePort.resetOcrValidationCache?.();
-      viewPort.setDirty?.(true);
       onCredentialStateChange?.();
     },
-    changeTranslationProvider: (provider) => {
-      modelList.clear();
-      dialogFlow.handleTranslationProviderChange(provider);
-      viewPort.setDirty?.(true);
-    },
-    markDirty: () => viewPort.setDirty?.(true),
+    changeTranslationProvider: dialogFlow.handleTranslationProviderChange,
   });
 
   // 凭据只住在这个浏览器里，一个字节都不向服务端要。
@@ -348,6 +313,7 @@ export function mountBrowserCredentialsFeature({
     for (const [input, value] of [
       [elements.paddleInput, current.paddleToken],
       [elements.mineruInput, current.mineruToken],
+      [elements.glmOcrInput, current.glmOcrToken],
       [elements.apiKeyInput, current.modelApiKey],
     ] as const) {
       if (input && !input.value) input.value = value || "";
@@ -358,13 +324,6 @@ export function mountBrowserCredentialsFeature({
   });
 
   return {
-    serviceProfiles,
-    ...createTaskServiceAccess({
-      getCredentials: access.readCurrentCredentials,
-      getTaskOptions,
-      getProfiles: () => serviceProfiles.getState().profiles,
-      defaultPaddleToken, defaultModelApiKey, defaultModelBaseUrl,
-    }),
     activateCredentialTab: dialogFlow.activateCredentialTab,
     ready: () => credentialReferencesReady,
     ensureOcrCredentialsReady: validation.ensureOcrReady,

@@ -1,73 +1,80 @@
+import {
+  normalizeTranslationApiProtocol,
+  normalizeTranslationThinking,
+} from "@/platform/config/providers.js";
+
 
 /** Values read from the browser credential dialog inputs. */
 export interface CredentialDialogValues {
   paddleToken: string;
   mineruToken?: string;
+  glmOcrToken?: string;
   modelApiKey: string;
   modelBaseUrl: string;
   modelName: string;
-  apiProtocol?: "openai" | "openai_responses" | "anthropic";
   translationWorkers: string;
-  clearPaddleToken: boolean;
-  clearMineruToken: boolean;
-  clearModelApiKey: boolean;
+  translationProtocol?: string;
+  translationThinking?: string;
   mathMode: string;
   ocrCredentialRef?: string;
   translationCredentialRef?: string;
 }
 
 export interface CredentialDialogElementsLike {
-  paddleInput?: { value?: string; dataset?: Record<string, string> } | null;
-  mineruInput?: { value?: string; dataset?: Record<string, string> } | null;
-  apiKeyInput?: { value?: string; dataset?: Record<string, string> } | null;
-  translationProtocolSelect?: { value?: string } | null;
+  paddleInput?: { value?: string } | null;
+  mineruInput?: { value?: string } | null;
+  glmOcrInput?: { value?: string } | null;
+  apiKeyInput?: { value?: string } | null;
   modelBaseUrlInput?: { value?: string } | null;
   modelNameInput?: { value?: string } | null;
   translationWorkersInput?: { value?: string } | null;
+  translationProtocolSelect?: { value?: string } | null;
+  translationThinkingSelect?: { value?: string } | null;
   mathModeSelect?: { value?: string } | null;
 }
 
 export interface ReadCredentialDialogValuesOptions {
-  elementsPort?: {
+  elementsPort: {
     elements: () => CredentialDialogElementsLike;
   };
 }
 
 export interface BuildBrowserCredentialConfigOptions {
-  values: Pick<CredentialDialogValues, "paddleToken" | "mineruToken" | "modelApiKey" | "ocrCredentialRef" | "translationCredentialRef">;
+  values: Pick<CredentialDialogValues, "paddleToken" | "mineruToken" | "glmOcrToken" | "modelApiKey" | "ocrCredentialRef" | "translationCredentialRef">;
   currentOcrProvider: () => string;
   defaultModelApiKey?: () => string;
 }
 
 export interface BuildTaskOptionsFromDialogValuesOptions {
-  values: Pick<CredentialDialogValues, "modelName" | "modelBaseUrl" | "translationWorkers" | "mathMode" | "apiProtocol">;
+  values: Pick<CredentialDialogValues, "modelName" | "modelBaseUrl" | "translationWorkers" | "translationProtocol" | "translationThinking" | "mathMode">;
   defaultModelBaseUrl?: () => string;
 }
 
 export function readCredentialDialogValues({
   elementsPort,
-}: ReadCredentialDialogValuesOptions = {}): CredentialDialogValues {
+}: ReadCredentialDialogValuesOptions): CredentialDialogValues {
   const {
     paddleInput,
     mineruInput,
+    glmOcrInput,
     apiKeyInput,
     modelBaseUrlInput,
     modelNameInput,
     translationWorkersInput,
-    mathModeSelect,
     translationProtocolSelect,
+    translationThinkingSelect,
+    mathModeSelect,
   } = elementsPort.elements();
   return {
     paddleToken: paddleInput?.value?.trim() || "",
     mineruToken: mineruInput?.value?.trim() || "",
+    glmOcrToken: glmOcrInput?.value?.trim() || "",
     modelApiKey: apiKeyInput?.value?.trim() || "",
     modelBaseUrl: modelBaseUrlInput?.value?.trim() || "",
     modelName: modelNameInput?.value?.trim() || "",
-    apiProtocol: (translationProtocolSelect?.value || "openai") as CredentialDialogValues["apiProtocol"],
     translationWorkers: translationWorkersInput?.value?.trim() || "",
-    clearPaddleToken: paddleInput?.dataset?.clearCredential === "1",
-    clearMineruToken: mineruInput?.dataset?.clearCredential === "1",
-    clearModelApiKey: apiKeyInput?.dataset?.clearCredential === "1",
+    translationProtocol: translationProtocolSelect?.value || "",
+    translationThinking: translationThinkingSelect?.value || "",
     mathMode: mathModeSelect?.value || "direct_typst",
   };
 }
@@ -82,6 +89,7 @@ export function buildBrowserCredentialConfig({
     ocrCredentialRef: `${values.ocrCredentialRef || ""}`.trim(),
     paddleToken: values.paddleToken,
     mineruToken: values.mineruToken || "",
+    glmOcrToken: values.glmOcrToken || "",
     translationCredentialRef: `${values.translationCredentialRef || ""}`.trim(),
     modelApiKey: `${values.modelApiKey || defaultModelApiKey?.() || ""}`.trim(),
   };
@@ -93,17 +101,20 @@ export function buildTaskOptionsFromDialogValues({
 }: BuildTaskOptionsFromDialogValuesOptions) {
   return {
     model: values.modelName,
-    apiProtocol: values.apiProtocol || "openai",
     baseUrl: values.modelBaseUrl || defaultModelBaseUrl?.() || "",
     workers: Number(values.translationWorkers),
+    apiProtocol: normalizeTranslationApiProtocol(values.translationProtocol),
+    thinking: normalizeTranslationThinking(values.translationThinking),
     mathMode: values.mathMode,
     translateTitles: true,
   };
 }
 
 export function ocrTokenFromDialogValues(
-  values: Partial<Pick<CredentialDialogValues, "paddleToken" | "mineruToken">> = {},
+  values: Partial<Pick<CredentialDialogValues, "paddleToken" | "mineruToken" | "glmOcrToken">> = {},
   providerId = "paddle",
 ) {
-  return (providerId === "mineru" ? values.mineruToken : values.paddleToken) || "";
+  if (providerId === "mineru") return values.mineruToken || "";
+  if (providerId === "glm_ocr") return values.glmOcrToken || "";
+  return values.paddleToken || "";
 }

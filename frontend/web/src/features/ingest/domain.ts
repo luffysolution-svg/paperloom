@@ -37,7 +37,6 @@ export { defaultUploadConfigPort } from "./domain/upload/config-port.js";
 
 export { mountWorkflowFeature } from "./domain/workflow/controller.js";
 export type {
-  UploadServiceOverrides,
   LoadGlossaryOptionsParams,
   MountWorkflowFeatureOptions,
   WorkflowConfigPortLike,

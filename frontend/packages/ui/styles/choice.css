@@ -1,0 +1,102 @@
+/* Checkbox、SegmentedControl（src/primitives/choice.tsx）。
+ *
+ * @owns ui-checkbox, ui-segmented
+ */
+
+.ui-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.ui-checkbox-box {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--ink);
+  cursor: pointer;
+}
+
+.ui-checkbox-box:disabled,
+.ui-checkbox:has(.ui-checkbox-box:disabled) {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.ui-checkbox-label {
+  min-width: 0;
+}
+
+/* —— 几个里选一个：外框是一条胶囊，选中的那段用主按钮的颜色 —— */
+
+.ui-segmented {
+  display: inline-flex;
+  justify-self: start;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--btn-radius);
+}
+
+/* 排成网格时（columns）：外框换成中等圆角，不然两行的胶囊是一团。 */
+.ui-segmented[data-layout="grid"] {
+  display: grid;
+  border-radius: var(--ui-radius-md);
+}
+
+.ui-segmented[data-layout="grid"] .ui-segmented-option {
+  border-radius: var(--ui-radius-sm);
+}
+
+.ui-segmented-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--btn-radius);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--ui-text-md);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* sm 连外框一共 28px，和 Button 的 sm 一样高。 */
+.ui-segmented[data-size="sm"] .ui-segmented-option {
+  min-height: 22px;
+  padding: 0 10px;
+  font-size: var(--ui-text-sm);
+}
+
+.ui-segmented-option svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.ui-segmented-option:hover:not(:disabled):not([aria-checked="true"]) {
+  color: var(--ink);
+}
+
+.ui-segmented-option[aria-checked="true"] {
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-fg);
+}
+
+.ui-segmented-option:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: 1px;
+}
+
+.ui-segmented-option:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

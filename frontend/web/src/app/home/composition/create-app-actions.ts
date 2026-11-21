@@ -117,35 +117,17 @@ export function createAppActions({
       workflowNeedsCredentials: (w?: string) => workflow().workflowNeedsCredentials(w),
       workflowNeedsUpload: (w?: string) => workflow().workflowNeedsUpload(w),
       currentRenderSourceJobId: () => workflow().currentRenderSourceJobId(),
-      currentBudgetState: (w?: string) => {
-        if (isOcrOnly()) return { visible: false, blocking: false, tone: "", message: "", topUpUrl: "" } as any;
-        const selected = workflow().getUploadServiceOverrides?.();
-        const current = selected && creds().getTaskServiceCatalog().resolve().translation;
-        // 自动余额预检只使用它所属账户的缓存，不能拿默认 Key 检查临时账户。
-        if (selected && current && (selected.modelApiKey !== current.apiKey || selected.translationCredentialRef !== current.credentialRef)) {
-          return { visible: false, blocking: false };
-        }
-        return workflow().currentBudgetState(w) as any;
-      },
+      currentBudgetState: (w?: string) => (
+        isOcrOnly()
+          ? { visible: false, blocking: false, tone: "", message: "", topUpUrl: "" }
+          : workflow().currentBudgetState(w)
+      ) as any,
       collectRunPayload: () => workflow().collectRunPayload(),
       validateBeforeSubmit: () => upload().validatePageRanges() ?? true,
-      ensureOcrCredentialsReady: (options?: Record<string, unknown>) => {
-        const selected = workflow().getUploadServiceOverrides?.();
-        if (!selected) return creds().ensureOcrCredentialsReady(options);
-        if (selected.ocrCredentialRef && !selected.ocrToken) return Promise.resolve(true);
-        return creds().ensureOcrCredentialsReady({ ...options, credentials: {
-          ocrProvider: selected.ocrProvider || "paddle",
-          ocrCredentialRef: selected.ocrCredentialRef || "",
-          paddleToken: selected.ocrProvider === "paddle" ? selected.ocrToken || "" : "",
-          mineruToken: selected.ocrProvider === "mineru" ? selected.ocrToken || "" : "",
-          modelApiKey: "", translationCredentialRef: "",
-        } });
-      },
-      hasBrowserCredentials: () => {
-        if (workflow().hasUploadCredentials) return workflow().hasUploadCredentials();
-        if (isOcrOnly()) return creds().hasOcrCredentials();
-        return Boolean(creds().hasBrowserCredentials());
-      },
+      ensureOcrCredentialsReady: (options?: Record<string, unknown>) => creds().ensureOcrCredentialsReady(options),
+      hasBrowserCredentials: () => (
+        isOcrOnly() ? creds().hasOcrCredentials() : Boolean(creds().hasBrowserCredentials())
+      ),
       // 缺 Key 和首次配置门是同一个落点：设置弹窗停在 api tab，
       // 区别只在 setupMode（引导语 + 「保存并启动」+ 存完标记首配完成）。
       openBrowserCredentialsDialog: (options?: unknown) => {

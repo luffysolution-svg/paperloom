@@ -150,7 +150,7 @@ test("runDeepSeekConnectivityCheck passes injected apiPrefix and model to DeepSe
     "/custom/api",
     {
       api_key: "sk-test",
-      api_protocol: "openai",
+      api_protocol: "openai_responses",
       base_url: "https://example.test/v1",
       model: "deepseek-flash",
     },
@@ -198,34 +198,6 @@ test("runDeepSeekConnectivityCheck surfaces the timeout message instead of a gen
   assert.equal(result.status, "timeout");
   assert.equal(result.summary, timeoutError.message);
   assert.equal(messages.at(-1), timeoutError.message);
-});
-
-test("local API policy rejection explains the desktop opt-in instead of reporting a network failure", async () => {
-  const result = await runDeepSeekConnectivityCheck({
-    apiKey: "test-key",
-    baseUrl: "http://127.0.0.1:7863/v1",
-    validateDeepSeekToken: async () => {
-      throw new Error("base_url host is not allowed; loopback/private/link-local IPs are blocked(400)");
-    },
-    showResult: false,
-  });
-  assert.equal(result.ok, false);
-  assert.equal(result.status, "private_url_blocked");
-  assert.match(result.summary, /允许本机和内网 API/);
-  assert.match(result.summary, /重启/);
-});
-
-test("provider validation retains a backend error reason", async () => {
-  const result = await runDeepSeekConnectivityCheck({
-    apiKey: "test-key",
-    validateDeepSeekToken: async () => {
-      const error = new Error("提交失败: 400 model name is required");
-      error.status = 400;
-      throw error;
-    },
-    showResult: false,
-  });
-  assert.equal(result.summary, "提交失败: 400 model name is required");
 });
 
 test("runDeepSeekConnectivityCheck still reports a generic failure for non-timeout errors", async () => {

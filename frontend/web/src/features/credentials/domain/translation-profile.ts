@@ -2,6 +2,10 @@
 
 import {
   getTranslationProviderDefinition,
+  normalizeTranslationApiProtocol,
+  normalizeTranslationThinking,
+  type TranslationApiProtocol,
+  type TranslationThinking,
 } from "@/platform/config/providers.js";
 
 export type TranslationProfile = {
@@ -9,7 +13,9 @@ export type TranslationProfile = {
   baseUrl: string;
   model: string;
   workers: number;
-  apiProtocol: "openai" | "openai_responses" | "anthropic";
+  /** 接口协议；默认用服务商自己的（Anthropic 是 anthropic，其余 openai）。 */
+  apiProtocol: TranslationApiProtocol;
+  thinking: TranslationThinking;
 };
 
 export function translationConfigError(baseUrl = "", model = "") {
@@ -22,9 +28,6 @@ export function translationConfigError(baseUrl = "", model = "") {
     }
     if (parsed.username || parsed.password) {
       return "翻译 API URL 不能包含用户名或密码";
-    }
-    if (parsed.search || parsed.hash) {
-      return "翻译 API URL 不能包含查询参数或片段";
     }
   } catch {
     return "翻译 API URL 必须是有效的 http(s) 地址";
@@ -47,10 +50,11 @@ export function translationProfileDefaults(providerId = "custom"): TranslationPr
   const definition = getTranslationProviderDefinition(providerId);
   return {
     apiKey: "",
-    apiProtocol: "openai",
     baseUrl: definition.baseUrl || "",
     model: definition.defaultModel || "",
     workers: Number(definition.defaultWorkers) || 5,
+    apiProtocol: normalizeTranslationApiProtocol(definition.protocol),
+    thinking: "off",
   };
 }
 
@@ -63,8 +67,6 @@ export function normalizeTranslationProfile(
   const workers = Number(candidate.workers);
   const maxWorkers = Number(definition.maxWorkers) || 100;
   return {
-    apiProtocol: ["openai", "openai_responses", "anthropic"].includes(String(candidate.apiProtocol))
-      ? candidate.apiProtocol as TranslationProfile["apiProtocol"] : "openai",
     apiKey: typeof candidate.apiKey === "string" ? candidate.apiKey : defaults.apiKey,
     baseUrl: providerId === "custom"
       ? `${candidate.baseUrl || defaults.baseUrl}`.trim()
@@ -73,12 +75,14 @@ export function normalizeTranslationProfile(
     workers: Number.isInteger(workers) && workers > 0 && workers <= maxWorkers
       ? workers
       : defaults.workers,
+    apiProtocol: normalizeTranslationApiProtocol(candidate.apiProtocol, defaults.apiProtocol),
+    thinking: normalizeTranslationThinking(candidate.thinking),
   };
 }
 
 type CredentialDialogLike = HTMLDialogElement | HTMLElement | boolean | null;
 
-export function dialogDataset(dialog: CredentialDialogLike): DOMStringMap | undefined {
+export function dialogDataset(dialog: CredentialDialogLike | undefined): DOMStringMap | undefined {
   if (dialog && typeof dialog === "object" && "dataset" in dialog) {
     return (dialog as HTMLElement).dataset;
   }

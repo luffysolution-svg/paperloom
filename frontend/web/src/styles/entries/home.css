@@ -23,12 +23,14 @@
 @source "../../features/**/*.{ts,tsx}";
 @source "../../ui/**/*.{ts,tsx}";
 @source "../../platform/**/*.{ts,tsx}";
+@source "../../../../packages/ui/src/**/*.{ts,tsx}";
 @source inline("app-settings-panel credential-provider-panel credential-tabs credential-top-up-link glossary-list-item library-bottom-bar progress-bar recent-job-cover status-result-actions status-substage-flow status-substage-step");
 
 @layer tokens, base, pages;
 
 @import "../tokens.css" layer(tokens);
 @import "../shadcn-theme.css" layer(tokens);
+@import "@retainpdf/ui/primitives.css";
 @import "../base.css" layer(base);
 /* 主页氛围：浅纹理 + 宽屏侧翼（装饰） */
 @import "../core/ambient-surface.css";
@@ -54,7 +56,15 @@
 @import "../pages/home/upload-workflow.utilities.css";
 @import "../pages/home/job-dialogs.css";
 @import "../pages/home/job-dialogs.utilities.css";
-@import "../pages/home/credential-settings.css";
+@import "../pages/home/settings-dialogs.css";
+@import "../../features/credentials/ui/CredentialsWorkbench.css";
+@import "../../features/credentials/ui/TranslationPanel.css";
+@import "../../features/credentials/ui/CredentialFormFields.css";
+@import "../../features/credentials/ui/CredentialCard.css";
+@import "../../features/glossaries/ui/GlossariesDialog.css";
+@import "../../features/glossaries/ui/GlossaryEditor.css";
+@import "../../features/credentials/ui/SecretInput.css";
+@import "../../features/credentials/ui/CredentialsWorkbenchInSettings.css";
 @import "../pages/home/credential-ocr.css";
 @import "../pages/home/status-card.css";
 /* 书籍详情按职责拆分：壳层 → 概览 → 处理 → 文件产物。 */

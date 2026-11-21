@@ -10,7 +10,7 @@ import {
   buildTranslationPayload as buildTranslationPayloadRequest,
   type WorkflowDeveloperConfig,
 } from "./payload.js";
-import type { UploadServiceOverrides, WorkflowConstants, WorkflowRunPayload, WorkflowSubmitValues } from "./contracts.js";
+import type { WorkflowConstants, WorkflowRunPayload, WorkflowSubmitValues } from "./contracts.js";
 
 export interface CreateWorkflowPayloadAssemblyOptions {
   constants: WorkflowConstants;
@@ -24,7 +24,6 @@ export interface CreateWorkflowPayloadAssemblyOptions {
   defaultOcrProvider: () => string;
   defaultPaddleToken: () => string;
   defaultModelApiKey: () => string;
-  getUploadServiceOverrides?: () => UploadServiceOverrides | null;
   readSubmitValues?: (options?: {
     defaultOcrProvider?: string;
     defaultPaddleToken?: string;
@@ -45,7 +44,6 @@ export function createWorkflowPayloadAssembly({
   defaultPaddleToken,
   defaultModelApiKey,
   readSubmitValues,
-  getUploadServiceOverrides,
 }: CreateWorkflowPayloadAssemblyOptions) {
   const { WORKFLOW_BOOK, WORKFLOW_TRANSLATE } = constants;
   const WORKFLOW_OCR = (constants as { WORKFLOW_OCR?: string }).WORKFLOW_OCR || "ocr";
@@ -129,12 +127,11 @@ export function createWorkflowPayloadAssembly({
 
   function collectRunPayload(): WorkflowRunPayload {
     const pageRanges = currentPageRanges();
-    const overrides = getUploadServiceOverrides?.();
-    const developerConfig = { ...developerConfigWithDefaults(), ...(overrides ? { model: overrides.model, baseUrl: overrides.baseUrl, apiProtocol: overrides.apiProtocol, workers: overrides.workers } : {}) };
+    const developerConfig = developerConfigWithDefaults();
     const ocrOnly = isOcrOnlyMode();
     const workflow = ocrOnly ? WORKFLOW_OCR : developerConfig.workflow;
     const uploadState = getUploadState();
-    const submitValues = { ...currentWorkflowSubmitValues(), ...overrides };
+    const submitValues = currentWorkflowSubmitValues();
     const effectiveNeedsUpload = ocrOnly ? () => true : workflowNeedsUpload;
     const payload: WorkflowRunPayload = {
       workflow,

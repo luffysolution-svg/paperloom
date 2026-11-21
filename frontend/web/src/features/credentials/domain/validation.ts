@@ -33,44 +33,44 @@ export interface ResetOcrValidationRuntimeOptions {
 export interface SetOcrValidationRuntimeOptions extends ResetOcrValidationRuntimeOptions {}
 
 export interface RunOcrTokenValidationOptions {
-  apiPrefix?: string;
+  apiPrefix: string;
   state?: unknown;
   credentialsStatePort?: CredentialsStatePortLike | CredentialsStatePort;
   providerId?: string;
   token?: string;
-  validateOcrToken?: (
-    apiPrefix?: unknown,
-    providerId?: unknown,
-    token?: unknown,
+  validateOcrToken: (
+    apiPrefix: string,
+    providerId: string,
+    token: string,
   ) => Promise<ProviderValidationResult | unknown> | ProviderValidationResult | unknown;
-  setOcrValidationMessage?: (message?: string, tone?: string, providerId?: string) => void;
+  setOcrValidationMessage: (message?: string, tone?: string, providerId?: string) => void;
   showResult?: boolean;
-  isCurrent?: () => boolean;
   legacyRuntimePort?: unknown;
 }
 
 export interface RunDeepSeekConnectivityCheckOptions {
-  apiProtocol?: string;
-  apiPrefix?: string;
+  apiPrefix: string;
   apiKey?: string;
   baseUrl?: string;
   /** 翻译真正要调用的模型名。不传则后端只能验 Key，验不到模型。 */
   model?: string;
-  validateDeepSeekToken?: (
-    apiPrefix?: unknown,
-    payload?: unknown,
+  /** openai / openai_responses / anthropic。 */
+  apiProtocol?: string;
+  validateDeepSeekToken: (
+    apiPrefix: string,
+    payload: Record<string, unknown>,
   ) => Promise<ProviderValidationResult | unknown> | ProviderValidationResult | unknown;
-  setDeepSeekValidationMessage?: (message?: string, tone?: string) => void;
+  setDeepSeekValidationMessage: (message?: string, tone?: string) => void;
   showResult?: boolean;
 }
 
 export interface RunDeepSeekBalanceCheckOptions {
-  apiPrefix?: string;
+  apiPrefix: string;
   apiKey?: string;
   baseUrl?: string;
   queryDeepSeekBalance?: (
-    apiPrefix?: unknown,
-    payload?: unknown,
+    apiPrefix: string,
+    payload: Record<string, unknown>,
   ) => Promise<ProviderValidationResult | unknown> | ProviderValidationResult | unknown;
 }
 
@@ -109,7 +109,6 @@ export async function runOcrTokenValidation({
   validateOcrToken,
   setOcrValidationMessage,
   showResult = true,
-  isCurrent = () => true,
   legacyRuntimePort,
 }: RunOcrTokenValidationOptions) {
   const definition = getOcrProviderDefinition(providerId);
@@ -141,7 +140,6 @@ export async function runOcrTokenValidation({
   }
   try {
     const result = asValidationResult(await validateOcrToken(apiPrefix, definition.id, normalizedToken));
-    if (!isCurrent()) return result;
     setOcrValidationRuntime({ state, credentialsStatePort, legacyRuntimePort }, {
       provider: definition.id,
       token: normalizedToken,
@@ -154,10 +152,10 @@ export async function runOcrTokenValidation({
     }
     return result;
   } catch (err) {
+    resetOcrValidationRuntime({ state, credentialsStatePort, legacyRuntimePort });
     const timedOut = timeoutSummary(err);
     const summary = timedOut || `${definition.label} Token 检测失败，请稍后重试。`;
-    if (isCurrent()) resetOcrValidationRuntime({ state, credentialsStatePort, legacyRuntimePort });
-    if (showResult && isCurrent()) {
+    if (showResult) {
       setOcrValidationMessage(summary, "error", definition.id);
     }
     return {
@@ -169,11 +167,11 @@ export async function runOcrTokenValidation({
 }
 
 export async function runDeepSeekConnectivityCheck({
-  apiProtocol = "openai",
   apiPrefix,
   apiKey,
   baseUrl,
   model,
+  apiProtocol = "openai_responses",
   validateDeepSeekToken,
   setDeepSeekValidationMessage,
   showResult = true,
@@ -208,25 +206,15 @@ export async function runDeepSeekConnectivityCheck({
     return result;
   } catch (err) {
     const timedOut = timeoutSummary(err);
-    const message = `${(err as { message?: string })?.message || ""}`.trim();
-    const privateUrlBlocked = message.includes("base_url host is not allowed");
-    const httpStatus = Number((err as { status?: number })?.status || 0);
-    const clientError = httpStatus >= 400 && httpStatus < 500;
-    const summary = timedOut || (privateUrlBlocked
-      ? "本机或内网 API 默认被禁止访问。桌面版请开启“允许本机和内网 API”后重启 PaperLoom；网页版请联系部署管理员。"
-      : clientError ? message : TRANSLATION_PROVIDER_DEFINITION.validationNetworkMessage);
+    const summary = timedOut || TRANSLATION_PROVIDER_DEFINITION.validationNetworkMessage;
     if (showResult) {
       setDeepSeekValidationMessage(summary, "error");
     }
-    return {
-      ok: false,
-      status: timedOut ? "timeout" : privateUrlBlocked ? "private_url_blocked" : clientError ? httpStatus : 0,
-      summary,
-    };
+    return { ok: false, status: timedOut ? "timeout" : 0, summary };
   }
 }
 
-export function summarizeDeepSeekBalance(result) {
+export function summarizeDeepSeekBalance(result: ProviderValidationResult | null | undefined) {
   const infos = Array.isArray(result?.balance_infos) ? result.balance_infos : [];
   const parts = infos
     .filter((item) => item && item.currency && item.total_balance)

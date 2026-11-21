@@ -1,0 +1,291 @@
+/* 术语表编辑表格、工具栏、底栏。（GlossaryEditor）
+ *
+ * @owns glossary
+ * @uses danger, hidden, upload-status, credential-top-up-link */
+
+@utility glossary-table {
+  & input {
+    border: 1px solid var(--line);
+    background: var(--paper);
+    color: var(--ink);
+    box-shadow: none;
+  }
+
+  & select {
+    border: 1px solid var(--line);
+    background: var(--paper);
+    color: var(--ink);
+    box-shadow: none;
+  }
+  width: 100%;
+  min-width: 820px;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 10px;
+
+  & .glossary-col-source {
+    width: 18%;
+  }
+
+  & .glossary-col-target {
+    width: 20%;
+  }
+
+  & .glossary-col-note {
+    width: 15%;
+  }
+  & .glossary-col-context { width: 17%; }
+  & .glossary-col-select { width: 28px; }
+  & input[type="checkbox"] { width: 14px; height: 14px; padding: 0; accent-color: var(--ink); }
+
+  & .glossary-col-level {
+    width: 15%;
+  }
+
+  & .glossary-col-match {
+    width: 14%;
+  }
+
+  & .glossary-col-action {
+    width: 34px;
+  }
+
+  & th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    height: 24px;
+    background: var(--bg);
+    color: var(--muted);
+    font-weight: 600;
+    text-align: left;
+  }
+
+  & th {
+    padding: 3px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  & td {
+    padding: 3px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  & th:last-child {
+    position: sticky;
+    right: 0;
+    z-index: 2;
+    background: var(--paper);
+    border-left: 1px solid var(--line);
+    box-shadow: -6px 0 10px color-mix(in srgb, var(--paper) 86%, transparent);
+    text-align: center;
+  }
+
+  & td:last-child {
+    position: sticky;
+    right: 0;
+    z-index: 2;
+    background: var(--paper);
+    border-left: 1px solid var(--line);
+    box-shadow: -6px 0 10px color-mix(in srgb, var(--paper) 86%, transparent);
+    text-align: center;
+  }
+
+  & th:last-child {
+    z-index: 3;
+    background: var(--bg);
+  }
+
+  & input {
+    min-width: 0;
+    width: 100%;
+    /* 词条格子用的是基础组件 Input，压掉它的 36px 最小高度，和同行的下拉一样高。 */
+    min-height: 0;
+    height: 24px;
+    border-radius: 6px;
+    padding: 0 5px;
+    font-size: 10px;
+  }
+
+  & select {
+    min-width: 0;
+    width: 100%;
+    height: 24px;
+    border-radius: 6px;
+    padding: 0 5px;
+    font-size: 10px;
+  }
+}
+
+@utility glossary-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  & button {
+    min-height: 26px;
+    padding-inline: 8px;
+    border-radius: 7px;
+    font-size: 11px;
+    font-weight: 550;
+  }
+
+  & .danger {
+    margin-left: auto;
+    color: var(--danger);
+  }
+}
+
+@utility glossary-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  & button {
+    min-height: 26px;
+    padding-inline: 8px;
+    border-radius: 7px;
+    font-size: 11px;
+    font-weight: 550;
+  }
+  justify-content: flex-end;
+  min-height: 30px;
+  padding-top: 2px;
+  border-top: 1px solid var(--line);
+  background: var(--paper);
+
+  & .upload-status {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    text-align: left;
+  }
+}
+
+@utility glossary-import-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  & button {
+    min-height: 26px;
+    padding-inline: 8px;
+    border-radius: 7px;
+    font-size: 11px;
+    font-weight: 550;
+  }
+}
+
+@utility danger {
+  .glossary-toolbar & {
+    margin-left: auto;
+    color: var(--danger);
+  }
+}
+
+@utility glossary-editor-scroll {
+  display: grid;
+  grid-auto-rows: max-content;
+  align-content: start;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 2px;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--ink) 22%, transparent) transparent;
+
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--ink) 18%, transparent);
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+  }
+}
+
+@utility glossary-table-wrap {
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: visible;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+
+@utility glossary-col-source {
+  .glossary-table & {
+    width: 20%;
+  }
+}
+
+@utility glossary-col-target {
+  .glossary-table & {
+    width: 28%;
+  }
+}
+
+@utility glossary-col-note {
+  .glossary-table & {
+    width: 17%;
+  }
+}
+
+@utility glossary-col-level {
+  .glossary-table & {
+    width: 15%;
+  }
+}
+
+@utility glossary-col-match {
+  .glossary-table & {
+    width: 14%;
+  }
+}
+
+@utility glossary-col-action {
+  .glossary-table & {
+    width: 34px;
+  }
+}
+
+@utility glossary-entry-remove {
+  min-width: 22px;
+  min-height: 22px;
+  padding: 0;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1;
+}
+
+/* 已知的放错位置：这个 `@utility hidden` 里有一条凭据卡片的规则（.credential-top-up-link）。
+ * 不能把它拆到 CredentialCard.css —— 同名 @utility 分写两处会改变 Tailwind 的输出顺序，
+ * 和 .flex / .block 等设置 display 的工具类先后调换（css:equivalence 实测）。 */
+@utility hidden {
+  &.glossary-import-panel {
+    display: none;
+  }
+
+  &.credential-top-up-link {
+    display: none !important;
+  }
+}
+
+@utility upload-status {
+  .glossary-footer & {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    text-align: left;
+  }
+}

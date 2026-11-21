@@ -36,13 +36,16 @@
       "types": "./dist/components/ui/tooltip.d.ts",
       "import": "./dist/components/ui/tooltip.js"
     },
-    "./styles.css": "./dist/styles.css"
+    "./styles.css": "./dist/styles.css",
+    "./primitives.css": "./styles/primitives.css"
   },
   "files": [
-    "dist"
+    "dist",
+    "styles"
   ],
   "sideEffects": [
-    "./dist/styles.css"
+    "./dist/styles.css",
+    "./styles/*.css"
   ],
   "scripts": {
     "clean": "node ./scripts/clean-dist.mjs",

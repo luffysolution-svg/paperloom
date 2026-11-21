@@ -62,7 +62,6 @@ export type WorkflowViewState = {
   developerDialog: WorkflowDeveloperDialog;
   developerFormState: Record<string, unknown>;
   ocrOnly: boolean;
-  taskServiceSelection: Record<string, string> | null;
 };
 
 export type WorkflowViewActions = {
@@ -110,7 +109,6 @@ export function createWorkflowViewStore(): WorkflowViewStore {
       developerDialog: {},
       developerFormState: {},
       ocrOnly: false,
-      taskServiceSelection: null,
     },
     actions: {
       patch(currentState, payload = {}) {
@@ -155,10 +153,6 @@ export function createWorkflowViewFeature({
 
   function setOcrOnly(value: boolean | unknown) {
     patch({ ocrOnly: Boolean(value) });
-  }
-
-  function setTaskServiceSelection(selection: Record<string, string> | null) {
-    patch({ taskServiceSelection: selection });
   }
 
   // ---- features/workflow/view.js 镜像 ----
@@ -319,8 +313,6 @@ export function createWorkflowViewFeature({
     selectedGlossaryId,
     isOcrOnly,
     setOcrOnly,
-    setTaskServiceSelection,
-    taskServiceSelection: () => store.getSnapshot().taskServiceSelection,
     setJobWarningVisible,
     setSelectedGlossaryId,
     setSubmitBusy,

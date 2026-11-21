@@ -2,34 +2,43 @@
 // 多为对下层流程的薄转发；集中于此让 browser.ts 只做装配。
 
 import { runOcrTokenValidation } from "./validation.js";
+import type {
+  ProviderValidationResult,
+  RunDeepSeekBalanceCheckOptions,
+  RunDeepSeekConnectivityCheckOptions,
+  RunOcrTokenValidationOptions,
+} from "./validation.js";
 import { getOcrProviderDefinition } from "@/platform/config/providers.js";
 import { handleBrowserDeepSeekValidate as runBrowserDeepSeekValidate } from "./deepseek-flow.js";
 import { ensureOcrCredentialValidationReady } from "./ocr-readiness-flow.js";
-import type { CredentialsFields } from "./state.js";
 import {
   ocrTokenFromDialogValues,
   readCredentialDialogValues,
 } from "./dialog-values.js";
+import type { CredentialDialogElementsLike } from "./dialog-values.js";
+import type {
+  CredentialsFields,
+  CredentialsStatePort,
+} from "./state.js";
 
 type CredentialAccess = {
-  readCurrentCredentials: () => any;
+  readCurrentCredentials: () => CredentialsFields;
   currentOcrProvider: () => string;
 };
 
 type ValidationViewPort = {
-  setOcrValidationMessage?: (message?: string, tone?: string, providerId?: string) => void;
+  setOcrValidationMessage: (message?: string, tone?: string, providerId?: string) => void;
 };
 
 type DeepSeekViewPort = {
-  elements?: () => any;
-  setTopUpVisible?: (visible?: boolean) => void;
-  setValidationMessage?: (message?: string, tone?: string) => void;
+  elements: () => CredentialDialogElementsLike;
+  setTopUpVisible: (visible?: boolean) => void;
+  setValidationMessage: (message?: string, tone?: string) => void;
 };
 
 export interface EnsureOcrReadyOptions {
-  credentials?: CredentialsFields;
   onMissingToken?: () => void;
-  onInvalidToken?: (result?: { ok?: boolean } | null) => void;
+  onInvalidToken?: (result?: ProviderValidationResult | null) => void;
 }
 
 export function createCredentialValidationFlow({
@@ -50,38 +59,34 @@ export function createCredentialValidationFlow({
   legacyRuntimePort,
   legacyValidationCachePort,
 }: {
-  apiPrefix?: string;
+  apiPrefix: string;
   state?: unknown;
   viewPort: ValidationViewPort;
   deepSeekViewPort: DeepSeekViewPort;
   access: CredentialAccess;
-  dialogElementsPort: { elements: () => any };
-  validateOcrToken?: (...args: any[]) => any;
-  validateDeepSeekToken?: (...args: any[]) => any;
-  queryDeepSeekBalance?: (...args: any[]) => any;
+  dialogElementsPort: { elements: () => CredentialDialogElementsLike };
+  validateOcrToken: RunOcrTokenValidationOptions["validateOcrToken"];
+  validateDeepSeekToken: RunDeepSeekConnectivityCheckOptions["validateDeepSeekToken"];
+  queryDeepSeekBalance?: RunDeepSeekBalanceCheckOptions["queryDeepSeekBalance"];
   defaultPaddleToken?: () => string;
   defaultModelApiKey?: () => string;
   onCredentialStateChange?: () => void;
-  credentialsStatePort: any;
-  runtimeEnv: { isDesktopMode?: () => boolean };
+  credentialsStatePort: CredentialsStatePort;
+  runtimeEnv: { isDesktopMode: () => boolean };
   legacyRuntimePort?: unknown;
   legacyValidationCachePort?: unknown;
 }) {
-  let ocrValidationRequest = 0;
-  let deepSeekValidationRequest = 0;
-
   async function ensureOcrReady({
     onMissingToken,
     onInvalidToken,
-    credentials,
   }: EnsureOcrReadyOptions = {}) {
-    const provider = credentials?.ocrProvider || access.currentOcrProvider();
+    const provider = access.currentOcrProvider();
     const readiness = await ensureOcrCredentialValidationReady({
       apiPrefix,
       state,
       providerId: provider,
-      credentials: credentials || access.readCurrentCredentials(),
-      defaultPaddleToken: credentials ? () => "" : defaultPaddleToken,
+      credentials: access.readCurrentCredentials(),
+      defaultPaddleToken,
       validateOcrToken,
       setOcrValidationMessage: viewPort.setOcrValidationMessage,
       showResult: !runtimeEnv.isDesktopMode(),
@@ -102,7 +107,6 @@ export function createCredentialValidationFlow({
   }
 
   async function handleOcrValidate() {
-    const request = ++ocrValidationRequest;
     const provider = access.currentOcrProvider();
     const token = ocrTokenFromDialogValues(
       readCredentialDialogValues({ elementsPort: dialogElementsPort }),
@@ -124,20 +128,12 @@ export function createCredentialValidationFlow({
       validateOcrToken,
       setOcrValidationMessage: viewPort.setOcrValidationMessage,
       showResult: true,
-      isCurrent: () => request === ocrValidationRequest
-        && provider === access.currentOcrProvider()
-        && token === ocrTokenFromDialogValues(readCredentialDialogValues({ elementsPort: dialogElementsPort }), provider),
       credentialsStatePort,
       legacyRuntimePort,
     });
   }
 
   async function handleDeepSeekValidate() {
-    const request = ++deepSeekValidationRequest;
-    const fields = ["apiKeyInput", "modelBaseUrlInput", "modelNameInput", "translationProtocolSelect"];
-    const elements = deepSeekViewPort.elements();
-    const inputs = fields.map((field) => elements[field]);
-    const values = inputs.map((input) => `${input?.value || ""}`.trim());
     await runBrowserDeepSeekValidate({
       apiPrefix,
       state,
@@ -147,11 +143,6 @@ export function createCredentialValidationFlow({
       onBalanceChange: onCredentialStateChange,
       credentialsStatePort,
       legacyRuntimePort,
-      isCurrent: () => {
-        const current = deepSeekViewPort.elements();
-        return request === deepSeekValidationRequest && fields.every((field, index) =>
-          current[field] === inputs[index] && `${current[field]?.value || ""}`.trim() === values[index]);
-      },
       viewPort: deepSeekViewPort,
     });
   }

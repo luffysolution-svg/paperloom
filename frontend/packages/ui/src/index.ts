@@ -26,3 +26,10 @@ export {
   TooltipProvider,
   TooltipTrigger,
 } from "./components/ui/tooltip.js";
+export {
+  Checkbox,
+  SegmentedControl,
+  type CheckboxProps,
+  type SegmentedControlProps,
+  type SegmentedOption,
+} from "./primitives/choice.js";

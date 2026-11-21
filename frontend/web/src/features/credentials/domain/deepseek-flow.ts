@@ -9,7 +9,14 @@ import {
   runDeepSeekConnectivityCheck,
   summarizeDeepSeekBalance,
 } from "./validation.js";
+import type {
+  ProviderValidationResult,
+  RunDeepSeekBalanceCheckOptions,
+  RunDeepSeekConnectivityCheckOptions,
+} from "./validation.js";
 import { defaultCredentialsStatePort } from "./default-state-port.js";
+import type { CredentialDialogElementsLike } from "./dialog-values.js";
+import type { CredentialsFields, CredentialsStatePort } from "./state.js";
 
 const DEEPSEEK_LOW_BALANCE_THRESHOLD = 2;
 
@@ -26,7 +33,7 @@ function translationApiLabel(baseUrl = "") {
 // 既可能把 1 CNY + 1.5 USD 凑成 2.5 判成余额充足，也可能在只有 USD 时
 // 用美元数额去比人民币阈值。改成只累加 CNY；没有 CNY 档时返回 null，
 // 由调用方跳过阈值判断而不是拿一个错的数去比。
-function deepSeekCnyBalance(result): number | null {
+function deepSeekCnyBalance(result: ProviderValidationResult): number | null {
   const infos = Array.isArray(result?.balance_infos) ? result.balance_infos : [];
   let total = 0;
   let matched = false;
@@ -49,22 +56,37 @@ export async function handleBrowserDeepSeekValidate({
   queryDeepSeekBalance,
   onBalanceChange,
   silent = false,
-  isCurrent = () => true,
   credentialsStatePort = defaultCredentialsStatePort,
   viewPort,
-}: any) {
+}: {
+  apiPrefix: string;
+  state?: unknown;
+  defaultModelApiKey?: () => string;
+  validateDeepSeekToken: RunDeepSeekConnectivityCheckOptions["validateDeepSeekToken"];
+  queryDeepSeekBalance?: RunDeepSeekBalanceCheckOptions["queryDeepSeekBalance"];
+  onBalanceChange?: () => void;
+  silent?: boolean;
+  credentialsStatePort?: CredentialsStatePort;
+  legacyRuntimePort?: unknown;
+  viewPort: {
+    elements: () => CredentialDialogElementsLike;
+    setTopUpVisible: (visible?: boolean) => void;
+    setValidationMessage: (message?: string, tone?: string) => void;
+  };
+}) {
   const {
     apiKeyInput,
     modelBaseUrlInput,
     modelNameInput,
     translationProtocolSelect,
   } = viewPort.elements();
-  const storedCredentials = credentialsStatePort.getCredentials?.() || {};
-  const modelApiKey = apiKeyInput
-    ? `${apiKeyInput.value || ""}`.trim()
-    : `${storedCredentials.modelApiKey || ""}`.trim() || defaultModelApiKey?.() || "";
+  const storedCredentials: Partial<CredentialsFields> = credentialsStatePort.getCredentials?.() || {};
+  const modelApiKey = apiKeyInput?.value?.trim()
+    || `${storedCredentials.modelApiKey || ""}`.trim()
+    || defaultModelApiKey?.()
+    || "";
   const baseUrl = modelBaseUrlInput?.value?.trim() || "";
-  // 模型名必须一起送去检测：探针走 /chat/completions，没有模型名就只能验 Key，
+  // 模型名必须一起送去检测：探针按翻译用的协议真调一次模型，没有模型名就只能验 Key，
   // 用户填错模型时会拿到一个假绿灯，真正翻译才失败。
   //
   // 模型名的真值只有这个输入框：它不在 credentials 里（那里只有 modelApiKey /
@@ -78,13 +100,8 @@ export async function handleBrowserDeepSeekValidate({
   credentialsStatePort.resetDeepSeekBalance?.();
   onBalanceChange?.();
   if (!modelApiKey) {
-    if (!silent) {
-      viewPort.setValidationMessage(
-        storedCredentials.translationCredentialRef
-          ? "翻译 API 使用旧配置；请填写 Key 后检测"
-          : TRANSLATION_PROVIDER_DEFINITION.validationMissingMessage,
-        storedCredentials.translationCredentialRef ? "" : "error",
-      );
+    if (!silent && storedCredentials.translationCredentialRef) {
+      viewPort.setValidationMessage("翻译 API 使用旧配置；请填写 Key 后检测", "");
     }
     return { ok: false, status: "missing_key" };
   }
@@ -100,12 +117,12 @@ export async function handleBrowserDeepSeekValidate({
     apiKey: modelApiKey,
     baseUrl,
     model: modelName,
-    apiProtocol: translationProtocolSelect?.value || "openai",
+    // 探针按翻译实际用的协议发请求（Anthropic 格式走 /messages）。
+    apiProtocol: translationProtocolSelect?.value || "openai_responses",
     validateDeepSeekToken,
     setDeepSeekValidationMessage: viewPort.setValidationMessage,
     showResult: false,
   });
-  if (!isCurrent()) return result;
   if (result.ok) {
     if (!isOfficialDeepSeekBaseUrl(baseUrl)) {
       viewPort.setTopUpVisible(false);
@@ -123,7 +140,6 @@ export async function handleBrowserDeepSeekValidate({
       baseUrl,
       queryDeepSeekBalance,
     });
-    if (!isCurrent()) return balance;
     if (balance.status === "unsupported_provider") {
       if (!silent) {
         viewPort.setValidationMessage(`${providerLabel} 可用${modelScopeNote}`, "valid");

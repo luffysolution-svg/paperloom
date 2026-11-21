@@ -20,7 +20,7 @@
 // 周期说明见旧版头注释结论：后台自检由 composition 的纯逻辑控制器驱动，
 // 与本组件是否挂载无关。
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Tabs as TabsPrimitive } from "radix-ui";
 import {
   Dialog,
@@ -120,8 +120,7 @@ export type SettingsDialogProps = {
   /** 「术语表」tab 里点 #glossary-btn 时打开术语表弹窗。 */
   onOpenGlossaries: () => void;
   /** 切到 API tab 前让凭据域预热表单（可选）。setupMode 原样透传。 */
-  onPrepareCredentialPanels?: (options?: { setupMode?: boolean; preserveDraft?: boolean }) => void;
-  credentialsDirty?: boolean;
+  onPrepareCredentialPanels?: (options?: { setupMode?: boolean }) => void;
   credentialsWorkbenchSlot?: React.ReactNode | null;
   /**
    * 首次配置门的一句引导，只在 payload.setupMode 时渲染。由 HomeApp 注入而不是
@@ -135,7 +134,6 @@ export function SettingsDialog({
   dialogStore,
   onOpenGlossaries,
   onPrepareCredentialPanels,
-  credentialsDirty = false,
   credentialsWorkbenchSlot = null,
   apiPaneSetupHintSlot = null,
   appUpdateBannerSlot = null,
@@ -146,9 +144,6 @@ export function SettingsDialog({
   const { onCloseAutoFocus } = useDialogReturnFocus(open);
   const [activeTab, setActiveTab] = useState(dialogState.payload?.tab || "api");
   const setupMode = Boolean(dialogState.payload?.setupMode);
-  const wasOpen = useRef(false);
-  const credentialsDirtyRef = useRef(credentialsDirty);
-  credentialsDirtyRef.current = credentialsDirty;
 
   useEffect(() => {
     if (open) {
@@ -157,25 +152,18 @@ export function SettingsDialog({
   }, [open]);
 
   // API 区内嵌凭据工作台：进入 api tab 时从凭据状态回填表单（不开二层弹窗）。
-  // 等 Portal 内表单 ref 挂好后回填一次，避免重复回填覆盖刚输入的 Key。
+  // forceMount 保证面板已挂载；rAF 再补一次，避免 ref 尚未挂上导致密码框空白、保存读到空串。
   useEffect(() => {
     if (!open || activeTab !== "api") {
       return;
     }
     // setupMode 必须跟着一起传：这个 effect 每次进 api tab 都跑，若只调无参版本
     // 就会把首配门刚设上的 setupMode 冲回 false，表单立刻退回普通形态。
-    const entering = !wasOpen.current;
-    const raf = requestAnimationFrame(() => onPrepareCredentialPanels?.({
-      setupMode,
-      preserveDraft: !entering && credentialsDirtyRef.current,
-    }));
-    wasOpen.current = true;
+    const prepare = () => onPrepareCredentialPanels?.({ setupMode });
+    prepare();
+    const raf = requestAnimationFrame(prepare);
     return () => cancelAnimationFrame(raf);
   }, [open, activeTab, onPrepareCredentialPanels, setupMode]);
-
-  useEffect(() => {
-    if (!open) wasOpen.current = false;
-  }, [open]);
 
   function handleOpenChange(nextOpen) {
     if (!nextOpen) {

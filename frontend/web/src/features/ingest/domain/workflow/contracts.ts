@@ -14,8 +14,6 @@ export interface WorkflowSubmitValues {
   selectedGlossaryId?: string;
 }
 
-export type UploadServiceOverrides = WorkflowSubmitValues & { model?: string; baseUrl?: string; apiProtocol?: "openai" | "openai_responses" | "anthropic"; workers?: number };
-
 export interface LoadGlossaryOptionsParams {
   force?: boolean;
   selectedId?: string;

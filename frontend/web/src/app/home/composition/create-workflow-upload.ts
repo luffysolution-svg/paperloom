@@ -47,7 +47,6 @@ import type {
 
 type WorkflowViewPort = {
   selectedGlossaryId: () => string;
-  taskServiceSelection?: () => Record<string, string> | null;
   isOcrOnly?: () => boolean;
   viewPort: unknown;
 };
@@ -116,35 +115,10 @@ export function createWorkflowAndUpload({
 
   const isOcrOnly = () => Boolean((workflowView as any).isOcrOnly?.() ?? false);
 
-  function getUploadServiceOverrides() {
-    const selection = workflowView.taskServiceSelection?.();
-    const catalog = selection && features.browserCredentialsFeature?.getTaskServiceCatalog();
-    if (!catalog) return null;
-    const { ocr, translation, model } = catalog.resolve(selection);
-    return {
-      ocrProvider: ocr.provider,
-      ocrToken: ocr.token,
-      ocrCredentialRef: ocr.credentialRef,
-      modelApiKey: translation.apiKey,
-      translationCredentialRef: translation.credentialRef,
-      model: model.trim(),
-      baseUrl: translation.baseUrl,
-      apiProtocol: translation.apiProtocol,
-      workers: translation.workers,
-    };
-  }
-
   const workflowFeature = mountWorkflowFeature({
     configPort: defaultWorkflowConfigPort,
     saveDeveloperStoredConfig: savePersistedDeveloperStoredConfig,
-    getDeepSeekBalanceState: () => {
-      const selected = getUploadServiceOverrides();
-      const current = credentialsStatePort.getCredentials();
-      if (selected && (selected.modelApiKey !== current.modelApiKey || selected.translationCredentialRef !== current.translationCredentialRef)) {
-        return { balanceCny: null, balanceChecked: false };
-      }
-      return credentialsStatePort.getDeepSeekBalanceState();
-    },
+    getDeepSeekBalanceState: () => credentialsStatePort.getDeepSeekBalanceState(),
     getDeveloperConfig: () => getDeveloperConfig(legacyState),
     getUploadState: uploadStatePort.getSnapshot,
     isDesktopMode: () => isDesktopMode(legacyState),
@@ -163,14 +137,8 @@ export function createWorkflowAndUpload({
     currentPageRanges: () => features.uploadFeature.currentPageRanges() || "",
     viewPort: workflowView.viewPort as import("@/features/ingest/domain.js").WorkflowViewPortLike,
     readSubmitValues,
-    getUploadServiceOverrides,
     renderPageRangeSummary: () => features.uploadFeature.renderPageRangeSummary(),
     hasBrowserCredentials: () => {
-      const selected = getUploadServiceOverrides();
-      if (selected) {
-        return Boolean((selected.ocrToken || selected.ocrCredentialRef)
-          && (isOcrOnly() || (selected.baseUrl && selected.model && (selected.modelApiKey || selected.translationCredentialRef))));
-      }
       if (isOcrOnly()) {
         const credentials = credentialsStatePort.getCredentials();
         const token = credentialsStatePort.getOcrToken({ defaultPaddleToken: () => defaultPaddleToken() }) || "";
@@ -178,7 +146,7 @@ export function createWorkflowAndUpload({
       }
       return Boolean(features.browserCredentialsFeature.hasBrowserCredentials());
     },
-    updateCredentialGate: (options?: unknown) => features.browserCredentialsFeature.updateCredentialGate(options),
+    updateCredentialGate: (options?: unknown) => features.browserCredentialsFeature.updateCredentialGate(options as any),
     fetchGlossaries,
     apiPrefix: API_PREFIX,
     setText,

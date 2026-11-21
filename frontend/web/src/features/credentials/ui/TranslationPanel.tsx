@@ -1,26 +1,23 @@
 import { CREDENTIAL_DOM_IDS } from "./credentials-dom-ids.js";
 import { useCredentialsController } from "./useCredentialsController.js";
-import { useCredentialSave } from "./useCredentialSave.js";
 import {
   getTranslationProviderDefinition,
+  TRANSLATION_API_PROTOCOL_OPTIONS,
   TRANSLATION_PROVIDER_DEFINITION,
+  TRANSLATION_THINKING_OPTIONS,
   TRANSLATION_PROVIDER_OPTIONS,
 } from "@/platform/config/providers.js";
 import { validationIcon } from "../domain/validation-icon.js";
-import { Check, ChevronDown, Code2, ExternalLink, Languages, PlugZap, Save, TriangleAlert } from "lucide-react";
+import { Box, Brain, Cable, Check, ChevronDown, Code2, ExternalLink, Gauge, KeyRound, Languages, Link2, PlugZap, Server, TriangleAlert } from "lucide-react";
 import { Select as SelectPrimitive } from "radix-ui";
 import { SecretInput } from "./SecretInput.js";
-import { DesktopPrivateApiAccess } from "./DesktopPrivateApiAccess.js";
-
-const API_PROTOCOL_LABELS: Record<string, string> = {
-  openai: "OpenAI Chat Completions",
-  openai_responses: "OpenAI Responses",
-  anthropic: "Anthropic Messages",
-};
+import { FieldLabel } from "./FieldLabel.jsx";
 
 const { browser: BROWSER_IDS } = CREDENTIAL_DOM_IDS;
 
-function TranslationProviderMark({ provider, compact = false }) {
+type TranslationProviderDefinition = ReturnType<typeof getTranslationProviderDefinition>;
+
+function TranslationProviderMark({ provider, compact = false }: { provider: TranslationProviderDefinition; compact?: boolean }) {
   if (provider.logoUrl) {
     return (
       <img
@@ -38,9 +35,8 @@ function TranslationProviderMark({ provider, compact = false }) {
   );
 }
 
-export function TranslationPanel({ disabled = false }: { disabled?: boolean } = {}) {
+export function TranslationPanel({ footerAction = null }: { footerAction?: React.ReactNode } = {}) {
   const { credentials, view, handlers, elementsRef } = useCredentialsController();
-  const { saving, save } = useCredentialSave(handlers?.saveTranslation, "翻译 API 设置已保存");
   const translationProvider = `${view.translationProvider || "custom"}`;
   const providerDefinition = getTranslationProviderDefinition(translationProvider);
   const fixedBaseUrl = providerDefinition.id !== "custom";
@@ -49,7 +45,6 @@ export function TranslationPanel({ disabled = false }: { disabled?: boolean } = 
   // 只有 tone === "pending" 才算「检测进行中」。此前用「有消息且无 tone」推断，
   // 会把中性提示（如「使用旧配置；请填写 Key 后检测」）误判成进行中并锁死按钮。
   const pending = validation.tone === "pending";
-  const locked = disabled || saving || view.dialogStatus?.tone === "pending";
   const badgeClasses = [
     "token-inline-status",
     content ? "" : "hidden",
@@ -65,22 +60,12 @@ export function TranslationPanel({ disabled = false }: { disabled?: boolean } = 
         <div className="credential-card-copy">
           <h3>{TRANSLATION_PROVIDER_DEFINITION.label}</h3>
         </div>
-        <span className="credential-card-tag">三种 API 协议</span>
       </div>
       <div className="credential-translation-grid">
-        <label className="credential-translation-protocol-field">
-          <span className="developer-label">API 协议</span>
-          <select aria-label="翻译 API 协议" defaultValue="openai" disabled={locked}
-            ref={(node) => { elementsRef.translationProtocolSelect = node || null; }}
-            onChange={() => { handlers?.markDirty?.(); handlers?.resetDeepSeekValidation?.(); }}>
-            {Object.entries(API_PROTOCOL_LABELS).map(([value, label]) => <option value={value} key={value}>{label}</option>)}
-          </select>
-        </label>
         <label className="credential-translation-provider-field">
-          <span className="developer-label">API 服务</span>
+          <FieldLabel icon={<Server />}>API 服务</FieldLabel>
           <SelectPrimitive.Root
             value={providerDefinition.id}
-            disabled={locked}
             onValueChange={(value) => handlers?.changeTranslationProvider?.(value)}
           >
             <SelectPrimitive.Trigger
@@ -127,7 +112,7 @@ export function TranslationPanel({ disabled = false }: { disabled?: boolean } = 
           </SelectPrimitive.Root>
         </label>
         <label className="credential-translation-url-field">
-          <span className="developer-label">API URL</span>
+          <FieldLabel icon={<Link2 />}>API URL</FieldLabel>
           <input
             id={BROWSER_IDS.modelBaseUrl}
             type="url"
@@ -137,14 +122,13 @@ export function TranslationPanel({ disabled = false }: { disabled?: boolean } = 
             defaultValue=""
             readOnly={fixedBaseUrl}
             aria-readonly={fixedBaseUrl}
-            title={fixedBaseUrl ? `${providerDefinition.label} 官方地址，由服务商选项管理` : "自定义 OpenAI 兼容 API 地址"}
+            title={fixedBaseUrl ? `${providerDefinition.label} 官方地址，由服务商选项管理` : "自定义 API 地址"}
             ref={(node) => { elementsRef.modelBaseUrlInput = node || null; }}
-            disabled={locked}
-            onInput={() => { handlers?.markDirty?.(); handlers?.resetDeepSeekValidation?.(); }}
+            onInput={() => handlers?.resetDeepSeekValidation?.()}
           />
         </label>
-        <div className="credential-translation-model-field">
-          <label htmlFor={BROWSER_IDS.modelName} className="developer-label">模型</label>
+        <label className="credential-translation-model-field">
+          <FieldLabel icon={<Box />}>模型</FieldLabel>
           <input
             id={BROWSER_IDS.modelName}
             type="text"
@@ -152,65 +136,23 @@ export function TranslationPanel({ disabled = false }: { disabled?: boolean } = 
             placeholder="模型名称"
             defaultValue=""
             ref={(node) => { elementsRef.modelNameInput = node || null; }}
-            disabled={locked}
-            onInput={() => { handlers?.markDirty?.(); handlers?.resetDeepSeekValidation?.(); }}
+            onInput={() => handlers?.resetDeepSeekValidation?.()}
           />
-          {view.translationModels?.items?.length ? (
-            <label htmlFor={BROWSER_IDS.modelOptions} className="credential-translation-model-list-field">
-              <span className="developer-label">已发现模型</span>
-              <select
-                id={BROWSER_IDS.modelOptions}
-                disabled={locked}
-                defaultValue=""
-                onChange={(event) => {
-                  const input = elementsRef.modelNameInput;
-                  if (input) input.value = event.currentTarget.value;
-                  handlers?.markDirty?.();
-                  handlers?.resetDeepSeekValidation?.();
-                }}
-              >
-                <option value="">选择模型以回填</option>
-                {view.translationModels.items.map((model) => <option key={model} value={model}>{model}</option>)}
-              </select>
-            </label>
-          ) : null}
-        </div>
-        <div className="credential-translation-key-field">
-          <label htmlFor={BROWSER_IDS.apiKey} className="developer-label">API Key</label>
-          <div className="credential-secret-input-row">
-            <SecretInput
-              id={BROWSER_IDS.apiKey}
-              secretLabel="翻译 API Key"
-              autoComplete="off"
-              placeholder={TRANSLATION_PROVIDER_DEFINITION.keyPlaceholder}
-              defaultValue=""
-              ref={(node) => { elementsRef.apiKeyInput = node || null; }}
-              disabled={locked}
-              onInput={() => {
-                if (elementsRef.apiKeyInput) delete elementsRef.apiKeyInput.dataset.clearCredential;
-                handlers?.markDirty?.();
-                handlers?.resetDeepSeekValidation?.();
-              }}
-            />
-            <button
-              type="button"
-              className="credential-inline-clear"
-              disabled={locked}
-              onClick={() => {
-                const input = elementsRef.apiKeyInput;
-                if (!input) return;
-                input.value = "";
-                input.dataset.clearCredential = "1";
-                handlers?.markDirty?.();
-                handlers?.resetDeepSeekValidation?.();
-              }}
-            >
-              清除
-            </button>
-          </div>
-        </div>
+        </label>
+        <label className="credential-translation-key-field">
+          <FieldLabel icon={<KeyRound />}>API Key</FieldLabel>
+          <SecretInput
+            id={BROWSER_IDS.apiKey}
+            secretLabel="翻译 API Key"
+            autoComplete="off"
+            placeholder={TRANSLATION_PROVIDER_DEFINITION.keyPlaceholder}
+            defaultValue=""
+            ref={(node) => { elementsRef.apiKeyInput = node || null; }}
+            onInput={() => handlers?.resetDeepSeekValidation?.()}
+          />
+        </label>
         <label className="credential-translation-workers-field">
-          <span className="developer-label">并发数</span>
+          <FieldLabel icon={<Gauge />}>并发数</FieldLabel>
           <input
             id={BROWSER_IDS.translationWorkers}
             type="number"
@@ -224,9 +166,34 @@ export function TranslationPanel({ disabled = false }: { disabled?: boolean } = 
             aria-label="翻译并发数"
             defaultValue=""
             ref={(node) => { elementsRef.translationWorkersInput = node || null; }}
-            disabled={locked}
-            onInput={() => handlers?.markDirty?.()}
           />
+        </label>
+        <label className="credential-translation-protocol-field">
+          <FieldLabel icon={<Cable />}>接口协议</FieldLabel>
+          <select
+            id={BROWSER_IDS.translationProtocol}
+            defaultValue={providerDefinition.protocol}
+            title="翻译请求用哪种接口格式。Anthropic 官方用 Anthropic 格式，其余用 OpenAI Responses 格式（/chat/completions 已去掉）。"
+            ref={(node) => { elementsRef.translationProtocolSelect = node || null; }}
+            onChange={() => handlers?.resetDeepSeekValidation?.()}
+          >
+            {TRANSLATION_API_PROTOCOL_OPTIONS.map((option) => (
+              <option key={option.id} value={option.id}>{`${option.label}（${option.hint}）`}</option>
+            ))}
+          </select>
+        </label>
+        <label className="credential-translation-thinking-field">
+          <FieldLabel icon={<Brain />}>思考深度</FieldLabel>
+          <select
+            id={BROWSER_IDS.translationThinking}
+            defaultValue="off"
+            title="默认关闭，翻译一般用不着思考。自动：能关就关。调深会更慢、更贵；服务商不支持的档位会自动退回。"
+            ref={(node) => { elementsRef.translationThinkingSelect = node || null; }}
+          >
+            {TRANSLATION_THINKING_OPTIONS.map((option) => (
+              <option key={option.id} value={option.id}>{option.label}</option>
+            ))}
+          </select>
         </label>
       </div>
       {providerDefinition.id === "custom" ? (
@@ -235,25 +202,13 @@ export function TranslationPanel({ disabled = false }: { disabled?: boolean } = 
           自定义 API 建议并发不超过 5，过高可能导致接口异常。
         </p>
       ) : null}
-      {providerDefinition.id === "custom" ? <DesktopPrivateApiAccess /> : null}
       <div className="credential-card-footer">
         <div className="credential-card-actions">
-          <button type="button" className="app-button secondary" disabled={locked}
-            aria-busy={saving} onClick={() => void save()}><Save aria-hidden="true" />{saving ? "正在保存…" : "保存翻译 API"}</button>
-          <button
-            type="button"
-            className="app-button secondary"
-            disabled={locked || view.translationModels?.loading}
-            aria-busy={view.translationModels?.loading}
-            onClick={() => void handlers?.fetchModels?.()}
-          >
-            {view.translationModels?.loading ? "正在拉取模型…" : "拉取模型"}
-          </button>
           <button
             id={BROWSER_IDS.deepSeekValidateButton}
             type="button"
             className="app-button secondary"
-            disabled={locked || pending}
+            disabled={pending}
             onClick={() => handlers?.validateDeepSeek?.()}
           >
             <PlugZap aria-hidden="true" />
@@ -263,17 +218,11 @@ export function TranslationPanel({ disabled = false }: { disabled?: boolean } = 
             id={BROWSER_IDS.deepSeekValidation}
             className={badgeClasses}
             title={content || TRANSLATION_PROVIDER_DEFINITION.validationIdleMessage}
-            aria-label={content || TRANSLATION_PROVIDER_DEFINITION.validationIdleMessage}
             role="status"
             aria-live="polite"
           >
             {validationIcon(validation.tone, content)}
           </span>
-          {view.translationModels?.message ? (
-            <span className={`credential-model-list-status is-${view.translationModels.tone || "idle"}`} role="status" aria-live="polite">
-              {view.translationModels.message}
-            </span>
-          ) : null}
           {providerDefinition.docsUrl ? (
             <a className="credential-card-link" href={providerDefinition.docsUrl} target="_blank" rel="noopener noreferrer">
               {providerDefinition.docsLabel}
@@ -301,10 +250,8 @@ export function TranslationPanel({ disabled = false }: { disabled?: boolean } = 
             <span id={BROWSER_IDS.deepSeekTopUpLink} className="hidden" />
           )}
         </div>
+        {footerAction}
       </div>
-      {validation.tone === "error" && content ? (
-        <p className="credential-validation-error" role="alert">{content}</p>
-      ) : null}
     </section>
   );
 }

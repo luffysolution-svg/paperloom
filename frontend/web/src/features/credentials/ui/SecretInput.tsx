@@ -11,7 +11,7 @@ type SecretInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type"> & {
 
 export const SecretInput = forwardRef<HTMLInputElement, SecretInputProps>(
   function SecretInput({ secretLabel, className = "", disabled, ...inputProps }, ref) {
-    const [revealed, setRevealed] = useState(false);
+    const [revealed, setRevealed] = useState(true);
     const actionVerb = revealed ? "隐藏" : "显示";
     const actionLabel = /^[A-Za-z]/.test(secretLabel)
       ? `${actionVerb} ${secretLabel}`

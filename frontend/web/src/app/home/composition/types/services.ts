@@ -165,7 +165,6 @@ export type HomeServicesViews = {
     store: AppStore;
     setSelectedGlossaryId: (id: string) => unknown;
     setOcrOnly: (value: boolean) => unknown;
-    setTaskServiceSelection: (selection: Record<string, string> | null) => unknown;
     isOcrOnly: () => boolean;
   };
   statusArea: StatusAreaBag;
@@ -222,7 +221,6 @@ export type CreateHomeCompositionOptions = {
   validateOcrToken?: AsyncFn | null;
   validateDeepSeekToken?: AsyncFn;
   queryDeepSeekBalance?: AsyncFn;
-  listModels?: AsyncFn;
   createCredential?: AsyncFn;
   updateCredential?: AsyncFn;
   checkApiConnectivity?: AsyncFn | null;

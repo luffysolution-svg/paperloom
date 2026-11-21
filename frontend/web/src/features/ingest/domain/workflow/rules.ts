@@ -1,3 +1,8 @@
+import {
+  normalizeTranslationApiProtocol,
+  normalizeTranslationThinking,
+} from "@/platform/config/providers.js";
+
 export function positiveInteger(value, fallback) {
   const fallbackNumber = Number(fallback);
   const normalizedFallback = Number.isFinite(fallbackNumber) && fallbackNumber > 0
@@ -29,7 +34,8 @@ export function buildDeveloperConfigWithDefaults({
     mathMode: normalizeMathMode(source.mathMode),
     model: source.model || defaultModelName(),
     baseUrl: source.baseUrl || defaultModelBaseUrl(),
-    apiProtocol: ["openai", "openai_responses", "anthropic"].includes(source.apiProtocol) ? source.apiProtocol : "openai",
+    apiProtocol: normalizeTranslationApiProtocol(source.apiProtocol),
+    thinking: normalizeTranslationThinking(source.thinking),
     glossaryId: `${source.glossaryId || source.glossary_id || ""}`.trim(),
     workers: positiveInteger(source.workers, defaults.workers),
     batchSize: positiveInteger(source.batchSize, defaults.batchSize),

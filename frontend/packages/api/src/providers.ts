@@ -27,11 +27,3 @@ export async function validateDeepSeekToken(apiPrefix: string, payload: unknown)
 export async function queryDeepSeekBalance(apiPrefix: string, payload: unknown): Promise<any> {
   return submitJson(buildApiEndpoint(apiPrefix, "providers/deepseek/balance"), payload, probeOptions);
 }
-
-export async function listModels(apiPrefix: string, payload: unknown): Promise<any> {
-  return submitJson(buildApiEndpoint(apiPrefix, "providers/models"), payload, probeOptions);
-}
-
-export async function setPrivateProviderAccess(apiPrefix: string, payload: { enabled: boolean }): Promise<any> {
-  return submitJson(buildApiEndpoint(apiPrefix, "providers/private-access"), payload, probeOptions);
-}
