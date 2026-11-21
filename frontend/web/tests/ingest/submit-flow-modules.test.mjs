@@ -92,6 +92,21 @@ test("runSubmitFlow returns invalid_page_ranges before any request", async () =>
   assert.equal(requested, false);
 });
 
+test("桌面首次提交打开设置，返回翻译窗口时不残留首次配置报错", async () => {
+  let opened = 0;
+  const h = createHarness({
+    desktopMode: true,
+    desktopConfigured: false,
+    openSetupDialog: () => { opened++; },
+  });
+  assert.equal((await runSubmitFlow(h)).status, "blocked");
+  assert.equal(opened, 1);
+  assert.equal(h.errors.at(-1).text, "-");
+  h.desktopConfigured = true;
+  assert.equal((await runSubmitFlow(h)).status, "submitted");
+  assert.equal(opened, 1);
+});
+
 // provider 预检（DeepSeek 余额 / OCR Token）不再挡在提交前面。
 //
 // 它们以前各是一次第三方网络往返（余额检测超时上限 12 秒），而 OCR 校验缓存是

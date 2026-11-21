@@ -577,12 +577,15 @@ fn resolve_asset(
     }
     candidates
         .into_iter()
-        .find(|candidate| is_safe_relative(candidate) && images_dir.join(candidate).is_file())
+        .find(|candidate| safe_image(images_dir, candidate).is_some())
 }
 
-fn is_safe_relative(path: &str) -> bool {
-    !path.is_empty()
-        && Path::new(path)
-            .components()
-            .all(|component| matches!(component, Component::Normal(_) | Component::CurDir))
+pub(super) fn safe_image(root: &Path, relative: &str) -> Option<std::path::PathBuf> {
+    if relative.is_empty() || !Path::new(relative).components().all(|part| {
+        matches!(part, Component::Normal(_) | Component::CurDir)
+    }) {
+        return None;
+    }
+    let path = root.join(relative).canonicalize().ok()?;
+    (path.starts_with(root.canonicalize().ok()?) && path.is_file()).then_some(path)
 }

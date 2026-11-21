@@ -24,6 +24,9 @@ const { createPortAllocator } = require("./src/main/port-allocator");
 const { createLocalGateway } = require("./src/main/local-gateway");
 const { resolveSystemProxy } = require("./src/main/system-proxy");
 const { createBackendRuntime } = require("./src/main/backend-runtime");
+const { stopChildGracefully } = require("./src/main/graceful-stop");
+const { createRetainpdfHome } = require("./src/main/retainpdf-home");
+const { createCliInstaller } = require("./src/main/cli-install");
 const { createDesktopConfigStore } = require("./src/main/desktop-config");
 const { createDesktopLogger } = require("./src/main/desktop-logging");
 const { createDesktopWindows } = require("./src/main/desktop-windows");
@@ -68,7 +71,38 @@ const backendHttp = createBackendHttp({
 const { canReuseExistingBackend } = backendHttp;
 const portOccupant = createPortOccupant({ canConnectToPort, logger: console });
 const { killProcessTreeSync } = portOccupant;
+function retainpdfHomeCliPath() {
+  const fileName = process.platform === "win32" ? "retainpdf.exe" : "retainpdf";
+  const repoRoot = path.join(__dirname, "..", "..");
+  const candidates = [
+    process.env.RETAINPDF_CLI || "",
+    path.join(resolveBackendRoot(), "bin", fileName),
+    ...(app.isPackaged ? [] : [
+      path.join(repoRoot, "target", "release", fileName),
+      path.join(repoRoot, "target", "debug", fileName),
+    ]),
+  ];
+  return candidates.find((candidate) => candidate && fs.existsSync(candidate)) || "";
+}
+
+/** ~/.paperloom 的设置（命令行不在或读不了时为 null）。 */
+function readRetainpdfSettings() {
+  try {
+    return retainpdfHome.exportSettings();
+  } catch (error) {
+    logDesktopError?.(`[desktop] ~/.paperloom unreadable: ${error?.message || error}`);
+    return null;
+  }
+}
+const retainpdfHome = createRetainpdfHome({ resolveCli: retainpdfHomeCliPath });
+const cliInstaller = createCliInstaller({ resolveSource: retainpdfHomeCliPath });
+let activeDataRoot;
+function resolveDataRoot() {
+  return activeDataRoot || path.join(app.getPath("userData"), "data");
+}
 const desktopConfigStore = createDesktopConfigStore(app, {
+  retainpdfHome,
+  resolveDataRoot,
   desktopApiKey: DESKTOP_API_KEY,
 });
 const {
@@ -134,6 +168,7 @@ function closeSplashWindow() {
 const desktopWindows = createDesktopWindows(app, {
   appRoot: __dirname,
   closeSplashWindow,
+  getApiBase: () => buildDesktopRuntimeConfig(loadDesktopConfig()).apiBase,
   getFrontendBaseUrl: () => frontendGatewayBaseUrl,
   isQuitting: () => isQuitting,
   loadDesktopConfig,
@@ -247,7 +282,9 @@ async function startBundledBackend() {
     "SourceHanSerifSC-Bold.otf",
   );
   const bundledTypstFontDir = path.join(backendRoot, "fonts");
-  const dataRoot = path.join(app.getPath("userData"), "data");
+  const settings = readRetainpdfSettings();
+  activeDataRoot = settings?.backend?.data_dir || path.join(app.getPath("userData"), "data");
+  const dataRoot = activeDataRoot;
   const rustApiRoot = path.join(dataRoot, "rust_api");
   const typstPackagePath = path.join(backendRoot, "typst-packages");
   const typstPackageCachePath = path.join(dataRoot, "typst-package-cache");
@@ -402,6 +439,7 @@ async function startBundledBackend() {
     const jobsSuperviseForEnv =
       process.env.RUST_API_JOBS_SUPERVISE || (app.isPackaged ? "1" : "");
     const env = buildBackendEnv({
+      retainpdfSettings: settings,
       apiPort,
       allowPrivateProviderUrls: loadDesktopConfig().allowPrivateProviderUrls,
       backendRoot,
@@ -592,21 +630,20 @@ app.on("window-all-closed", () => {
   }
 });
 
-app.on("before-quit", () => {
+let shutdown = null;
+app.on("before-quit", (event) => {
   isQuitting = true;
   backendStopping = true;
-  // Synchronously terminate whole process trees: plain ChildProcess.kill()
-  // only kills the direct child, leaving supervised grandchildren (jobsd,
-  // workers) orphaned and holding ports. Never touch foreign
-  // backends: skip rust_api when reusing an external one.
-  if (
-    !usingExternalBackend &&
-    backendChild &&
-    !backendChild.killed &&
-    backendChild.pid
-  ) {
+  if (usingExternalBackend || !backendChild?.pid) return;
+  if (process.platform === "win32") {
     killProcessTreeSync(backendChild.pid);
+    return;
   }
+  event.preventDefault();
+  shutdown ??= stopChildGracefully(backendChild).then(() => {
+    backendChild = null;
+    app.quit();
+  });
 });
 
 ipcMain.handle("desktop:invoke", async (event, command, args = {}) => {
@@ -617,18 +654,40 @@ ipcMain.handle("desktop:invoke", async (event, command, args = {}) => {
     cancel_app_update: desktopUpdater.cancel,
     install_app_update: desktopUpdater.install,
   };
+  const frame = event.senderFrame;
+  const url = frame?.url || "";
+  const isLocalPage = frontendGatewayBaseUrl && url.startsWith(`${frontendGatewayBaseUrl}/`);
+  const isFilePage = url.startsWith(require("url").pathToFileURL(resolveFrontendRoot() + path.sep).href);
+  if (frame !== event.sender.mainFrame || (!isLocalPage && !isFilePage)) throw new Error("桌面命令只允许软件主页面调用");
   if (Object.hasOwn(updateCommands, command) || command === "open_backup_location") {
-    const frame = event.senderFrame;
-    const url = frame?.url || "";
-    const isLocalPage = frontendGatewayBaseUrl && url.startsWith(`${frontendGatewayBaseUrl}/`);
-    const isFilePage = url.startsWith(require("url").pathToFileURL(resolveFrontendRoot() + path.sep).href);
-    if (frame !== event.sender.mainFrame || (!isLocalPage && !isFilePage)) throw new Error("桌面命令只允许软件主页面调用");
     if (command === "open_backup_location") {
-      return openBackupLocation(path.join(app.getPath("userData"), "data"), args, shell);
+      return openBackupLocation(resolveDataRoot(), args, shell);
     }
     return updateCommands[command]();
   }
   switch (command) {
+    case "cli_status":
+      return cliInstaller.status();
+    case "install_cli":
+      return cliInstaller.install();
+    case "pick_directory": {
+      const owner = BrowserWindow.fromWebContents(event.sender);
+      const result = await dialog.showOpenDialog(owner, {
+        title: args.title || "选择文件夹", defaultPath: args.defaultPath || undefined,
+        properties: ["openDirectory", "createDirectory"],
+      });
+      return { path: result.canceled ? null : result.filePaths[0] || null };
+    }
+    case "focus_window":
+      showMainWindow();
+      return { ok: true };
+    case "open_backup_directory": {
+      const dir = path.join(resolveDataRoot(), "backups", "db");
+      fs.mkdirSync(dir, { recursive: true });
+      const error = await shell.openPath(dir);
+      if (error) throw new Error(error);
+      return { ok: true };
+    }
     case "load_desktop_config": {
       const config = loadDesktopConfig();
       return buildDesktopConfigResponse(config);
@@ -638,7 +697,7 @@ ipcMain.handle("desktop:invoke", async (event, command, args = {}) => {
       return buildDesktopConfigResponse(config);
     }
     case "open_output_directory": {
-      const outputDir = path.join(app.getPath("userData"), "data", "jobs");
+      const outputDir = path.join(resolveDataRoot(), "jobs");
       fs.mkdirSync(outputDir, { recursive: true });
       const result = await shell.openPath(outputDir);
       if (result) {

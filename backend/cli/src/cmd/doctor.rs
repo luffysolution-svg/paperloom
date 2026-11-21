@@ -1,4 +1,4 @@
-//! `retainpdf doctor`:逐项检查,告诉你哪里不对、怎么改。
+//! `paperloom doctor`:逐项检查,告诉你哪里不对、怎么改。
 
 use std::process::ExitCode;
 
@@ -59,7 +59,7 @@ pub fn run(ctx: &Ctx) -> Result<ExitCode> {
                 None => check(
                     "翻译 API Key",
                     Level::Bad,
-                    format!("没填。运行 `retainpdf setup`,或 `retainpdf config set providers.{}.api_key`", settings.translation.provider),
+                    format!("没填。运行 `paperloom setup`,或 `paperloom config set providers.{}.api_key`", settings.translation.provider),
                 ),
             });
             if settings.translation.base_url.is_empty() {
@@ -67,7 +67,7 @@ pub fn run(ctx: &Ctx) -> Result<ExitCode> {
             }
             checks.push(match &settings.ocr_token {
                 Some(_) => check("OCR token", Level::Ok, settings.ocr_provider.clone()),
-                None => check("OCR token", Level::Bad, format!("没填({})。运行 `retainpdf setup`", settings.ocr_provider)),
+                None => check("OCR token", Level::Bad, format!("没填({})。运行 `paperloom setup`", settings.ocr_provider)),
             });
         }
         Err(error) => checks.push(check("配置文件", Level::Bad, format!("{error:#}"))),
@@ -103,7 +103,7 @@ pub fn run(ctx: &Ctx) -> Result<ExitCode> {
         checks.push(if result == "ok" {
             check("数据库", Level::Ok, "完整性检查通过")
         } else {
-            check("数据库", Level::Bad, format!("完整性检查没通过:{result}。可以 `retainpdf backup list` 找一份备份恢复"))
+            check("数据库", Level::Bad, format!("完整性检查没通过:{result}。可以 `paperloom backup list` 找一份备份恢复"))
         });
         let sync = sync_summary(&conn);
         if sync["enabled"].as_bool() == Some(true) {
@@ -121,7 +121,7 @@ pub fn run(ctx: &Ctx) -> Result<ExitCode> {
     checks.push(match backup["last_auto"].as_str().and_then(hours_since) {
         Some(hours) if hours <= 48 => check("自动备份", Level::Ok, format!("{hours} 小时前")),
         Some(hours) => check("自动备份", Level::Warn, format!("最近一次是 {} 天前(后端开着时每天备份)", hours / 24)),
-        None if ctx.db_path().is_file() => check("自动备份", Level::Warn, "还没有。后端开着时会每天自动备份,也可以 `retainpdf backup create`"),
+        None if ctx.db_path().is_file() => check("自动备份", Level::Warn, "还没有。后端开着时会每天自动备份,也可以 `paperloom backup create`"),
         None => check("自动备份", Level::Ok, "还没有书库,不需要"),
     });
 
@@ -141,7 +141,7 @@ pub fn run(ctx: &Ctx) -> Result<ExitCode> {
         BackendState::Unreachable(runtime) => {
             checks.push(check("后端", Level::Bad, format!("进程 {} 在,但连不上 {}", runtime.pid, runtime.api_base)))
         }
-        BackendState::Stopped => checks.push(check("后端", Level::Warn, "没在运行(翻译、下载要先打开 RetainPDF)")),
+        BackendState::Stopped => checks.push(check("后端", Level::Warn, "没在运行(翻译、下载要先打开 PaperLoom)")),
     }
 
     let worst = checks.iter().map(|c| c.level).fold(Level::Ok, |a, b| match (a, b) {

@@ -24,6 +24,23 @@ const { defaultCredentialsStatePort } = await import("../../src/features/credent
 const createServices = (overrides) => createCredentialServices(createHomeComposition, overrides);
 const { waitFor, waitForDialogReady } = credentialsDialogWaits(dom);
 
+test("桌面启动后，首次提交能读到已保存的 OCR 与翻译配置", async () => {
+  const { bootstrapDesktop } = await import("../../src/app/desktop/bootstrap.ts");
+  const { desktopBootstrapState } = await import("../../src/platform/desktop/state.ts");
+  const services = createServices({ initialDesktopMode: true, legacyState: desktopBootstrapState });
+  try {
+    await bootstrapDesktop({
+      firstRunCompleted: false,
+      browserConfig: { ocrProvider: "mineru", mineruToken: "fixture", modelApiKey: "fixture" },
+      developerConfig: {},
+    });
+    const result = await services.bridge.submitForm({ preventDefault() {} });
+    assert.equal(result.readiness.reason, "missing_upload");
+  } finally {
+    services.dispose();
+  }
+});
+
 test("CredentialsDialog：OCR/DeepSeek 校验三态(缺失/错误/通过)", async () => {
   const services = createServices();
   const { host, root } = await bootHomeApp(dom, { services });

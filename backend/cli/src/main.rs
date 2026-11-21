@@ -1,6 +1,6 @@
-//! `retainpdf`:RetainPDF 的命令行。
+//! `paperloom`:PaperLoom 的命令行。
 //!
-//! 配置在 `~/.retainpdf/`(见 retainpdf-config),与桌面版共用。后端开着时会改东西的命令转给
+//! 配置在 `~/.paperloom/`(见 retainpdf-config),与桌面版共用。后端开着时会改东西的命令转给
 //! 后端,没开时直接操作数据目录(见 `context.rs`)。默认输出给人看,`--json` 给脚本。
 
 mod cmd;
@@ -16,7 +16,7 @@ use crate::cmd::{backup, config, doctor, setup, status, sync};
 use crate::context::Ctx;
 
 #[derive(Parser)]
-#[command(name = "retainpdf", version, about = "RetainPDF 命令行:配置、状态、环境检查、备份、同步")]
+#[command(name = "paperloom", version, about = "PaperLoom 命令行:配置、状态、环境检查、备份、同步")]
 struct Cli {
     /// 输出 JSON(给脚本用)
     #[arg(long, global = true)]
@@ -32,7 +32,7 @@ struct Cli {
 enum Command {
     /// 一问一答地配置:翻译服务商、模型、并发、API Key、OCR
     Setup,
-    /// 查看和修改配置(~/.retainpdf/)
+    /// 查看和修改配置(~/.paperloom/)
     Config {
         #[command(subcommand)]
         action: config::ConfigCommand,

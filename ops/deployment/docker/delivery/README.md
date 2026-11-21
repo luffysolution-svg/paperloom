@@ -41,8 +41,8 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml stop
 - `.env`：本机部署的内部 key；可加入 `WEB_PORT=45002` 修改网页端口。若改了端口或访问域名，同时设置 `PAPERLOOM_PUBLIC_BASE_URL`，让 Obsidian 笔记里的链接指向正确地址。
 - `docker/app.env`：容器路径、上传上限、并发数和字体。默认最大 200MiB／300 页、4 个并发任务。
 - `docker/web.env`：浏览器的 OCR／模型默认选项。`FRONT_*_TOKEN`、`FRONT_MODEL_API_KEY` 会写入浏览器可读的配置；推荐留空，让使用者在页面中填写。`FRONT_X_API_KEY` 保持为空。
-- `docker-compose.yml`：持久化、健康检查、端口与可选目录挂载。
-- `docker-compose.build.yml`：从本仓库构建 `paperloom-app:local` 和 `paperloom-web:local`，并传入随机内部 key；它覆盖模板 auth 文件中的占位 key。
+- `docker-compose.yml` 将本机生成的密钥传给后端和 Web 代理，并配置持久化、健康检查、端口与可选目录挂载。
+- `docker-compose.build.yml` 从本仓库构建 `paperloom-app:local` 和 `paperloom-web:local`。
 
 默认只监听宿主机 `127.0.0.1`，网页为 `45001`，完整 API 为 `46000`，multipart API 为 `47000`。不需要直接调用 API 时，可以删去 `app` 的两个宿主机端口映射；容器之间仍走内部网络。PaperLoom 目前是单工作区服务，面向公网时请在反向代理配置独立访问门禁。示例见 [NGINX 配置](../../nginx/retainpdf.example.conf)。
 
@@ -74,6 +74,6 @@ Docker 不会继承 Electron 解析的 Windows 系统代理。如宿主机需要
 
 如果你使用自己发布的镜像，可以通过 `APP_IMAGE` 和 `WEB_IMAGE` 指定镜像地址。直接从源码构建时不需要配置这些变量。
 
-使用镜像时只传 `docker-compose.yml`，并把 `docker/auth.local.json` 和 `docker/web.env` 中的内部 key 配成同一个随机值，不能沿用模板的占位 key。确认镜像地址可访问后，再执行 `docker compose pull`。本地源码构建不需要这一步。
+使用镜像时先运行 `python3 init-local.py` 生成本机密钥，再用 `docker compose pull` 和 `docker compose up -d` 启动。已有部署可在 .env 中设置 PAPERLOOM_API_KEY 为当前私有密钥。
 
 镜像运行用户、目录权限和后端端口详见 [后端容器说明](../backend/README.md)。软件及捆绑运行时的许可说明见 [第三方通知](../../../../THIRD_PARTY_NOTICES.md)。

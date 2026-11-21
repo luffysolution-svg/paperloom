@@ -574,6 +574,15 @@ fn source_language_suffix_is_normalized() {
 }
 
 #[test]
+fn exported_images_must_resolve_inside_the_images_directory() {
+    let fixture = golden_root().join("ocr");
+    let root = fixture.join("normalized");
+    assert!(super::render::safe_image(&root, "document.v1.json").is_some());
+    assert!(super::render::safe_image(&root, "../normalized/document.v1.json").is_none());
+    assert!(super::render::safe_image(&root, &fixture.to_string_lossy()).is_none());
+}
+
+#[test]
 fn public_base_url_switches_open_link_to_web_reader() {
     let uri = |base: Option<&str>| NoteMeta::from_document(None, "job 1", "en", base).paperloom_uri;
     assert_eq!(uri(None), "paperloom://open?job=job+1");

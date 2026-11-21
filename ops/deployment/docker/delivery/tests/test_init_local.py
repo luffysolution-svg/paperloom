@@ -41,3 +41,10 @@ def test_separate_deployments_receive_different_keys(tmp_path):
     _module().initialize(first)
     _module().initialize(second)
     assert (first / ".env").read_bytes() != (second / ".env").read_bytes()
+
+
+def test_initializes_existing_port_only_configuration(tmp_path):
+    path = tmp_path / ".env"
+    path.write_bytes(b"WEB_PORT=45002")
+    _module().initialize(tmp_path)
+    assert re.fullmatch(rb"WEB_PORT=45002\nPAPERLOOM_API_KEY=[0-9a-f]{64}\n", path.read_bytes())

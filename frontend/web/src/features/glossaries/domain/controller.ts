@@ -2,11 +2,11 @@ import {
   completeDownloadToast,
   failDownloadToast,
   showDownloadPreparing,
+  pickDownloadTargetWithFeedback,
   updateDownloadProgress,
 } from "@/platform/utils/download-feedback.js";
 import {
   downloadProtectedResponse,
-  prepareDownloadTarget,
 } from "@/platform/utils/downloads.js";
 
 import type {
@@ -263,14 +263,13 @@ export function mountGlossariesFeature({
     }
     const fallbackName = `${state.currentDetail?.name || state.selectedId || "glossary"}.csv`;
     // 惰性:响应确认成功之后才问保存位置（见 downloads.ts）。
-    const downloadTarget = (filename?: string) => prepareDownloadTarget(filename || fallbackName);
     viewPort.setStatus("正在导出 CSV...");
     try {
       showDownloadPreparing(fallbackName);
       const filename = await downloadProtectedResponse({
         fetchResponse: () => exportGlossaryCsv(apiPrefix, state.selectedId) as Promise<Response>,
         fallbackName,
-        target: downloadTarget,
+        target: pickDownloadTargetWithFeedback,
         onProgress: ({ filename: progressFilename, receivedBytes, totalBytes, percent, done }: GlossaryDownloadProgress) => {
           if (done) {
             completeDownloadToast(progressFilename);
@@ -279,7 +278,8 @@ export function mountGlossariesFeature({
           updateDownloadProgress({ filename: progressFilename, receivedBytes, totalBytes, percent });
         },
       });
-      viewPort.setStatus(`已导出 ${filename}。`, "valid");
+      if (filename) viewPort.setStatus(`已导出 ${filename}。`, "valid");
+      else viewPort.setStatus("已取消导出");
     } catch (err) {
       const message = errorText(err);
       viewPort.setStatus(message, "error");

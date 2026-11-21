@@ -47,10 +47,10 @@ function fakeBackend() {
     const method = init.method || "GET";
     const path = new URL(`${url}`, "http://localhost").pathname;
     calls.push({ method, path });
-    const restore = path.match(/\/api\/v1\/backups\/([^/]+)\/restore$/);
-    const one = path.match(/\/api\/v1\/backups\/([^/]+)$/);
-    if (path.endsWith("/api/v1/backups") && method === "GET") return reply(200, { code: 0, message: "ok", data: snapshot() });
-    if (path.endsWith("/api/v1/backups") && method === "POST") {
+    const restore = path.match(/\/api\/v1\/database-backups\/([^/]+)\/restore$/);
+    const one = path.match(/\/api\/v1\/database-backups\/([^/]+)$/);
+    if (path.endsWith("/api/v1/database-backups") && method === "GET") return reply(200, { code: 0, message: "ok", data: snapshot() });
+    if (path.endsWith("/api/v1/database-backups") && method === "POST") {
       made += 1;
       const fresh = item(`manual-20261009T10000${made}000Z-v19`, "manual", `2026-10-09T10:00:0${made}Z`);
       state.items.unshift(fresh);
@@ -120,7 +120,7 @@ test("立即备份、恢复（先确认；有任务在跑时被拒）、删除�
   click(dom, host.querySelector('[data-backup-action="confirm-restore"]'));
   await waitFor(() => reloaded === 1);
   assert.match(text(), /已恢复/);
-  assert.ok(backend.calls.some((c) => c.method === "POST" && c.path.endsWith(`/api/v1/backups/${target}/restore`)));
+  assert.ok(backend.calls.some((c) => c.method === "POST" && c.path.endsWith(`/api/v1/database-backups/${target}/restore`)));
 
   const manual = rows().find((row) => row.querySelector('[data-backup-action="delete"]'));
   const manualId = manual.getAttribute("data-backup-id");

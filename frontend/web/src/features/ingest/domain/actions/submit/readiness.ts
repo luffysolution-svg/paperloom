@@ -45,8 +45,8 @@ export function handleSubmitReadinessBlock({
 }: HandleSubmitReadinessBlockOptions) {
   switch (readiness?.reason) {
     case SUBMIT_BLOCK_REASONS.DESKTOP_NOT_CONFIGURED:
+      setText("error-box", openSetupDialog ? "-" : "请先完成首次配置。");
       openSetupDialog?.();
-      setText("error-box", "请先完成首次配置。");
       return true;
     case SUBMIT_BLOCK_REASONS.MISSING_CREDENTIALS:
       setText("error-box", "请先填写当前 OCR Provider 凭证。");

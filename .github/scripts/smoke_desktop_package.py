@@ -90,7 +90,8 @@ def main() -> None:
         nonlocal process, log
         log_path = root / f"startup-{round_}.log"
         log = log_path.open("wb")
-        env = dict(os.environ, ELECTRON_ENABLE_LOGGING="1")
+        env = dict(os.environ, ELECTRON_ENABLE_LOGGING="1",
+                   RETAINPDF_HOME=str(root / "cli-home"), RETAINPDF_DATA_DIR=str(profile / "data"))
         env.pop("ELECTRON_RUN_AS_NODE", None)
         process = subprocess.Popen(
             [str(args.app.resolve()), f"--user-data-dir={profile}", "--no-sandbox", "--disable-gpu"],
@@ -179,10 +180,23 @@ def main() -> None:
             assert response.headers["Cache-Control"] == "no-store"
             assert json.load(response)["data"]["config"] == config
 
+        resources = (args.app.parent.parent / "Resources" if os.sys.platform == "darwin"
+                     else args.app.parent / "resources")
+        cli = resources / "backend/bin" / ("retainpdf.exe" if os.name == "nt" else "retainpdf")
+        if not cli.is_file():
+            raise RuntimeError(f"Missing packaged CLI at {cli}")
+
         def renderer_restored():
-            stored = json.loads((profile / "desktop-config.json").read_text(encoding="utf-8"))
-            return (all(stored.get(k) == v for k, v in config["browser_config"].items())
-                    and stored.get("developerConfig", {}).get("translationProfiles", {}).get("custom", {}).get("apiKey")
+            raw = subprocess.check_output([str(cli), "config", "export", "--with-secrets"],
+                                          env=dict(os.environ, RETAINPDF_HOME=str(root / "cli-home")),
+                                          timeout=15)
+            stored = json.loads(raw)
+            expected = config["browser_config"]
+            return (stored["ocr"]["provider"] == expected["ocrProvider"]
+                    and stored["ocr"]["tokens"]["mineru"] == expected["mineruToken"]
+                    and stored["ocr"]["tokens"]["paddle"] == expected["paddleToken"]
+                    and stored["translation"]["api_key"] == expected["modelApiKey"]
+                    and stored["providers"]["custom"]["api_key"]
                     == config["developer_config"]["translationProfiles"]["custom"]["apiKey"])
 
         eventually(renderer_restored, "renderer to persist restored OCR and translation keys")

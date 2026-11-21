@@ -1,4 +1,4 @@
-import { formatTransferSize } from "./downloads.js";
+import { formatTransferSize, prepareDownloadTarget } from "./downloads.js";
 
 export interface DownloadToastState {
   visible?: boolean;
@@ -86,6 +86,15 @@ export function showDownloadPreparing(filename = "") {
     percent: NaN,
     tone: "progress",
   });
+}
+
+export async function pickDownloadTargetWithFeedback(filename: string) {
+  const target = await prepareDownloadTarget(filename);
+  if (target.kind === "aborted") {
+    clearHideTimer();
+    toastElement()?.hide();
+  }
+  return target;
 }
 
 export function updateDownloadProgress({

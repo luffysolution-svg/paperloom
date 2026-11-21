@@ -43,9 +43,9 @@ impl Db {
         let now = now_iso();
         conn.execute(
             r#"
-            INSERT INTO document_external_refs (source, library_id, item_key, attachment_key, document_id, metadata_json, collection_path, created_at, updated_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)
-            ON CONFLICT(source, library_id, attachment_key) DO UPDATE SET
+            INSERT INTO document_external_refs (owner_user_id, source, library_id, item_key, attachment_key, document_id, metadata_json, collection_path, created_at, updated_at)
+            VALUES ((SELECT owner_user_id FROM documents WHERE document_id = ?5), ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)
+            ON CONFLICT(owner_user_id, source, library_id, attachment_key) DO UPDATE SET
                 item_key = excluded.item_key,
                 document_id = excluded.document_id,
                 metadata_json = excluded.metadata_json,
@@ -76,12 +76,12 @@ impl Db {
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
-    pub fn external_refs_for_library(&self, source: &str, library_id: &str) -> Result<Vec<ExternalRefRecord>> {
+    pub fn external_refs_for_library(&self, owner: &str, source: &str, library_id: &str) -> Result<Vec<ExternalRefRecord>> {
         let conn = self.connect()?;
         let mut stmt = conn.prepare(&format!(
-            "SELECT {COLUMNS} FROM document_external_refs WHERE source = ?1 AND library_id = ?2"
+            "SELECT {COLUMNS} FROM document_external_refs WHERE source = ?1 AND library_id = ?2 AND owner_user_id = ?3"
         ))?;
-        let rows = stmt.query_map(params![source, library_id], row_to_ref)?;
+        let rows = stmt.query_map(params![source, library_id, owner], row_to_ref)?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 

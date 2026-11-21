@@ -101,8 +101,8 @@ export function createCredentials({
       if (!persisted.firstRunCompleted) {
         persisted = await savePersistedDesktopConfig({ firstRunCompleted: true });
       }
-      setDesktopConfigured(legacyState, true);
     }
+    setDesktopConfigured(legacyState, true);
     await afterSave?.();
     return persisted;
   }

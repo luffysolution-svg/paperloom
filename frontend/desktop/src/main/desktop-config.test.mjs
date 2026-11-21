@@ -172,3 +172,168 @@ test("GLM-OCR remains independently saved locally and restores matching legacy t
     ...saved, glmOcrToken: "", ocrCredentialRef: "cred_glm",
   }).browserConfig.glmOcrToken, "legacy-glm");
 });
+
+const { createRetainpdfHome, changesFromDesktop, overlayExport } = require("./retainpdf-home.js");
+
+const fakeExport = {
+  translation: { provider: "qwen", model: "qwen3.8-flash", base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1", workers: 30, api_key: "sk-qwen" },
+  providers: {
+    deepseek: { model: "deepseek-flash", base_url: "https://api.deepseek.com/v1", workers: 50, api_key: null },
+    qwen: {
+      model: "qwen3.8-flash",
+      base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      protocol: "openai",
+      thinking: "off",
+      workers: 30,
+      api_key: "sk-qwen",
+    },
+    custom: { model: "", base_url: "", workers: 5, api_key: null },
+  },
+  ocr: { provider: "mineru", tokens: { paddle: null, mineru: "mineru-tok" } },
+  backend: { data_dir: null, max_running_jobs: 3 },
+  assistant: { model: "qwen3.8-flash" },
+};
+
+test("settings from ~/.paperloom fill the fields the settings page reads", () => {
+  const merged = overlayExport({ firstRunCompleted: true, developerConfig: { mathMode: "placeholder" } }, fakeExport);
+  assert.equal(merged.firstRunCompleted, true);
+  assert.equal(merged.ocrProvider, "mineru");
+  assert.equal(merged.mineruToken, "mineru-tok");
+  assert.equal(merged.modelApiKey, "sk-qwen");
+  assert.equal(merged.developerConfig.mathMode, "placeholder", "other task options are kept");
+  assert.equal(merged.developerConfig.translationProvider, "qwen");
+  assert.deepEqual(merged.developerConfig.translationProfiles.qwen, {
+    apiKey: "sk-qwen",
+    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    model: "qwen3.8-flash",
+    workers: 30,
+    apiProtocol: "openai",
+    thinking: "off",
+  });
+  assert.equal(merged.developerConfig.translationProfiles.custom.apiProtocol, "openai_responses", "missing protocol → openai_responses");
+  assert.equal(merged.developerConfig.translationProfiles.custom.thinking, "off", "missing thinking → off");
+});
+
+test("saving from the settings page becomes ~/.paperloom changes; legacy top-level keys fill the current profile", () => {
+  const changes = changesFromDesktop(
+    {
+      ocrProvider: "paddle",
+      paddleToken: " paddle-tok ",
+      mineruToken: "",
+      modelApiKey: "sk-legacy",
+      developerConfig: {
+        translationProvider: "deepseek",
+        workers: 64,
+        translationProfiles: {
+          custom: {
+            apiKey: "",
+            baseUrl: "https://llm.example.com/v1",
+            model: "m1",
+            workers: 4,
+            apiProtocol: "anthropic",
+            thinking: "nonsense",
+          },
+          "made-up": { apiKey: "x" },
+        },
+      },
+    },
+    ["deepseek", "qwen", "custom"],
+  );
+  assert.equal(changes["translation.provider"], "deepseek");
+  assert.equal(changes["providers.deepseek.api_key"], "sk-legacy");
+  assert.equal(changes["providers.deepseek.workers"], "64");
+  assert.equal(changes["providers.custom.base_url"], "https://llm.example.com/v1");
+  assert.equal(changes["providers.custom.api_key"], null);
+  assert.equal(changes["providers.custom.protocol"], "anthropic");
+  assert.equal(changes["providers.custom.thinking"], null, "unknown thinking level is cleared back to the default");
+  assert.equal(changes["ocr.paddle_token"], "paddle-tok");
+  assert.equal(changes["ocr.mineru_token"], null);
+  assert.ok(!Object.keys(changes).some((key) => key.includes("made-up")), "unknown providers are ignored");
+});
+
+function fakeCli() {
+  const calls = [];
+  let state = JSON.parse(JSON.stringify(fakeExport));
+  return {
+    calls,
+    runCli(_cli, args, input) {
+      calls.push({ args, input: input ? JSON.parse(input) : null });
+      if (args.includes("export")) return JSON.stringify(state);
+      const changes = JSON.parse(input);
+      if (changes["providers.deepseek.api_key"]) state.providers.deepseek.api_key = changes["providers.deepseek.api_key"];
+      if (changes["translation.provider"]) state.translation.provider = changes["translation.provider"];
+      return "{}";
+    },
+  };
+}
+
+test("an old desktop config is moved to ~/.paperloom once, backed up, and loses its secrets", (t) => {
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), "retainpdf-desktop-home-"));
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "retainpdf-home-"));
+  t.after(() => {
+    fs.rmSync(userData, { recursive: true, force: true });
+    fs.rmSync(home, { recursive: true, force: true });
+  });
+  const legacyPath = path.join(userData, "desktop-config.json");
+  fs.writeFileSync(legacyPath, JSON.stringify({
+    firstRunCompleted: true,
+    ocrProvider: "paddle",
+    paddleToken: "legacy-paddle",
+    modelApiKey: "sk-legacy",
+    model: "deepseek-flash",
+    baseUrl: "https://api.deepseek.com/v1",
+    developerConfig: { translationProvider: "deepseek", mathMode: "placeholder" },
+  }));
+  const cli = fakeCli();
+  const cliPath = path.join(home, "fake-retainpdf");
+  fs.writeFileSync(cliPath, "");
+  const retainpdfHome = createRetainpdfHome({
+    resolveCli: () => cliPath,
+    runCli: cli.runCli,
+    env: { RETAINPDF_HOME: home },
+    logger: { log() {} },
+  });
+  const store = createDesktopConfigStore({ getPath: () => userData }, { retainpdfHome });
+
+  const loaded = store.loadDesktopConfig();
+  const imported = cli.calls.find((c) => c.args.includes("import"));
+  assert.equal(imported.input["providers.deepseek.api_key"], "sk-legacy");
+  assert.equal(imported.input["ocr.paddle_token"], "legacy-paddle");
+  assert.equal(loaded.firstRunCompleted, true);
+  assert.equal(loaded.developerConfig.mathMode, "placeholder");
+  const rewritten = JSON.parse(fs.readFileSync(legacyPath, "utf8"));
+  assert.equal(rewritten.modelApiKey, undefined, "secrets leave the desktop file");
+  assert.equal(rewritten.paddleToken, undefined);
+  assert.equal(rewritten.developerConfig.mathMode, "placeholder");
+  const backup = JSON.parse(fs.readFileSync(path.join(userData, "desktop-config.before-retainpdf-home.json"), "utf8"));
+  assert.equal(backup.modelApiKey, "sk-legacy", "the original is kept as a backup");
+
+  // 已经有 ~/.paperloom/config.toml:不再搬。
+  fs.writeFileSync(path.join(home, "config.toml"), "");
+  const before = cli.calls.filter((c) => c.args.includes("import")).length;
+  store.loadDesktopConfig();
+  assert.equal(cli.calls.filter((c) => c.args.includes("import")).length, before);
+});
+
+test("without the command line the desktop keeps storing everything itself", (t) => {
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), "retainpdf-desktop-nocli-"));
+  t.after(() => fs.rmSync(userData, { recursive: true, force: true }));
+  const retainpdfHome = createRetainpdfHome({ resolveCli: () => "", logger: { log() {} } });
+  const store = createDesktopConfigStore({ getPath: () => userData }, { retainpdfHome });
+  store.saveDesktopConfig({ modelApiKey: "sk-local", firstRunCompleted: true });
+  assert.equal(store.loadDesktopConfig().modelApiKey, "sk-local");
+});
+
+test("GLM-OCR: the choice and its key stay in desktop-config.json, since ~/.paperloom only knows paddle and mineru", () => {
+  const exported = { ocr: { provider: "paddle", tokens: { paddle: "p" } }, translation: {}, providers: {} };
+  const config = { ocrProvider: "glm_ocr", glmOcrToken: "zhipu-key", paddleToken: "p" };
+  assert.equal(overlayExport(config, exported).ocrProvider, "glm_ocr", "the command line's paddle must not overwrite the GLM choice");
+  assert.equal(overlayExport({ ocrProvider: "paddle" }, exported).ocrProvider, "paddle");
+  const changes = changesFromDesktop(config, []);
+  assert.equal(changes["ocr.provider"], undefined, "glm_ocr is not written to the command line");
+  const { stripMapped } = require("./retainpdf-home.js");
+  const kept = stripMapped(config);
+  assert.equal(kept.ocrProvider, "glm_ocr");
+  assert.equal(kept.glmOcrToken, "zhipu-key");
+  assert.equal(kept.paddleToken, undefined, "keys the command line holds still leave desktop-config.json");
+});

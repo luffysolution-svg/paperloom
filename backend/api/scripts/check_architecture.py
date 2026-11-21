@@ -174,6 +174,9 @@ ROUTE_SERVICE_IMPORT_ALLOWLIST = {
     Path("src/routes/backups.rs"): (
         "crate::services::backups",
     ),
+    Path("src/routes/database_backups.rs"): (
+        "crate::services::platform",
+    ),
     Path("src/routes/integrations.rs"): (
         "crate::services::integrations",
     ),
@@ -208,6 +211,7 @@ ROUTE_SERVICE_IMPORT_ALLOWLIST = {
     ),
     Path("src/routes/common/backups.rs"): (
         "crate::services::backups::BackupService",
+        "crate::services::platform::BackupApiDeps",
     ),
     Path("src/routes/common/integrations.rs"): (
         "crate::services::integrations::IntegrationApiDeps",

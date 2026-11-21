@@ -107,6 +107,8 @@ function buildBackendEnv(options = {}) {
       ? { RUST_API_JOBS_SUPERVISE: String(jobsSupervise) }
       : {}),
   };
+  env.RUST_API_WRITE_RUNTIME_FILE = "1";
+  applyRetainpdfSettings(env, options.retainpdfSettings);
   if (fs.existsSync(typstPackagePath)) {
     env.TYPST_PACKAGE_PATH = typstPackagePath;
   }
@@ -121,6 +123,19 @@ function buildBackendEnv(options = {}) {
   return env;
 }
 
+function applyRetainpdfSettings(env, settings) {
+  if (!settings || typeof settings !== "object") return;
+  const put = (name, value) => {
+    if (value === null || value === undefined || value === "" || process.env[name]) return;
+    env[name] = String(value);
+  };
+  const backend = settings.backend || {};
+  put("RUST_API_MAX_RUNNING_JOBS", backend.max_running_jobs);
+  put("RUST_API_SYNC_INTERVAL_SECS", backend.sync_interval_secs);
+  put("RUST_API_BACKUP_INTERVAL_HOURS", backend.backup_interval_hours);
+}
+
 module.exports = {
+  applyRetainpdfSettings,
   buildBackendEnv,
 };

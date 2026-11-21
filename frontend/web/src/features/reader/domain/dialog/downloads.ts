@@ -1,12 +1,12 @@
 import {
   downloadProtectedResponse,
   formatTransferSize,
-  prepareDownloadTarget,
 } from "@/platform/utils/downloads.js";
 import type { DownloadProgressPayload } from "@/platform/utils/downloads.js";
 import {
   completeDownloadToast,
   showDownloadPreparing,
+  pickDownloadTargetWithFeedback,
   updateDownloadProgress,
 } from "@/platform/utils/download-feedback.js";
 
@@ -31,7 +31,6 @@ export async function downloadProtectedResource(
   const trimmedName = `${preferredName || ""}`.trim();
   const suggestedName = trimmedName || fallbackName;
   // 惰性:响应确认成功之后才问保存位置（见 downloads.ts）。
-  const downloadTarget = (filename?: string) => prepareDownloadTarget(filename || suggestedName);
   if (typeof onBusy === "function") {
     onBusy(true, "下载中...");
   }
@@ -42,7 +41,7 @@ export async function downloadProtectedResource(
       url,
       fallbackName,
       preferredName: trimmedName,
-      target: downloadTarget,
+      target: pickDownloadTargetWithFeedback,
       onProgress: ({ filename, receivedBytes, totalBytes, percent, done }) => {
         if (typeof onStatus === "function") {
           onStatus({ filename, receivedBytes, totalBytes, percent, done });

@@ -2,12 +2,12 @@ import type { ArtifactRuntimeState } from "@retainpdf/domain/job";
 import {
   downloadProtectedResponse,
   formatTransferSize,
-  prepareDownloadTarget,
 } from "@/platform/utils/downloads.js";
 import {
   completeDownloadToast,
   failDownloadToast,
   showDownloadPreparing,
+  pickDownloadTargetWithFeedback,
   updateDownloadProgress,
 } from "@/platform/utils/download-feedback.js";
 import { buildErrorDiagnostic } from "@/platform/utils/error-diagnostics.js";
@@ -97,7 +97,6 @@ export function mountArtifactDownloadsFeature({
       nameResolver: downloadNameResolver,
     });
     // 惰性:响应确认成功之后才问保存位置（见 downloads.ts）。
-    const downloadTarget = (filename?: string) => prepareDownloadTarget(filename || preferredName);
 
     try {
       viewPort.setLinkBusy(link, true, "下载中...");
@@ -107,7 +106,7 @@ export function mountArtifactDownloadsFeature({
         url,
         fallbackName,
         preferredName: preferSuggestedName ? preferredName : "",
-        target: downloadTarget,
+        target: pickDownloadTargetWithFeedback,
         onProgress: ({ filename, receivedBytes, totalBytes, percent, done }: ArtifactDownloadProgress) => {
           if (done) {
             setText("error-box", `已开始保存 ${filename}`);

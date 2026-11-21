@@ -1,4 +1,4 @@
-//! `~/.retainpdf/` 目录:读写两个配置文件(保留注释)和「正在运行的后端」记录。
+//! `~/.paperloom/` 目录:读写两个配置文件(保留注释)和「正在运行的后端」记录。
 
 use std::fs;
 use std::io::Write;
@@ -14,9 +14,9 @@ const CONFIG_FILE: &str = "config.toml";
 const CREDENTIALS_FILE: &str = "credentials.toml";
 const RUNTIME_FILE: &str = "run/backend.json";
 
-const CONFIG_TEMPLATE: &str = r#"# RetainPDF 配置。命令行 `retainpdf config` 和桌面版设置页都读写这个文件,也可以直接改。
+const CONFIG_TEMPLATE: &str = r#"# PaperLoom 配置。命令行 `paperloom config` 和桌面版设置页都读写这个文件,也可以直接改。
 # 接口密钥不在这里,在同目录的 credentials.toml。
-# 环境变量优先于这里(比如 RETAINPDF_TRANSLATION_MODEL),见 `retainpdf config show`。
+# 环境变量优先于这里(比如 RETAINPDF_TRANSLATION_MODEL),见 `paperloom config show`。
 
 [translation]
 # 翻译用哪个服务商:deepseek / qwen / openai / anthropic / zhipu / opencode / custom
@@ -51,8 +51,8 @@ provider = "paddle"
 # max_running_jobs = 2
 "#;
 
-const CREDENTIALS_TEMPLATE: &str = r#"# RetainPDF 的接口密钥(明文,只有本人可读)。用 `retainpdf setup` 或
-# `retainpdf config set providers.deepseek.api_key` 填,也可以直接改。
+const CREDENTIALS_TEMPLATE: &str = r#"# PaperLoom 的接口密钥(明文,只有本人可读)。用 `paperloom setup` 或
+# `paperloom config set providers.deepseek.api_key` 填,也可以直接改。
 "#;
 
 /// 正在运行的后端(后端启动时写,退出时删)。
@@ -116,7 +116,7 @@ fn write_private(path: &Path, bytes: &[u8], private: bool) -> Result<()> {
 }
 
 impl ConfigHome {
-    /// `RETAINPDF_HOME`,否则 `~/.retainpdf`。
+    /// `RETAINPDF_HOME`,否则 `~/.paperloom`。
     pub fn locate() -> Result<Self> {
         if let Some(dir) = std::env::var_os("RETAINPDF_HOME").filter(|v| !v.is_empty()) {
             return Ok(Self::at(expand_home(&dir.to_string_lossy())));
@@ -124,7 +124,7 @@ impl ConfigHome {
         let Some(home) = user_home() else {
             bail!("找不到用户目录(HOME),请用 RETAINPDF_HOME 指定配置目录");
         };
-        Ok(Self::at(home.join(".retainpdf")))
+        Ok(Self::at(home.join(".paperloom")))
     }
 
     pub fn at(dir: impl Into<PathBuf>) -> Self {
@@ -186,7 +186,7 @@ impl ConfigHome {
     }
 
     fn checked(path: &str) -> Result<KeyInfo> {
-        describe_key(path).ok_or_else(|| anyhow::anyhow!("没有这个配置项:{path}(`retainpdf config keys` 列出全部)"))
+        describe_key(path).ok_or_else(|| anyhow::anyhow!("没有这个配置项:{path}(`paperloom config keys` 列出全部)"))
     }
 
     /// 文件里写的值(不含默认与环境变量);没写为 None。
@@ -331,7 +331,7 @@ mod tests {
         home.set("providers.deepseek.api_key", "sk-test-1234567890").unwrap();
         home.set("translation.provider", "deepseek").unwrap();
         let config = fs::read_to_string(home.config_path()).unwrap();
-        assert!(config.contains("# RetainPDF 配置"), "template comments kept:\n{config}");
+        assert!(config.contains("# PaperLoom 配置"), "template comments kept:\n{config}");
         assert!(config.contains("[providers.deepseek]\nworkers = 64"), "{config}");
         assert!(!config.contains("sk-test"), "secrets never land in config.toml");
         let credentials = fs::read_to_string(home.credentials_path()).unwrap();

@@ -8,7 +8,7 @@
   <img src="resources/brand/RetainPDF-github.svg" alt="PaperLoom" width="320" />
 </p>
 
-Reading papers often means switching between a PDF reader, a translation tool, Zotero, and your notes app. PaperLoom brings these steps together: import a paper, parse and translate it, check the translation alongside the original, ask the document AI questions, then save the results to Zotero or Obsidian.
+Reading papers often means switching between a PDF reader, a translation tool, Zotero, and your notes app. PaperLoom brings these steps together: import a paper, parse and translate it, check the translation alongside the original, then save the results to Zotero or Obsidian.
 
 PaperLoom is an independently released derivative of [RetainPDF](https://github.com/wxyhgk/retain-pdf) (MIT). Its data and ports are separate from upstream installations. Thank you to the original author for the PDF processing, translation, and typesetting foundation.
 
@@ -29,10 +29,9 @@ PaperLoom is currently the only open-source project built for layout-preserving 
 
 - **Translate PDFs while keeping their layout.** Supports editable, image-based, and scanned PDFs, including multi-column text, images, tables, and complex formulas.
 - **Keep your papers organized.** The library, collections, favorites, task center, and source/translation reader share one interface.
-- **Ask questions about a document.** Summarize papers, understand methods, or explain formulas. Answers include document citations that take you to the original page. PDF Agent offers document operations that require explicit approval.
 - **Import from Zotero and save translations back.** Batch import is supported. With Zotero 10+, save translated PDFs individually or in batches; repeating the operation updates the existing attachment.
 - **Save to Obsidian.** Export Chinese translation notes, optional source notes, images, and translated PDFs individually or in batches, with bibliographic metadata, source links, and links between notes.
-- **Configure it for your workflow.** Supports MinerU/Paddle OCR, model APIs, glossaries, custom translation strategies, code protection, table controls, PDF size optimization, and an open API. You can also self-host or extend it.
+- **Configure it for your workflow.** Supports MinerU/Paddle/GLM-OCR, model APIs, glossaries, custom translation strategies, code protection, table controls, PDF size optimization, and an open API. You can also self-host or extend it.
 
 The translation pipeline first restores complete meaning across columns, pages, and broken sentences before sending text to the model. This reduces the loss of context caused by translating isolated boxes. Its font and typesetting algorithm restores formulas and multi-column paper layouts.
 
@@ -95,21 +94,6 @@ Open the Markdown panel when you need to copy or search the text while reading t
 
 </details>
 
-### Document AI
-
-Ask questions such as “What methods does this paper use?” or “Which page contains this number?” The screenshot below shows questions about materials synthesis and characterization in Yang 2024. The AI organizes the synthesis steps and characterization methods with document citations. Citation previews show the page number, a page thumbnail, and an excerpt from the source.
-
-![Materials-synthesis question about Yang 2024 in PaperLoom desktop](resources/brand/readme-gallery/product/paperloom-ai-real.png)
-
-<details>
-<summary>Show the characterization summary and citation preview</summary>
-
-![AI characterization-method table and page-3 citation preview in PaperLoom desktop](resources/brand/readme-gallery/product/paperloom-ai-citations-real.png)
-
-</details>
-
-This answer reached the retrieval-step limit, and the screenshot retains the early-wrap-up notice. Check AI answers and OCR output against the source, especially experimental conditions, units, and table values.
-
 ### Obsidian: metadata and note contents
 
 Exported notes include the title, authors, year, DOI, journal, Zotero links, and links to the PaperLoom document and task. Source and translation notes link to each other; the translated PDF and images are stored in a companion assets directory.
@@ -158,7 +142,7 @@ Download the latest PaperLoom release from [GitHub Releases](https://github.com/
 1. Open PaperLoom and enter your OCR-service and translation-model API credentials in Settings. You can use MinerU, PaddleOCR, and supported translation models.
 2. Click Add PDF, or select local papers through Import from Zotero. Zotero PDF attachments must be downloaded to your computer first.
 3. Start translation and follow its progress in the task center.
-4. Once it finishes, read source and translation side by side to check text, formulas, figures, and tables. Open Markdown or document AI when needed.
+4. Once it finishes, read source and translation side by side to check text, formulas, figures, and tables. Open Markdown when needed.
 5. Export files from the document details, or select multiple documents in the library to save to Obsidian or Zotero.
 
 OCR and model APIs are provided by their respective services. Account quotas and fees are set by those providers.

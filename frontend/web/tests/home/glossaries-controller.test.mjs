@@ -8,6 +8,7 @@ function createGlossariesFeature({
   refreshCalls = [],
   fetchGlossaries = null,
   fetchGlossary = null,
+  exportGlossaryCsv = async () => ({}),
   view = {},
   viewPort,
 } = {}) {
@@ -63,7 +64,7 @@ function createGlossariesFeature({
       glossary_id: createdId,
     }),
     deleteGlossary: async () => ({}),
-    exportGlossaryCsv: async () => ({}),
+    exportGlossaryCsv,
     parseGlossaryCsv: async () => ({ entries: [] }),
     refreshWorkflowGlossaries: async (options) => {
       refreshCalls.push(options);
@@ -96,6 +97,34 @@ test("glossary save refreshes workflow glossary options through port", async () 
   } finally {
     globalThis.document = previousDocument;
   }
+});
+
+test("取消 CSV 另存为会关闭准备通知，并显示取消状态", async (t) => {
+  const toastEvents = [];
+  const toast = { setState: (state) => toastEvents.push(state.tone), hide: () => toastEvents.push("hide") };
+  const previousWindow = globalThis.window;
+  const previousDocument = globalThis.document;
+  t.after(() => {
+    globalThis.window = previousWindow;
+    globalThis.document = previousDocument;
+  });
+  globalThis.document = { querySelector: () => toast };
+  globalThis.window = { showSaveFilePicker: async () => { throw new DOMException("取消", "AbortError"); } };
+  let handlers;
+  let status;
+  const feature = createGlossariesFeature({
+    exportGlossaryCsv: async () => new Response("source,target"),
+    viewPort: {
+      bindEvents: (value) => { handlers = value; },
+      renderList() {}, renderEditor() {}, clearCsvText() {}, setImportVisible() {},
+      setStatus: (message) => { status = message; },
+    },
+  });
+  feature.bindEvents();
+  await handlers.selectGlossary("glossary-1");
+  await handlers.exportCurrent();
+  assert.deepEqual(toastEvents, ["progress", "hide"]);
+  assert.equal(status, "已取消导出");
 });
 
 test("glossary controller routes dialog operations through view port", async () => {

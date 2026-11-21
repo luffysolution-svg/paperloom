@@ -87,6 +87,7 @@ fn rewrite(
 #[tokio::test]
 async fn round_trip_to_different_root_preserves_database_files_and_old_library() {
     let source = test_state("backup-source");
+    source.db.sync_state_set("webdav_password", "sync-test-secret").unwrap();
     library(&source.config, &source.db);
     let item = create(&source.backups, false).await;
     let path = source.backups.download_path(&item.name).unwrap();
@@ -117,6 +118,7 @@ async fn round_trip_to_different_root_preserves_database_files_and_old_library()
     drop(target);
     apply_pending(&config).unwrap();
     let restored = crate::app::build_state(config.clone()).unwrap();
+    assert!(restored.db.sync_state_get("webdav_password").unwrap().is_none());
     let upload = restored.db.get_upload("u1").unwrap();
     assert_eq!(fs::read(upload.stored_path).unwrap(), b"%PDF-1.4 original");
     assert_eq!(

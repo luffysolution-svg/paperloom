@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ExternalLink, LoaderCircle } from "lucide-react";
+import { ExternalLink, FileOutput, LoaderCircle } from "lucide-react";
 
 import { writeTranslatedPdfToZotero, type ZoteroWritebackResult } from "@/platform/api/index.js";
 import {
@@ -88,19 +88,20 @@ export function ZoteroWritebackDialog({
             ) : null}
           </DialogBody>
           <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="secondary">{result ? "完成" : "取消"}</Button>
+            </DialogClose>
             {result ? (
-              <Button type="button" onClick={() => openZoteroUri(result.zotero_uri)}>
+              <Button type="button" variant="primary" onClick={() => openZoteroUri(result.zotero_uri)}>
                 <ExternalLink aria-hidden="true" />
                 在 Zotero 中打开
               </Button>
             ) : (
-              <Button type="button" disabled={busy} onClick={() => void submit()}>
+              <Button type="button" variant="primary" pending={busy} onClick={() => void submit()}>
+                {!busy && <FileOutput aria-hidden="true" />}
                 {busy ? "正在写回…" : "写回译文 PDF"}
               </Button>
             )}
-            <DialogClose asChild>
-              <Button type="button" variant="secondary">{result ? "完成" : "取消"}</Button>
-            </DialogClose>
           </DialogFooter>
         </DialogShell>
       </DialogContent>

@@ -22,7 +22,7 @@ export function openSetupDialog() {
   }));
 }
 
-export async function bootstrapDesktop(initialConfig = null) {
+export async function bootstrapDesktop(initialConfig: Awaited<ReturnType<typeof loadPersistedConfig>> | null = null) {
   setDesktopMode(state, true);
   showDesktopUi();
   const payload = initialConfig || await loadPersistedConfig();

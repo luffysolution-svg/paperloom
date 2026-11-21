@@ -12,6 +12,7 @@ import {
   loadPersistedConfig,
 } from "@/platform/config/desktop-persistence.js";
 import { bootstrapDesktop } from "@/app/desktop/bootstrap.js";
+import { desktopBootstrapState } from "@/platform/desktop/state.js";
 import { restoreBackupClientConfig } from "@/platform/config/backup-client-config.js";
 import { AuthErrorScreen, ForcedPasswordScreen, LoginScreen, resolveAuthGate } from "@/features/auth/index.js";
 
@@ -50,6 +51,7 @@ async function bootHome() {
   const services = createHomeComposition({
     appUpdateAutoCheckEnabled: true,
     initialDesktopMode: desktopMode,
+    ...(desktopMode ? { legacyState: desktopBootstrapState } : {}),
     ...(desktopConfig ? {
       loadPersistedBrowserConfig: () => desktopConfig.browserConfig || {},
       loadPersistedDeveloperConfig: () => desktopConfig.developerConfig || {},
@@ -73,7 +75,7 @@ async function bootHome() {
   if (desktopMode) {
     await mountedFeature(services.features, "browserCredentialsFeature").ready();
     try {
-      await bootstrapDesktop();
+      await bootstrapDesktop(desktopConfig);
     } catch (error) {
       console.error("[desktop] failed to finish desktop bootstrap", error);
     }

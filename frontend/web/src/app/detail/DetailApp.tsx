@@ -47,12 +47,12 @@ import {
 } from "@/features/job-detail/index.js";
 import {
   downloadProtectedResponse,
-  prepareDownloadTarget,
 } from "@/platform/utils/downloads.js";
 import {
   completeDownloadToast,
   failDownloadToast,
   showDownloadPreparing,
+  pickDownloadTargetWithFeedback,
   updateDownloadProgress,
 } from "@/platform/utils/download-feedback.js";
 
@@ -285,14 +285,13 @@ export function DetailApp({
     const state = pageState;
     const fallbackName = fallbackNameFactory(state.job?.job_id || "job");
     // 惰性:响应确认成功之后才问保存位置，否则请求失败会在磁盘上留下一个 0 字节文件。
-    const downloadTarget = (filename?: string) => prepareDownloadTarget(filename || fallbackName);
     try {
       showDownloadPreparing(fallbackName);
       await downloadProtectedResponse({
         fetchResponse: () => dataPort.fetchProtected(url),
         url,
         fallbackName,
-        target: downloadTarget,
+        target: pickDownloadTargetWithFeedback,
         onProgress: ({ filename, receivedBytes, totalBytes, percent, done }) => {
           if (done) {
             setText("detail-head-note", `已开始保存 ${filename}`);

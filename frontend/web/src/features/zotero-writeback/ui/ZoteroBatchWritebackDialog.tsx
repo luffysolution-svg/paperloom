@@ -76,10 +76,10 @@ export function ZoteroBatchWritebackDialog({ open, onOpenChange, documentIds }: 
             ) : null}
           </DialogBody>
           <DialogFooter>
-            {!result ? <Button type="button" disabled={busy || count === 0 || count > 200} onClick={() => void submit()}>
+            <DialogClose asChild><Button type="button" variant={result ? "primary" : "secondary"} disabled={busy}>{result ? "完成" : "取消"}</Button></DialogClose>
+            {!result ? <Button type="button" variant="primary" pending={busy} disabled={count === 0 || count > 200} onClick={() => void submit()}>
               {busy ? "正在写回…" : "写回所选译文 PDF"}
             </Button> : null}
-            <DialogClose asChild><Button type="button" variant="secondary" disabled={busy}>{result ? "完成" : "取消"}</Button></DialogClose>
           </DialogFooter>
         </DialogShell>
       </DialogContent>

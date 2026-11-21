@@ -9,6 +9,7 @@ pub(crate) mod download_response;
 pub mod fonts;
 pub mod glossaries;
 pub mod backups;
+pub mod database_backups;
 pub mod sync;
 pub mod health;
 pub mod integrations;

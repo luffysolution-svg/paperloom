@@ -170,7 +170,7 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(
             "CREATE TABLE uploads (upload_id TEXT PRIMARY KEY, filename TEXT NOT NULL, stored_path TEXT NOT NULL, bytes INTEGER NOT NULL, page_count INTEGER NOT NULL, uploaded_at TEXT NOT NULL, developer_mode INTEGER NOT NULL, content_hash TEXT NOT NULL DEFAULT '');
-             CREATE TABLE jobs (job_id TEXT PRIMARY KEY, workflow TEXT NOT NULL, status_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, command_json TEXT NOT NULL, request_json TEXT NOT NULL, log_tail_json TEXT NOT NULL, document_id TEXT, run_generation INTEGER NOT NULL DEFAULT 0);
+             CREATE TABLE jobs (job_id TEXT PRIMARY KEY, workflow TEXT NOT NULL, status_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, command_json TEXT NOT NULL, request_json TEXT NOT NULL, log_tail_json TEXT NOT NULL, upload_id TEXT, document_id TEXT, run_generation INTEGER NOT NULL DEFAULT 0);
              CREATE TABLE artifacts (job_id TEXT PRIMARY KEY, artifacts_json TEXT NOT NULL, updated_at TEXT NOT NULL);
              CREATE TABLE job_artifact_entries (job_id TEXT NOT NULL, artifact_key TEXT NOT NULL, PRIMARY KEY(job_id, artifact_key));
              CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT, job_id TEXT NOT NULL, seq INTEGER NOT NULL DEFAULT 0, ts TEXT NOT NULL, level TEXT NOT NULL DEFAULT '', stage TEXT, stage_detail TEXT, provider TEXT, provider_stage TEXT, event TEXT NOT NULL DEFAULT '', event_type TEXT, progress_current INTEGER, progress_total INTEGER, payload_json TEXT NOT NULL DEFAULT '{}', retry_count INTEGER, elapsed_ms INTEGER, message TEXT NOT NULL);
@@ -182,9 +182,20 @@ mod tests {
         }
         // Apply PaperLoom v0.2.8's v17 (document_external_refs, now v30) and set user_version = 17
         conn.execute_batch(MIGRATIONS[29].sql).unwrap();
+        conn.execute_batch(
+            "INSERT INTO documents(document_id, title, source_filename, added_at, updated_at)
+             VALUES ('legacy-paper', 'Title', 'paper.pdf', 't', 't');
+             INSERT INTO document_external_refs(source, library_id, item_key, attachment_key, document_id, created_at, updated_at)
+             VALUES ('zotero', 'users/0', 'item', 'attachment', 'legacy-paper', 't', 't');"
+        ).unwrap();
         conn.pragma_update(None, "user_version", 17).unwrap();
 
-        run_versioned_migrations(&conn).expect("upgrade PaperLoom v17 to v30");
+        run_versioned_migrations(&conn).expect("upgrade PaperLoom v17");
+        let owner: String = conn.query_row(
+            "SELECT owner_user_id FROM document_external_refs WHERE document_id='legacy-paper'",
+            [], |r| r.get(0),
+        ).unwrap();
+        assert_eq!(owner, "local");
         let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
         assert_eq!(version, versioned_migration_count());
         let has_sync: i64 = conn

@@ -1,4 +1,4 @@
-//! `retainpdf setup`:一问一答地配好翻译和 OCR,写进 ~/.retainpdf/。
+//! `paperloom setup`:一问一答地配好翻译和 OCR,写进 ~/.paperloom/。
 //!
 //! 填完当场检测:后端开着时用后端的检测接口(翻译 key 用一次真实的小请求验模型名,
 //! DeepSeek 顺带查余额;OCR token 问服务商);后端没开时先保存,提示打开应用后再检测。
@@ -45,7 +45,7 @@ fn choose(label: &str, options: &[(&str, &str)], current: &str) -> Result<String
 
 fn check_translation(ctx: &Ctx, base_url: &str, model: &str, api_key: &str, provider: &str, protocol: &str) {
     let BackendState::Running(backend) = &ctx.backend else {
-        ui::warn("后端没开,先保存不检测;打开 RetainPDF 后运行 `retainpdf doctor` 检测");
+        ui::warn("后端没开,先保存不检测;打开 PaperLoom 后运行 `paperloom doctor` 检测");
         return;
     };
     let body = json!({ "api_key": api_key, "base_url": base_url, "model": model, "api_protocol": protocol });
@@ -84,7 +84,7 @@ fn check_ocr(ctx: &Ctx, provider: &str, token: &str) {
 
 pub fn run(ctx: &Ctx) -> Result<ExitCode> {
     if !ui::interactive() {
-        anyhow::bail!("setup 要在终端里回答问题;脚本里请用 `retainpdf config set <项> <值>`");
+        anyhow::bail!("setup 要在终端里回答问题;脚本里请用 `paperloom config set <项> <值>`");
     }
     let current = ctx.settings()?;
     println!("配置会写进 {}(密钥在 credentials.toml,只有你能读)。直接回车保留现在的值。\n", ctx.home.dir().display());
@@ -158,7 +158,7 @@ pub fn run(ctx: &Ctx) -> Result<ExitCode> {
             let effective_url = if base_url.is_empty() { builtin.base_url.to_string() } else { base_url.clone() };
             check_translation(ctx, &effective_url, &model, key, &provider, &protocol);
         }
-        None => ui::warn("还没有翻译 API Key,翻译前要补上:retainpdf config set providers.<服务商>.api_key"),
+        None => ui::warn("还没有翻译 API Key,翻译前要补上:paperloom config set providers.<服务商>.api_key"),
     }
     println!();
 
@@ -178,10 +178,10 @@ pub fn run(ctx: &Ctx) -> Result<ExitCode> {
     }
     match if token.is_empty() { saved_token } else { Some(token) } {
         Some(token) => check_ocr(ctx, &ocr, &token),
-        None => ui::warn(format!("还没有 OCR token,翻译前要补上:retainpdf config set ocr.{token_key}")),
+        None => ui::warn(format!("还没有 OCR token,翻译前要补上:paperloom config set ocr.{token_key}")),
     }
 
     println!();
-    ui::ok(format!("已保存。`retainpdf config show` 查看,`retainpdf config edit` 直接改文件。"));
+    ui::ok(format!("已保存。`paperloom config show` 查看,`paperloom config edit` 直接改文件。"));
     Ok(ExitCode::SUCCESS)
 }

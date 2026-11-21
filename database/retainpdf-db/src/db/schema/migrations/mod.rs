@@ -161,6 +161,11 @@ pub(super) const MIGRATIONS: &[Migration] = &[
         name: "external_refs",
         sql: include_str!("v30_external_refs.sql"),
     },
+    Migration {
+        version: 31,
+        name: "external_ref_owners",
+        sql: include_str!("v31_external_ref_owners.sql"),
+    },
 ];
 
 #[cfg(test)]

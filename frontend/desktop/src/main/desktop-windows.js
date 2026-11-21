@@ -1,3 +1,4 @@
+const { installFileOriginBridge } = require("./file-origin-bridge");
 const fs = require("fs");
 const path = require("path");
 const { pathToFileURL } = require("url");
@@ -177,6 +178,8 @@ function createDesktopWindows(app, options = {}) {
       mainWindow.loadURL(indexUrl);
     } else {
       logDesktop(`[desktop] loading frontend index=${indexPath}`);
+      const removeBridge = installFileOriginBridge(mainWindow.webContents, options.getApiBase());
+      mainWindow.once("closed", removeBridge);
       mainWindow.loadFile(indexPath, readerQuery ? { search: readerQuery } : undefined);
     }
 

@@ -276,7 +276,9 @@ impl Db {
     /// VACUUM INTO includes committed WAL pages without copying a live database file.
     pub fn create_backup_snapshot(&self, destination: &Path) -> Result<i64> {
         let conn = self.connect()?;
+        drop(create_private(destination)?);
         conn.execute("VACUUM INTO ?1", [destination.to_string_lossy().as_ref()])?;
+        strip_secrets(destination)?;
         inspect_backup_snapshot(destination)
     }
 

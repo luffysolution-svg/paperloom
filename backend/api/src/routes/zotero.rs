@@ -13,6 +13,7 @@ use crate::services::integrations::{
     ZoteroBatchWritebackView, ZoteroCollection, ZoteroImportRequest, ZoteroImportResult,
     ZoteroItemPage, ZoteroStatus, ZoteroWritebackResult,
 };
+use crate::auth::Principal;
 use crate::AppState;
 
 pub(crate) async fn get_zotero_status() -> Result<Json<ApiResponse<ZoteroStatus>>, AppError> {
@@ -26,20 +27,22 @@ pub(crate) async fn list_zotero_collections(
 }
 
 pub(crate) async fn list_zotero_items(
+    principal: Principal,
     State(state): State<AppState>,
     ApiQuery(query): ApiQuery<ItemsQuery>,
 ) -> Result<Json<ApiResponse<ZoteroItemPage>>, AppError> {
     let deps = build_integration_route_deps(&state);
-    Ok(ok_json(zotero_items_view(&deps, &query).await?))
+    Ok(ok_json(zotero_items_view(&deps, &principal, &query).await?))
 }
 
 pub(crate) async fn import_zotero_attachments(
+    principal: Principal,
     State(state): State<AppState>,
     ApiJson(request): ApiJson<ZoteroImportRequest>,
 ) -> Result<Json<ApiResponse<Vec<ZoteroImportResult>>>, AppError> {
     let deps = build_integration_route_deps(&state);
     Ok(ok_json(
-        import_zotero_attachments_view(&deps, &request).await?,
+        import_zotero_attachments_view(&deps, &principal, &request).await?,
     ))
 }
 

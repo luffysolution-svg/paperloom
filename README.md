@@ -8,7 +8,7 @@
   <img src="resources/brand/RetainPDF-github.svg" alt="PaperLoom" width="320" />
 </p>
 
-读论文时，常常要在 PDF、翻译工具、Zotero 和笔记软件之间来回切换。PaperLoom 把这些步骤放在一起：导入文献，解析和翻译，边读原文边核对译文，向文档 AI 提问，再把结果保存回 Zotero 或 Obsidian。
+读论文时，常常要在 PDF、翻译工具、Zotero 和笔记软件之间来回切换。PaperLoom 把这些步骤放在一起：导入文献，解析和翻译，边读原文边核对译文，再把结果保存回 Zotero 或 Obsidian。
 
 PaperLoom 基于 [RetainPDF](https://github.com/wxyhgk/retain-pdf)（MIT）二次开发，独立发布，与上游版本的数据和端口互不干扰。感谢原作者提供的 PDF 处理、翻译和排版基础。
 
@@ -29,11 +29,10 @@ PaperLoom 是目前唯一面向图片型 / 扫描版 PDF、支持保留排版翻
 
 - **翻译 PDF，并保留版面。** 支持可编辑 PDF、图片型和扫描版 PDF，处理多栏正文、图片、表格和复杂公式。
 - **集中管理文献。** 书库、合集、收藏、任务中心和原文／译文对照阅读都在同一个界面里。
-- **围绕文档问问题。** 可以总结论文、梳理方法、解释公式；回答带文档引用，点击引用回到原文页码。PDF Agent 提供需要明确授权的文档操作。
 - **从 Zotero 导入，再把译文写回。** 支持批量导入；Zotero 10+ 可单篇或批量保存译文 PDF，重复写回更新原附件。
 - **保存到 Obsidian。** 单篇或批量导出中文笔记、可选原文笔记、图片和译文 PDF，带文献信息、来源链接和互链。
-- **迁移与备份资料库。** 在“设置 → 数据与备份”导出／导入资料库 ZIP，或手动备份到 WebDAV；恢复在重启后生效，并保留恢复前数据。详见[操作说明](docs/core/api/backups.md)。
-- **按自己的习惯配置。** 支持 MinerU／Paddle OCR、模型 API、术语表、自定义翻译策略、代码保护、表格控制、PDF 压缩优化和开放 API；也可以自部署或二次开发。
+- **迁移与备份资料库。** 在“设置 → 同步与备份 → 整库迁移”导出／导入资料库 ZIP，或手动备份到 WebDAV；恢复在重启后生效，并保留恢复前数据。详见[操作说明](docs/core/api/backups.md)。
+- **按自己的习惯配置。** 支持 MinerU／Paddle／GLM-OCR、模型 API、术语表、自定义翻译策略、代码保护、表格控制、PDF 压缩优化和开放 API；也可以自部署或二次开发。
 
 翻译流程会先恢复跨栏、跨页和断句后的完整语义，再交给模型翻译，减少逐框翻译造成的上下文割裂。字体排版算法用于还原公式和多栏论文的版式。
 
@@ -96,21 +95,6 @@ PaperLoom 是目前唯一面向图片型 / 扫描版 PDF、支持保留排版翻
 
 </details>
 
-### 文档 AI 对话
-
-直接问“这篇论文的方法是什么”“这个数字在哪一页”。下图是围绕 Yang 2024 文献的材料合成与表征问答：AI 分别整理了合成步骤和表征方法，并附上文档引用。引用预览可以查看页码、页面缩略图和原文摘录。
-
-![PaperLoom 桌面版中围绕 Yang 2024 文献的材料合成问答](resources/brand/readme-gallery/product/paperloom-ai-real.png)
-
-<details>
-<summary>展开 AI 表征方法总结与引用预览</summary>
-
-![PaperLoom 桌面版中的 AI 表征方法表格与第 3 页引用预览](resources/brand/readme-gallery/product/paperloom-ai-citations-real.png)
-
-</details>
-
-截图中的这次回答触及检索步数上限，界面保留了提前收尾提示。AI 回答和 OCR 结果都需要结合原文核对，尤其是实验条件、单位和表格数值。
-
 ### Obsidian：文献信息与正文
 
 导出笔记带有标题、作者、年份、DOI、期刊、Zotero 链接，以及 PaperLoom 文档和任务链接。原文笔记与译文笔记互链，译文 PDF 和图片放在配套资源目录里。
@@ -161,7 +145,7 @@ PaperLoom 是目前唯一面向图片型 / 扫描版 PDF、支持保留排版翻
 1. 打开 PaperLoom，在“设置”中填写 OCR 服务和翻译模型的 API 凭据。你可以使用 MinerU、PaddleOCR 以及支持的翻译模型。
 2. 点击“添加 PDF”，或“从 Zotero 导入”选择本机文献。Zotero 的 PDF 需要先下载到本地。
 3. 开始翻译，在任务中心查看进度。
-4. 完成后打开对照阅读，核对正文、公式和图表；需要时打开 Markdown 或 AI 问答。
+4. 完成后打开对照阅读，核对正文、公式和图表；需要时打开 Markdown。
 5. 在书籍详情中导出文件，或在书库多选后保存到 Obsidian、写回 Zotero。
 
 OCR 与模型 API 由相应服务商提供，账户额度和费用以服务商为准。

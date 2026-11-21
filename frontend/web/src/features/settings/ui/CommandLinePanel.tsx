@@ -1,6 +1,6 @@
 // 设置 → 更新 →「命令行工具」（只在桌面版显示）：把包里的 retainpdf 装进终端。
 //
-// 命令行和桌面版共用 ~/.retainpdf/ 里的配置：在终端里 `retainpdf config set …` 改的，
+// 命令行和桌面版共用 ~/.paperloom/ 里的配置：在终端里 `paperloom config set …` 改的，
 // 应用里马上看得到。
 
 import { useEffect, useState } from "react";
@@ -29,7 +29,7 @@ export function CommandLinePanel() {
     try {
       const result = await desktop.installCli();
       if (result.ok) {
-        setMessage({ ok: true, text: [`已安装到 ${result.path}。`, result.hint || "打开终端试试 retainpdf status。"].join("") });
+        setMessage({ ok: true, text: [`已安装到 ${result.path}。`, result.hint || "打开终端试试 paperloom status。"].join("") });
         setStatus(await desktop.cliStatus());
       } else {
         setMessage({ ok: false, text: result.error || "安装失败" });
@@ -45,7 +45,7 @@ export function CommandLinePanel() {
     <section className="cli-install" data-cli-install>
       <h3 className="cli-install-title">命令行工具</h3>
       <p className="cli-install-hint">
-        在终端里用 retainpdf 查看状态、备份、同步，或配置接口密钥、模型和并发。配置放在 ~/.retainpdf/，和这里的设置是同一份。
+        在终端里用 paperloom 查看状态、备份、同步，或配置接口密钥、模型和并发。配置放在 ~/.paperloom/，和这里的设置是同一份。
       </p>
       {status.installedAt ? <p className="cli-install-hint">已安装：{status.installedAt}</p> : null}
       {status.supported ? (

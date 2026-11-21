@@ -46,7 +46,7 @@ pub(crate) struct IntegrationApiDeps<'a> {
     pub(crate) data_root: &'a Path,
     pub(crate) downloads_dir: &'a Path,
     pub(crate) download_generation: &'a Arc<DownloadGeneration>,
-    pub(crate) public_base_url: Option<&'a str>,
+    pub(crate) public_base_url: Option<String>,
 }
 
 impl<'a> IntegrationApiDeps<'a> {
@@ -56,7 +56,7 @@ impl<'a> IntegrationApiDeps<'a> {
         data_root: &'a Path,
         downloads_dir: &'a Path,
         download_generation: &'a Arc<DownloadGeneration>,
-        public_base_url: Option<&'a str>,
+        public_base_url: Option<String>,
     ) -> Self {
         Self {
             db,
@@ -68,13 +68,13 @@ impl<'a> IntegrationApiDeps<'a> {
         }
     }
 
-    pub(crate) fn download_deps(&self) -> DownloadJobsDeps<'a> {
+    pub(crate) fn download_deps(&self) -> DownloadJobsDeps<'_> {
         DownloadJobsDeps {
             db: self.db,
             data_root: self.data_root,
             downloads_dir: self.downloads_dir,
             download_generation: self.download_generation,
-            public_base_url: self.public_base_url,
+            public_base_url: self.public_base_url.as_deref(),
         }
     }
 }
@@ -117,6 +117,7 @@ fn default_limit() -> usize {
 
 pub(crate) async fn zotero_items_view(
     deps: &IntegrationApiDeps<'_>,
+    principal: &Principal,
     query: &ItemsQuery,
 ) -> Result<ZoteroItemPage, AppError> {
     let collection_key = query
@@ -135,7 +136,7 @@ pub(crate) async fn zotero_items_view(
     // 标出已导入过的附件，前端据此显示「已在书库」。
     let refs = deps
         .db
-        .external_refs_for_library(zotero::SOURCE, &query.library_id)
+        .external_refs_for_library(principal.owner_id(), zotero::SOURCE, &query.library_id)
         .map_err(|err| AppError::internal(err.to_string()))?;
     for attachment in page
         .items
@@ -189,6 +190,7 @@ pub(crate) struct ZoteroImportResult {
 
 pub(crate) async fn import_zotero_attachments_view(
     deps: &IntegrationApiDeps<'_>,
+    principal: &Principal,
     request: &ZoteroImportRequest,
 ) -> Result<Vec<ZoteroImportResult>, AppError> {
     let library_id = validate_library_id(&request.library_id)?.to_string();
@@ -216,7 +218,7 @@ pub(crate) async fn import_zotero_attachments_view(
 
     let mut results = Vec::with_capacity(request.attachments.len());
     for attachment in &request.attachments {
-        let outcome = import_one(deps, &client, &library_id, &folder, attachment).await;
+        let outcome = import_one(deps, principal, &client, &library_id, &folder, attachment).await;
         results.push(outcome.unwrap_or_else(|err| ZoteroImportResult {
             item_key: attachment.item_key.clone(),
             attachment_key: attachment.attachment_key.clone(),
@@ -232,6 +234,7 @@ pub(crate) async fn import_zotero_attachments_view(
 
 async fn import_one(
     deps: &IntegrationApiDeps<'_>,
+    principal: &Principal,
     client: &ZoteroSource,
     library_id: &str,
     folder: &str,
@@ -241,7 +244,7 @@ async fn import_one(
         .resolve_attachment(library_id, &attachment.item_key, &attachment.attachment_key)
         .await?;
     let bytes = tokio::fs::read(&resolved.path).await?;
-    let document_id = sha256_hex(&bytes);
+    let document_id = principal.scoped_content_hash(&sha256_hex(&bytes));
     let existing = deps
         .db
         .find_upload_for_document(&document_id)
@@ -255,7 +258,7 @@ async fn import_one(
             resolved.filename.clone(),
             bytes,
             false,
-            Principal::local(),
+            principal.clone(),
         )
         .await?;
         debug_assert_eq!(upload.content_hash, document_id);

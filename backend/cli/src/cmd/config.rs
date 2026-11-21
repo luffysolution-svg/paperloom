@@ -1,4 +1,4 @@
-//! `retainpdf config`:查看和修改 ~/.retainpdf/ 里的配置。
+//! `paperloom config`:查看和修改 ~/.paperloom/ 里的配置。
 
 use std::process::ExitCode;
 
@@ -130,12 +130,12 @@ pub fn run(ctx: &Ctx, action: ConfigCommand) -> Result<ExitCode> {
         }
         ConfigCommand::Set { key, value } => {
             let Some(info) = describe_key(&key) else {
-                bail!("没有这个配置项:{key}(`retainpdf config keys` 列出全部)");
+                bail!("没有这个配置项:{key}(`paperloom config keys` 列出全部)");
             };
             let value = match value {
                 Some(value) => value,
                 None if info.kind == KeyKind::Secret => ui::ask_secret(&info.help)?,
-                None => bail!("请给出值:retainpdf config set {key} <值>"),
+                None => bail!("请给出值:paperloom config set {key} <值>"),
             };
             ctx.home.set(&key, &value)?;
             if ctx.json {

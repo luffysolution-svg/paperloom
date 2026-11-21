@@ -178,7 +178,7 @@ struct ExportedNotes {
 
 fn build_notes(inputs: &ExportInputs<'_>, names: NoteNames) -> ExportedNotes {
     let translations = TranslationIndex::from_pages(inputs.translation_pages);
-    let exists = |rel: &str| inputs.images_dir.is_some_and(|dir| dir.join(rel).is_file());
+    let exists = |rel: &str| inputs.images_dir.is_some_and(|dir| render::safe_image(dir, rel).is_some());
     let mut plan = ImagePlan::default();
 
     // 先渲染译文：图片编号以译文笔记中的出现顺序为准。
@@ -333,7 +333,7 @@ impl ExportSource {
             .iter()
             .filter_map(|image| {
                 let dir = self.images_dir.as_deref()?;
-                Some((image.file_name.clone(), dir.join(&image.source_rel)))
+                Some((image.file_name.clone(), render::safe_image(dir, &image.source_rel)?))
             })
             .collect();
         if let Some(pdf) = &self.pdf {

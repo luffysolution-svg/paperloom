@@ -6,6 +6,8 @@ services:
     restart: unless-stopped
     env_file:
       - ./docker/app.env
+    environment:
+      RUST_API_KEYS: ${PAPERLOOM_API_KEY:?Run python3 init-local.py first}
     ports:
       - "${HOST_BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-46000}:41000"
       - "${HOST_BIND_ADDRESS:-127.0.0.1}:${APP_SIMPLE_PORT:-47000}:42000"
@@ -38,6 +40,8 @@ services:
         condition: service_healthy
     env_file:
       - ./docker/web.env
+    environment:
+      RETAINPDF_PROXY_API_KEY: ${PAPERLOOM_API_KEY:?Run python3 init-local.py first}
     ports:
       - "${HOST_BIND_ADDRESS:-127.0.0.1}:${WEB_PORT:-45001}:80"
     healthcheck:

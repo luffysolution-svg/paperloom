@@ -305,6 +305,7 @@ export function ObsidianExportDialog({
                 </DialogClose>
                 <Button
                   type="submit"
+                  variant="primary"
                   form="book-detail-obsidian-form"
                   disabled={busy || !vaultId}
                 >
@@ -339,6 +340,7 @@ export function ObsidianExportDialog({
                   type="button"
                   disabled={busy}
                   onClick={() => void submit("rename")}
+                  variant="primary"
                 >
                   另存为新笔记
                 </Button>
@@ -346,7 +348,7 @@ export function ObsidianExportDialog({
             ) : null}
             {phase.kind === "batchDone" ? (
               <DialogClose asChild>
-                <Button type="button">完成</Button>
+                <Button type="button" variant="primary">完成</Button>
               </DialogClose>
             ) : null}
             {phase.kind === "done" ? (
@@ -359,6 +361,7 @@ export function ObsidianExportDialog({
                 {phase.result.obsidian_uri ? (
                   <Button
                     type="button"
+                    variant="primary"
                     onClick={() =>
                       openExternalUri(phase.result.obsidian_uri || "")
                     }

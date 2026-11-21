@@ -1,6 +1,6 @@
 //! 命令运行的环境:配置、数据目录、后端开着没有。
 //!
-//! 同一个数据目录同一时间只能有一个程序写:后端开着(`~/.retainpdf/run/backend.json` 记着、
+//! 同一个数据目录同一时间只能有一个程序写:后端开着(`~/.paperloom/run/backend.json` 记着、
 //! 进程在、数据目录相同、`/health` 应答)时,会改东西的命令都转给后端;后端没开时直接操作
 //! 数据目录;记录说开着却连不上时,会改东西的命令拒绝执行。
 
@@ -33,21 +33,21 @@ pub struct Backend {
     client: reqwest::blocking::Client,
 }
 
-/// 桌面版默认的数据目录(打包后的应用名是 RetainPDF)。
+/// 桌面版默认的数据目录(打包后的应用名是 PaperLoom)。
 pub fn default_data_dir() -> PathBuf {
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from).unwrap_or_default();
     if cfg!(target_os = "macos") {
-        home.join("Library/Application Support/RetainPDF/data")
+        home.join("Library/Application Support/PaperLoom/data")
     } else if cfg!(windows) {
         std::env::var_os("APPDATA")
             .map(PathBuf::from)
             .unwrap_or_else(|| home.join("AppData/Roaming"))
-            .join("RetainPDF/data")
+            .join("PaperLoom/data")
     } else {
         std::env::var_os("XDG_CONFIG_HOME")
             .map(PathBuf::from)
             .unwrap_or_else(|| home.join(".config"))
-            .join("RetainPDF/data")
+            .join("PaperLoom/data")
     }
 }
 
@@ -93,7 +93,7 @@ impl Ctx {
     /// 直接打开数据库(会建表、补迁移)。只在后端没开时用来改东西。
     pub fn db(&self) -> Result<Db> {
         if !self.db_path().is_file() {
-            bail!("{} 里还没有书库(数据库不存在)。先打开一次 RetainPDF,或用 --data 指定数据目录", self.data_dir.display());
+            bail!("{} 里还没有书库(数据库不存在)。先打开一次 PaperLoom,或用 --data 指定数据目录", self.data_dir.display());
         }
         Ok(Db::new(self.db_path(), self.data_dir.clone()))
     }
@@ -118,7 +118,7 @@ impl Ctx {
             BackendState::Running(backend) => Ok(Some(backend)),
             BackendState::Stopped => Ok(None),
             BackendState::Unreachable(runtime) => bail!(
-                "后端在运行(进程 {})但连不上 {}。等它启动完成再试,或者先退出 RetainPDF",
+                "后端在运行(进程 {})但连不上 {}。等它启动完成再试,或者先退出 PaperLoom",
                 runtime.pid,
                 runtime.api_base
             ),

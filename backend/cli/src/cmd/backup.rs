@@ -1,4 +1,4 @@
-//! `retainpdf backup`:书库数据库的备份与恢复。后端开着时经后端(恢复时它会停住同步、
+//! `paperloom backup`:书库数据库的备份与恢复。后端开着时经后端(恢复时它会停住同步、
 //! 拒绝在任务运行时恢复),没开时直接操作数据目录(规则相同,见 retainpdf-db 的 backup.rs)。
 
 use std::process::ExitCode;
@@ -39,10 +39,10 @@ fn kind_label(kind: &str) -> &str {
     }
 }
 
-/// 备份列表(与 GET /api/v1/backups 的 items 同形状)。
+/// 备份列表(与 GET /api/v1/database-backups 的 items 同形状)。
 fn list(ctx: &Ctx) -> Result<Vec<Value>> {
     if let Some(backend) = ctx.writer()? {
-        let status = backend.get("/api/v1/backups")?;
+        let status = backend.get("/api/v1/database-backups")?;
         return Ok(status.get("items").and_then(Value::as_array).cloned().unwrap_or_default());
     }
     let db = ctx.db()?;
@@ -67,7 +67,7 @@ fn resolve(ctx: &Ctx, given: &str) -> Result<String> {
     if items.iter().any(|b| b["id"] == given) {
         return Ok(given.to_string());
     }
-    bail!("没有这份备份:{given}(`retainpdf backup list` 看编号)")
+    bail!("没有这份备份:{given}(`paperloom backup list` 看编号)")
 }
 
 pub fn run(ctx: &Ctx, action: BackupCommand) -> Result<ExitCode> {
@@ -77,7 +77,7 @@ pub fn run(ctx: &Ctx, action: BackupCommand) -> Result<ExitCode> {
             if ctx.json {
                 ui::print_json(&json!(items));
             } else if items.is_empty() {
-                println!("还没有备份。`retainpdf backup create` 立即备份一份");
+                println!("还没有备份。`paperloom backup create` 立即备份一份");
             } else {
                 for (i, item) in items.iter().enumerate() {
                     let when: String = item["created_at"].as_str().unwrap_or("").replace('T', " ").chars().take(19).collect();
@@ -93,7 +93,7 @@ pub fn run(ctx: &Ctx, action: BackupCommand) -> Result<ExitCode> {
         }
         BackupCommand::Create => {
             let made = match ctx.writer()? {
-                Some(backend) => backend.post("/api/v1/backups", None)?,
+                Some(backend) => backend.post("/api/v1/database-backups", None)?,
                 None => {
                     let db = ctx.db()?;
                     let info = db.create_backup(KIND_MANUAL)?;
@@ -123,7 +123,7 @@ pub fn run(ctx: &Ctx, action: BackupCommand) -> Result<ExitCode> {
                 }
             }
             let result = match ctx.writer()? {
-                Some(backend) => backend.post(&format!("/api/v1/backups/{id}/restore"), None)?,
+                Some(backend) => backend.post(&format!("/api/v1/database-backups/{id}/restore"), None)?,
                 None => {
                     let db = ctx.db()?;
                     let blockers = db.restore_blockers()?;
@@ -155,7 +155,7 @@ pub fn run(ctx: &Ctx, action: BackupCommand) -> Result<ExitCode> {
             let id = resolve(ctx, &backup)?;
             match ctx.writer()? {
                 Some(backend) => {
-                    backend.call(reqwest::Method::DELETE, &format!("/api/v1/backups/{id}"), None)?;
+                    backend.call(reqwest::Method::DELETE, &format!("/api/v1/database-backups/{id}"), None)?;
                 }
                 None => {
                     ctx.db()?.delete_backup(&id)?;

@@ -8,7 +8,7 @@
   <img src="resources/brand/RetainPDF-github.svg" alt="PaperLoom" width="320" />
 </p>
 
-Khi đọc bài báo, bạn thường phải chuyển qua lại giữa trình đọc PDF, công cụ dịch, Zotero và ứng dụng ghi chú. PaperLoom gom các bước này vào cùng một nơi: nhập tài liệu, phân tích và dịch, đối chiếu bản dịch với bản gốc, hỏi AI về tài liệu, rồi lưu kết quả về Zotero hoặc Obsidian.
+Khi đọc bài báo, bạn thường phải chuyển qua lại giữa trình đọc PDF, công cụ dịch, Zotero và ứng dụng ghi chú. PaperLoom gom các bước này vào cùng một nơi: nhập tài liệu, phân tích và dịch, đối chiếu bản dịch với bản gốc, rồi lưu kết quả về Zotero hoặc Obsidian.
 
 PaperLoom được phát triển từ [RetainPDF](https://github.com/wxyhgk/retain-pdf) (MIT) và phát hành độc lập, với dữ liệu và cổng riêng, không ảnh hưởng đến bản gốc. Xin cảm ơn tác giả RetainPDF đã xây dựng nền tảng xử lý, dịch và dàn trang PDF.
 
@@ -29,10 +29,9 @@ PaperLoom hiện là dự án mã nguồn mở duy nhất dành cho việc dịc
 
 - **Dịch PDF và giữ bố cục.** Hỗ trợ PDF có thể chỉnh sửa, PDF dạng ảnh và bản quét, gồm văn bản nhiều cột, hình ảnh, bảng và công thức phức tạp.
 - **Quản lý tài liệu tập trung.** Thư viện, bộ sưu tập, mục yêu thích, trung tâm tác vụ và trình đọc đối chiếu bản gốc/bản dịch đều nằm trong cùng một giao diện.
-- **Hỏi AI về tài liệu.** Tóm tắt bài báo, tìm hiểu phương pháp hoặc giải thích công thức. Câu trả lời có trích dẫn để quay về trang gốc. PDF Agent hỗ trợ các thao tác với tài liệu cần được bạn cho phép rõ ràng.
 - **Nhập từ Zotero và lưu bản dịch về đó.** Hỗ trợ nhập hàng loạt. Với Zotero 10+, bạn có thể lưu PDF đã dịch từng tài liệu hoặc theo lô; lưu lại sẽ cập nhật tệp đính kèm hiện có.
 - **Lưu sang Obsidian.** Xuất ghi chú bản dịch tiếng Trung, ghi chú bản gốc tùy chọn, hình ảnh và PDF đã dịch, từng tài liệu hoặc theo lô, kèm thông tin thư mục, liên kết nguồn và liên kết giữa các ghi chú.
-- **Cấu hình theo cách làm việc của bạn.** Hỗ trợ MinerU/Paddle OCR, API mô hình, bảng thuật ngữ, chiến lược dịch tùy chỉnh, bảo vệ mã nguồn, kiểm soát bảng, tối ưu dung lượng PDF và API mở. Bạn cũng có thể tự triển khai hoặc phát triển thêm.
+- **Cấu hình theo cách làm việc của bạn.** Hỗ trợ MinerU/Paddle/GLM-OCR, API mô hình, bảng thuật ngữ, chiến lược dịch tùy chỉnh, bảo vệ mã nguồn, kiểm soát bảng, tối ưu dung lượng PDF và API mở. Bạn cũng có thể tự triển khai hoặc phát triển thêm.
 
 Quy trình dịch khôi phục ý nghĩa hoàn chỉnh của nội dung bị ngắt giữa cột, trang hoặc câu trước khi gửi đến mô hình. Cách này giảm tình trạng mất ngữ cảnh khi dịch từng khung riêng lẻ. Thuật toán phông chữ và dàn trang giúp khôi phục công thức và bố cục bài báo nhiều cột.
 
@@ -95,21 +94,6 @@ Mở bảng Markdown khi cần sao chép hoặc tìm kiếm nội dung trong lú
 
 </details>
 
-### Hỏi đáp AI theo tài liệu
-
-Bạn có thể hỏi “Bài báo này dùng phương pháp nào?” hoặc “Số liệu này nằm ở trang nào?”. Ảnh dưới là phần hỏi đáp về tổng hợp và đặc trưng vật liệu trong Yang 2024. AI sắp xếp các bước tổng hợp và phương pháp đặc trưng, kèm trích dẫn tài liệu. Phần xem trước trích dẫn hiển thị số trang, ảnh thu nhỏ và đoạn trích từ bản gốc.
-
-![Hỏi đáp về tổng hợp vật liệu trong Yang 2024 trên PaperLoom desktop](resources/brand/readme-gallery/product/paperloom-ai-real.png)
-
-<details>
-<summary>Xem bảng tóm tắt phương pháp đặc trưng và trích dẫn</summary>
-
-![Bảng phương pháp đặc trưng do AI tổng hợp và trích dẫn trang 3 trong PaperLoom desktop](resources/brand/readme-gallery/product/paperloom-ai-citations-real.png)
-
-</details>
-
-Câu trả lời này đã chạm giới hạn lượt truy xuất; ảnh vẫn giữ thông báo kết thúc sớm. Hãy đối chiếu câu trả lời AI và kết quả OCR với bản gốc, nhất là điều kiện thí nghiệm, đơn vị và số liệu trong bảng.
-
 ### Obsidian: thông tin tài liệu và nội dung ghi chú
 
 Ghi chú xuất ra có tiêu đề, tác giả, năm, DOI, tạp chí, liên kết Zotero và liên kết đến tài liệu cùng tác vụ trong PaperLoom. Ghi chú bản gốc và bản dịch liên kết với nhau; PDF đã dịch và hình ảnh được lưu trong thư mục tài nguyên đi kèm.
@@ -158,7 +142,7 @@ Tải bản phát hành PaperLoom mới nhất từ [GitHub Releases](https://gi
 1. Mở PaperLoom và nhập thông tin xác thực API của dịch vụ OCR và mô hình dịch trong Cài đặt. Bạn có thể dùng MinerU, PaddleOCR và các mô hình dịch được hỗ trợ.
 2. Nhấn Thêm PDF hoặc chọn tài liệu trên máy qua Nhập từ Zotero. Tệp PDF trong Zotero cần được tải về máy trước.
 3. Bắt đầu dịch và theo dõi tiến độ trong trung tâm tác vụ.
-4. Khi hoàn tất, đọc đối chiếu để kiểm tra văn bản, công thức, hình và bảng. Mở Markdown hoặc hỏi đáp AI khi cần.
+4. Khi hoàn tất, đọc đối chiếu để kiểm tra văn bản, công thức, hình và bảng. Mở Markdown khi cần.
 5. Xuất tệp trong trang chi tiết, hoặc chọn nhiều tài liệu trong thư viện để lưu sang Obsidian hay về Zotero.
 
 API OCR và mô hình do các dịch vụ tương ứng cung cấp. Hạn mức và phí sử dụng do nhà cung cấp quy định.

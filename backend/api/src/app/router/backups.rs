@@ -10,7 +10,7 @@ use futures_util::StreamExt;
 
 use crate::app::AppState;
 use crate::error::AppError;
-use crate::routes::{backups, token_usage};
+use crate::routes::{backups, database_backups, token_usage};
 
 crate::endpoints! {
     state: AppState;
@@ -18,6 +18,14 @@ crate::endpoints! {
     GET "/api/v1/usage" => token_usage::all_usage_route, signed;
     /// 一本书的模型用量
     GET "/api/v1/documents/:document_id/usage" => token_usage::document_usage_route, signed;
+    /// 备份列表
+    GET "/api/v1/database-backups" => database_backups::list_backups_route, admin;
+    /// 马上备份一次
+    POST "/api/v1/database-backups" => database_backups::create_backup_route, admin;
+    /// 删除一个备份
+    DELETE "/api/v1/database-backups/:backup_id" => database_backups::delete_backup_route, admin;
+    /// 从备份恢复
+    POST "/api/v1/database-backups/:backup_id/restore" => database_backups::restore_backup_route, admin;
     /// 备份与恢复状态
     GET "/api/v1/backups" => backups::status, admin;
     /// 创建本地迁移包备份

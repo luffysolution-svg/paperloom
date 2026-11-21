@@ -9,6 +9,7 @@ mod file_responses;
 mod glossaries;
 mod glossaries_contract;
 mod backups;
+mod database_backups;
 mod sync;
 mod token_usage;
 mod golden_replay;

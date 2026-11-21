@@ -578,6 +578,23 @@ async fn zotero_routes_browse_import_dedupe_and_feed_note_metadata() {
         .db
         .link_job_to_document(JOB_ID, &upload.upload_id)
         .expect("link");
+    // A signed-in administrator importing the same attachment owns an independent document.
+    let principal = crate::services::accounts::Principal {
+        user_id: "second-admin".into(),
+        username: "second-admin".into(),
+        role: crate::services::accounts::Role::Admin,
+        via: crate::services::accounts::AuthVia::Session,
+    };
+    let deps = crate::routes::common::build_integration_route_deps(&state);
+    let request = serde_json::from_value(import_body.clone()).unwrap();
+    let account_import = crate::services::integrations::import_zotero_attachments_view(
+        &deps, &principal, &request,
+    ).await.unwrap();
+    let scoped_id = principal.scoped_content_hash(&document_id);
+    assert_eq!(account_import[0].document_id.as_deref(), Some(scoped_id.as_str()));
+    let refs = state.db.external_refs_for_library(principal.owner_id(), "zotero", "users/0").unwrap();
+    assert_eq!(refs[0].document_id, scoped_id);
+
     let (_, again) = call(state.clone(), "POST", import_uri, Some(import_body)).await;
     assert_eq!(again["data"][0]["status"], "existing");
     assert_eq!(again["data"][0]["document_id"], document_id.as_str());

@@ -1,4 +1,4 @@
-//! `retainpdf sync`:多设备同步。后端开着时经后端,没开时直接同步数据目录
+//! `paperloom sync`:多设备同步。后端开着时经后端,没开时直接同步数据目录
 //! (`retainpdf_data::sync::control`,与后端同一套)。
 
 use std::path::PathBuf;
@@ -115,7 +115,7 @@ pub fn run(ctx: &Ctx, action: SyncCommand) -> Result<ExitCode> {
                 None => {
                     let control = control(ctx)?;
                     if !control.enabled()? {
-                        bail!("同步没有开启(`retainpdf sync on`)");
+                        bail!("同步没有开启(`paperloom sync on`)");
                     }
                     if !ctx.json {
                         println!("正在同步…");

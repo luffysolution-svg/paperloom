@@ -227,6 +227,7 @@ export type CreateHomeCompositionOptions = {
   checkApiConnectivity?: (() => Promise<unknown>) | null;
   saveDesktopConfig?: CredentialsMountOptions["saveDesktopConfig"] | null;
   initialDesktopMode?: boolean;
+  legacyState?: typeof import("@/platform/desktop/state.js").desktopBootstrapState;
   fetchGlossary?: typeof fetchGlossaryApi;
   createGlossary?: typeof createGlossaryApi;
   updateGlossary?: typeof updateGlossaryApi;

@@ -104,6 +104,7 @@ export function createHomeComposition({
   checkApiConnectivity: checkApiConnectivityOverride = null,
   saveDesktopConfig: saveDesktopConfigOverride = null,
   initialDesktopMode = false,
+  legacyState = { ...createDeveloperState(), ...createDesktopState() },
   fetchGlossary: fetchGlossaryOverride = fetchGlossaryApi,
   createGlossary: createGlossaryOverride = createGlossaryApi,
   updateGlossary: updateGlossaryOverride = updateGlossaryApi,
@@ -117,7 +118,6 @@ export function createHomeComposition({
   const features: HomeFeatures = {};
 
   // —— 基础 state / view ——
-  const legacyState = { ...createDeveloperState(), ...createDesktopState() };
   setDeveloperConfig(legacyState, loadPersistedDeveloperConfig());
   setDesktopMode(legacyState, initialDesktopMode);
 

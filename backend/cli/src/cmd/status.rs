@@ -1,4 +1,4 @@
-//! `retainpdf status`:后端、数据目录、书库、同步、备份的概况。只读,后端开不开都能用。
+//! `paperloom status`:后端、数据目录、书库、同步、备份的概况。只读,后端开不开都能用。
 
 use std::path::Path;
 use std::process::ExitCode;

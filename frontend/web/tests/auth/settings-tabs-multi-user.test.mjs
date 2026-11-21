@@ -30,3 +30,32 @@ test("普通用户：藏掉单机分栏，多「账户」；要打开「接口�
   await waitFor(() => doc.getElementById("account-body"), "落到账户分栏");
   root.unmount();
 });
+
+test("旧备份入口打开同步与备份中的整库迁移，三个页面均可切换", async () => {
+  const dom = makeDomWith("", {
+    html: "<!doctype html><html><body><div id='root'></div></body></html>",
+    keys: [...DOM_GLOBAL_KEYS, "HTMLSelectElement"],
+  });
+  const React = await import("react");
+  const { createRoot } = await import("react-dom/client");
+  const { SettingsDialog } = await import("../../src/features/settings/ui/SettingsDialog.jsx");
+  const { createDialogStore } = await import("../../src/platform/store/dialog-store.js");
+  const store = createDialogStore(null);
+  const doc = dom.window.document;
+  const root = createRoot(doc.getElementById("root"));
+  root.render(React.createElement(SettingsDialog, {
+    dialogStore: store, onOpenGlossaries() {},
+    syncPanelSlot: React.createElement("p", {id:"sync-body"}),
+    backupPanelSlot: React.createElement("p", {id:"backup-body"}),
+    snapshotPanelSlot: React.createElement("p", {id:"snapshot-body"}),
+  }));
+  store.open({ tab: "backup" });
+  await waitFor(() => doc.getElementById("backup-body"), "整库迁移");
+  assert.equal(doc.querySelector('[data-settings-tab="backup"]'), null);
+  assert.equal(doc.querySelector('[data-settings-tab="sync"]').textContent, "同步与备份");
+  for (const tab of ["sync", "snapshot", "backup"]) {
+    doc.querySelector(`[data-segment-value="${tab}"]`).click();
+    await waitFor(() => doc.getElementById(`${tab}-body`), tab);
+  }
+  root.unmount();
+});
