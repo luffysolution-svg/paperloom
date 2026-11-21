@@ -65,22 +65,20 @@ async function waitFor(predicate, description) {
   assert.fail(`等待超时：${description}`);
 }
 
-test("选择工具条：有 onAddNote 时出现「添加批注」，复制/问 AI/取消保持", () => {
+test("选择工具条：有 onAddNote 时出现「添加批注」，复制/取消保持", () => {
   const withNote = renderToStaticMarkup(React.createElement(ReaderSelectionToolbar, {
     selection: TEXT_SELECTION,
     onDismiss() {},
-    onAskAi() {},
     onAddNote() {},
   }));
   assert.match(withNote, /添加批注/);
   assert.match(withNote, />复制</);
-  assert.match(withNote, /问 AI/);
+  assert.doesNotMatch(withNote, /问 AI/);
   assert.match(withNote, /aria-label="取消选区"/);
 
   const withoutNote = renderToStaticMarkup(React.createElement(ReaderSelectionToolbar, {
     selection: TEXT_SELECTION,
     onDismiss() {},
-    onAskAi() {},
   }));
   assert.doesNotMatch(withoutNote, /添加批注/);
   assert.match(withoutNote, />复制</);

@@ -9,7 +9,6 @@ export { ReaderFavoritesPanel } from "./ReaderFavoritesPanel.js";
 export { ReaderMarkdownPanel } from "./ReaderMarkdownPanel.js";
 export { ReaderNotesPanel } from "./ReaderNotesPanel.js";
 export type { ReaderNotesPanelProps } from "./ReaderNotesPanel.js";
-export { ReaderAiPanel } from "./ReaderAiPanel.js";
 export { ReaderFloatShell } from "./ReaderFloatShell.js";
 export { ReaderReactBoot } from "./ReaderReactBoot.js";
 export { ReaderSelectionToolbar } from "./ReaderSelectionToolbar.js";

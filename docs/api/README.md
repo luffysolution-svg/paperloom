@@ -59,7 +59,6 @@
 - `POST /api/v1/documents/{document_id}/ocr`
 - `POST /api/v1/documents/{document_id}/translate`
 - `GET /api/v1/documents/{document_id}/jobs`
-- `GET /api/v1/documents/{document_id}/agent-versions`
 
 ### 安全凭据引用
 
@@ -68,20 +67,6 @@
 
 新翻译客户端应提交 `translation.credential_ref`，不要长期保存或重复发送内联
 `translation.api_key`。凭据查询只返回元数据，不返回原始值。
-
-### AI 问答与 PDF operation
-
-- `POST /api/v1/ai/ask`
-- `GET|PUT /api/v1/ai/runtime-config`
-- `POST|GET /api/v1/ai/conversations`
-- `GET|PATCH|DELETE /api/v1/ai/conversations/{conversation_id}`
-- `GET /api/v1/ai/conversations/{conversation_id}/operations?limit=&offset=`
-- `GET /api/v1/ai/operations/{operation_id}`
-- `POST /api/v1/ai/operations/{operation_id}/{run|retry|cancel|commit}`
-- `GET /api/v1/ai/operations/{operation_id}/candidate.pdf`
-
-SSE 只负责通知；会话、operation 和文档版本查询才是刷新或断线恢复后的状态真源。
-完整契约见[AI 问答与文档操作](../core/api/reader-ai-chat.md)。
 
 ### OCR
 

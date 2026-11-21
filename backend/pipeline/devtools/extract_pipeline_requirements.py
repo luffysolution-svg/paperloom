@@ -287,7 +287,6 @@ def _build_report(services_root: Path) -> dict[str, object]:
         "pyproject.toml",
         "uv.lock",
         "pipeline/pyproject.toml",
-        "ai/pyproject.toml",
     ]
     return {
         "services_root": str(services_root),

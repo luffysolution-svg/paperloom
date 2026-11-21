@@ -1,9 +1,3 @@
-import {
-  fetchAgentRuntimeConfig,
-  updateAgentRuntimeConfig,
-  type AgentRuntimeConfigUpdate,
-  type AgentRuntimeConfigView,
-} from "@/platform/api/index.js";
 import { savePersistedBrowserStoredConfig } from "@/platform/config/persisted-config.js";
 import { notifyCredentialsChanged } from "@/platform/contracts/credentials-contract.js";
 import type { CredentialsFields, CredentialsStatePort } from "./state.js";
@@ -15,23 +9,7 @@ export type ServiceProfile = {
   name: string;
   credentials: CredentialsFields;
   translation: Record<string, unknown>;
-  agent: AgentRuntimeConfigUpdate | null;
 };
-
-export function agentConfigSnapshot(config: AgentRuntimeConfigView): AgentRuntimeConfigUpdate {
-  return {
-    agent_runtime: config.configured_runtime,
-    agent_confirmation_mode: config.agent_confirmation_mode,
-    llm_base_url: config.llm_base_url,
-    llm_model: config.llm_model,
-    llm_api_key: config.llm_api_key || "",
-    clear_llm_api_key: !config.llm_api_key,
-    fx_gateway_base_url: config.fx_gateway_base_url,
-    fx_model: config.fx_model,
-    fx_gateway_api_key: config.fx_gateway_api_key || "",
-    clear_fx_gateway_api_key: !config.fx_gateway_api_key,
-  };
-}
 
 export function createServiceProfiles({
   getSettings,
@@ -39,16 +17,12 @@ export function createServiceProfiles({
   saveSettings,
   credentialsStatePort,
   onApply,
-  fetchAgent = fetchAgentRuntimeConfig,
-  updateAgent = updateAgentRuntimeConfig,
 }: {
   getSettings: () => Record<string, unknown>;
   getTaskOptions: () => Record<string, unknown>;
   saveSettings: (settings: Record<string, unknown>) => Promise<unknown>;
   credentialsStatePort: CredentialsStatePort;
   onApply: () => void;
-  fetchAgent?: typeof fetchAgentRuntimeConfig;
-  updateAgent?: typeof updateAgentRuntimeConfig;
 }) {
   let busy = false;
 
@@ -77,7 +51,7 @@ export function createServiceProfiles({
   }
 
   // Capture only service settings, so a profile never contains other profiles.
-  async function save(name: string, id?: string, agent?: AgentRuntimeConfigUpdate | null) {
+  async function save(name: string, id?: string) {
     const state = getState();
     const options = getTaskOptions();
     const profile: ServiceProfile = {
@@ -88,9 +62,6 @@ export function createServiceProfiles({
         ["model", "baseUrl", "apiProtocol", "workers", "translationProvider", "translationProfiles"]
           .map((key) => [key, structuredClone(options[key])]),
       ),
-      agent: agent === undefined
-        ? state.profiles.find((item) => item.id === id)?.agent ?? null
-        : agent ? { ...agent } : null,
     };
     await persist([...state.profiles.filter((item) => item.id !== profile.id), profile], profile.id);
   }
@@ -112,10 +83,6 @@ export function createServiceProfiles({
     busy = true;
     announce();
     try {
-      if (profile.agent) {
-        const current = await fetchAgent();
-        await updateAgent({ ...profile.agent, expected_revision: current.configured_revision });
-      }
       await savePersistedBrowserStoredConfig(profile.credentials);
       await saveSettings({ ...profile.translation, activeServiceProfileId: profile.id });
       credentialsStatePort.setCredentials(profile.credentials);

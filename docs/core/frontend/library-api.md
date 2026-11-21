@@ -73,57 +73,7 @@ GET /api/v1/search?q=光学光谱&limit=20
 - 任意长度的 `q` 都能查(≥3 字符走 FTS5 全文索引,更短自动回退模糊匹配);
 - `limit` 上限 100。
 
-### 4. AI 问答与 PDF Agent
-
-> 前端只访问 Rust API：`/api/v1/ai/ask` 反向代理到 `retainpdf-ai`，认证仍使用
-> `X-API-Key`。不要直连 Python 服务，也不要解析模型文案来推断操作状态。
-
-```text
-POST /api/v1/ai/ask
-```
-
-请求除 `question`、`document_id` / `job_id` 和 `conversation_id` 外，还支持：
-
-- `parent_id`、`regenerate`：在消息树上续写或重新生成分支；
-- `user_message_id`、`assistant_message_id`：客户端稳定 ID，网络重试时保持不变；
-- `assistant_mode`：`reading | operations | auto`；
-- `confirm_document_operation`：本次请求是否包含用户对 run/commit 的明确授权；
-- `stream`：是否返回 SSE；
-- `llm_api_key`、`llm_base_url`、`llm_model`：兼容的单请求模型覆盖。
-
-运行模式和长期凭据通过 `GET|PUT /api/v1/ai/runtime-config` 管理。密钥只允许写入，
-查询和错误响应都不会返回明文。
-
-非流式 `data` 除 `answer/citations/tool_trace/rounds` 外，还包含
-`persisted`、`conversation_id`、`agent_runtime`、`operation_refs` 和
-`confirmation_requests`。`persisted=false` 时必须提示用户本轮历史可能没有保存。
-
-流式事件包括：
-
-| `type` | 说明 |
-| --- | --- |
-| `agent_session` | 会话 ID、实际 runtime 和确认模式 |
-| `tool` / `agent_tool` | 阅读工具或 Agent 工具的安全过程投影 |
-| `agent_operation` | operation 身份和状态刷新提示 |
-| `agent_confirmation_required` | 后端生成的结构化待确认动作 |
-| `answer_delta` | 增量文本片段，不是累积全文 |
-| `compress` | 对话历史发生压缩 |
-| `done` | 最终载荷，包含 `persisted` |
-| `error` | 本轮失败 |
-
-前端渲染要点：
-
-- `[n]` 对应 `citations[].ref`，使用 `job_id + page_idx + block_id` 跳转；
-- 默认确认模式下只渲染后端的 `confirmation_requests`，不要把“确认”自然语言
-  再发给模型猜测；
-- SSE 断线后重新查询 conversation 和 operation。SSE 本身不是可重放状态真源；
-- AI 服务未启动时反代返回 502，可提示“AI 服务未运行”。
-
-完整契约见 [`ai-ask.v1.schema.json`](../../../backend/contracts/ai-ask.v1.schema.json)，
-接入与恢复说明见 [AI 问答与文档操作 API](../api/reader-ai-chat.md)。
-
-
-### 5. 资产(收藏截图等图片附件)
+### 4. 资产(收藏截图等图片附件)
 
 ```
 POST /api/v1/assets                    ← multipart,字段名 file(png/jpeg/webp,≤20MB)

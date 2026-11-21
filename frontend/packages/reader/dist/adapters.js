@@ -1,7 +1,5 @@
-import { s as t } from "./config-DT8amRQ9.js";
-import { s as a, r as s } from "./answer-enhance-D8zK9znw.js";
-import { h as A, l as P, n as D } from "./markdown-payload-kK3ewW_I.js";
-const n = [
+import { h as R, l as i, n as v } from "./markdown-payload-kK3ewW_I.js";
+const a = [
   "isMockMode",
   "resolveResourceUrl",
   "fetchProtected",
@@ -17,9 +15,6 @@ const n = [
   "liveTranslation",
   "pdf",
   "sessionData",
-  "aiOperations",
-  "conversations",
-  "askChat",
   "resolveMarkdownAssetUrl",
   "resolveReaderDownloadUrls",
   "resolveReaderDownloadName",
@@ -29,10 +24,8 @@ const n = [
   "fetchDocumentByJobId",
   "createFavorite",
   "fetchFavorites",
-  "deleteFavorite",
-  "credentialsPort",
-  "askDocumentAi"
-], c = [
+  "deleteFavorite"
+], t = [
   "resolveMarkdownAssetUrl",
   "resolveReaderDownloadUrls",
   "resolveReaderDownloadName",
@@ -41,33 +34,28 @@ const n = [
   "fetchDocumentByJobId",
   "createFavorite",
   "fetchFavorites",
-  "deleteFavorite",
-  "credentialsPort",
-  "askDocumentAi"
+  "deleteFavorite"
 ];
-let r = null;
-function i(e) {
-  r = e, t({ credentialsPort: (e == null ? void 0 : e.credentialsPort) ?? null }), s(), e && a({
-    fetchProtected: e.fetchProtected,
-    resolveResourceUrl: e.resolveResourceUrl
-  });
+let e = null;
+function d(r) {
+  e = r;
 }
-function R() {
-  return r;
+function l() {
+  return e;
 }
-function f(e) {
-  const o = r == null ? void 0 : r[e];
-  if (o == null) throw new Error(`Reader adapter missing: ${String(e)} (call setReaderAdapters)`);
+function s(r) {
+  const o = e == null ? void 0 : e[r];
+  if (o == null) throw new Error(`Reader adapter missing: ${String(r)} (call setReaderAdapters)`);
   return o;
 }
 export {
-  n as READER_ADAPTER_KEYS,
-  c as READER_REQUIRED_ADAPTER_KEYS,
-  R as getReaderAdapters,
-  A as hasMarkdownContent,
-  P as loadMarkdownPayloadWithFallback,
-  D as normalizeMarkdownPayload,
-  f as requireAdapter,
-  i as setReaderAdapters
+  a as READER_ADAPTER_KEYS,
+  t as READER_REQUIRED_ADAPTER_KEYS,
+  l as getReaderAdapters,
+  R as hasMarkdownContent,
+  i as loadMarkdownPayloadWithFallback,
+  v as normalizeMarkdownPayload,
+  s as requireAdapter,
+  d as setReaderAdapters
 };
 //# sourceMappingURL=adapters.js.map

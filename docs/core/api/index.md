@@ -823,46 +823,7 @@ CSV 表头支持英文和中文别名：
 - `network_error`
 - `provider_error`
 
-## 12. AI 问答、会话与文档操作
-
-推荐入口：
-
-```text
-POST /api/v1/ai/ask
-```
-
-该接口同时承载带引用的阅读问答和受限 PDF Agent 操作。`assistant_mode` 可取
-`reading | operations | auto`。流式响应使用 SSE，`answer_delta.text` 是增量片段；
-客户端必须同时看到非空 `conversation_id` 和 `done.persisted=true`，才能把本轮视为
-可在刷新后恢复的持久历史。
-
-相关公共接口：
-
-- `GET|PUT /api/v1/ai/runtime-config`
-- `POST|GET /api/v1/ai/conversations`
-- `POST /api/v1/ai/conversations/fork`
-- `GET|PATCH|DELETE /api/v1/ai/conversations/{conversation_id}`
-- `POST /api/v1/ai/conversations/{conversation_id}/messages`
-- `GET /api/v1/ai/conversations/{conversation_id}/operations?limit=50&offset=0`
-- `GET /api/v1/ai/operations/{operation_id}`
-- `POST /api/v1/ai/operations/{operation_id}/{run|retry|cancel|commit}`
-- `GET /api/v1/ai/operations/{operation_id}/candidate.pdf`
-
-SSE 只负责通知；会话、消息树和 operation 查询结果才是断线重连后的权威状态。
-默认 `explicit` 模式下，客户端应渲染后端返回的
-`agent_confirmation_required` / `confirmation_requests`，不得根据模型文字猜测确认。
-operation 列表响应包含 `operations`、`total`、`limit`、`offset` 和 `has_more`；同一
-页按 `updated_at DESC, operation_id DESC` 稳定排序。
-
-完整请求、事件、会话分支、operation 并发保护和旧接口迁移说明见
-[AI 问答与文档操作 API](./reader-ai-chat.md)。公开 operation 与 runtime 配置字段
-分别以
-[`public-document-operation.v1.schema.json`](../../../contracts/public-document-operation.v1.schema.json)
-和
-[`runtime-config.v1.schema.json`](../../../contracts/runtime-config.v1.schema.json)
-为准。
-
-## 13. Simple App 入口
+## 12. Simple App 入口
 
 `POST /api/v1/translate/bundle`
 
@@ -894,7 +855,6 @@ SQLite 主要表：
 - [本地启动与配置](./local-dev.md)
 - [存储结构](./storage.md)
 - [错误排查](./troubleshooting.md)
-- [AI 问答与文档操作](./reader-ai-chat.md)
 - [Rust API 架构边界](../rust_api/README.md)
 - [当前运行主链](../../../backend/api/CURRENT_API_MAP.md)
 - [Stage 执行契约](../../../backend/api/STAGE_EXECUTION_CONTRACT.md)

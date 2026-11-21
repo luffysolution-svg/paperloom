@@ -11,7 +11,12 @@ import { Check, ChevronDown, Code2, ExternalLink, Languages, PlugZap, Save, Tria
 import { Select as SelectPrimitive } from "radix-ui";
 import { SecretInput } from "./SecretInput.js";
 import { DesktopPrivateApiAccess } from "./DesktopPrivateApiAccess.js";
-import { API_PROTOCOL_LABELS } from "@retainpdf/api";
+
+const API_PROTOCOL_LABELS: Record<string, string> = {
+  openai: "OpenAI Chat Completions",
+  openai_responses: "OpenAI Responses",
+  anthropic: "Anthropic Messages",
+};
 
 const { browser: BROWSER_IDS } = CREDENTIAL_DOM_IDS;
 

@@ -47,7 +47,6 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
-    "@assistant-ui/react": "^0.15.16",
     "@retainpdf/api": "0.1.0",
     "@retainpdf/contracts": "0.1.0",
     "@retainpdf/domain": "0.1.0",

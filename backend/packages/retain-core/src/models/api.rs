@@ -42,8 +42,6 @@ pub use super::view::{
     NormalizationSummaryView,
     OcrAmbiguityReceiptFieldView, OcrAmbiguityResolutionKind, OcrAmbiguityResolutionRequest,
     OcrAmbiguityResolutionView, OcrAmbiguityView, OcrJobSummaryView, LayoutDocxQuery, PagePreviewQuery,
-    ReaderAiChatRequest, ReaderAiChatView, ReaderAiCitationView, ReaderAiContextView,
-    ReaderAiHistoryMessageView, ReaderAiRectView, ReaderAiSelectionView, ReaderAiUsedContextView,
     ReaderDocumentMetadataView, ReaderMetadataView, ReaderPageMetadataView, ReaderRegionBoxView,
     ReaderRegionItemView, ReaderRegionsView, RetryStageKind, RetryStageRequest,
     RetryStageSubmissionView, StageActionsView, StageRetryActionLinkView, StageRetryActionView,

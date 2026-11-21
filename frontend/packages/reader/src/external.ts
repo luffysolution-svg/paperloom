@@ -1,28 +1,10 @@
 // @retainpdf/reader — 包内运行时访问层（runtime access layer）。
-//
-// 与 frontend/web/src/app/reader/external.ts 同名但方向相反、职责不同：
-//   - 本文件（包内）：包内代码「读取」宿主注入能力的访问层，实现是
-//     adapters 注入 + 轻量 fallback，未注入时返回空/默认，保证 standalone
-//     可 tsc/build；深功能需宿主先 setReaderAdapters。
-//   - web app/reader/external.ts（宿主）：RetainPDF Web「提供」给包的能力出口。
-// 二者不是互相转发关系，改动任一侧前先确认方向，避免误把宿主导出搬进包内。
-//
-// 职责边界：adapters.ts 是宿主能力的「注入注册表」，本文件是包内读取这些
-// 能力的「运行时访问层」。历史上独立的 config-port.ts 已删除，其宿主配置
-// 能力统一由 adapters + runtime/config 承载，不要再新增平行入口。
-// 未注入的 port 尽量给出空/默认实现；缺失关键能力时才 requireAdapter 抛错。
-// data/pageConfig port 采用显式方法转发（见下方），方法名与形状都由包内 runtime
-// 工厂签名派生，宿主漏接或拼错会在 tsc/运行时立刻暴露。极少数 `as any` 仅用于
-// port 签名比宿主实现窄（0 参 vs 可选入参），属有意为之且已就近注释。
 
 import { getReaderAdapters, requireAdapter } from "./adapters.js";
 import type { createReaderDataPort } from "./runtime/data.js";
 import type { createReaderPageConfigPort } from "./runtime/config.js";
 import type { ReaderPdfPort } from "./contracts/pdf.js";
 import type { ReaderSessionDataPort } from "./contracts/session.js";
-import type { ReaderAgentOperationPort } from "./contracts/ai-operations.js";
-import type { ReaderConversationPort } from "./contracts/conversations.js";
-import type { ReaderAskPort } from "./contracts/ai-chat.js";
 import {
   resolveReaderDownloadName as defaultResolveReaderDownloadName,
   resolveReaderDownloadUrls as defaultResolveReaderDownloadUrls,
@@ -31,9 +13,6 @@ import {
   createReaderServerFavoritesPort as createSharedReaderServerFavoritesPort,
 } from "./shared/state/server-favorites-port.js";
 import type { CreateServerFavoritesPortOptions } from "./shared/types/types.js";
-import {
-  createReaderAskAnswerer as createSharedReaderAskAnswerer,
-} from "./shared/ai/ask-answerer.js";
 
 // —— config / mock / messaging ——
 export const isMockMode = (...args: any[]): boolean => (getReaderAdapters()?.isMockMode as any)?.(...args) ?? false;
@@ -53,9 +32,6 @@ export const resolvePdfjsVendorUrl = (relativePath = ""): string =>
   (getReaderAdapters()?.resolvePdfjsVendorUrl as any)?.(relativePath) ?? "";
 
 // —— js/reader 共享 ports ——
-// 显式方法转发：方法名写死，宿主 port 缺失或拼错方法名都会在此抛错，
-// 而不是旧 Proxy 静默返回 undefined。形状由 adapter 契约（runtime 工厂
-// 派生的具体类型）约束，方法增删会在 tsc 阶段暴露。
 type ReaderDataPort = ReturnType<typeof createReaderDataPort>;
 type ReaderPageConfigPort = ReturnType<typeof createReaderPageConfigPort>;
 const readDataPort = (): ReaderDataPort => requireAdapter("defaultReaderDataPort");
@@ -101,14 +77,9 @@ export const readerSessionDataPort = (): ReaderSessionDataPort => {
     resolveReaderArtifactUrl: (item) => adapters.resolveReaderArtifactUrl?.(item) ?? "",
   };
 };
-export const readerAgentOperationPort = (): ReaderAgentOperationPort | null => getReaderAdapters()?.aiOperations ?? null;
-export const readerConversationPort = (): ReaderConversationPort | null => getReaderAdapters()?.conversations ?? null;
-export const readerAskChatPort = (): ReaderAskPort | null => getReaderAdapters()?.askChat ?? null;
 
 export const resolveReaderAnchor = (...a: any[]) => getReaderAdapters()?.resolveReaderAnchor?.(...a) ?? null;
 export const resolveReaderDocumentId = (): string => getReaderAdapters()?.resolveReaderDocumentId?.() ?? "";
-// resolveReaderJobId / resolvePdfjsVendorUrl 的 port 签名比宿主实现窄
-//（0 参 vs 可选入参），保留最小局部 cast 以原样转发参数。
 export const resolveReaderJobId = (...a: any[]): string => (getReaderAdapters()?.resolveReaderJobId as any)?.(...a) ?? "";
 export const resolveReaderArtifactUrl = (...a: any[]) => getReaderAdapters()?.resolveReaderArtifactUrl?.(...a) ?? "";
 export const resolveReaderSourcePdf = (...a: any[]) => getReaderAdapters()?.resolveReaderSourcePdf?.(...a) ?? null;
@@ -141,80 +112,6 @@ export const resolveMarkdownAssetUrl = (
 ): string => requireAdapter("resolveMarkdownAssetUrl")(imagesBaseUrl, relativePath);
 export { parseMarkdownWithMath } from "./shared/content/markdown-math.js";
 
-// —— AI ——
-// Factory 在 package 边界内消费宿主 adapter，调用方只需传 jobId。
-// 旧实现直接 re-export shared factory，导致默认 ask/documentByJobId 空实现。
-export const createReaderAskAnswerer = (options: Record<string, unknown> = {}) => {
-  const adapters = getReaderAdapters();
-  return createSharedReaderAskAnswerer({
-    apiPrefix: adapters?.apiPrefix || "/api/v1",
-    ask: adapters?.askDocumentAi,
-    documentByJobId: adapters?.fetchDocumentByJobId,
-    ...options,
-  });
-};
-export { createReaderMarkdownAnswerer } from "./shared/ai/markdown-answerer.js";
-export {
-  hydrateProtectedImages,
-  injectCitationMarkers,
-  isAgenticCitation,
-  mountAnswerHtml,
-  normalizeAiCitations,
-  neutralizeMarkdownAnchors,
-  renderCitationFooter,
-  revokeHydratedImageUrls,
-} from "./shared/ai/answer-enhance.js";
-export type { AiCitationLike } from "./shared/ai/answer-enhance.js";
-export {
-  armReaderAiClickShield,
-  clearReaderAiNavigationLock,
-  installReaderWindowOpenGuard,
-  isReaderAiNavigationLocked,
-  lockReaderAiNavigation,
-  shouldIgnoreReaderAiNavEvent,
-} from "./shared/ai/ui-interaction-lock.js";
-export {
-  peekFinalAnswerHtmlCache,
-  renderFinalAnswerHtml,
-  renderStreamingPreviewHtml,
-} from "./shared/ai/render-answer-html.js";
-export { sanitizeAssistantAnswer } from "./shared/ai/sanitize-answer.js";
-export {
-  clearThreadBranchSnapshot,
-  loadThreadBranchSnapshot,
-  saveThreadBranchSnapshot,
-  threadBranchStorageKey,
-  visiblePathFromSnapshot,
-} from "./shared/ai/thread-branch-store.js";
-export type {
-  ThreadBranchCitation,
-  ThreadBranchItem,
-  ThreadBranchMessage,
-  ThreadBranchSnapshot,
-} from "./shared/ai/thread-branch-store.js";
-export {
-  appendConversationMessage,
-  baseConversationTitle,
-  createConversation,
-  deleteConversation,
-  forkConversationFromPath,
-  getConversation,
-  listConversations,
-  messagesToBranchItems,
-  nextForkConversationTitle,
-  patchConversation,
-} from "@retainpdf/api/conversations";
-export type {
-  ConversationDetail,
-  ConversationRecord,
-  MessageRecord,
-} from "@retainpdf/api/conversations";
-export {
-  clearStoredConversationId,
-  loadStoredConversationId,
-  saveStoredConversationId,
-} from "./shared/ai/conversation-store.js";
-
 // —— 服务端收藏 ——
 export const API_PREFIX = "/api/v1";
 export const fetchDocumentByJobId = (...args: [string, string]) =>
@@ -239,10 +136,3 @@ export function createReaderServerFavoritesPort(options: CreateServerFavoritesPo
 }
 export { normalizeServerFavorite } from "./shared/state/server-favorites-port.js";
 export type { ServerFavorite } from "./shared/types/types.js";
-
-// —— 阅读器 AI 面板：模型 Key 门禁 ——
-export {
-  CREDENTIALS_CHANGED_EVENT,
-  hasModelApiKey,
-  MISSING_MODEL_API_KEY_MESSAGE,
-} from "./shared/ai/config.js";

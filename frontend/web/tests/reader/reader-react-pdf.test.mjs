@@ -202,10 +202,10 @@ test("assistant tools use a visible right rail and a unified dock header", () =>
   }));
   assert.match(rail, /reader-assistant-rail/);
   assert.match(rail, /aria-label="打开Markdown"/);
-  assert.match(rail, /aria-label="打开AI 问答"/);
+  assert.doesNotMatch(rail, /aria-label="打开AI 问答"/);
 
   const dock = renderToStaticMarkup(createElement(ReaderAssistantDock, {
-    active: "ai",
+    active: "markdown",
     onSelect() {},
     onClose() {},
   }));
@@ -214,7 +214,7 @@ test("assistant tools use a visible right rail and a unified dock header", () =>
   assert.match(dock, /aria-label="关闭阅读辅助面板"/);
 });
 
-test("assistant state restores directly and migrates the former split preference", () => {
+test("assistant state restores directly and drops retired ai preference", () => {
   assert.equal(resolveInitialAssistantPanel("source", {
     schema: "retainpdf_reader_view_v1",
     assistantPanel: "markdown",
@@ -222,9 +222,14 @@ test("assistant state restores directly and migrates the former split preference
   }), "markdown");
   assert.equal(resolveInitialAssistantPanel("translated", {
     schema: "retainpdf_reader_view_v1",
+    splitLayout: { left: "source", right: "markdown" },
+    updatedAt: 1,
+  }), "markdown");
+  assert.equal(resolveInitialAssistantPanel("translated", {
+    schema: "retainpdf_reader_view_v1",
     splitLayout: { left: "source", right: "ai" },
     updatedAt: 1,
-  }), "ai");
+  }), null);
   assert.equal(resolveInitialAssistantPanel("source", {
     schema: "retainpdf_reader_view_v1",
     splitLayout: { left: "source", right: "translated" },
@@ -233,7 +238,7 @@ test("assistant state restores directly and migrates the former split preference
   assert.equal(resolveInitialAssistantPanel("source", null), null);
   assert.equal(resolveInitialAssistantPanel("compare", {
     schema: "retainpdf_reader_view_v1",
-    assistantPanel: "ai",
+    assistantPanel: "markdown",
     updatedAt: 1,
   }), null);
 });
@@ -265,7 +270,7 @@ test("reader view state persists page fraction, zoom and assistant panel without
   saveReaderViewState(scope, { anchor: { page: 7, fraction: 0.42 } }, storage);
   saveReaderViewState(scope, {
     zoom: 0.65,
-    assistantPanel: "ai",
+    assistantPanel: "markdown",
     splitLayout: null,
   }, storage);
   assert.deepEqual(loadReaderViewState(scope, storage), {
@@ -273,7 +278,7 @@ test("reader view state persists page fraction, zoom and assistant panel without
     anchor: { page: 7, fraction: 0.42 },
     zoom: 0.65,
     splitLayout: null,
-    assistantPanel: "ai",
+    assistantPanel: "markdown",
     updatedAt: loadReaderViewState(scope, storage).updatedAt,
   });
   assert.equal(readerViewStateScope({ jobId: "job-2" }), "job:job-2");

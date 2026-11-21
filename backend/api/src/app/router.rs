@@ -8,7 +8,6 @@ use crate::app::AppState;
 use crate::auth;
 use crate::routes::common::{method_not_allowed, unknown_route};
 
-mod ai;
 mod backups;
 mod collections;
 mod credentials;
@@ -17,7 +16,6 @@ mod fonts;
 mod glossaries;
 mod ingestion;
 mod integrations;
-mod internal_agent;
 mod jobs;
 mod library;
 mod providers;
@@ -67,9 +65,7 @@ fn authenticated_api_routes(state: &AppState) -> Router<AppState> {
         .merge(ingestion::routes())
         .merge(glossaries::routes())
         .merge(documents::routes())
-        .merge(ai::routes())
         .merge(collections::routes())
-        .merge(internal_agent::routes())
         .merge(library::routes())
         .merge(jobs::routes())
         .merge(providers::routes())

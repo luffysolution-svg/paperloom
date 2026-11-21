@@ -10,7 +10,6 @@ import { CREDENTIAL_DOM_IDS } from "./credentials-dom-ids.js";
 import { useCredentialsController } from "./useCredentialsController.js";
 import { OcrPanels, TranslationPanel } from "./ProviderPanels.jsx";
 import { Button as ButtonBase } from "@/ui/Button.jsx";
-import { AgentRuntimeSettingsCard, type AgentRuntimeSettingsHandle } from "./AgentRuntimeSettingsCard.jsx";
 import { ServiceProfileManager } from "./ServiceProfileManager.js";
 import { DialogFooter } from "@/ui/components/dialog.js";
 import { FormStatusLine } from "@/ui/components/form-status-line.js";
@@ -28,7 +27,6 @@ const SAVED_FEEDBACK_MS = 1600;
 
 export function CredentialsWorkbench() {
   const { credentials, view, handlers, feature } = useCredentialsController();
-  const agentRef = useRef<AgentRuntimeSettingsHandle>(null);
   const saveInFlight = useRef(false);
   const [savingAll, setSavingAll] = useState(false);
 
@@ -41,9 +39,6 @@ export function CredentialsWorkbench() {
     saveInFlight.current = true;
     setSavingAll(true);
     try {
-      if (agentRef.current && !await agentRef.current.saveIfChanged()) {
-        throw new Error("AI Agent 配置未保存，请检查该组设置");
-      }
       if (!await handlers?.save?.()) {
         if (profileName !== undefined) throw new Error("请先补全 OCR 和翻译 API 设置");
         return;
@@ -52,8 +47,7 @@ export function CredentialsWorkbench() {
       const { profiles, activeId } = manager.getState();
       const active = profiles.find((profile) => profile.id === activeId);
       if (!setupMode) {
-        await manager.save(profileName ?? active?.name ?? "默认方案", profileName === undefined ? active?.id : undefined,
-          agentRef.current?.getProfile() ?? active?.agent ?? null);
+        await manager.save(profileName ?? active?.name ?? "默认方案", profileName === undefined ? active?.id : undefined);
       }
     } catch (error) {
       feature.setDialogStatus((error as Error).message || "保存失败", "error");
@@ -140,15 +134,6 @@ export function CredentialsWorkbench() {
           </div>
         </div>
       </div>
-      {setupMode ? (
-        <p className="credential-agent-setup-note">
-          AI Agent 可稍后在设置中配置。
-        </p>
-      ) : (
-        <div className="credential-agent-section">
-          <AgentRuntimeSettingsCard ref={agentRef} />
-        </div>
-      )}
       {saveAction}
     </div>
   );

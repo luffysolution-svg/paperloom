@@ -6,7 +6,6 @@ RUST_API_ROOT="${RUST_API_ROOT:-/app/services/api}"
 RUST_API_DATA_ROOT="${RUST_API_DATA_ROOT:-${RUST_API_DATA_DIR:-/data}}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-${RUST_API_OUTPUT_ROOT:-$RUST_API_DATA_ROOT/jobs}}"
 TYPST_PACKAGE_CACHE_PATH="${TYPST_PACKAGE_CACHE_PATH:-$RUST_API_DATA_ROOT/typst-package-cache}"
-RETAIN_AI_FX_STATE_ROOT="${RETAIN_AI_FX_STATE_ROOT:-$RUST_API_DATA_ROOT/agent-runtime/fx}"
 HOME="${HOME:-$RUST_API_DATA_ROOT/runtime-home}"
 TMPDIR="${TMPDIR:-/tmp/retainpdf}"
 XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
@@ -37,7 +36,6 @@ export RUST_API_DATA_ROOT
 export OUTPUT_ROOT
 export RUST_API_OUTPUT_ROOT="$OUTPUT_ROOT"
 export TYPST_PACKAGE_CACHE_PATH
-export RETAIN_AI_FX_STATE_ROOT
 export HOME
 export TMPDIR
 export XDG_CACHE_HOME
@@ -53,7 +51,6 @@ for directory in \
   "$RUST_API_DATA_ROOT/db" \
   "$RUST_API_OUTPUT_ROOT" \
   "$TYPST_PACKAGE_CACHE_PATH" \
-  "$RETAIN_AI_FX_STATE_ROOT" \
   "$HOME" \
   "$XDG_CACHE_HOME" \
   "$XDG_CONFIG_HOME" \
@@ -75,18 +72,5 @@ for pkg in "cmarker/$CMARKER_VERSION" "mitex/$MITEX_VERSION"; do
     exit 1
   fi
 done
-
-if [ "${RETAIN_AI_RUNTIME:-python}" = "fx" ]; then
-  fx_command="${RETAIN_AI_FX_COMMAND:-fx}"
-  expected_fx_version="${RETAIN_AI_FX_EXPECTED_VERSION:-0.0.5}"
-  if ! actual_fx_version="$("$fx_command" --version 2>/dev/null)"; then
-    echo "ERROR: FX runtime was selected but $fx_command is not executable." >&2
-    exit 1
-  fi
-  if [ "$actual_fx_version" != "$expected_fx_version" ]; then
-    echo "ERROR: FX runtime version mismatch: expected $expected_fx_version, got $actual_fx_version." >&2
-    exit 1
-  fi
-fi
 
 exec /usr/local/bin/rust_api

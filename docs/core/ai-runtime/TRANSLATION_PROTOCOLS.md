@@ -19,5 +19,3 @@
 
 翻译传输位于 `backend/pipeline/retainpdf_pipeline/translate/llm/shared/model_wire.py`。
 原生协议只有收到完整终态才接受结果，断流和被截断的输出不会作为完成的译文。
-
-问答继续使用原有运行时配置和 OpenAI 兼容模型调用，见 [AI_RUNTIME.md](AI_RUNTIME.md)。

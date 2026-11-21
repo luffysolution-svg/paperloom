@@ -36,12 +36,10 @@ const KNOWN_ORPHANS = {
   // 键跟随 PAGES[].jsDir，src/js/reader 已不存在。
   // 扩面到 .tsx 后暴露的非 DOM 字符串，均非样式类或 id，无法补归属，登记为
   // 已知孤儿：
-  //   reader-ai-pending   ReaderAppReactPdf 的 React key 兜底值
   //   reader-embedded     boot.tsx 运行时加到 body 的标记类(无对应 CSS)
   // react-resizable-panels 的 reader-document / reader-assistant 是 const 声明，
   // 由 declarations 归属覆盖，不需豁免。
   "../packages/reader/src": Object.freeze([
-    "reader-ai-pending",
     "reader-embedded",
   ]),
   // home 页的 JS 真值随 B6/B7 全部落到 src/app/home（src/js/features 已删除）。

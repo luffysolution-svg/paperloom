@@ -179,6 +179,13 @@ def test_rejects_incomplete_backend_layout(tmp_path: Path) -> None:
         resolve_backend_source(repo_root, allow_dirty=True)
 
 
+def test_required_paths_exist_in_this_repository() -> None:
+    missing = [relative for relative in REQUIRED_PATHS if not (REPO_ROOT / "backend" / relative).exists()]
+    missing += [relative for relative in REQUIRED_ROOT_PATHS if not (REPO_ROOT / relative).exists()]
+
+    assert missing == []
+
+
 def test_manifest_declares_only_the_embedded_package_path() -> None:
     manifest = json.loads((REPO_ROOT / "backend-package.json").read_text(encoding="utf-8"))
 
@@ -220,7 +227,7 @@ def test_backend_workflow_commands_do_not_bypass_the_package_resolver(
         if stripped.startswith('- "backend/'):
             # Embedded package path filters intentionally trigger relevant jobs.
             continue
-        if any(path in line for path in ("backend/api", "backend/ai", "backend/pipeline")):
+        if any(path in line for path in ("backend/api", "backend/pipeline")):
             hardcoded_backend_lines.append(stripped)
 
     assert hardcoded_backend_lines == []

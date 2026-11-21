@@ -9,7 +9,6 @@ pub(super) mod live_stage;
 mod live_translation;
 mod presentation;
 mod query;
-mod reader_ai;
 mod reader_regions;
 mod readiness;
 mod stage_plan;

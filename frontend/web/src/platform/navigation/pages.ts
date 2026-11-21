@@ -1,6 +1,6 @@
 // 三页导航统一契约（壳 A5）：home / detail / reader。
 //
-// - home:   index.html?tab=library|collections|favorites|ask
+// - home:   index.html?tab=library|collections|favorites（?tab=ask 已移除，落回图书馆）
 //          （UI 历史键 "categories" == 领域 collections，双向兼容）
 // - detail: detail.html?job_id=<jobId>
 // - reader: reader.html?job_id=<jobId>&page_idx=<n>&block_id=<id>
@@ -10,15 +10,15 @@
 // 跳转统一走 navigateTo()；APP_EVENTS.openReaderRequested 事件保留兼容，
 // 新代码优先用 buildReaderUrl() + navigateToReader()/navigateTo()。
 
-export type HomeTab = "library" | "collections" | "favorites" | "ask";
+export type HomeTab = "library" | "collections" | "favorites";
 /** UI 层历史键：categories == collections（见 LibraryTopTabs COLLECTIONS_TAB_KEY）。 */
 export type HomeTabKey = HomeTab | "categories";
 
-export const HOME_TABS: readonly HomeTab[] = ["library", "collections", "favorites", "ask"];
+export const HOME_TABS: readonly HomeTab[] = ["library", "collections", "favorites"];
 
 function normalizeTabKey(raw: unknown): HomeTabKey | "" {
   const tab = `${raw || ""}`.trim().toLowerCase();
-  if (tab === "library" || tab === "collections" || tab === "categories" || tab === "favorites" || tab === "ask") {
+  if (tab === "library" || tab === "collections" || tab === "categories" || tab === "favorites") {
     return tab as HomeTabKey;
   }
   return "";
@@ -39,7 +39,6 @@ export function toContractTab(tab: HomeTabKey | string): HomeTab {
   const key = `${tab || ""}`.trim().toLowerCase();
   if (key === "categories" || key === "collections") return "collections";
   if (key === "favorites") return "favorites";
-  if (key === "ask") return "ask";
   return "library";
 }
 
@@ -48,7 +47,6 @@ export function toUiTabKey(tab: HomeTab | HomeTabKey | string): HomeTabKey {
   const key = `${tab || ""}`.trim().toLowerCase();
   if (key === "collections" || key === "categories") return "categories";
   if (key === "favorites") return "favorites";
-  if (key === "ask") return "ask";
   return "library";
 }
 

@@ -8,7 +8,6 @@ use tracing::warn;
 use super::jobs::reconcile_owned_runtime;
 use crate::config::AppConfig;
 use crate::db::Db;
-use crate::services::agent_capabilities::AgentCapabilityAuthority;
 use crate::services::runtime_gateway::{JobDriverRegistry, JobRuntime};
 use crate::services::uploads::{UploadService, UploadServiceConfig};
 
@@ -17,7 +16,6 @@ pub struct AppState {
     pub config: Arc<AppConfig>,
     pub db: Arc<Db>,
     pub(crate) backups: Arc<crate::services::backups::BackupService>,
-    pub(crate) ai_gateway: Arc<crate::services::ai::AiGateway>,
     pub(crate) uploads: Arc<UploadService>,
     pub download_generation: Arc<crate::services::download_generation::DownloadGeneration>,
     pub(crate) query_execution: Arc<crate::services::query_execution::QueryExecution>,
@@ -26,8 +24,6 @@ pub struct AppState {
     pub job_drivers: Arc<JobDriverRegistry>,
     /// 任务运行时落点（ADR-002）：进程内或远端 jobsd，装配一次此后只读。
     pub job_runtime: Arc<JobRuntime>,
-    /// Per-process signing authority for short-lived, least-privilege agent capabilities.
-    pub agent_capabilities: Arc<AgentCapabilityAuthority>,
     /// Staged rollout: disabled until worker pause/resume integration is enabled.
     pub model_executor: Option<Arc<crate::services::model_executor::ModelExecutor>>,
 }
@@ -74,11 +70,6 @@ pub fn build_state(config: Arc<AppConfig>) -> Result<AppState> {
             config.clone(),
             db.clone(),
         )),
-        ai_gateway: Arc::new(crate::services::ai::AiGateway::new(
-            &config.ai_proxy,
-            config.ai_service.base_url(),
-            crate::runtime::ai_supervisor::ai_service_status,
-        )?),
         uploads: Arc::new(UploadService::new(
             db.clone(),
             UploadServiceConfig {
@@ -99,7 +90,6 @@ pub fn build_state(config: Arc<AppConfig>) -> Result<AppState> {
         job_slots: Arc::new(Semaphore::new(config.max_running_jobs)),
         job_drivers: Arc::default(),
         job_runtime,
-        agent_capabilities: Arc::new(AgentCapabilityAuthority::new_random()?),
     })
 }
 
@@ -183,14 +173,10 @@ mod tests {
                 provider_limits: crate::config::ProviderLimitsConfig::default(),
                 provider_runtime: crate::config::ProviderRuntimeConfig::default(),
                 job_runner: crate::config::JobRunnerConfig::default(),
-                ai_service: crate::config::AiServiceConfig::default(),
                 jobs_service: crate::config::JobsServiceConfig::default(),
                 asset: crate::config::AssetConfig::default(),
                 cleanup: crate::config::CleanupConfig::default(),
                 db: crate::config::DbConfig::default(),
-                ai_proxy: crate::config::AiProxyConfig::default(),
-                reader_llm: crate::config::ReaderLlmConfig::default(),
-                rag: crate::config::RagConfig::default(),
                 public_base_url: None,
             })
         }

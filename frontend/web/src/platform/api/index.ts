@@ -7,7 +7,6 @@
 // re-exports them. Keep the public export names/paths stable.
 
 export * from "./domains/http.js";
-export * from "./domains/agent-runtime-settings.js";
 export * from "./domains/credentials.js";
 export * from "./domains/jobs.js";
 export * from "./domains/library-books.js";
@@ -21,9 +20,6 @@ export * from "./domains/favorites.js";
 export * from "./domains/providers.js";
 export * from "./domains/glossaries.js";
 export * from "./domains/translation-debug.js";
-export * from "./domains/ai.js";
-export * from "./domains/document-operations.js";
-export * from "./domains/conversations.js";
 export * from "./domains/obsidian.js";
 export * from "./domains/zotero.js";
 

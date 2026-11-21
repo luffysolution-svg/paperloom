@@ -32,7 +32,6 @@ const { createRoot } = await import("react-dom/client");
 const React = await import("react");
 const { createHomeComposition } = await import("../../src/app/home/create-home-composition.js");
 const { HomeApp } = await import("../../src/app/home/HomeApp.jsx");
-const { AgentRuntimeSettingsCard } = await import("../../src/features/credentials/ui/AgentRuntimeSettingsCard.jsx");
 const { APP_EVENTS } = await import("@/platform/contracts/app-contract.js");
 const { defaultCredentialsStatePort } = await import("../../src/features/credentials/domain/default-state-port.js");
 
@@ -191,51 +190,6 @@ async function mountHome(services) {
   return { host, root };
 }
 
-test("Agent Key：读取后遮蔽回填，保存和重新挂载后保留", async () => {
-  const previousFetch = globalThis.fetch;
-  let saved = {
-    schema: "retainpdf_ai_runtime_config_view_v1",
-    active_runtime: "python-retrieval-v1", configured_runtime: "python",
-    configured_revision: 1, active_revision: 1, restart_state: "active",
-    agent_confirmation_mode: "explicit", restart_required: false,
-    llm_base_url: "https://model.example/v1", llm_model: "fixture-model",
-    llm_api_key: "saved-agent-key", llm_api_key_configured: true,
-    fx_gateway_api_key: "saved-fx-key", fx_gateway_api_key_configured: true,
-  };
-  globalThis.fetch = async (url, options) => {
-    assert.match(`${url}`, /\/ai\/runtime-config$/);
-    if (options.method === "PUT") saved = { ...saved, ...JSON.parse(options.body) };
-    return new Response(JSON.stringify({ data: saved }), { status: 200 });
-  };
-  const host = document.createElement("div");
-  document.body.appendChild(host);
-  let root = createRoot(host);
-  const input = (label) => host.querySelector(`input[aria-label="${label}"]`);
-  try {
-    root.render(React.createElement(AgentRuntimeSettingsCard));
-    await waitFor(() => input("模型 API Key")?.value === "saved-agent-key", "Agent Key 回填");
-    assert.equal(input("模型 API Key").type, "password");
-    typeInput(input("模型 API Key"), "edited-agent-key");
-    click(host.querySelector(".credential-agent-save-button"));
-    await waitFor(() => host.textContent.includes("已保存在本机"), "Agent 保存完成");
-    assert.equal(saved.llm_api_key, "edited-agent-key");
-    assert.equal(input("模型 API Key").value, "edited-agent-key");
-    root.unmount();
-    root = createRoot(host);
-    root.render(React.createElement(AgentRuntimeSettingsCard));
-    await waitFor(() => input("模型 API Key")?.value === "edited-agent-key", "重新打开后恢复 Agent Key");
-    const mode = host.querySelector('select[aria-label="AI Agent 运行模式"]');
-    mode.value = "fx";
-    mode.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
-    await waitFor(() => input("FX Gateway Key")?.value === "saved-fx-key", "FX Key 回填");
-    assert.equal(input("FX Gateway Key").type, "password");
-  } finally {
-    root.unmount();
-    host.remove();
-    globalThis.fetch = previousFetch;
-  }
-});
-
 for (const selected of ["paddle", "mineru"]) {
   test(`首次配置：两个 OCR 都填写后以 ${selected} 保存并启动，不丢另一个 Token`, async () => {
     const services = createServices({ initialDesktopMode: true, saveDesktopConfig: async () => ({}) });
@@ -265,129 +219,6 @@ for (const selected of ["paddle", "mineru"]) {
     }
   });
 }
-
-test("配置方案：另存为保留原方案，全局保存更新 Agent，切换后翻译使用对应 Key", async () => {
-  const previousFetch = globalThis.fetch;
-  let savedAgent = {
-    schema: "retainpdf_ai_runtime_config_view_v1", active_runtime: "python-retrieval-v1", configured_runtime: "python",
-    configured_revision: 1, active_revision: 1, restart_state: "active", restart_required: false,
-    agent_confirmation_mode: "explicit", llm_base_url: "https://agent.example/v1", llm_model: "agent-model",
-    llm_api_key: "agent-a", llm_api_key_configured: true, fx_gateway_base_url: "", fx_model: "",
-    fx_gateway_api_key: "", fx_gateway_api_key_configured: false,
-  };
-  const updates = [];
-  globalThis.fetch = async (url, options = {}) => {
-    if (!`${url}`.endsWith("/ai/runtime-config")) return previousFetch(url, options);
-    if (options.method === "PUT") {
-      const update = JSON.parse(options.body);
-      updates.push(update);
-      savedAgent = { ...savedAgent, ...update, configured_revision: savedAgent.configured_revision + 1,
-        active_revision: savedAgent.configured_revision + 1 };
-    }
-    return new Response(JSON.stringify({ data: savedAgent }), { status: 200 });
-  };
-  const services = createServices();
-  const { host, root } = await mountHome(services);
-  const button = (text) => [...document.querySelectorAll("button")].find((node) => node.textContent.trim() === text);
-  const agentKey = () => document.querySelector('input[aria-label="模型 API Key"]');
-  const nameInput = () => document.querySelector('.credential-service-profile-manager input');
-  const manager = services.credentials.feature.serviceProfiles;
-  try {
-    document.dispatchEvent(new CustomEvent(APP_EVENTS.openBrowserCredentials));
-    await waitForDialogReady();
-    await waitFor(() => agentKey()?.value === "agent-a", "读取 Agent 设置");
-    typeInput(byId("browser-paddle-token"), "paddle-a");
-    typeInput(byId("browser-mineru-token"), "mineru-a");
-    typeInput(byId("browser-api-key"), "translation-a");
-    typeInput(nameInput(), "主服务");
-    await wait(0);
-    click(button("另存为新方案"));
-    await waitFor(() => manager.getState().profiles.length === 1, "保存首个方案");
-    await waitFor(() => [...document.querySelectorAll('[data-sonner-toast]')].some((node) => node.textContent.includes("已另存为方案「主服务」")), "显示另存成功提示");
-    const firstId = manager.getState().activeId;
-
-    typeInput(agentKey(), "agent-updated");
-    await wait(0);
-    click(byId("browser-credentials-save-btn"));
-    await waitFor(() => manager.getState().profiles[0].agent?.llm_api_key === "agent-updated", "全局保存包含 Agent 修改");
-    assert.equal(savedAgent.llm_api_key, "agent-updated");
-    assert.equal(updates.length, 1);
-
-    typeInput(byId("browser-paddle-token"), "paddle-b");
-    typeInput(byId("browser-mineru-token"), "mineru-b");
-    typeInput(byId("browser-api-key"), "translation-b");
-    typeInput(agentKey(), "agent-b");
-    typeInput(nameInput(), "备用服务");
-    await wait(0);
-    click(button("另存为新方案"));
-    await waitFor(() => manager.getState().profiles.length === 2, "另存为第二个方案");
-    const secondId = manager.getState().activeId;
-    assert.equal(manager.getState().profiles.find((item) => item.id === firstId).credentials.modelApiKey, "translation-a");
-
-    const select = document.querySelector('.credential-service-profile-manager select');
-    select.value = firstId;
-    select.dispatchEvent(new Event("change", { bubbles: true }));
-    await waitFor(() => byId("browser-api-key").value === "translation-a" && agentKey().value === "agent-updated", "切换同时还原三组配置");
-    assert.equal(byId("browser-mineru-token").value, "mineru-a");
-    const agentUpdatesBeforeUpload = updates.length;
-    services.settingsHub.dialogStore.close();
-    await waitFor(() => !byId("app-settings-dialog"), "关闭设置");
-    services.workflowDialog.openUpload();
-    await waitFor(() => document.querySelector('[aria-label="本次任务配置方案"]'), "翻译窗口方案入口");
-    const quick = document.querySelector('[aria-label="本次任务配置方案"]');
-    quick.value = secondId;
-    quick.dispatchEvent(new Event("change", { bubbles: true }));
-    await waitFor(() => services.features.workflowFeature.collectRunPayload().translation.api_key === "translation-b", "本次任务使用所选方案");
-    assert.equal(manager.getState().activeId, firstId, "临时方案不改全局默认");
-    assert.equal(services.features.workflowFeature.buildTranslateJobConfig("").translation.api_key, "translation-a", "馆藏翻译继续使用全局设置");
-    assert.equal(savedAgent.llm_api_key, "agent-updated", "上传窗口不切换 AI Agent");
-
-    const ocrSelect = document.querySelector('[aria-label="本次任务 OCR 服务"]');
-    ocrSelect.value = "current:mineru";
-    ocrSelect.dispatchEvent(new Event("change", { bubbles: true }));
-    await waitFor(() => services.features.workflowFeature.collectRunPayload().ocr.provider === "mineru", "独立切换 OCR");
-    document.querySelector('[aria-label="本次任务翻译模型"]').dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
-    await waitFor(() => [...document.querySelectorAll('[role="option"]')].some((item) => item.textContent === "手动输入模型名称"), "打开完整模型列表");
-    click([...document.querySelectorAll('[role="option"]')].find((item) => item.textContent === "手动输入模型名称"));
-    await waitFor(() => document.querySelector('input[aria-label="本次任务翻译模型"]'), "切换到手动输入模型");
-    const modelInput = document.querySelector('input[aria-label="本次任务翻译模型"]');
-    typeInput(modelInput, "custom-model");
-    await waitFor(() => services.features.workflowFeature.collectRunPayload().translation.model === "custom-model", "独立指定模型");
-    const payload = services.features.workflowFeature.collectRunPayload();
-    assert.equal(payload.ocr.mineru_token, "mineru-a", "OCR 使用独立选择的凭据");
-    assert.equal(payload.translation.api_key, "translation-b", "修改 OCR 不改变翻译服务");
-    assert.equal(manager.getState().profiles.find((item) => item.id === firstId).credentials.modelApiKey, "translation-a");
-    assert.equal(updates.length, agentUpdatesBeforeUpload, "临时切换不调用 Agent 保存接口");
-    services.workflowDialog.close();
-    await waitFor(() => services.stores.workflowView.getSnapshot().taskServiceSelection === null, "关闭上传窗口清除临时选择");
-    assert.equal(services.features.workflowFeature.collectRunPayload().translation.api_key, "translation-a");
-  } finally {
-    root.unmount(); services.dispose(); host.remove(); globalThis.fetch = previousFetch;
-  }
-});
-
-test("配置方案：Agent 暂时无法读取时，保存翻译修改仍保留方案中的 Agent Key", async () => {
-  const previousFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response(JSON.stringify({ message: "fixture Agent offline" }), { status: 503 });
-  const services = createServices({ loadPersistedBrowserConfig: () => ({
-    paddleToken: "saved-paddle", mineruToken: "saved-mineru", modelApiKey: "saved-translation",
-  }) });
-  const { host, root } = await mountHome(services);
-  const manager = services.credentials.feature.serviceProfiles;
-  try {
-    await manager.save("已有方案", undefined, { llm_api_key: "saved-agent" });
-    document.dispatchEvent(new CustomEvent(APP_EVENTS.openBrowserCredentials));
-    await waitForDialogReady();
-    await waitFor(() => document.querySelector('.credential-agent-runtime-message')?.textContent.includes("fixture Agent offline"), "Agent 读取失败");
-    typeInput(byId("browser-api-key"), "updated-translation");
-    click(byId("browser-credentials-save-btn"));
-    await waitFor(() => manager.getState().profiles[0].credentials.modelApiKey === "updated-translation", "更新当前方案");
-    assert.equal(manager.getState().profiles[0].agent.llm_api_key, "saved-agent");
-    assert.equal(manager.getState().profiles[0].credentials.mineruToken, "saved-mineru");
-  } finally {
-    root.unmount(); services.dispose(); host.remove(); globalThis.fetch = previousFetch;
-  }
-});
 
 test("MinerU：Token 本机保存、遮蔽回填，切回 Paddle 保留各自 Token", async () => {
   const services = createServices();
@@ -706,10 +537,6 @@ test("接口设置只有一个弹窗：常规与首次配置共用设置中心 A
   assert.equal(byId("browser-credentials-dialog"), null, "常规不再弹独立接口设置窗");
   assert.equal(byId("browser-credentials-save-btn").textContent, "更新当前方案");
   assert.equal(byId("browser-credentials-subtitle"), null, "常规入口不该出现首配引导语");
-  assert.ok(
-    dom.window.document.querySelector(".credential-agent-section .credential-agent-card"),
-    "常规入口展示 AI 连接管理",
-  );
 
   services.settingsHub.dialogStore.close();
   await waitFor(() => byId("app-settings-dialog") === null, "关闭设置");
@@ -742,11 +569,7 @@ test("接口设置只有一个弹窗：常规与首次配置共用设置中心 A
   assert.equal(
     dom.window.document.querySelector(".credential-agent-card"),
     null,
-    "首次配置不展示另行保存的 Agent 表单",
-  );
-  assert.match(
-    dom.window.document.querySelector(".credential-agent-setup-note").textContent,
-    /稍后在设置中配置/,
+    "首次配置不展示 Agent 表单",
   );
 
   root.unmount();
@@ -792,52 +615,10 @@ test("凭据入口：设置 API 区内嵌工作台；#credential-gate-action 也
     [[true, false], [false, true]],
     "接口页按 OCR、翻译的纵向顺序排列",
   );
-  assert.ok(dom.window.document.querySelector(".credential-agent-section > .credential-agent-card"));
-  assert.match(
-    dom.window.document.querySelector(".credential-agent-beta")?.textContent || "",
-    /Beta/i,
-    "AI Agent 标题显示测试阶段徽标",
-  );
-  assert.equal(
-    dom.window.document.querySelector(".credential-agent-save-button").classList.contains("secondary"),
-    true,
-    "Agent 保存使用次级按钮，避免与文档接口保存混淆",
-  );
   assert.equal(
     dom.window.document.querySelector(".credential-save-note"),
     null,
     "接口页不重复说明保存范围",
-  );
-  const agentModeSelect = dom.window.document.querySelector('[aria-label="AI Agent 运行模式"]');
-  assert.ok(
-    dom.window.document.querySelector('[aria-label="显示模型 API Key"]'),
-    "AI Agent 模型 Key 使用相同的双态显示控件",
-  );
-  assert.deepEqual(
-    [...agentModeSelect.options].map((option) => [option.value, option.textContent]),
-    [
-      ["python", "Markdown 检索问答"],
-      ["openai", "OpenAI 兼容 Agent"],
-      ["fx", "FX Gateway Agent"],
-    ],
-  );
-  agentModeSelect.value = "fx";
-  agentModeSelect.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
-  await waitFor(
-    () => dom.window.document.querySelector('[aria-label="FX Gateway URL"]'),
-    "FX 模式显示自定义 Gateway URL",
-  );
-  assert.ok(
-    dom.window.document.querySelector('[aria-label="显示 FX Gateway Key"]'),
-    "FX Gateway Key 使用相同的双态显示控件",
-  );
-  assert.match(
-    dom.window.document.querySelector(".credential-agent-fx-url-note").textContent,
-    /仅支持本机 HTTP \+ 端口/,
-  );
-  assert.match(
-    dom.window.document.querySelector(".credential-agent-fx-url-note").textContent,
-    /远程地址请使用 OpenAI 模式/,
   );
   assert.equal(byId("credentials-btn"), null, "门厅按钮已退役");
   assert.equal(byId("browser-credentials-dialog"), null, "设置内不再弹二层凭据对话框");

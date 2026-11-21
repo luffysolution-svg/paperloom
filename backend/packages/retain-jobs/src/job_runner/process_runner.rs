@@ -270,14 +270,10 @@ pub(super) mod tests {
                 worker_output_drain_secs: 2,
                 ..crate::config::JobRunnerConfig::default()
             },
-            ai_service: crate::config::AiServiceConfig::default(),
             jobs_service: crate::config::JobsServiceConfig::default(),
             asset: crate::config::AssetConfig::default(),
             cleanup: crate::config::CleanupConfig::default(),
             db: crate::config::DbConfig::default(),
-            ai_proxy: crate::config::AiProxyConfig::default(),
-            reader_llm: crate::config::ReaderLlmConfig::default(),
-            rag: crate::config::RagConfig::default(),
             public_base_url: None,
         });
 

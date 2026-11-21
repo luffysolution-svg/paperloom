@@ -7,7 +7,7 @@
 // use-reader-fab-position / use-reader-fab-menu / use-reader-fab-downloads /
 // ReaderFabMenu。主组件只组合行为并保留 ReaderFab 导出名。
 
-import { Bookmark, FileCode2, Sparkles, StickyNote, X } from "lucide-react";
+import { Bookmark, FileCode2, StickyNote, X } from "lucide-react";
 import { useCallback, useId, useRef, type ReactElement } from "react";
 import type { ReaderDownloadContext } from "../../hooks/use-reader-session.js";
 import type { ReaderToolId } from "../../tools/registry.js";
@@ -28,7 +28,6 @@ export type ReaderFabToolId = ReaderToolId | "notes";
 const TOOL_ICONS: Record<ReaderFabToolId, typeof Bookmark> = {
   favorites: Bookmark,
   markdown: FileCode2,
-  ai: Sparkles,
   notes: StickyNote,
 };
 

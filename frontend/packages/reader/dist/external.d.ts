@@ -3,9 +3,6 @@ import type { createReaderDataPort } from "./runtime/data.js";
 import type { createReaderPageConfigPort } from "./runtime/config.js";
 import type { ReaderPdfPort } from "./contracts/pdf.js";
 import type { ReaderSessionDataPort } from "./contracts/session.js";
-import type { ReaderAgentOperationPort } from "./contracts/ai-operations.js";
-import type { ReaderConversationPort } from "./contracts/conversations.js";
-import type { ReaderAskPort } from "./contracts/ai-chat.js";
 import { resolveReaderDownloadName as defaultResolveReaderDownloadName, resolveReaderDownloadUrls as defaultResolveReaderDownloadUrls } from "./shared/state/downloads/resolve.js";
 import type { CreateServerFavoritesPortOptions } from "./shared/types/types.js";
 export declare const isMockMode: (...args: any[]) => boolean;
@@ -23,9 +20,6 @@ export declare const defaultReaderPageConfigPort: ReaderPageConfigPort;
 export declare const readerLiveTranslation: () => import("./contracts/live-translation.js").ReaderLiveTranslationPort;
 export declare const readerPdfPort: () => ReaderPdfPort;
 export declare const readerSessionDataPort: () => ReaderSessionDataPort;
-export declare const readerAgentOperationPort: () => ReaderAgentOperationPort | null;
-export declare const readerConversationPort: () => ReaderConversationPort | null;
-export declare const readerAskChatPort: () => ReaderAskPort | null;
 export declare const resolveReaderAnchor: (...a: any[]) => any;
 export declare const resolveReaderDocumentId: () => string;
 export declare const resolveReaderJobId: (...a: any[]) => string;
@@ -42,18 +36,6 @@ type ReaderAdaptersDownloadResource = NonNullable<ReturnType<typeof getReaderAda
 type ReaderAdaptersFailToast = NonNullable<ReturnType<typeof getReaderAdapters>>["failDownloadToast"];
 export declare const resolveMarkdownAssetUrl: (imagesBaseUrl: unknown, relativePath: unknown) => string;
 export { parseMarkdownWithMath } from "./shared/content/markdown-math.js";
-export declare const createReaderAskAnswerer: (options?: Record<string, unknown>) => any;
-export { createReaderMarkdownAnswerer } from "./shared/ai/markdown-answerer.js";
-export { hydrateProtectedImages, injectCitationMarkers, isAgenticCitation, mountAnswerHtml, normalizeAiCitations, neutralizeMarkdownAnchors, renderCitationFooter, revokeHydratedImageUrls, } from "./shared/ai/answer-enhance.js";
-export type { AiCitationLike } from "./shared/ai/answer-enhance.js";
-export { armReaderAiClickShield, clearReaderAiNavigationLock, installReaderWindowOpenGuard, isReaderAiNavigationLocked, lockReaderAiNavigation, shouldIgnoreReaderAiNavEvent, } from "./shared/ai/ui-interaction-lock.js";
-export { peekFinalAnswerHtmlCache, renderFinalAnswerHtml, renderStreamingPreviewHtml, } from "./shared/ai/render-answer-html.js";
-export { sanitizeAssistantAnswer } from "./shared/ai/sanitize-answer.js";
-export { clearThreadBranchSnapshot, loadThreadBranchSnapshot, saveThreadBranchSnapshot, threadBranchStorageKey, visiblePathFromSnapshot, } from "./shared/ai/thread-branch-store.js";
-export type { ThreadBranchCitation, ThreadBranchItem, ThreadBranchMessage, ThreadBranchSnapshot, } from "./shared/ai/thread-branch-store.js";
-export { appendConversationMessage, baseConversationTitle, createConversation, deleteConversation, forkConversationFromPath, getConversation, listConversations, messagesToBranchItems, nextForkConversationTitle, patchConversation, } from "@retainpdf/api/conversations";
-export type { ConversationDetail, ConversationRecord, MessageRecord, } from "@retainpdf/api/conversations";
-export { clearStoredConversationId, loadStoredConversationId, saveStoredConversationId, } from "./shared/ai/conversation-store.js";
 export declare const API_PREFIX = "/api/v1";
 export declare const fetchDocumentByJobId: (...args: [string, string]) => Promise<{
     document_id?: string;
@@ -74,5 +56,4 @@ export declare function createReaderServerFavoritesPort(options?: CreateServerFa
 }>;
 export { normalizeServerFavorite } from "./shared/state/server-favorites-port.js";
 export type { ServerFavorite } from "./shared/types/types.js";
-export { CREDENTIALS_CHANGED_EVENT, hasModelApiKey, MISSING_MODEL_API_KEY_MESSAGE, } from "./shared/ai/config.js";
 //# sourceMappingURL=external.d.ts.map

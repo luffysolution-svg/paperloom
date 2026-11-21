@@ -180,9 +180,8 @@ def main() -> int:
                 "-c",
                 (
                     "from pathlib import Path; "
-                    "import retainpdf_ai, retainpdf_pipeline; "
+                    "import retainpdf_pipeline; "
                     "root = Path.cwd().resolve(); "
-                    "assert Path(retainpdf_ai.__file__).resolve().is_relative_to(root); "
                     "assert Path(retainpdf_pipeline.__file__).resolve().is_relative_to(root); "
                     "from retainpdf_pipeline.ocr.ocr_provider_config "
                     "import _config_path; "

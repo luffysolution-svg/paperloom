@@ -18,7 +18,6 @@ const servicesRoot = path.resolve(
   process.env.RETAIN_PDF_SERVICES_ROOT || path.join(repoRoot, "backend"),
 );
 const servicesPipelineRoot = path.join(servicesRoot, "pipeline");
-const servicesAiRoot = path.join(servicesRoot, "ai");
 const servicesConfigRoot = path.join(servicesRoot, "config");
 const servicesFontsRoot = path.join(repoRoot, "resources", "fonts");
 const desktopSrcRoot = path.join(desktopRoot, "src");
@@ -304,33 +303,6 @@ function resolveJobsdBinary() {
   };
 }
 
-function resolveAgentBinary() {
-  const overridePath = process.env.RETAINPDF_AGENT_BINARY
-    ? path.resolve(process.env.RETAINPDF_AGENT_BINARY)
-    : "";
-  const fileName = targetPlatform === "win32" ? "retainpdf-agent.exe" : "retainpdf-agent";
-  const candidates = [overridePath];
-
-  if (targetPlatform === "win32") {
-    candidates.push(
-      path.join(repoRoot, "target", "x86_64-pc-windows-msvc", "release", fileName),
-      path.join(repoRoot, "target", "i686-pc-windows-msvc", "release", fileName),
-      path.join(repoRoot, "target", "release", fileName),
-    );
-  } else if (targetPlatform === "darwin") {
-    candidates.push(
-      path.join(repoRoot, "target", "release", fileName),
-      path.join(repoRoot, "target", "x86_64-apple-darwin", "release", fileName),
-      path.join(repoRoot, "target", "aarch64-apple-darwin", "release", fileName),
-    );
-  } else {
-    candidates.push(path.join(repoRoot, "target", "release", fileName));
-  }
-
-  const match = candidates.find((candidate) => candidate && fs.existsSync(candidate));
-  return { path: match || candidates[1] || "", fileName };
-}
-
 function hasBundledPosixPython(root) {
   return fs.existsSync(path.join(root, "bin", "python3"))
     || fs.existsSync(path.join(root, "bin", "python"));
@@ -554,7 +526,6 @@ function verifyBundledPythonRuntime(root) {
 
 const rustApiBinary = resolveRustApiBinary();
 const jobsdBinary = resolveJobsdBinary();
-const agentBinary = resolveAgentBinary();
 if (desktopPackage.version !== releaseVersion) {
   desktopPackage.version = releaseVersion;
   fs.writeFileSync(`${desktopPackagePath}.tmp`, `${JSON.stringify(desktopPackage, null, 2)}\n`, "utf8");
@@ -777,25 +748,6 @@ if (!frontendOnly) {
     recursive: true,
     force: true,
   });
-  const aiServiceSrc = servicesAiRoot;
-  const aiServiceDst = path.join(outputBackendRoot, "ai_service");
-  if (!fs.existsSync(aiServiceSrc)) {
-    throw new Error(`missing ai_service at ${aiServiceSrc}`);
-  }
-  fs.cpSync(aiServiceSrc, aiServiceDst, {
-    recursive: true,
-    force: true,
-    filter: (sourcePath) => {
-      const base = path.basename(sourcePath);
-      if (base === "__pycache__" || base === ".pytest_cache" || base === "tests") {
-        return false;
-      }
-      return true;
-    },
-  });
-  if (!fs.existsSync(path.join(aiServiceDst, "retainpdf_ai", "__main__.py"))) {
-    throw new Error(`bundled ai_service missing retainpdf_ai/__main__.py under ${aiServiceDst}`);
-  }
 }
 
 if (!frontendOnly && fs.existsSync(rustApiBinary.path)) {
@@ -807,12 +759,6 @@ if (!frontendOnly && fs.existsSync(rustApiBinary.path)) {
 if (!frontendOnly && fs.existsSync(jobsdBinary.path)) {
   fs.mkdirSync(path.join(outputBackendRoot, "bin"), { recursive: true });
   fs.cpSync(jobsdBinary.path, path.join(outputBackendRoot, "bin", jobsdBinary.fileName), {
-    force: true,
-  });
-}
-if (!frontendOnly && fs.existsSync(agentBinary.path)) {
-  fs.mkdirSync(path.join(outputBackendRoot, "bin"), { recursive: true });
-  fs.cpSync(agentBinary.path, path.join(outputBackendRoot, "bin", agentBinary.fileName), {
     force: true,
   });
 }
@@ -920,8 +866,6 @@ if (!frontendOnly) {
     rustApiBinaryName: rustApiBinary.fileName,
     jobsdBinaryBundled: fs.existsSync(path.join(outputBackendRoot, "bin", jobsdBinary.fileName)),
     jobsdBinaryName: jobsdBinary.fileName,
-    agentBinaryBundled: fs.existsSync(path.join(outputBackendRoot, "bin", agentBinary.fileName)),
-    agentBinaryName: agentBinary.fileName,
     pipelineCommandBundled: Boolean(resolveBuiltPipelineCommand(outputBackendRoot)),
     pipelineCommand: (() => {
       const built = resolveBuiltPipelineCommand(outputBackendRoot);

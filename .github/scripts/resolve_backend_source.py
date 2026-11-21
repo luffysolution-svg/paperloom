@@ -16,7 +16,6 @@ REQUIRED_PATHS = (
     "pyproject.toml",
     "uv.lock",
     "api/Cargo.toml",
-    "ai/pyproject.toml",
     "pipeline/pyproject.toml",
     "config/ocr_providers.json",
 )

@@ -1,6 +1,6 @@
 // 阅读器工具定义（自包含版，从 frontend/web/src/pages/reader/tools/registry.ts 复制）
 
-export type ReaderToolId = "favorites" | "markdown" | "ai";
+export type ReaderToolId = "favorites" | "markdown";
 
 export type ReaderToolDef = {
   id: ReaderToolId;
@@ -25,13 +25,6 @@ export const READER_TOOLS: readonly ReaderToolDef[] = Object.freeze([
     id: "markdown",
     label: "Markdown",
     subIdle: "识别 / 译文文本",
-    subOpen: "关闭悬浮窗",
-    needsJob: true,
-  },
-  {
-    id: "ai",
-    label: "AI 问答",
-    subIdle: "基于文档提问",
     subOpen: "关闭悬浮窗",
     needsJob: true,
   },

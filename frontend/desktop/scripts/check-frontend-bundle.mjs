@@ -102,31 +102,12 @@ if (indexHtml.includes("runtime-config.local.js")) {
   fail("Desktop index.html still references runtime-config.local.js");
 }
 
-// 阅读器的 AI 面板自 f53fb04e（启用 esbuild 代码分割）起被拆进
-// dist/chunks/reader/ 的独立 chunk，`credentials-changed` 这个事件名不再出现在
-// reader.bundle.js 里。原先只查主 bundle 的写法从那天起就该失败了——本地之所以
-// 一直绿，是因为 desktop/app/frontend/ 里躺着一份代码分割之前的陈旧副本；CI 每次
-// sync-frontend 重新拷贝，所以只在 CI 上红。
-//
-// 改为在主 bundle 与其 chunk 里一起找：无论将来懒加载边界怎么挪，只要这个凭据
-// 门禁的刷新事件还在阅读器产物里，检查就成立。
-const readerArtifacts = [
-  readFile("dist/reader.bundle.js"),
-  ...collectFiles(path.join(frontendRoot, "dist", "chunks", "reader"), new Set([".js"]))
-    .map((file) => fs.readFileSync(file, "utf8")),
-];
-if (!readerArtifacts.some((source) => source.includes("credentials-changed"))) {
-  fail("Desktop reader bundle (含 chunks) missing credentials-changed gate refresh");
-}
 const appBundleJs = readFile("dist/app.bundle.js");
 if (!appBundleJs.includes("./vendor/") && !appBundleJs.includes("vendor/pdfjs")) {
   // bundle may inline resolver strings differently; require credentials gate markers
 }
 if (!appBundleJs.includes("credentials-changed") && !appBundleJs.includes("retainpdf:credentials-changed")) {
   fail("Desktop app bundle missing credentials-changed gate refresh");
-}
-if (!appBundleJs.includes("home-ask")) {
-  fail("Desktop app bundle missing home AI ask feature");
 }
 if (appBundleJs.includes("../../../vendor/pdfjs-dist/build/pdf.mjs")) {
   fail("Desktop app bundle still contains module-depth pdfjs vendor path");

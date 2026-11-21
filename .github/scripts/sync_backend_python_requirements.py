@@ -140,13 +140,10 @@ def main() -> None:
         else repo_root / raw_services_root
     ).resolve()
     pipeline_path = services_root / "pipeline" / "pyproject.toml"
-    ai_path = services_root / "ai" / "pyproject.toml"
     # Keep generated headers stable even when the backend is checked out beside
     # the product repository rather than inside the backend package.
     pipeline_source = "backend/pipeline/pyproject.toml"
-    ai_source = "backend/ai/pyproject.toml"
     pipeline_runtime, pipeline_test = _load_dependency_groups(pipeline_path)
-    ai_runtime, _ai_test = _load_dependency_groups(ai_path)
     pipeline_with_test = pipeline_runtime + pipeline_test
 
     targets = {
@@ -170,10 +167,6 @@ def main() -> None:
             pipeline_runtime,
             source=pipeline_source,
             extra_header=DESKTOP_MACOS_EXTRA_HEADER,
-        ),
-        repo_root / "frontend" / "desktop" / "requirements-ai-service.txt": _render_requirements(
-            ai_runtime,
-            source=ai_source,
         ),
     }
 

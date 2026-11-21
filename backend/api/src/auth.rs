@@ -20,7 +20,7 @@ fn has_valid_api_key(deps: AuthRouteDeps<'_>, request: &Request<Body>) -> bool {
 
 pub async fn require_api_key(
     axum::extract::State(state): axum::extract::State<AppState>,
-    mut request: Request<Body>,
+    request: Request<Body>,
     next: Next,
 ) -> Result<Response, AppError> {
     if request.method() == Method::OPTIONS {
@@ -31,18 +31,5 @@ pub async fn require_api_key(
         return Ok(next.run(request).await);
     }
 
-    let capability = request
-        .headers()
-        .get("x-retainpdf-agent-capability")
-        .and_then(|value| value.to_str().ok())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| AppError::unauthorized("missing or invalid X-API-Key"))?;
-    let claims = state.agent_capabilities.authenticate_request(
-        capability,
-        request.method().as_str(),
-        request.uri().path(),
-    )?;
-    request.extensions_mut().insert(claims);
-    Ok(next.run(request).await)
+    Err(AppError::unauthorized("missing or invalid X-API-Key"))
 }

@@ -2,7 +2,7 @@
 
 import type { PageScrollProgress } from "../types/reader-scroll.js";
 
-export type StoredReaderPaneContent = "source" | "translated" | "markdown" | "ai";
+export type StoredReaderPaneContent = "source" | "translated" | "markdown";
 
 export type StoredReaderSplitLayout = {
   left: StoredReaderPaneContent;
@@ -17,7 +17,7 @@ export type ReaderViewState = {
   zoom?: number;
   mode?: StoredReaderMode;
   splitLayout?: StoredReaderSplitLayout | null;
-  assistantPanel?: "markdown" | "ai" | null;
+  assistantPanel?: "markdown" | null;
   updatedAt: number;
 };
 
@@ -30,7 +30,6 @@ const VALID_PANE_CONTENT = new Set<StoredReaderPaneContent>([
   "source",
   "translated",
   "markdown",
-  "ai",
 ]);
 const VALID_READER_MODE = new Set<StoredReaderMode>([
   "source",
@@ -90,9 +89,9 @@ function normalizeSplitLayout(value: unknown): StoredReaderSplitLayout | null | 
   return { left, right };
 }
 
-function normalizeAssistantPanel(value: unknown): "markdown" | "ai" | null | undefined {
+function normalizeAssistantPanel(value: unknown): "markdown" | null | undefined {
   if (value === null) return null;
-  return value === "markdown" || value === "ai" ? value : undefined;
+  return value === "markdown" ? value : undefined;
 }
 
 function normalizeReaderMode(value: unknown): StoredReaderMode | undefined {

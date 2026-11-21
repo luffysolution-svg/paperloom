@@ -22,14 +22,11 @@ const REQUIRED_EXPORTS = [
   ".",
   "./adapters",
   "./boot",
-  "./ai",
   "./contracts",
-  "./runtime/ai",
   "./runtime/config",
   "./runtime/content",
   "./runtime/data",
   "./runtime/state",
-  "./ai.css",
   "./styles.css",
 ];
 const SOURCE_EXTENSIONS = new Set([".js", ".jsx", ".mjs", ".ts", ".tsx"]);
@@ -176,13 +173,13 @@ test("reader package exports only built, packed public entrypoints", () => {
     }
   }
 
-  const styleTargets = ["./ai.css", "./styles.css"]
+  const styleTargets = ["./styles.css"]
     .flatMap((exportName) => exportTargets(readerPackage.exports[exportName]))
     .filter((target) => target.endsWith(".css"));
   assert.equal(
     styleTargets.length,
-    2,
-    "reader must publish full and AI-only compiled CSS",
+    1,
+    "reader must publish compiled CSS",
   );
   for (const target of styleTargets) {
     const css = readFileSync(join(READER_ROOT, target), "utf8");
@@ -253,7 +250,6 @@ test("reader exports align with vite build entries and resolve into dist", () =>
 test("importing Reader root and runtime exports does not require or mutate the DOM", async () => {
   const importUrls = [
     ".",
-    "./runtime/ai",
     "./runtime/config",
     "./runtime/content",
     "./runtime/data",
@@ -307,51 +303,6 @@ test("Reader live translation implementation depends on package contracts, not A
   assert.deepEqual(offenders, []);
 });
 
-test("Reader ask runtime uses the dedicated Ask/Chat port", () => {
-  const file = join(
-    READER_SOURCE_ROOT,
-    "components/react-pdf/assistant/use-reader-ask-runtime.ts",
-  );
-  const source = readFileSync(file, "utf8");
-  assert.match(source, /readerAskChatPort/);
-  assert.doesNotMatch(source, /@retainpdf\/api\/ai/);
-});
-
-test("Reader conversation shell uses the dedicated conversation port", () => {
-  const files = [
-    join(
-      READER_SOURCE_ROOT,
-      "components/react-pdf/assistant/use-reader-conversation.ts",
-    ),
-    join(
-      READER_SOURCE_ROOT,
-      "components/react-pdf/assistant/use-reader-session-commands.ts",
-    ),
-  ];
-  const offenders = files.flatMap((file) =>
-    importSpecifiers(readFileSync(file, "utf8"))
-      .filter((specifier) => specifier === "@retainpdf/api/conversations")
-      .map((specifier) => `${relative(REPO_ROOT, file)} -> ${specifier}`),
-  );
-  assert.deepEqual(offenders, []);
-});
-
-test("Reader operation UI uses the dedicated AI operation port", () => {
-  const files = sourceFilesUnder(
-    join(READER_SOURCE_ROOT, "components/react-pdf/assistant"),
-  );
-  const offenders = files.flatMap((file) =>
-    importSpecifiers(readFileSync(file, "utf8"))
-      .filter(
-        (specifier) =>
-          specifier === "@retainpdf/api/document-operations" ||
-          specifier === "@retainpdf/api/agent-runtime-settings",
-      )
-      .map((specifier) => `${relative(REPO_ROOT, file)} -> ${specifier}`),
-  );
-  assert.deepEqual(offenders, []);
-});
-
 test("session hooks consume the dedicated SessionDataPort accessor", () => {
   for (const relativePath of [
     "hooks/reader-session/session-assets.ts",
@@ -396,8 +347,8 @@ test("production consumers do not deep-link into frontend/packages/reader/src", 
   const hostRoot = join(WEB_ROOT, "src/features/reader/domain/host");
   assert.deepEqual(
     sourceFilesUnder(hostRoot).map((file) => relative(hostRoot, file)),
-    ["ai.ts", "config.ts", "content.ts", "data.ts", "state.ts"],
-    "frontend/web must keep exactly five Reader host adapter entries",
+    ["config.ts", "content.ts", "data.ts", "state.ts"],
+    "frontend/web must keep exactly four Reader host adapter entries",
   );
 
   for (const configFile of [

@@ -28,7 +28,6 @@ COPY --from=ghcr.io/astral-sh/uv:0.11.19 /uv /uvx /bin/
 WORKDIR /workspace
 
 COPY backend/pyproject.toml backend/uv.lock ./
-COPY backend/ai/pyproject.toml ai/pyproject.toml
 COPY backend/pipeline/pyproject.toml pipeline/pyproject.toml
 
 RUN uv export \
@@ -46,7 +45,6 @@ COPY ops/release/github-assets.json /usr/local/bin/github-assets.json
 ARG TYPST_VERSION=0.15.1
 ARG CMARKER_VERSION=0.1.10
 ARG MITEX_VERSION=0.2.7
-ARG FX_VERSION=0.0.5
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
@@ -80,34 +78,6 @@ RUN set -eux; \
       cp -R "/tmp/typst/${name}/." "/opt/typst-packages/preview/${name}/${version}/"; \
     done
 
-# fx publishes versioned, statically linked Linux binaries for both image
-# architectures.  The upstream installer is version-aware but does not verify
-# an artifact checksum, so the image downloads the immutable release artifact
-# directly and pins the hashes verified for v0.0.5.
-RUN set -eux; \
-    ARCH="$(uname -m)"; \
-    case "$ARCH" in \
-      x86_64) \
-        FX_ARCH="x86_64"; \
-        FX_SHA256="d5639d173267774aa8228a474baf619a7076ac41a91023915007c865143429b1" \
-        ;; \
-      aarch64) \
-        FX_ARCH="aarch64"; \
-        FX_SHA256="8bbcde6a41256c4fac4e0a022291cf02740419e27afabde3b8f45e7a4e393edb" \
-        ;; \
-      *) echo "Unsupported architecture for fx: $ARCH"; exit 1 ;; \
-    esac; \
-    mkdir -p /tmp/fx /opt/fx/bin /opt/fx/licenses; \
-    curl -fsSL --retry 5 --retry-all-errors --proto '=https' \
-      "https://releases.fx.sh/v${FX_VERSION}/fx-linux-${FX_ARCH}.tar.gz" \
-      -o /tmp/fx/fx.tar.gz; \
-    echo "${FX_SHA256}  /tmp/fx/fx.tar.gz" | sha256sum -c -; \
-    tar -xzf /tmp/fx/fx.tar.gz -C /tmp/fx; \
-    install -m 0755 /tmp/fx/fx /opt/fx/bin/fx; \
-    install -m 0644 /tmp/fx/LICENSE /opt/fx/licenses/LICENSE; \
-    install -m 0644 /tmp/fx/THIRD_PARTY_NOTICES.md /opt/fx/licenses/THIRD_PARTY_NOTICES.md; \
-    test "$(/opt/fx/bin/fx --version)" = "$FX_VERSION"
-
 # 保留排版的 Word 导出由 retainpdf2doc（Node 包）生成，Python 流水线会起它。
 # 它的 dist/ 不进版本库，所以镜像里得自己构建一次。
 FROM node:22-bookworm-slim AS docbuilder
@@ -131,7 +101,6 @@ FROM python:3.11-slim-bookworm AS runtime
 
 ARG CMARKER_VERSION=0.1.10
 ARG MITEX_VERSION=0.2.7
-ARG FX_VERSION=0.0.5
 ARG RETAINPDF_UID=10001
 ARG RETAINPDF_GID=10001
 
@@ -155,15 +124,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     RETAIN_PDF_TITLE_BOLD_FONT_PATH=/usr/local/share/fonts/source-han-serif/SourceHanSerifSC-Bold.otf \
     RETAIN_PDF_TYPST_FONT_DIRS=/usr/local/share/fonts/source-han-serif \
     RETAIN_PDF_TYPST_FONT_FAMILY="Source Han Serif SC" \
-    RUST_API_AI_SUPERVISE=1 \
-    RUST_API_AI_COMMAND=python3 \
-    RUST_API_AI_ARGS="-m retainpdf_ai" \
-    RUST_API_AI_CWD=/app/services/ai \
-    RETAIN_AI_FX_COMMAND=/usr/local/bin/fx \
-    RETAIN_AI_FX_EXPECTED_VERSION=${FX_VERSION} \
-    RETAIN_AI_FX_AGENT_CLI_COMMAND=/usr/local/bin/retainpdf-agent \
-    RETAIN_AI_FX_STATE_ROOT=/data/agent-runtime/fx \
-    FX_AUTO_UPGRADE=0 \
     CMARKER_VERSION=${CMARKER_VERSION} \
     MITEX_VERSION=${MITEX_VERSION} \
     RUST_API_BIND_HOST=0.0.0.0 \
@@ -183,8 +143,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=typstsrc /opt/typst/bin/typst /usr/local/bin/typst
 COPY --from=typstsrc /opt/typst-packages /app/backend/typst-packages
-COPY --from=typstsrc /opt/fx/bin/fx /usr/local/bin/fx
-COPY --from=typstsrc /opt/fx/licenses /usr/share/licenses/fx
 
 RUN mkdir -p /usr/local/share/fonts/source-han-serif
 
@@ -200,7 +158,6 @@ RUN pip install --no-cache-dir --require-hashes -r /tmp/requirements-backend.txt
 
 COPY --from=builder /build/target/release/rust_api /usr/local/bin/rust_api
 COPY --from=builder /build/target/release/retain-jobsd /usr/local/bin/retain-jobsd
-COPY --from=builder /build/target/release/retainpdf-agent /usr/local/bin/retainpdf-agent
 COPY backend/config /app/services/config
 COPY backend/pipeline /app/services/pipeline
 # Node 运行时:直接从官方 node 镜像取二进制（两边都是 bookworm，ABI 一致），
@@ -211,8 +168,7 @@ COPY --from=docbuilder /build/backend/packages/retainpdf2doc/assets /app/service
 COPY --from=docbuilder /build/backend/packages/retainpdf2doc/NOTICE.md /build/backend/packages/retainpdf2doc/LICENSE-VISUALTEX /app/services/retainpdf2doc/
 COPY LICENSE LICENSE-MIT THIRD_PARTY_NOTICES.md CORRESPONDING_SOURCE.md /usr/share/licenses/paperloom/
 COPY resources/licenses /usr/share/licenses/paperloom/dependencies/
-COPY backend/ai /app/services/ai
-RUN pip install --no-cache-dir --no-deps /app/services/pipeline /app/services/ai
+RUN pip install --no-cache-dir --no-deps /app/services/pipeline
 COPY backend/api/auth.local.example.json /app/services/api/auth.local.example.json
 COPY ops/deployment/docker/backend/entrypoint-app.sh /entrypoint.sh
 
@@ -232,7 +188,6 @@ RUN groupadd --gid "${RETAINPDF_GID}" retainpdf \
       /data/db \
       /data/jobs \
       /data/typst-package-cache \
-      /data/agent-runtime/fx \
       /data/runtime-home/.cache \
       /data/runtime-home/.config \
       /tmp/retainpdf \

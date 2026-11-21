@@ -1,5 +1,5 @@
 import type { PageScrollProgress } from "../types/reader-scroll.js";
-export type StoredReaderPaneContent = "source" | "translated" | "markdown" | "ai";
+export type StoredReaderPaneContent = "source" | "translated" | "markdown";
 export type StoredReaderSplitLayout = {
     left: StoredReaderPaneContent;
     right: StoredReaderPaneContent;
@@ -11,7 +11,7 @@ export type ReaderViewState = {
     zoom?: number;
     mode?: StoredReaderMode;
     splitLayout?: StoredReaderSplitLayout | null;
-    assistantPanel?: "markdown" | "ai" | null;
+    assistantPanel?: "markdown" | null;
     updatedAt: number;
 };
 type ReaderViewStatePatch = Partial<Pick<ReaderViewState, "anchor" | "zoom" | "mode" | "splitLayout" | "assistantPanel">>;

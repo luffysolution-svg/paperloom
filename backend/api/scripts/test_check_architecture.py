@@ -103,8 +103,8 @@ mod tests { fn fixture() { let runtime: ProcessRuntimeDeps; } }
 
     def test_runtime_ownership_allows_assembly_and_health(self):
         self.assertEqual([], self.check_sources({
-            "runtime/ai_supervisor.rs": "use crate::config::AppConfig;",
-            "app/server.rs": "crate::runtime::ai_supervisor::spawn_ai_supervisor();",
+            "runtime/jobsd_supervisor.rs": "use crate::config::AppConfig;",
+            "app/server.rs": "crate::runtime::jobsd_supervisor::spawn_jobsd_supervisor();",
             "services/health_api.rs": "crate::runtime::jobsd_supervisor::jobsd_status();",
         }, checks.check_runtime_ownership))
 
@@ -165,8 +165,6 @@ mod tests { fn fixture() { let runtime: ProcessRuntimeDeps; } }
 
     def test_mixed_job_routes_keep_only_explicit_commands_wide(self):
         for path, reader, command in (
-            ("routes/jobs/query/reader.rs", "get_reader_regions", "reader_ai_chat"),
-            ("routes/jobs/query/reader/metadata.rs", "get_reader_metadata", "reader_ai_chat"),
             ("routes/jobs/translation_debug.rs", "get_translation_item", "replay_translation_item_route"),
         ):
             source = f"""
@@ -189,9 +187,9 @@ mod tests { fn fixture() { let runtime: ProcessRuntimeDeps; } }
                 ))
 
     def test_mixed_job_routes_detect_full_builder_import_aliases(self):
-        self.assertTrue(self.check_sources({"routes/jobs/query/reader.rs": """
+        self.assertTrue(self.check_sources({"routes/jobs/translation_debug.rs": """
             use crate::routes::common::build_jobs_route_deps as full;
-            pub async fn get_reader_regions() { full(&state); }
+            pub async fn get_translation_item() { full(&state); }
         """}, checks.check_jobs_route_deps_dedup))
 
     def test_job_boundaries_ignore_comments_and_rust_literals(self):
@@ -217,9 +215,9 @@ mod tests { fn fixture() { let runtime: ProcessRuntimeDeps; } }
         self.assertTrue(self.check_sources({
             "services/jobs/query/nested.rs": notes + "struct Bad { runtime: JobRuntime }",
         }, checks.check_jobs_dependency_boundaries))
-        self.assertTrue(self.check_sources({"routes/jobs/query/reader.rs": notes + '''
-            async fn get_reader_regions() {
-                let ignored = r#"} fn reader_ai_chat() {"#;
+        self.assertTrue(self.check_sources({"routes/jobs/translation_debug.rs": notes + '''
+            async fn get_translation_item() {
+                let ignored = r#"} fn replay_translation_item_route() {"#;
                 build_jobs_route_deps(&state)
             }
         '''}, checks.check_jobs_route_deps_dedup))
@@ -227,38 +225,13 @@ mod tests { fn fixture() { let runtime: ProcessRuntimeDeps; } }
     def test_runtime_ownership_rejects_reverse_dependencies_and_old_locations(self):
         for path, source in (
             ("runtime/jobsd_supervisor.rs", "use crate::services::jobs;"),
-            ("runtime/ai_supervisor.rs", "use crate::AppState;"),
-            ("routes/health.rs", "crate::runtime::ai_supervisor::ai_service_status();"),
+            ("runtime/jobsd_supervisor.rs", "use crate::AppState;"),
+            ("routes/health.rs", "crate::runtime::jobsd_supervisor::jobsd_status();"),
             ("services/jobs/facade.rs", "crate::runtime::jobsd_supervisor::jobsd_status();"),
-            ("services/ai_supervisor.rs", ""),
+            ("services/jobsd_supervisor.rs", ""),
         ):
             with self.subTest(path=path):
                 self.assertTrue(self.check_sources({path: source}, checks.check_runtime_ownership))
-
-    def test_ai_gateway_has_no_hidden_configuration_or_health_reads(self):
-        for source in ("AiProxyConfig::from_env()", "std::env::var(\"BASE\")", "ai_service_status()", "Lazy<Client>"):
-            with self.subTest(source=source):
-                self.assertTrue(self.check_sources(
-                    {"services/ai/gateway.rs": source}, checks.check_ai_gateway_dependencies,
-                ))
-        self.assertEqual([], self.check_sources(
-            {"services/ai/gateway.rs": "fn new(config: &AiProxyConfig, status: fn() -> u8) {}"},
-            checks.check_ai_gateway_dependencies,
-        ))
-
-    def test_agent_calculations_use_narrow_dependencies(self):
-        for name in ("agent_calculations/service.rs", "agent_calculations/api.rs", "agent_calculations/tests.rs"):
-            for dependency in ("AppConfig", "AppState", "api_tests"):
-                with self.subTest(name=name, dependency=dependency):
-                    errors = self.check_sources(
-                        {f"services/{name}": f"use crate::{dependency};"},
-                        checks.check_agent_calculation_dependencies,
-                    )
-                    self.assertTrue(any("narrow Db/data_root" in error for error in errors))
-        self.assertEqual([], self.check_sources(
-            {"services/agent_calculations/service.rs": "use crate::db::Db; fn f(data_root: &Path) {}"},
-            checks.check_agent_calculation_dependencies,
-        ))
 
     def check_sources(self, sources, check=None):
         with tempfile.TemporaryDirectory() as directory:
@@ -373,49 +346,10 @@ mod tests { fn fixture() { let runtime: ProcessRuntimeDeps; } }
                     {"routes/common/library.rs": source}, checks.check_route_service_imports,
                 ))
 
-    def test_ai_private_gateway_rejects_external_and_grouped_access(self):
-        for source in (
-            "use crate::services::ai::gateway::AiGateway;",
-            "use crate::services::ai::{gateway::AiGateway};",
-            "crate::services::ai::gateway::run();",
-        ):
-            with self.subTest(source=source):
-                self.assertTrue(self.check_sources(
-                    {"api_tests/ai_proxy.rs": source}, checks.check_business_private_modules,
-                ))
-        self.assertEqual([], self.check_sources({
-            "app/state.rs": "use crate::services::ai::AiGateway;",
-            "services/ai/api.rs": "use super::gateway::AiGateway;",
-        }, checks.check_business_private_modules))
-
-    def test_ai_route_only_imports_application_entry(self):
-        self.assertEqual([], self.check_sources(
-            {"routes/ai_proxy.rs": "use crate::services::ai::api as ai_api;"},
-            checks.check_route_service_imports,
-        ))
-        for source in (
-            "use crate::services::ai::AiGateway;",
-            "use crate::services::ai_proxy_api;",
-            "use crate::services::ai::api_internal;",
-        ):
-            self.assertTrue(self.check_sources(
-                {"routes/ai_proxy.rs": source}, checks.check_route_service_imports,
-            ))
-
-    def test_ai_models_remain_in_facade_guard(self):
-        self.assertTrue(self.check_sources(
-            {"services/ai/gateway.rs": "use crate::models::UploadRecord;"},
-            checks.check_service_model_facade_boundaries,
-        ))
-        self.assertEqual([], self.check_sources(
-            {"services/ai/gateway.rs": "use crate::models::domain::UploadRecord;"},
-            checks.check_service_model_facade_boundaries,
-        ))
-
     def test_small_module_routes_use_api_not_implementation(self):
         for domain, route in (
             ("fonts", "fonts"), ("credentials", "credentials"),
-            ("agent_calculations", "agent_calculations"), ("glossaries", "glossaries"),
+            ("glossaries", "glossaries"),
         ):
             with self.subTest(domain=domain):
                 self.assertEqual([], self.check_sources(
@@ -430,8 +364,7 @@ mod tests { fn fixture() { let runtime: ProcessRuntimeDeps; } }
     def test_small_module_private_paths_are_guarded(self):
         for domain, member in (
             ("fonts", "service"), ("credentials", "service"),
-            ("agent_calculations", "service"), ("glossaries", "csv"),
-            ("glossaries", "entries"), ("glossaries", "records"),
+            ("glossaries", "csv"), ("glossaries", "entries"), ("glossaries", "records"),
         ):
             with self.subTest(domain=domain, member=member):
                 for suffix in (f"{member}::Entry", f"{{{member}::Entry}}"):
@@ -445,7 +378,7 @@ mod tests { fn fixture() { let runtime: ProcessRuntimeDeps; } }
                 ))
 
     def test_small_module_model_facades_are_scanned(self):
-        for domain in ("fonts", "credentials", "agent_calculations", "glossaries"):
+        for domain in ("fonts", "credentials", "glossaries"):
             with self.subTest(domain=domain):
                 self.assertTrue(self.check_sources(
                     {f"services/{domain}/api.rs": "use crate::models::UploadRecord;"},

@@ -1,10 +1,7 @@
-//! 资产存储(收藏截图等二进制附件)与 AI 问答会话历史。
+//! 资产存储（收藏截图等二进制附件）。
 //!
 //! 资产是内容寻址的:asset_id = sha256(文件字节),文件落
 //! data_root/assets/<前2位>/<hash>,重复上传自动归并,URL 永久可缓存。
-//! 会话遵循"软锚点"原则:引用只存 JSON 快照,不做 job 删除保护。
-//!
-//! All handlers go through library_api (PR5).
 
 use std::num::NonZeroU64;
 
@@ -14,20 +11,12 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 
 use crate::error::AppError;
-use crate::models::api::{
-    ApiResponse, AppendMessageInput, AssetRecord, ConversationDetailView, ConversationListView,
-    ConversationMutationResult, ConversationRecord, CreateConversationInput, ForkConversationInput,
-    ListConversationsQuery, MessageRecord, PatchConversationInput,
-};
+use crate::models::api::{ApiResponse, AssetRecord};
 use crate::routes::common::{
-    build_library_route_deps, ok_json, read_multipart_field_limited, safe_multipart_error, ApiJson,
-    ApiMultipart, ApiPath, ApiQuery,
+    build_library_route_deps, ok_json, read_multipart_field_limited, safe_multipart_error,
+    ApiMultipart, ApiPath,
 };
-use crate::services::library::api::{
-    append_message_view, create_conversation_view, delete_conversation_view,
-    fork_conversation_view, get_conversation_view, list_conversations_view, load_asset_view,
-    patch_conversation_view, store_asset_view,
-};
+use crate::services::library::api::{load_asset_view, store_asset_view};
 use crate::AppState;
 
 pub async fn upload_asset_route(
@@ -76,76 +65,4 @@ pub async fn download_asset_route(
         asset.data,
     )
         .into_response())
-}
-
-pub async fn create_conversation_route(
-    State(state): State<AppState>,
-    ApiJson(payload): ApiJson<CreateConversationInput>,
-) -> Result<Json<ApiResponse<ConversationRecord>>, AppError> {
-    let deps = build_library_route_deps(&state);
-    Ok(ok_json(create_conversation_view(&deps.library, &payload)?))
-}
-
-pub async fn list_conversations_route(
-    State(state): State<AppState>,
-    ApiQuery(query): ApiQuery<ListConversationsQuery>,
-) -> Result<Json<ApiResponse<ConversationListView>>, AppError> {
-    let deps = build_library_route_deps(&state);
-    Ok(ok_json(list_conversations_view(&deps.library, &query)?))
-}
-
-pub async fn get_conversation_route(
-    State(state): State<AppState>,
-    ApiPath(conversation_id): ApiPath<String>,
-) -> Result<Json<ApiResponse<ConversationDetailView>>, AppError> {
-    let deps = build_library_route_deps(&state);
-    Ok(ok_json(get_conversation_view(
-        &deps.library,
-        &conversation_id,
-    )?))
-}
-
-pub async fn delete_conversation_route(
-    State(state): State<AppState>,
-    ApiPath(conversation_id): ApiPath<String>,
-) -> Result<Json<ApiResponse<ConversationMutationResult>>, AppError> {
-    let deps = build_library_route_deps(&state);
-    Ok(ok_json(delete_conversation_view(
-        &deps.library,
-        &conversation_id,
-    )?))
-}
-
-pub async fn patch_conversation_route(
-    State(state): State<AppState>,
-    ApiPath(conversation_id): ApiPath<String>,
-    ApiJson(payload): ApiJson<PatchConversationInput>,
-) -> Result<Json<ApiResponse<ConversationRecord>>, AppError> {
-    let deps = build_library_route_deps(&state);
-    Ok(ok_json(patch_conversation_view(
-        &deps.library,
-        &conversation_id,
-        &payload,
-    )?))
-}
-
-pub async fn append_message_route(
-    State(state): State<AppState>,
-    ApiPath(conversation_id): ApiPath<String>,
-    ApiJson(payload): ApiJson<AppendMessageInput>,
-) -> Result<Json<ApiResponse<MessageRecord>>, AppError> {
-    let deps = build_library_route_deps(&state);
-    Ok(ok_json(append_message_view(
-        &deps.library,
-        &conversation_id,
-        payload,
-    )?))
-}
-
-pub async fn fork_conversation_route(
-    State(state): State<AppState>,
-    ApiJson(payload): ApiJson<ForkConversationInput>,
-) -> Result<Json<ApiResponse<ConversationDetailView>>, AppError> {
-    let deps = build_library_route_deps(&state);
-    Ok(ok_json(fork_conversation_view(&deps.library, &payload)?))
 }

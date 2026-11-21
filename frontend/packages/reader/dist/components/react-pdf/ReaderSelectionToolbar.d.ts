@@ -7,9 +7,8 @@ export type ReaderSelectionNoteInput = {
 export type ReaderSelectionToolbarProps = {
     selection: ReaderSelection | null;
     onDismiss: () => void;
-    onAskAi?: (selection: ReaderSelection) => void;
     onAddNote?: (input: ReaderSelectionNoteInput) => void;
 };
 export declare function copyReaderSelectionText(value: string): Promise<void>;
-export declare function ReaderSelectionToolbar({ selection, onDismiss, onAskAi, onAddNote, }: ReaderSelectionToolbarProps): import("react").JSX.Element;
+export declare function ReaderSelectionToolbar({ selection, onDismiss, onAddNote, }: ReaderSelectionToolbarProps): import("react").JSX.Element;
 //# sourceMappingURL=ReaderSelectionToolbar.d.ts.map

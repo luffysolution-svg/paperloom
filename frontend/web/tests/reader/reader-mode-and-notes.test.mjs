@@ -80,7 +80,7 @@ test("ReaderAppReactPdf routes notes through ReaderFab instead of a duplicate le
   assert.doesNotMatch(app, /打开批注/);
 });
 
-test("ReaderFab exposes favorites/markdown/ai aligned with the tool registry", () => {
+test("ReaderFab exposes favorites/markdown aligned with the tool registry", () => {
   const fab = readerSource(
     "../../../../frontend/packages/reader/src/components/react-pdf/ReaderFab.tsx",
   );
@@ -91,8 +91,8 @@ test("ReaderFab exposes favorites/markdown/ai aligned with the tool registry", (
   const app = readerSource(
     "../../../../frontend/packages/reader/src/ReaderAppReactPdf.tsx",
   );
-  // FAB 的 markdown/ai 与 Dock 同行为：走辅助面板 toggle，而非 tools。
-  assert.match(app, /if \(id === "markdown" \|\| id === "ai"\)/);
+  // FAB 的 markdown 与 Dock 同行为：走辅助面板 toggle，而非 tools。
+  assert.match(app, /if \(id === "markdown"\)/);
   assert.match(app, /assistantPanel \?\? tools\.active/);
 });
 

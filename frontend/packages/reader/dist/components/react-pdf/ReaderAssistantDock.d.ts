@@ -8,7 +8,7 @@ export type ReaderAssistantDockProps = {
     onClose?: () => void;
 };
 /**
- * Markdown 和 AI 是阅读辅助工具，不参与 PDF 阅读模式的选择。
+ * Markdown 是阅读辅助工具，不参与 PDF 阅读模式的选择。
  * 关闭时只显示安静的右侧工具栏；打开后由 Dock 顶栏负责切换与关闭。
  */
 export declare function ReaderAssistantDock(props: ReaderAssistantDockProps): ReactElement;

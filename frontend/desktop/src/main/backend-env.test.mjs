@@ -5,10 +5,10 @@ import test from "node:test";
 const require = createRequire(import.meta.url);
 const { buildBackendEnv } = require("./backend-env.js");
 
-test("passes a relocated AI port to both Rust proxy and supervised Python child", () => {
+test("passes backend API, multipart, and jobs ports without standalone AI env", () => {
   const env = buildBackendEnv({
     apiPort: 41001,
-    aiServicePort: 41101,
+    jobsPort: 41003,
     backendRoot: "C:\\RetainPDF\\backend",
     bundledFontPath: "C:\\RetainPDF\\font.otf",
     bundledPythonImportPaths: [],
@@ -25,11 +25,11 @@ test("passes a relocated AI port to both Rust proxy and supervised Python child"
     typstPackagePath: "C:\\RetainPDF\\typst-packages",
   });
 
-  assert.equal(env.RUST_API_AI_SERVICE_BASE, "http://127.0.0.1:41101");
-  assert.equal(env.RUST_API_AI_HOST, "127.0.0.1");
-  assert.equal(env.RUST_API_AI_PORT, "41101");
-  assert.equal(env.RETAIN_AI_HOST, "127.0.0.1");
-  assert.equal(env.RETAIN_AI_PORT, "41101");
+  assert.equal(env.RUST_API_PORT, "41001");
+  assert.equal(env.RUST_API_SIMPLE_PORT, "42001");
+  assert.equal(env.RUST_API_JOBS_PORT, "41003");
+  assert.equal(env.RUST_API_AI_SERVICE_BASE, undefined);
+  assert.equal(env.RETAIN_AI_PORT, undefined);
 });
 
 test("explicit desktop consent enables private provider URLs in the child process", () => {
@@ -43,22 +43,21 @@ test("explicit desktop consent enables private provider URLs in the child proces
 test("passes a resolved system proxy to backend provider traffic", () => {
   const env = buildBackendEnv({
     apiPort: 41001,
-    aiServicePort: 41101,
-    backendRoot: "C:\RetainPDF\backend",
-    bundledFontPath: "C:\RetainPDF\font.otf",
+    backendRoot: "C:\\RetainPDF\\backend",
+    bundledFontPath: "C:\\RetainPDF\\font.otf",
     bundledPythonImportPaths: [],
-    bundledTitleBoldFontPath: "C:\RetainPDF\font-bold.otf",
-    bundledTypstFontDir: "C:\RetainPDF\fonts",
-    dataRoot: "C:\RetainPDF\data",
+    bundledTitleBoldFontPath: "C:\\RetainPDF\\font-bold.otf",
+    bundledTypstFontDir: "C:\\RetainPDF\\fonts",
+    dataRoot: "C:\\RetainPDF\\data",
     desktopApiKey: "desktop-key",
     outboundProxyUrl: "http://127.0.0.1:7890",
-    pythonRuntime: { command: "C:\RetainPDF\python.exe" },
-    rustApiRoot: "C:\RetainPDF\rust-api",
-    scriptsDir: "C:\RetainPDF\pipeline",
+    pythonRuntime: { command: "C:\\RetainPDF\\python.exe" },
+    rustApiRoot: "C:\\RetainPDF\\rust-api",
+    scriptsDir: "C:\\RetainPDF\\pipeline",
     simplePort: 42001,
-    typstBin: "C:\RetainPDF\typst.exe",
-    typstPackageCachePath: "C:\RetainPDF\typst-cache",
-    typstPackagePath: "C:\RetainPDF\typst-packages",
+    typstBin: "C:\\RetainPDF\\typst.exe",
+    typstPackageCachePath: "C:\\RetainPDF\\typst-cache",
+    typstPackagePath: "C:\\RetainPDF\\typst-packages",
   });
 
   assert.equal(env.HTTPS_PROXY, "http://127.0.0.1:7890");

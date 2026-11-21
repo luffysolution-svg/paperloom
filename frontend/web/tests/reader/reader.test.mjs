@@ -267,19 +267,19 @@ test("reader translated region right click keeps selection drag from stealing th
   global.window = previousWindow;
 });
 
-test("reader page exposes ai/favorites/download entries, keeps paused tools hidden", () => {
+test("reader page exposes favorites/markdown/download entries, keeps paused tools hidden", () => {
   // legacy 已删除（f0803f2 后仅 react-pdf），改扫新世界 @retainpdf/reader 组件
   const jsxSources = [
     "../../../../frontend/packages/reader/src/components/react-pdf/ReaderFavoritesPanel.tsx",
-    "../../../../frontend/packages/reader/src/components/react-pdf/ReaderAiPanel.tsx",
+    "../../../../frontend/packages/reader/src/components/react-pdf/ReaderMarkdownPanel.tsx",
     "../../../../frontend/packages/reader/src/components/react-pdf/ReaderFab.tsx",
   ].map((file) => {
     try { return readFileSync(new URL(file, import.meta.url), "utf8"); } catch { return ""; }
   }).join("\n");
 
-  // 新引擎：favorites/ai 在 Fab/Panel 中，不再经 legacy SideDrawers
+  // 新引擎：favorites/markdown 在 Fab/Panel 中，不再经 legacy SideDrawers
   assert.match(jsxSources, /ReaderFavoritesPanel|reader-favorites/);
-  assert.match(jsxSources, /ReaderAiPanel|reader-ai/);
+  assert.match(jsxSources, /ReaderMarkdownPanel|reader-markdown/);
   assert.match(jsxSources, /ReaderFab|reader-fab/);
 
   const markup = readFileSync(new URL("../../reader.html", import.meta.url), "utf8");
@@ -328,81 +328,6 @@ test("reader download actions resolve artifact urls and disabled reasons", () =>
 
 // 抽屉互斥开合的状态语义已移入 React 世界的 drawer store,
 // DOM 写入(is-open/inert/aria-expanded)由组件渲染;见 tests/reader-drawers.test.mjs。
-
-
-test("reader markdown answerer answers from markdown sections", async () => {
-  if (!readerAiMarkdown) return; // shared ai not available, skip
-  const answerer = readerAiMarkdown.createReaderMarkdownAnswerer({
-    loadMarkdownPayload: async () => ({
-      content: [
-        "# Paper",
-        "This paper studies retained translation quality.",
-        "## Formula",
-        "The energy equation is E = mc^2 and appears near page 3.",
-        "## Conclusion",
-        "The method improves bilingual PDF reading.",
-      ].join("\n"),
-    }),
-  });
-
-  const result = await answerer.answer({
-    jobId: "job-ai",
-    question: "energy equation",
-  });
-
-  assert.match(result.answer, /Formula/);
-  assert.match(result.answer, /E = mc\^2/);
-  assert.deepEqual(result.citations.includes("Formula"), true);
-});
-
-// chat 提交/状态流转已随 AI 问答 UI 迁入 React(use-reader-ai-chat),
-// 等价断言见 tests/reader-ai-conversations.test.mjs(React 组件版)。
-// 旧 remote-answerer（/reader/ai/chat payload）已删除；现网走 ask-answerer。
-
-test("reader ai config prefers persisted browser credentials", () => {
-  if (!readerAiConfig) return; // shared ai not available, skip
-  const config = readerAiConfig.resolveReaderAiConfig({
-    browserConfig: { modelApiKey: "sk-local" },
-    developerConfig: {
-      baseUrl: "https://reader.local/v1",
-      model: "deepseek-chat",
-    },
-  });
-
-  assert.deepEqual(config, {
-    apiKey: "sk-local",
-    baseUrl: "https://reader.local/v1",
-    model: "deepseek-chat",
-    provider: "custom",
-  });
-});
-
-test("reader ai model key comes only from settings (no runtime secret fallback)", async () => {
-  if (!readerAiConfig) return;
-  const { setRuntimeConfig } = await import("@/platform/config/runtime.js");
-  setRuntimeConfig({
-    modelApiKey: "sk-from-runtime",
-    baseUrl: "https://api.deepseek.com/v1",
-    model: "deepseek-flash",
-  });
-  // 模型 Key 只认设置；runtime 里的 modelApiKey 不得解锁
-  const config = readerAiConfig.resolveReaderAiConfig({
-    browserConfig: { modelApiKey: "   " },
-    developerConfig: { baseUrl: "", model: "" },
-  });
-  assert.equal(config.apiKey, "");
-  assert.equal(config.baseUrl, "https://api.deepseek.com/v1");
-  assert.equal(config.model, "deepseek-flash");
-  assert.equal(config.provider, "deepseek");
-  // hasModelApiKey / readSettingsModelApiKey 只认设置里的 modelApiKey
-  assert.equal(readerAiConfig.readSettingsModelApiKey({ modelApiKey: "" }), "");
-  assert.equal(readerAiConfig.readSettingsModelApiKey({ modelApiKey: "   " }), "");
-  assert.equal(readerAiConfig.readSettingsModelApiKey({ modelApiKey: " sk-user " }), "sk-user");
-  setRuntimeConfig({ modelApiKey: "", baseUrl: "", model: "" });
-});
-
-// 502 回退本地 Markdown 检索的语义迁移至 React 组件测试:
-// 见 tests/reader-ai-conversations.test.mjs「后端 502 时回退本地检索」。
 
 test("reader data port owns page API orchestration and fallbacks", async () => {
   const calls = [];

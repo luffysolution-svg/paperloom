@@ -6,18 +6,13 @@ import { fileURLToPath } from "node:url";
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const EXPECTED_DIALECT = "https://json-schema.org/draft/2020-12/schema";
 const EXPECTED_SCHEMAS = [
-  "agent-calculation.v1.schema.json",
-  "ai-ask.v1.schema.json",
-  "ai-conversations.v1.schema.json",
   "create-job.v1.schema.json",
   "job-events.v2.schema.json",
   "job-status.v1.schema.json",
   "jobs-control.v1.schema.json",
   "library-books.v1.schema.json",
   "pipeline-stdout.v1.schema.json",
-  "public-document-operation.v1.schema.json",
   "reader-data.v1.schema.json",
-  "runtime-config.v1.schema.json",
 ];
 
 function decodePointerSegment(segment) {

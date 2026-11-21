@@ -19,7 +19,7 @@ pub use query::{
     get_live_translation_events, get_live_translation_layout, get_live_translation_page,
     get_ocr_job, get_ocr_job_artifacts, get_ocr_job_artifacts_manifest, get_ocr_job_events,
     get_reader_metadata, get_reader_regions, get_resume_plan, get_stage_actions, list_jobs,
-    list_ocr_jobs, reader_ai_chat, rerun_job, resolve_ocr_ambiguity, resume_job, retry_stage,
+    list_ocr_jobs, rerun_job, resolve_ocr_ambiguity, resume_job, retry_stage,
 };
 pub use translation_debug::{
     get_translation_diagnostics, get_translation_item, list_translation_items,

@@ -115,12 +115,8 @@ ROUTE_RAW_EXTRACTOR_ALLOWLIST = {
 }
 
 ROUTE_STATE_RESOURCE_ALLOWLIST = {
-    Path("src/routes/common/agent_calculations.rs"),
-    Path("src/routes/common/agent_capabilities.rs"),
-    Path("src/routes/common/agent_runtime_sessions.rs"),
     Path("src/routes/common/auth.rs"),
     Path("src/routes/common/credentials.rs"),
-    Path("src/routes/common/document_operations.rs"),
     Path("src/routes/common/fonts.rs"),
     Path("src/routes/common/glossaries.rs"),
     Path("src/routes/common/health.rs"),
@@ -138,9 +134,6 @@ ROUTE_SERVICE_IMPORT_ALLOWLIST = {
     Path("src/routes/model_requests.rs"): (
         "crate::services::model_requests_api::",
     ),
-    Path("src/routes/agent_calculations.rs"): (
-        "crate::services::agent_calculations::api::",
-    ),
     Path("src/routes/glossaries.rs"): (
         "crate::services::glossaries::api::",
     ),
@@ -155,18 +148,6 @@ ROUTE_SERVICE_IMPORT_ALLOWLIST = {
     ),
     Path("src/routes/credentials.rs"): (
         "crate::services::credentials::api::",
-    ),
-    Path("src/routes/document_operations.rs"): (
-        "crate::services::document_operation_api::",
-    ),
-    Path("src/routes/agent_runtime_sessions.rs"): (
-        "crate::services::agent_runtime_session_api::",
-    ),
-    Path("src/routes/agent_capabilities.rs"): (
-        "crate::services::agent_capability_api::",
-    ),
-    Path("src/routes/public_document_operations.rs"): (
-        "crate::services::public_document_operations_api::",
     ),
     Path("src/routes/library.rs"): (
         "crate::services::library::api::",
@@ -187,15 +168,6 @@ ROUTE_SERVICE_IMPORT_ALLOWLIST = {
     ),
     Path("src/routes/common/uploads.rs"): (
         "crate::services::uploads::api::UploadApiDeps",
-    ),
-    Path("src/routes/common/agent_capabilities.rs"): (
-        "crate::services::agent_capabilities::AgentCapabilityAuthority",
-    ),
-    Path("src/routes/common/agent_runtime_sessions.rs"): (
-        "crate::services::agent_runtime_session_api::AgentRuntimeSessionApiDeps",
-    ),
-    Path("src/routes/common/agent_calculations.rs"): (
-        "crate::services::agent_calculations::api::AgentCalculationApiDeps",
     ),
     Path("src/routes/common/glossaries.rs"): (
         "crate::services::glossaries::api::GlossaryApiDeps",
@@ -228,9 +200,6 @@ ROUTE_SERVICE_IMPORT_ALLOWLIST = {
     ),
     Path("src/routes/providers.rs"): (
         "crate::services::provider_api::",
-    ),
-    Path("src/routes/ai_proxy.rs"): (
-        "crate::services::ai::api",
     ),
     Path("src/routes/fonts.rs"): (
         "crate::services::fonts::api::",
@@ -362,12 +331,12 @@ def check_multipart_field_buffering(errors: list[str]) -> None:
 def check_jobs_route_deps_dedup(errors: list[str]) -> None:
     narrow_modules = (
         Path("src/routes/jobs/query/read"),
+        Path("src/routes/jobs/query/reader"),
         Path("src/routes/jobs/query/diagnostics"),
         Path("src/routes/jobs/download"),
         Path("src/routes/download_response"),
     )
     mixed_modules = {
-        Path("src/routes/jobs/query/reader"): {"reader_ai_chat"},
         Path("src/routes/jobs/translation_debug"): {"replay_translation_item_route"},
     }
     full_capabilities = r"build_jobs_route_deps|build_jobs_facade_from_state|jobs_facade|JobsFacade|JobsRouteDeps"
@@ -593,7 +562,6 @@ def check_service_model_facade_boundaries(errors: list[str]) -> None:
         SRC_ROOT / "services" / "glossaries",
         SRC_ROOT / "services" / "fonts",
         SRC_ROOT / "services" / "credentials",
-        SRC_ROOT / "services" / "agent_calculations",
         SRC_ROOT / "services" / "job_snapshot_factory.rs",
         SRC_ROOT / "services" / "job_validation.rs",
         SRC_ROOT / "services" / "job_launcher.rs",
@@ -625,7 +593,6 @@ def check_service_model_facade_boundaries(errors: list[str]) -> None:
         SRC_ROOT / "services" / "library",
         SRC_ROOT / "services" / "library" / "api.rs",
         SRC_ROOT / "services" / "provider_probe.rs",
-        SRC_ROOT / "services" / "ai",
         SRC_ROOT / "services" / "uploads",
         SRC_ROOT / "services" / "book_projection",
         SRC_ROOT / "services" / "book_projection.rs",
@@ -680,7 +647,7 @@ def check_jobs_dependency_boundaries(errors: list[str]) -> None:
 
 def check_runtime_ownership(errors: list[str]) -> None:
     allowed = {Path("src/app/server.rs"), Path("src/app/state.rs"),
-               Path("src/services/health_api.rs"), Path("src/services/ai/gateway.rs")}
+               Path("src/services/health_api.rs")}
     for path in scan_rs_files(SRC_ROOT):
         relative = rel(path)
         text = route_source_without_tests(path)
@@ -689,28 +656,17 @@ def check_runtime_ownership(errors: list[str]) -> None:
             if re.search(r"\b(?:services|routes|AppState)\b", text):
                 errors.append(f"{relative}: runtime must not depend on business services or HTTP assembly state")
         elif relative not in allowed and not path.is_relative_to(SRC_ROOT / "api_tests"):
-            if re.search(r"\b(?:ai_supervisor|jobsd_supervisor)\b", text):
+            if re.search(r"\bjobsd_supervisor\b", text):
                 errors.append(f"{relative}: supervisor access belongs to app assembly and explicit health consumers")
-    for name in ("ai_supervisor", "jobsd_supervisor"):
-        if (SRC_ROOT / "services" / f"{name}.rs").exists():
-            errors.append(f"services/{name}.rs: supervisor implementation belongs in runtime")
-
-
-def check_ai_gateway_dependencies(errors: list[str]) -> None:
-    for path in scan_rs_files(SRC_ROOT / "services" / "ai"):
-        text = route_source_without_tests(path)
-        text = re.sub(r"/\*.*?\*/|//[^\n]*", "", text, flags=re.DOTALL)
-        if re.search(r"\b(?:from_env|ai_service_status)\s*\(|\benv\s*::\s*var\s*\(|\bLazy\b", text):
-            errors.append(f"{rel(path)}: AI gateway must receive configuration and health source from app assembly")
+    if (SRC_ROOT / "services" / "jobsd_supervisor.rs").exists():
+        errors.append("services/jobsd_supervisor.rs: supervisor implementation belongs in runtime")
 
 
 def check_business_private_modules(errors: list[str]) -> None:
     """Public capability reexports are valid; implementation-path imports are not."""
     private = {
-        "ai": {"gateway"},
         "fonts": {"service"},
         "credentials": {"service"},
-        "agent_calculations": {"service"},
         "glossaries": {"csv", "entries", "records"},
     }
     for path in scan_rs_files(SRC_ROOT):
@@ -725,17 +681,6 @@ def check_business_private_modules(errors: list[str]) -> None:
                 if (first and first.group(1) in members) or grouped & members:
                     errors.append(f"{rel(path)}: external callers must use the {domain} public surface, not its internal modules")
                     break
-
-
-def check_agent_calculation_dependencies(errors: list[str]) -> None:
-    """Calculation storage needs Db and data_root, not application configuration."""
-    for path in scan_rs_files(SRC_ROOT / "services" / "agent_calculations"):
-        text = path.read_text(encoding="utf-8")
-        text = re.sub(r"/\*.*?\*/|//[^\n]*", "", text, flags=re.DOTALL)
-        if re.search(r"\b(?:AppConfig|AppState|api_tests)\b", text):
-            errors.append(
-                f"{rel(path)}: agent calculations must use narrow Db/data_root dependencies, including test fixtures"
-            )
 
 
 def check_upload_boundaries(errors: list[str]) -> None:
@@ -1325,8 +1270,6 @@ def main() -> int:
     check_service_model_facade_boundaries(errors)
     check_upload_boundaries(errors)
     check_business_private_modules(errors)
-    check_agent_calculation_dependencies(errors)
-    check_ai_gateway_dependencies(errors)
     check_runtime_ownership(errors)
     check_jobs_dependency_boundaries(errors)
     check_process_runtime_deps_usage(errors)

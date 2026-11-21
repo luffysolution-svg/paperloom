@@ -1,10 +1,6 @@
 // @retainpdf/reader/boot — explicit MPA startup API (react-pdf only).
 import { createRoot, type Root } from "react-dom/client";
 import { ReaderApp } from "./ReaderApp.js";
-import {
-  clearReaderAiNavigationLock,
-  installReaderWindowOpenGuard,
-} from "./external.js";
 import { bootTheme } from "./shared/theme/theme.js";
 
 export type ReaderBootOptions = {
@@ -20,13 +16,6 @@ export function syncReaderBodyClasses(body: HTMLElement = document.body): void {
   }
 }
 
-/**
- * Removes any sibling markup that predates the Reader mount. Retained
- * intentionally as a defensive cleanup: a stale cached MPA shell (old HTML)
- * can still contain legacy markup, and this is the only guarantee that the
- * React root owns <body>. `bootReader` calls it unless the host explicitly
- * opts out via `purgeLegacyMarkup: false`.
- */
 export function purgeLegacyMarkup(
   body: HTMLElement = document.body,
   preservedRoot?: HTMLElement,
@@ -57,8 +46,6 @@ export function bootReader(options: ReaderBootOptions = {}): Root {
   const host = options.root ?? resolveReaderRoot(body);
 
   bootTheme();
-  clearReaderAiNavigationLock();
-  installReaderWindowOpenGuard();
   syncReaderBodyClasses(body);
   if (options.purgeLegacyMarkup !== false) {
     purgeLegacyMarkup(body, host);

@@ -10,57 +10,6 @@
 // 导出与模块级适配器注册一并泄漏/提前触发，且无法审计真实对外面。
 
 export {
-  CREDENTIALS_CHANGED_EVENT,
-  MISSING_MODEL_API_KEY_MESSAGE,
-  armReaderAiClickShield,
-  buildScopedQuestion,
-  clearReaderAiNavigationLock,
-  clearStoredConversationId,
-  clearThreadBranchSnapshot,
-  conversationStorageKey,
-  createReaderAiHistoryStore,
-  createReaderAskAnswerer,
-  createReaderMarkdownAnswerer,
-  deriveSessionTitle,
-  hasModelApiKey,
-  hydrateProtectedImages,
-  injectCitationMarkers,
-  installReaderWindowOpenGuard,
-  isAgenticCitation,
-  isReaderAiNavigationLocked,
-  loadStoredConversationId,
-  loadThreadBranchSnapshot,
-  lockReaderAiNavigation,
-  neutralizeMarkdownAnchors,
-  peekFinalAnswerHtmlCache,
-  protectNumericCitations,
-  readSettingsModelApiKey,
-  renderCitationFooter,
-  renderFinalAnswerHtml,
-  renderStreamingPreviewHtml,
-  resolveReaderAiConfig,
-  restoreNumericCitations,
-  revokeHydratedImageUrls,
-  sanitizeAssistantAnswer,
-  saveStoredConversationId,
-  saveThreadBranchSnapshot,
-  shouldIgnoreReaderAiNavEvent,
-  summarizeSessions,
-  threadBranchStorageKey,
-  trimSessions,
-  visiblePathFromSnapshot,
-} from "./domain/host/ai.js";
-export { aiOperationsPort, askChatPort, conversationPort } from "./domain/host/ai.js";
-
-export type {
-  AiCitationLike,
-  ThreadBranchCitation,
-  ThreadBranchItem,
-  ThreadBranchMessage,
-  ThreadBranchSnapshot,
-} from "./domain/host/ai.js";
-
-export {
   createReaderPageConfigPort,
   defaultReaderPageConfigPort,
   resolveReaderAnchor,

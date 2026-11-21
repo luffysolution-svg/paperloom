@@ -14,4 +14,4 @@ pub use read::{
     get_ocr_job_artifacts, get_ocr_job_artifacts_manifest, get_ocr_job_events, list_jobs,
     list_ocr_jobs,
 };
-pub use reader::{get_reader_metadata, get_reader_regions, reader_ai_chat};
+pub use reader::{get_reader_metadata, get_reader_regions};

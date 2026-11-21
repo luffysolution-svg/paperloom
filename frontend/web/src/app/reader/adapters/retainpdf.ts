@@ -3,9 +3,6 @@ import * as ext from "../external.js";
 import { setReaderAdapters } from "@retainpdf/reader/adapters";
 import type { ReaderAdapters } from "@retainpdf/reader/adapters";
 
-// external.ts 是 MPA 宿主能力的单一出口。这里只显式列出 ReaderAdapters
-// 声明的字段：过去的 `...ext` 会把未声明的导出静默带入运行时对象，
-// 一旦包契约增删字段无法在类型层暴露。逐字段映射可让漏接/错配立即报错。
 const adapters: ReaderAdapters = {
   // —— session ——
   isMockMode: ext.isMockMode,
@@ -16,9 +13,6 @@ const adapters: ReaderAdapters = {
   liveTranslation: ext.liveTranslationPort,
   pdf: ext.pdfPort,
   sessionData: ext.sessionDataPort,
-  aiOperations: ext.aiOperationsPort,
-  conversations: ext.conversationPort,
-  askChat: ext.askChatPort,
   defaultReaderPageConfigPort: ext.defaultReaderPageConfigPort,
   resolveReaderAnchor: ext.resolveReaderAnchor,
   resolveReaderDocumentId: ext.resolveReaderDocumentId,
@@ -39,10 +33,6 @@ const adapters: ReaderAdapters = {
   createFavorite: ext.createFavorite,
   fetchFavorites: ext.fetchFavorites,
   deleteFavorite: ext.deleteFavorite,
-  // —— credentials ——
-  credentialsPort: ext.defaultCredentialsStatePort,
-  // —— AI ——
-  askDocumentAi: ext.askLibraryAi,
 };
 setReaderAdapters(adapters);
 export { adapters as retainPdfReaderAdapters };

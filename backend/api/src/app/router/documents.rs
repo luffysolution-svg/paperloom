@@ -1,11 +1,20 @@
+use axum::extract::DefaultBodyLimit;
 use axum::routing::{get, post};
 use axum::Router;
 
 use crate::app::AppState;
-use crate::routes::{library_data, public_document_operations};
+use crate::routes::{library_data, library_extras};
 
 pub(super) fn routes() -> Router<AppState> {
     Router::new()
+        .route(
+            "/api/v1/assets",
+            post(library_extras::upload_asset_route).layer(DefaultBodyLimit::disable()),
+        )
+        .route(
+            "/api/v1/assets/:asset_id",
+            get(library_extras::download_asset_route),
+        )
         .route("/api/v1/documents", get(library_data::list_documents_route))
         .route(
             "/api/v1/documents/export-batch",
@@ -53,10 +62,6 @@ pub(super) fn routes() -> Router<AppState> {
         .route(
             "/api/v1/documents/:document_id/jobs",
             get(library_data::list_document_jobs_route),
-        )
-        .route(
-            "/api/v1/documents/:document_id/agent-versions",
-            get(public_document_operations::list_document_agent_versions_route),
         )
         .route(
             "/api/v1/favorites",

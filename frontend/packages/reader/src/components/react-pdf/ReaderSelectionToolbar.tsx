@@ -1,7 +1,7 @@
 // PDF 选择浮条：正文走原生选区，公式/表格/图片走 OCR 结构选择层。
 
 import { useEffect, useState } from "react";
-import { Check, Copy, Image, Sigma, Sparkles, StickyNote, Table2, Type, X } from "lucide-react";
+import { Check, Copy, Image, Sigma, StickyNote, Table2, Type, X } from "lucide-react";
 import {
   extractReaderFormulaLatex,
   readerRegionContent,
@@ -17,7 +17,6 @@ export type ReaderSelectionNoteInput = {
 export type ReaderSelectionToolbarProps = {
   selection: ReaderSelection | null;
   onDismiss: () => void;
-  onAskAi?: (selection: ReaderSelection) => void;
   onAddNote?: (input: ReaderSelectionNoteInput) => void;
 };
 
@@ -47,7 +46,6 @@ export async function copyReaderSelectionText(value: string): Promise<void> {
 export function ReaderSelectionToolbar({
   selection,
   onDismiss,
-  onAskAi,
   onAddNote,
 }: ReaderSelectionToolbarProps) {
   const [copied, setCopied] = useState(false);
@@ -143,16 +141,6 @@ export function ReaderSelectionToolbar({
             >
               <StickyNote size={15} strokeWidth={2.2} aria-hidden />
               <span>添加批注</span>
-            </button>
-          ) : null}
-          {onAskAi ? (
-            <button
-              type="button"
-              className="reader-sel-pop-btn reader-sel-pop-btn--secondary"
-              onClick={() => onAskAi(selection)}
-            >
-              <Sparkles size={15} strokeWidth={2.2} aria-hidden />
-              <span>问 AI</span>
             </button>
           ) : null}
           <button
