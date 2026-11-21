@@ -38,6 +38,7 @@ import { useReaderPanelSlot } from "./components/react-pdf/use-reader-panel-slot
 import { resolveLiveTranslationToggles } from "./shared/data/live-translation-state.js";
 import { createRegionHoverStore } from "./shared/state/region-hover-store.js";
 import { ReaderFinder, ReaderFinderToggles, type ReaderFinderTab } from "./components/react-pdf/ReaderFinder.js";
+import { Button } from "@retainpdf/ui";
 
 /** 阅读视图可见台面的判别联合。 */
 export type ReaderPaneComposition = {
@@ -303,6 +304,7 @@ export function ReaderAppReactPdf() {
     if (readerViewportWidth() < 900) setFinder(null);
   }, [c.jumpToAnchor]);
   const jumpToBlock = useCallback((itemId: string) => c.jumpToAnchor({ block_id: itemId }), [c.jumpToAnchor]);
+  const jumpToReference = useCallback((itemId: string) => c.jumpToReference({ block_id: itemId }), [c.jumpToReference]);
   const readerContext = useMemo<ReaderContextValue>(() => ({
     bindShell: c.shell.bindShell,
     shellEl: c.shell.shellEl,
@@ -323,6 +325,9 @@ export function ReaderAppReactPdf() {
     activeRegion: c.activeRegion,
     regionHover,
     jumpToBlock,
+    jumpToReference,
+    referenceReturnAvailable: c.referenceReturnAvailable,
+    restoreReferencePosition: c.restoreReferencePosition,
     revisedBlocks: c.revisedBlocks,
     sourceOnly: c.sourceOnly,
     sourceViewOnly,
@@ -341,6 +346,9 @@ export function ReaderAppReactPdf() {
     c.activeRegion,
     regionHover,
     jumpToBlock,
+    jumpToReference,
+    c.referenceReturnAvailable,
+    c.restoreReferencePosition,
     c.revisedBlocks,
     c.sourceOnly,
     sourceViewOnly,
@@ -380,6 +388,17 @@ export function ReaderAppReactPdf() {
         ) : null}
         <div className="reader-chrome-tray">
           <ReaderPanelToggles active={assistantPanel} />
+          {c.referenceReturnAvailable ? (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="reader-reference-return"
+              onClick={c.restoreReferencePosition}
+            >
+              返回引用前位置
+            </Button>
+          ) : null}
           <ReaderDownloadActions />
           <ReaderCloseHome onBeforeClose={session.prepareClose} />
         </div>

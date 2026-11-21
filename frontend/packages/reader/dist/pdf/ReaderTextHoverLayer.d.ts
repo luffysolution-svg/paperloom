@@ -26,9 +26,14 @@ export declare const HOVER_TOOLS_WIDTH = 250;
  */
 export declare function hoverToolsOutside(rect: ReaderRegionRect, toolsWidth?: number): boolean;
 export declare function extractReaderCitationLabels(text: string): string[];
+type ReaderAuthorYearCitation = {
+    key: string;
+    label: string;
+};
+export declare function extractReaderAuthorYearCitations(text: string): ReaderAuthorYearCitation[];
 export declare function buildReaderReferenceIndex(references: readonly ReaderRegion[]): ReaderReferenceIndex;
 export declare function findReaderReferencePreview(target: ReaderTextHoverTarget, references?: readonly ReaderRegion[]): ReaderReferencePreview | null;
-export declare function findReaderReferencePreviews(target: ReaderTextHoverTarget, referenceIndex: ReaderReferenceIndex, citationLabel?: string | null): ReaderReferencePreview[];
+export declare function findReaderReferencePreviews(target: ReaderTextHoverTarget, referenceIndex: ReaderReferenceIndex, citationLabel?: string | null, citationDisplayLabel?: string | null): ReaderReferencePreview[];
 /**
  * 悬停内容块：红色虚线框 + 翻译编号 + 「复制」（行间公式是「复制 LaTeX」）。
  *
@@ -36,7 +41,7 @@ export declare function findReaderReferencePreviews(target: ReaderTextHoverTarge
  * 右栏复制译文 —— 这是 4.1.x 旧引擎里最常用的那个交互，React 引擎替换时丢了。
  * 只有这一种块级交互：双击 / 三击留给浏览器选词选段（以前双击会整块复制，把选词弄坏了）。
  */
-export declare function ReaderTextHoverLayer({ target, pane, revisedCount, referenceIndex, referenceRegions, citationLabel, onReferenceClick, }: {
+export declare function ReaderTextHoverLayer({ target, pane, revisedCount, referenceIndex, referenceRegions, citationLabel, citationDisplayLabel, citationRect, onReferenceClick, }: {
     target: ReaderTextHoverTarget | null;
     pane?: "source" | "translated";
     /** 这一块改过几次（精修、手改、助手改）；只在译文栏提示。 */
@@ -44,6 +49,8 @@ export declare function ReaderTextHoverLayer({ target, pane, revisedCount, refer
     referenceIndex?: ReaderReferenceIndex;
     referenceRegions?: readonly ReaderRegion[];
     citationLabel?: string | null;
+    citationDisplayLabel?: string | null;
+    citationRect?: ReaderRegionRect | null;
     onReferenceClick?: (itemId: string) => void;
 }): import("react").JSX.Element;
 //# sourceMappingURL=ReaderTextHoverLayer.d.ts.map

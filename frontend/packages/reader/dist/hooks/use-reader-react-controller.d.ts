@@ -48,6 +48,9 @@ export type ReaderReactController = {
     goToPage: (page: number, pane?: "source" | "translated") => void;
     activeRegion: ReaderRegion | null;
     jumpToAnchor: (target: ReaderAnchorTarget, pane?: "source" | "translated") => void;
+    jumpToReference: (target: ReaderAnchorTarget, pane?: "source" | "translated") => void;
+    referenceReturnAvailable: boolean;
+    restoreReferencePosition: () => void;
     setModeKeepingPage: (next: ReaderMode) => void;
     showHud: boolean;
     download: ReaderSessionState["download"];

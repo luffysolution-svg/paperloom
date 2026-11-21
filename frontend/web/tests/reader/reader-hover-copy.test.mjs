@@ -176,8 +176,9 @@ test("正文引用悬停时显示对应参考文献预览", () => {
   assert.match(renderToStaticMarkup(createElement(ReaderTextHoverLayer, {
     target,
     referenceRegions: [reference],
+    citationLabel: "1",
     onReferenceClick: () => {},
-  })), /参考文献 1/);
+  })), /参考文献/);
 });
 
 test("作者年份引用悬停时显示对应参考文献预览", () => {

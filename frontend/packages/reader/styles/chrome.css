@@ -220,6 +220,10 @@
   gap: 8px;
 }
 
+.reader-reference-return {
+  white-space: nowrap;
+}
+
 /* 手机宽度：托盘三颗按钮之间收到 4px，原文 / 对照 / 译文才放得下（360px 宽时差 8px）。写在基础规则后面，不然被盖回 8px。 */
 @media (max-width: 440px) {
   .reader-chrome-tray {

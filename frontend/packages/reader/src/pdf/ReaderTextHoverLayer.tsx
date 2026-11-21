@@ -141,16 +141,52 @@ async function copyFigureImage(url: string): Promise<boolean> {
   return true;
 }
 
-async function openOrDownloadFigure(url: string, download: boolean): Promise<void> {
+async function openFigurePreview(url: string): Promise<void> {
   const objectUrl = URL.createObjectURL(await imageBlob(url));
-  if (download) {
-    const link = document.createElement("a");
-    link.href = objectUrl;
-    link.download = "paperloom-image";
-    link.click();
-  } else {
-    window.open(objectUrl, "_blank", "noopener,noreferrer");
-  }
+  const doc = document;
+  const overlay = doc.createElement("div");
+  overlay.className = "reader-pdf-image-preview";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-label", "图片预览");
+  const panel = doc.createElement("div");
+  panel.className = "reader-pdf-image-preview-panel";
+  const close = doc.createElement("button");
+  close.type = "button";
+  close.className = "reader-pdf-image-preview-close";
+  close.textContent = "关闭";
+  close.setAttribute("aria-label", "关闭图片预览");
+  const image = doc.createElement("img");
+  image.src = objectUrl;
+  image.alt = "PDF 图片预览";
+  const dismiss = () => {
+    doc.removeEventListener("keydown", onKeyDown, true);
+    URL.revokeObjectURL(objectUrl);
+    overlay.remove();
+  };
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      dismiss();
+    }
+  };
+  close.onclick = dismiss;
+  overlay.onclick = (event) => {
+    if (event.target === overlay) dismiss();
+  };
+  panel.append(close, image);
+  overlay.append(panel);
+  doc.body.append(overlay);
+  doc.addEventListener("keydown", onKeyDown, true);
+  close.focus();
+}
+
+async function downloadFigure(url: string): Promise<void> {
+  const objectUrl = URL.createObjectURL(await imageBlob(url));
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = "paperloom-image";
+  link.click();
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
 }
 
@@ -251,6 +287,7 @@ export function extractReaderCitationLabels(text: string): string[] {
     }
   };
   for (const match of text.matchAll(/\[((?:\d+\s*[-–]\s*\d+|\d+)(?:\s*[,;，、]\s*(?:\d+\s*[-–]\s*\d+|\d+))*)\]/g)) add(match[1]);
+  for (const match of text.matchAll(/【((?:\d+\s*[-–]\s*\d+|\d+)(?:\s*[,;，、]\s*(?:\d+\s*[-–]\s*\d+|\d+))*)】/g)) add(match[1]);
   for (const match of text.matchAll(/<sup[^>]*>\s*(\d+(?:\s*[-–]\s*\d+)?)\s*<\/sup>/gi)) add(match[1]);
   return labels.slice(0, 32);
 }
@@ -262,7 +299,7 @@ function normalizeAuthorYearKey(author: string, year: string): string {
     + `|${year.toLocaleLowerCase()}`;
 }
 
-function extractReaderAuthorYearCitations(text: string): ReaderAuthorYearCitation[] {
+export function extractReaderAuthorYearCitations(text: string): ReaderAuthorYearCitation[] {
   const citations: ReaderAuthorYearCitation[] = [];
   const seen = new Set<string>();
   const add = (author: string, year: string) => {
@@ -306,16 +343,19 @@ export function findReaderReferencePreviews(
   target: ReaderTextHoverTarget,
   referenceIndex: ReaderReferenceIndex,
   citationLabel?: string | null,
+  citationDisplayLabel?: string | null,
 ): ReaderReferencePreview[] {
   if (readerRegionKindForRegion(target.highlight.region) !== "text"
     || target.highlight.region.subType === "reference_entry") return [];
   const source = target.highlight.region.source.text || target.highlight.region.translated.text || "";
   const numericLabels = citationLabel ? [citationLabel] : extractReaderCitationLabels(source);
   const authorYearLabels = citationLabel ? [] : extractReaderAuthorYearCitations(source);
-  const matches = [
-    ...numericLabels.map((label) => ({ key: label, label })),
-    ...authorYearLabels,
-  ];
+  const matches = citationLabel
+    ? [{ key: citationLabel, label: citationDisplayLabel || citationLabel }]
+    : [
+      ...numericLabels.map((label) => ({ key: label, label })),
+      ...authorYearLabels,
+    ];
   return matches.flatMap(({ key, label }) => (referenceIndex.get(key) || []).map((entry) => ({
     itemId: entry.itemId,
     label,
@@ -338,6 +378,8 @@ export function ReaderTextHoverLayer({
   referenceIndex,
   referenceRegions,
   citationLabel,
+  citationDisplayLabel,
+  citationRect,
   onReferenceClick,
 }: {
   target: ReaderTextHoverTarget | null;
@@ -347,6 +389,8 @@ export function ReaderTextHoverLayer({
   referenceIndex?: ReaderReferenceIndex;
   referenceRegions?: readonly ReaderRegion[];
   citationLabel?: string | null;
+  citationDisplayLabel?: string | null;
+  citationRect?: ReaderRegionRect | null;
   onReferenceClick?: (itemId: string) => void;
 }) {
   const [state, setState] = useState<CopyState>("idle");
@@ -373,8 +417,8 @@ export function ReaderTextHoverLayer({
   const kind = readerRegionKindForRegion(target.highlight.region);
   const figureUrl = kind === "figure" ? figureAssetUrl(target.highlight.region) : "";
   const resolvedReferenceIndex = referenceIndex || fallbackReferenceIndex;
-  const referencePreviews = resolvedReferenceIndex
-    ? findReaderReferencePreviews(target, resolvedReferenceIndex, citationLabel)
+  const referencePreviews = resolvedReferenceIndex && citationLabel
+    ? findReaderReferencePreviews(target, resolvedReferenceIndex, citationLabel, citationDisplayLabel)
     : [];
   const copyWith = (value: string, set: (next: CopyState) => void) =>
     async (event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -387,6 +431,17 @@ export function ReaderTextHoverLayer({
     };
   const idleLabel = kind === "formula" ? "复制 LaTeX" : "复制";
   const outside = hoverToolsOutside(target.rect);
+  const referencePopoverStyle = citationRect
+    ? (() => {
+      const above = citationRect.top > 220;
+      const viewportWidth = typeof window === "undefined" ? 1200 : window.innerWidth;
+      return {
+        left: Math.min(citationRect.left, Math.max(8, viewportWidth - 440)),
+        top: above ? citationRect.top - 10 : citationRect.top + citationRect.height + 10,
+        transform: above ? "translateY(-100%)" : undefined,
+      };
+    })()
+    : undefined;
   const figureAction = async (
     action: "copy" | "open" | "download",
     event: ReactMouseEvent<HTMLButtonElement>,
@@ -401,9 +456,9 @@ export function ReaderTextHoverLayer({
       if (action === "copy") {
         if (!await copyFigureImage(figureUrl)) throw new Error("图片复制不可用");
       } else if (action === "open") {
-        await openOrDownloadFigure(figureUrl, false);
+        await openFigurePreview(figureUrl);
       } else {
-        await openOrDownloadFigure(figureUrl, true);
+        await downloadFigure(figureUrl);
       }
       setState("copied");
     } catch {
@@ -438,23 +493,33 @@ export function ReaderTextHoverLayer({
               改过 {revisedCount} 次
             </span>
           ) : null}
-          {referencePreviews.map((preview) => (
-            <HoverToolButton
-              key={preview.itemId}
-              className="reader-text-hover-reference"
-              title={`跳转到参考文献 ${preview.label}`}
-              state="idle"
-              label={`跳转到参考文献 ${preview.label}`}
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                onReferenceClick?.(preview.itemId);
-              }}
+          {referencePreviews.length ? (
+            <div
+              className="reader-text-hover-reference-popover"
+              style={referencePopoverStyle}
+              onPointerDown={(event) => event.stopPropagation()}
             >
-              <strong>参考文献 {preview.label}</strong>
-              <span>{preview.text}</span>
-            </HoverToolButton>
-          ))}
+              <div className="reader-text-hover-reference-heading">参考文献</div>
+              {referencePreviews.map((preview) => (
+                <div className="reader-text-hover-reference-entry" key={preview.itemId}>
+                  <div className="reader-text-hover-reference-label">{preview.label}</div>
+                  <div className="reader-text-hover-reference-text">{preview.text}</div>
+                  <HoverToolButton
+                    className="reader-text-hover-reference-jump"
+                    state="idle"
+                    label={`跳转到参考文献 ${preview.label}`}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onReferenceClick?.(preview.itemId);
+                    }}
+                  >
+                    跳转到参考文献
+                  </HoverToolButton>
+                </div>
+              ))}
+            </div>
+          ) : null}
           {kind === "table" ? (
             <>
               <HoverToolButton

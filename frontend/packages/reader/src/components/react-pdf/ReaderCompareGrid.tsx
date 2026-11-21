@@ -256,7 +256,7 @@ export function ReaderCompareGrid(props: ReaderCompareGridProps): ReactElement {
             readerMetadata={readerMetadata}
             hoveredRegionId={hoveredRegionId}
             onHoverRegion={handleHoverRegion}
-            onJumpToRegion={ctx?.jumpToBlock}
+            onJumpToRegion={ctx?.jumpToReference}
             // 流式译文直接叠加在源栏原文 PDF 上（overlayOnSource，用户主动触发）。
             // 对照态不再消栏：右栏（最终译文 PDF）照常保留。叠加 badge 由
             // sourcePaneAction 组合透出，避免与「左右都是中文」混淆。
@@ -297,7 +297,7 @@ export function ReaderCompareGrid(props: ReaderCompareGridProps): ReactElement {
             readerMetadata={readerMetadata}
             hoveredRegionId={hoveredRegionId}
             onHoverRegion={handleHoverRegion}
-            onJumpToRegion={ctx?.jumpToBlock}
+            onJumpToRegion={ctx?.jumpToReference}
             // 译文 PDF 栏就是最终译文本身，绝不叠加流式画布。
             liveTranslation={undefined}
             showLiveTranslation={false}
