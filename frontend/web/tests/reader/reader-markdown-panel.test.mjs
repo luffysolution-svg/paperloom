@@ -302,7 +302,7 @@ test("table Word copy writes an HTML table with readable formula text", async ()
   }
 });
 
-test("selected Markdown text copies formula source with surrounding text", async () => {
+test("inline formulas inside ordinary selections use browser copy behavior", async () => {
   const { addMarkdownCopyActions } = await import("../../../../frontend/packages/reader/src/shared/content/markdown-copy.ts");
   const article = dom.window.document.createElement("article");
   article.innerHTML = '<p>before <span class="reader-md-math reader-md-math-inline" data-reader-tex="x_i"><svg><path /></svg></span> after</p>';
@@ -318,38 +318,34 @@ test("selected Markdown text copies formula source with surrounding text", async
   const event = new dom.window.Event("copy", { bubbles: true, cancelable: true });
   Object.defineProperty(event, "clipboardData", { value: { setData: (type, value) => { data[type] = value; } } });
   article.dispatchEvent(event);
-  assert.equal(data["text/plain"], "before $x_i$ after");
-  assert.match(data["text/html"], /before \$x_i\$ after/);
+  assert.equal(event.defaultPrevented, false);
+  assert.deepEqual(data, {});
   selection.removeAllRanges();
   article.remove();
 });
 
-test("selecting only a rendered formula copies its TeX source", async () => {
+test("standalone rendered formulas expose a dedicated TeX copy action", async () => {
   const { addMarkdownCopyActions } = await import("../../../../frontend/packages/reader/src/shared/content/markdown-copy.ts");
   const article = dom.window.document.createElement("article");
-  article.innerHTML = '<p><span class="reader-md-math reader-md-math-inline" data-reader-tex="\\frac{a}{b}"><svg><path /></svg></span></p>';
+  article.innerHTML = '<div class="reader-md-math reader-md-math-display" data-reader-tex="\\frac{a}{b}"><svg><path /></svg></div>';
   addMarkdownCopyActions(article);
-  document.body.append(article);
-  const formula = article.querySelector("[data-reader-tex]");
-  const range = dom.window.document.createRange();
-  range.selectNodeContents(formula.querySelector("svg"));
-  const selection = dom.window.getSelection();
-  selection.removeAllRanges();
-  selection.addRange(range);
-  const data = {};
-  const event = new dom.window.Event("copy", { bubbles: true, cancelable: true });
-  Object.defineProperty(event, "clipboardData", { value: { setData: (type, value) => { data[type] = value; } } });
-  article.dispatchEvent(event);
-  assert.equal(data["text/plain"], "$\\frac{a}{b}$");
-  assert.match(data["text/html"], /\$\\frac\{a\}\{b\}\$/);
-  selection.removeAllRanges();
-  article.remove();
+  const originalNavigator = globalThis.navigator;
+  const writes = [];
+  Object.defineProperty(globalThis, "navigator", {
+    value: { clipboard: { writeText: async (value) => { writes.push(value); } } }, configurable: true,
+  });
+  try {
+    article.querySelector("button[aria-label='复制公式 LaTeX']").click();
+    await waitFor(() => writes.at(-1) === "\\frac{a}{b}", "公式复制");
+  } finally {
+    Object.defineProperty(globalThis, "navigator", { value: originalNavigator, configurable: true });
+  }
 });
 
-test("selected Markdown paragraphs keep readable line breaks", async () => {
+test("ordinary Markdown selections use the browser copy behavior", async () => {
   const { addMarkdownCopyActions } = await import("../../../../frontend/packages/reader/src/shared/content/markdown-copy.ts");
   const article = dom.window.document.createElement("article");
-  article.innerHTML = "<p>first</p><p>second</p>";
+  article.innerHTML = '<p>first <a href="https://example.com">link</a></p><pre><code>const answer = 42;</code></pre>';
   addMarkdownCopyActions(article);
   document.body.append(article);
   const range = dom.window.document.createRange();
@@ -361,52 +357,18 @@ test("selected Markdown paragraphs keep readable line breaks", async () => {
   const event = new dom.window.Event("copy", { bubbles: true, cancelable: true });
   Object.defineProperty(event, "clipboardData", { value: { setData: (type, value) => { data[type] = value; } } });
   article.dispatchEvent(event);
-  assert.equal(data["text/plain"], "first\nsecond");
-  assert.doesNotMatch(data["text/html"], /reader-md-selection-actions|reader-md-internal-back/);
+  assert.equal(event.defaultPrevented, false);
+  assert.deepEqual(data, {});
+  assert.equal(article.querySelector(".reader-md-selection-actions"), null);
   selection.removeAllRanges();
   article.remove();
 });
 
-test("Markdown code blocks expose a copy action", async () => {
-  const originalNavigator = globalThis.navigator;
-  Object.defineProperty(globalThis, "navigator", {
-    value: { clipboard: { writeText: async (value) => { globalThis.__readerCodeCopy = value; } } }, configurable: true,
-  });
+test("Markdown code blocks have no custom copy action", async () => {
   const article = dom.window.document.createElement("article");
   article.innerHTML = "<pre><code>const answer = 42;\nconsole.log(answer);</code></pre>";
   addMarkdownCopyActions(article);
-  article.querySelector("button[aria-label='复制代码']").click();
-  await waitFor(() => article.querySelector(".reader-md-code-actions [role='status']")?.textContent === "已复制", "代码复制状态");
-  assert.equal(globalThis.__readerCodeCopy, "const answer = 42;\nconsole.log(answer);");
-  delete globalThis.__readerCodeCopy;
-  Object.defineProperty(globalThis, "navigator", { value: originalNavigator, configurable: true });
-});
-
-test("Markdown selection actions provide Markdown and excerpt formats", async () => {
-  const originalNavigator = globalThis.navigator;
-  const writes = [];
-  Object.defineProperty(globalThis, "navigator", {
-    value: { clipboard: { writeText: async (value) => { writes.push(value); } } }, configurable: true,
-  });
-  const article = dom.window.document.createElement("article");
-  article.innerHTML = '<div data-md-block="item-7" data-md-page="12"><p><strong>Important</strong> result</p></div>';
-  addMarkdownCopyActions(article);
-  document.body.append(article);
-  const range = dom.window.document.createRange();
-  range.selectNodeContents(article.querySelector("p"));
-  const selection = dom.window.getSelection();
-  selection.removeAllRanges();
-  selection.addRange(range);
-  dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
-  const toolbar = article.querySelector(".reader-md-selection-actions");
-  assert.equal(toolbar.hidden, false);
-  toolbar.querySelector("button:nth-of-type(2)").click();
-  await waitFor(() => writes.at(-1) === "**Important** result", "Markdown 选区复制");
-  toolbar.querySelector("button:nth-of-type(4)").click();
-  await waitFor(() => writes.at(-1) === "Important result\n\n来源：第 12 页，块 item-7", "摘录复制");
-  selection.removeAllRanges();
-  article.remove();
-  Object.defineProperty(globalThis, "navigator", { value: originalNavigator, configurable: true });
+  assert.equal(article.querySelector(".reader-md-code-actions"), null);
 });
 
 test("Markdown image actions open a closable preview", () => {
@@ -430,6 +392,25 @@ test("Markdown footnote links stay internal and are handled in the reader", () =
   assert.equal(link.getAttribute("target"), null);
   addMarkdownCopyActions(article);
   document.body.append(article);
+  let prevented = false;
+  const event = new dom.window.MouseEvent("click", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "preventDefault", { value: () => { prevented = true; } });
+  link.dispatchEvent(event);
+  assert.equal(prevented, true);
+  assert.equal(article.querySelector(".reader-md-internal-back").hidden, false);
+  article.remove();
+});
+
+test("Markdown internal links can jump across streamed chunks and return", () => {
+  const article = dom.window.document.createElement("article");
+  article.className = "reader-markdown-content";
+  article.innerHTML = '<section><p>See <a href="#fn-1">[1]</a></p></section><section><p id="fn-1">Reference</p></section>';
+  const target = article.querySelector("#fn-1");
+  target.scrollIntoView = () => {};
+  addMarkdownCopyActions(article.querySelector("section"));
+  addMarkdownCopyActions(article.querySelectorAll("section")[1]);
+  document.body.append(article);
+  const link = article.querySelector("a");
   let prevented = false;
   const event = new dom.window.MouseEvent("click", { bubbles: true, cancelable: true });
   Object.defineProperty(event, "preventDefault", { value: () => { prevented = true; } });

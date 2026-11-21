@@ -17,6 +17,7 @@ import { useHomeDialogStore, useHomeSettingsHub, useHomeWorkflowDialog } from ".
 import { useStoreSnapshot } from "@/ui/hooks/use-store.js";
 import { useLibrarySearchBinding } from "@/features/library/index.js";
 import { TRANSLATION_WORKFLOW_DIALOG } from "@/features/ingest/domain.js";
+import { canUseIntegrations, useAuthSession } from "@/features/auth/index.js";
 
 // 任务中心浮层入口事件：平台 ?tab= 白名单（platform/navigation/pages.js）没有
 // tasks 键且不可动（别的 agent 领地），故任务中心不做顶栏 Tab，走主页浮层——
@@ -38,6 +39,7 @@ export function AppBottomBar({ showSearch = true, hidden = false }) {
   const dialogStore = useHomeDialogStore();
   const workflowDialog = useHomeWorkflowDialog();
   const settingsHub = useHomeSettingsHub();
+  const integrationsEnabled = canUseIntegrations(useAuthSession());
   const dialog = useStoreSnapshot(dialogStore);
   const open = Boolean(dialog.open);
   // hooks 不能条件调用——始终订阅,只在 showSearch 时渲染 input(分类 tab 下
@@ -67,18 +69,20 @@ export function AppBottomBar({ showSearch = true, hidden = false }) {
         <span className="library-bottom-icon-btn-ornament" aria-hidden="true" />
       </button>
 
-      <IconButton
-        id="library-home-zotero-trigger"
-        label="从 Zotero 导入"
-        className="library-bottom-icon-btn"
-        aria-controls="zotero-import-dialog"
-        onClick={openZoteroImport}
-      >
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M6 5h12L6 19h12" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-        <span className="library-bottom-icon-btn-ornament" aria-hidden="true" />
-      </IconButton>
+      {integrationsEnabled ? (
+        <IconButton
+          id="library-home-zotero-trigger"
+          label="从 Zotero 导入"
+          className="library-bottom-icon-btn"
+          aria-controls="zotero-import-dialog"
+          onClick={openZoteroImport}
+        >
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6 5h12L6 19h12" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span className="library-bottom-icon-btn-ornament" aria-hidden="true" />
+        </IconButton>
+      ) : null}
 
       {showSearch ? (
         <div className="library-bottom-search" role="search">

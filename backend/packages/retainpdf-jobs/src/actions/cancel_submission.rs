@@ -25,9 +25,9 @@ impl<'a> JobsFacade<'a> {
     /// 同一条路径（登记取消 + 终止 worker 进程，非 OCR 任务落 Canceled），之后调用方再删行删目录。
     ///
     /// 以前强删既不登记取消也不杀进程：worker 继续花 OCR / 模型的钱，runner 的下一次落库
-    /// 还会把已删的行写回来。尽力而为：某个任务取消失败（进程已退出、jobsd 抖动）只记日志，
-    /// 不挡住删除——行删掉以后 runner 的 CAS 写落空，会自己收手并终止 worker。
-    pub async fn cancel_before_delete(&self, job_ids: &[String]) {
+    /// 还会把已删的行写回来。现在任何取消或终止失败都会阻止后续删除，调用方可以保留
+    /// 数据和任务目录，等待运行时恢复后重试。
+    pub async fn cancel_before_delete(&self, job_ids: &[String]) -> Result<(), AppError> {
         for job_id in job_ids {
             let active = matches!(
                 self.command.db.job_status(job_id),
@@ -38,7 +38,9 @@ impl<'a> JobsFacade<'a> {
             }
             if let Err(error) = cancel_job_service(&self.command.control, job_id).await {
                 tracing::warn!("cancel before force delete failed for job {job_id}: {error:?}");
+                return Err(error);
             }
         }
+        Ok(())
     }
 }

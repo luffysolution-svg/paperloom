@@ -5,7 +5,7 @@
 // 调用方在 EOF 时把剩余文本直接渲染即可。
 //
 // 已知限制：分段用独立的 marked.parse，语法上「跨块才有意义」的构造会被切坏。
-// 这里做能做的缓解：块边界不落在引用式链接定义「之前」，也不落在松散列表项之间
+// 这里做能做的缓解：块边界不落在引用式链接或脚注定义「之前」，也不落在松散列表项之间
 // （见 boundaryIsUnsafe）。仍无法覆盖的情形（例如定义出现在文档最前、跨块的紧列表
 // 续项、跨块 HTML 块）只能保持现状；窗口化与整篇渲染的语义并非完全等价。
 
@@ -22,8 +22,8 @@ function nextNonEmptyLine(text: string, from: number): string | null {
   return null;
 }
 
-/** `[label]: url` 引用式链接/图片定义（最多 3 空格缩进，CommonMark 允许）。 */
-const REFERENCE_DEFINITION_RE = /^\s{0,3}\[[^\]]+\]:/;
+/** 引用式链接/图片定义和脚注定义（最多 3 空格缩进，CommonMark 允许）。 */
+const REFERENCE_DEFINITION_RE = /^\s{0,3}\[(?:\^)?[^\]]+\]:/;
 
 /** 列表项类型；有序列表用分隔符区分，避免 `1.` 与 `1)` 混判。 */
 function markdownListKind(line: string): string | null {
@@ -35,7 +35,7 @@ function markdownListKind(line: string): string | null {
 
 /**
  * 该空行边界是否不安全（应推迟到下一个边界再切）。
- * - 边界后紧跟引用式定义：定义必须与前面的引用同块，否则链接解析失败。
+ * - 边界后紧跟引用式链接或脚注定义：定义必须与前面的引用同块，否则解析失败。
  * - 边界前后都是同种列表项：这是松散列表的内部空行，切开会被渲染成多个列表。
  */
 function boundaryIsUnsafe(text: string, boundary: number, previousNonEmptyLine: string | null): boolean {

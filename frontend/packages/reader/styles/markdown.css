@@ -214,11 +214,6 @@
   background: none;
 }
 
-.reader-md-code-actions {
-  justify-content: flex-start;
-  margin-top: -5px;
-}
-
 .reader-markdown-content img {
   display: block;
   max-width: 100%;
@@ -272,7 +267,6 @@
   border-color: var(--ink);
 }
 
-.reader-md-selection-actions,
 .reader-md-internal-back {
   display: flex;
   align-items: center;
@@ -286,12 +280,10 @@
   font-size: var(--ui-text-xs);
 }
 
-.reader-md-selection-actions[hidden],
 .reader-md-internal-back[hidden] {
   display: none;
 }
 
-.reader-md-selection-actions button,
 .reader-md-internal-back {
   min-height: 24px;
   padding: 2px 8px;
@@ -303,11 +295,40 @@
   cursor: pointer;
 }
 
-.reader-md-selection-actions button:hover,
-.reader-md-selection-actions button:focus-visible,
 .reader-md-internal-back:hover,
 .reader-md-internal-back:focus-visible {
   border-color: var(--ink);
+}
+
+.reader-md-footnotes {
+  margin-top: 1.4em;
+  padding-top: 0.8em;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: var(--ui-text-sm);
+}
+
+.reader-md-footnotes h2 {
+  margin: 0 0 0.55em;
+  font-size: var(--ui-text-sm);
+}
+
+.reader-md-footnotes ol {
+  margin: 0;
+  padding-left: 1.6em;
+}
+
+.reader-md-footnote-ref a,
+.reader-md-footnote-back {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.reader-md-footnote-ref a:hover,
+.reader-md-footnote-ref a:focus-visible,
+.reader-md-footnote-back:hover,
+.reader-md-footnote-back:focus-visible {
+  text-decoration: underline;
 }
 
 .reader-md-image-preview {

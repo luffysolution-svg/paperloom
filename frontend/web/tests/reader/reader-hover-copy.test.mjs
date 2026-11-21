@@ -1,5 +1,5 @@
 // 阅读器悬停复制：鼠标在 PDF 内容块上 → 红色虚线框 + 「复制」，对照时左右两栏同一块一起画；
-// 左栏复制原文、右栏复制译文；双击整块复制。4.1.x 旧引擎里最常用的交互，React 引擎替换时丢了，
+// 左栏复制原文、右栏复制译文；拖选仍交给浏览器原生复制。4.1.x 旧引擎里最常用的交互，React 引擎替换时丢了，
 // 同时内容块数据被「归一化两次」清成了 0，悬停框、点块浮条一起失效。
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -9,6 +9,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   copyReaderText,
+  findReaderReferencePreview,
   hoverToolsOutside,
   projectReaderTextHoverTargets,
   ReaderTextHoverLayer,
@@ -119,6 +120,113 @@ test("行间公式也能悬停：两栏都复制 LaTeX（去掉 $$）；译文�
   assert.ok(t, "公式块是悬停目标（以前只有正文是）");
   const markup = renderToStaticMarkup(createElement(ReaderTextHoverLayer, { target: t, pane: "translated" }));
   assert.match(markup, /复制 LaTeX/);
+});
+
+test("图片块也提供复制、放大和下载按钮", () => {
+  const [figure] = normalizeReaderRegions({ items: [{
+    item_id: "p002-b0004",
+    source: { page: 2, bbox: [20, 40, 180, 140], unit: "pdf_point", origin: "top_left", text: "" },
+    translated: { page: 2, bbox: [20, 40, 180, 140], unit: "pdf_point", origin: "top_left", text: "" },
+    markdown: "",
+    region_type: "figure",
+    status: "translated",
+    asset_urls: ["/api/v1/jobs/j1/files/output/ocr/images/figure.png"],
+  }] });
+  const [target] = projectReaderTextHoverTargets([{
+    itemId: figure.itemId,
+    region: figure,
+    box: figure.source,
+    pageSize: { page: 2, width: 200, height: 200 },
+  }], 200, 200);
+  assert.ok(target);
+  const markup = renderToStaticMarkup(createElement(ReaderTextHoverLayer, { target, pane: "source" }));
+  assert.match(markup, /aria-label="复制图片"/);
+  assert.match(markup, /aria-label="放大图片"/);
+  assert.match(markup, /aria-label="下载图片"/);
+});
+
+test("正文引用悬停时显示对应参考文献预览", () => {
+  const [citation, reference] = normalizeReaderRegions({ items: [
+    {
+      item_id: "p001-b0001",
+      source: { page: 1, bbox: [20, 40, 180, 70], unit: "pdf_point", origin: "top_left", text: "已有研究表明 [1]" },
+      translated: { page: 1, bbox: [20, 40, 180, 70], unit: "pdf_point", origin: "top_left", text: "已有研究表明 [1]" },
+      region_type: "text", sub_type: "paragraph", status: "translated",
+    },
+    {
+      item_id: "p009-b0002",
+      source: { page: 9, bbox: [20, 40, 180, 70], unit: "pdf_point", origin: "top_left", text: "[1] Smith et al. 2024. Example." },
+      translated: { page: 9, bbox: [20, 40, 180, 70], unit: "pdf_point", origin: "top_left", text: "[1] Smith et al. 2024. Example." },
+      region_type: "text", sub_type: "reference_entry", status: "source_only",
+    },
+  ] });
+  const [target] = projectReaderTextHoverTargets([{
+    itemId: citation.itemId,
+    region: citation,
+    box: citation.source,
+    pageSize: { page: 1, width: 200, height: 200 },
+  }], 200, 200);
+  const preview = findReaderReferencePreview(target, [reference]);
+  assert.deepEqual(preview, {
+    itemId: "p009-b0002",
+    label: "1",
+    text: "[1] Smith et al. 2024. Example.",
+    page: 9,
+  });
+  assert.match(renderToStaticMarkup(createElement(ReaderTextHoverLayer, {
+    target,
+    referenceRegions: [reference],
+    onReferenceClick: () => {},
+  })), /参考文献 1/);
+});
+
+test("作者年份引用悬停时显示对应参考文献预览", () => {
+  const [citation, reference] = normalizeReaderRegions({ items: [
+    {
+      item_id: "p001-b0005",
+      source: { page: 1, bbox: [20, 40, 180, 70], unit: "pdf_point", origin: "top_left", text: "Smith et al. (2024) 提出了新的方法。" },
+      translated: { page: 1, bbox: [20, 40, 180, 70], unit: "pdf_point", origin: "top_left", text: "Smith et al. (2024) 提出了新的方法。" },
+      region_type: "text", sub_type: "paragraph", status: "translated",
+    },
+    {
+      item_id: "p009-b0006",
+      source: { page: 9, bbox: [20, 40, 180, 70], unit: "pdf_point", origin: "top_left", text: "[1] Smith et al. 2024. Example." },
+      translated: { page: 9, bbox: [20, 40, 180, 70], unit: "pdf_point", origin: "top_left", text: "[1] Smith et al. 2024. Example." },
+      region_type: "text", sub_type: "reference_entry", status: "source_only",
+    },
+  ] });
+  const [target] = projectReaderTextHoverTargets([{
+    itemId: citation.itemId,
+    region: citation,
+    box: citation.source,
+    pageSize: { page: 1, width: 200, height: 200 },
+  }], 200, 200);
+  assert.deepEqual(findReaderReferencePreview(target, [reference]), {
+    itemId: "p009-b0006",
+    label: "Smith et al., 2024",
+    text: "[1] Smith et al. 2024. Example.",
+    page: 9,
+  });
+});
+
+test("PDF 表格悬停时提供纯文本、Markdown 和 LaTeX 复制", () => {
+  const [table] = normalizeReaderRegions({ items: [{
+    item_id: "p003-b0001",
+    source: { page: 3, bbox: [20, 40, 180, 140], unit: "pdf_point", origin: "top_left", text: "" },
+    translated: { page: 3, bbox: [20, 40, 180, 140], unit: "pdf_point", origin: "top_left", text: "" },
+    markdown: "| A | B |\n| --- | --- |\n| 1 | 2 |",
+    region_type: "table", status: "translated",
+  }] });
+  const [target] = projectReaderTextHoverTargets([{
+    itemId: table.itemId,
+    region: table,
+    box: table.source,
+    pageSize: { page: 3, width: 200, height: 200 },
+  }], 200, 200);
+  const markup = renderToStaticMarkup(createElement(ReaderTextHoverLayer, { target, pane: "source" }));
+  assert.match(markup, /aria-label="复制表格"/);
+  assert.match(markup, /aria-label="复制表格为 Markdown"/);
+  assert.match(markup, /aria-label="复制表格为 LaTeX"/);
 });
 
 test("正文里的行内公式原样保留 $…$", () => {

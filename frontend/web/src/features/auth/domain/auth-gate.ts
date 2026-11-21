@@ -73,6 +73,10 @@ export function isAdmin(session: AuthSessionView | null | undefined): boolean {
   return session?.mode !== "multi" || session?.user?.role === "admin";
 }
 
+export function canUseIntegrations(session: AuthSessionView | null | undefined): boolean {
+  return !isMultiUser(session) || isAdmin(session);
+}
+
 // 多用户模式下藏掉单机才有的设置分栏：普通用户看不到接口设置（凭证由服务器统一管）、同步、备份；
 // 「更新」（检查桌面版更新、装命令行）对服务器部署没有意义，管理员也藏。单机模式什么都不藏。
 const MULTI_USER_HIDDEN_TABS: readonly string[] = ["update"];

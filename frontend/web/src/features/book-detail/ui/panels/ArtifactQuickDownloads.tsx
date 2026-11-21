@@ -66,6 +66,7 @@ export function ArtifactQuickDownloads({
   downloadingId,
   onDownload,
   onDownloadMarkdown,
+  canUseIntegrations = true,
 }: {
   sections: ArtifactCenterSection[];
   loading: boolean;
@@ -73,6 +74,7 @@ export function ArtifactQuickDownloads({
   onDownload: (item: ArtifactCenterItem) => void;
   /** Markdown 那一颗：打 zip（原文、译文、双语 + 图片）；第二个参数是拿哪个任务的块来拼。不给就照旧下产物。 */
   onDownloadMarkdown?: (item: ArtifactCenterItem, readingJobId: string) => void;
+  canUseIntegrations?: boolean;
 }) {
   const items = selectArtifactQuickDownloads(sections);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -151,7 +153,7 @@ export function ArtifactQuickDownloads({
           })}
         </div>
       </TooltipProvider>
-      <Button
+      {canUseIntegrations ? <Button
         id="book-detail-obsidian-trigger"
         type="button"
         variant="secondary"
@@ -163,8 +165,8 @@ export function ArtifactQuickDownloads({
       >
         <Gem aria-hidden="true" />
         <span>保存到 Obsidian</span>
-      </Button>
-      <Button
+      </Button> : null}
+      {canUseIntegrations ? <Button
         id="book-detail-zotero-writeback-trigger"
         type="button"
         variant="secondary"
@@ -176,8 +178,8 @@ export function ArtifactQuickDownloads({
       >
         <Upload aria-hidden="true" />
         <span>写回 Zotero</span>
-      </Button>
-      {translatedJobId ? (
+      </Button> : null}
+      {canUseIntegrations && translatedJobId ? (
         <>
           <ObsidianExportDialog open={obsidianOpen} onOpenChange={setObsidianOpen} jobId={translatedJobId} />
           <ZoteroWritebackDialog open={zoteroOpen} onOpenChange={setZoteroOpen} jobId={translatedJobId} />

@@ -8,157 +8,7 @@ function replaceMathForCopy(root: ParentNode) {
     const replacement = math.ownerDocument.createTextNode(`${math.classList.contains("reader-md-math-display") ? "\n" : ""}$${tex}$${math.classList.contains("reader-md-math-display") ? "\n" : ""}`);
     math.replaceWith(replacement);
   });
-  root.querySelectorAll(".reader-md-copy-actions, .reader-md-selection-actions, .reader-md-internal-back").forEach((node) => node.remove());
-}
-
-function mathAncestor(node: Node, container: HTMLElement): HTMLElement | null {
-  let current: Element | null = node.nodeType === Node.ELEMENT_NODE
-    ? node as Element
-    : node.parentElement;
-  while (current && current !== container) {
-    if (current.matches("[data-reader-tex], .reader-md-math-error")) return current as HTMLElement;
-    current = current.parentElement;
-  }
-  return null;
-}
-
-function copyTextFromNode(node: Node): string {
-  if (node.nodeType === Node.TEXT_NODE) return node.textContent || "";
-  if (node.nodeType !== Node.ELEMENT_NODE) return "";
-  const element = node as HTMLElement;
-  if (element.classList.contains("reader-md-copy-actions")
-    || element.classList.contains("reader-md-selection-actions")
-    || element.classList.contains("reader-md-internal-back")) return "";
-  if (element.tagName === "BR") return "\n";
-  const text = Array.from(element.childNodes, copyTextFromNode).join("");
-  return /^(ADDRESS|ARTICLE|BLOCKQUOTE|DIV|H[1-6]|LI|OL|P|PRE|SECTION|TABLE|TR|UL)$/.test(element.tagName)
-    ? `${text}\n`
-    : text;
-}
-
-function selectedMarkdownFragment(container: HTMLElement, selection: Selection | null): { text: string; html: string } | null {
-  if (!selection?.rangeCount || selection.isCollapsed) return null;
-  const range = selection.getRangeAt(0).cloneRange();
-  if (!container.contains(range.commonAncestorContainer)) return null;
-  const startMath = mathAncestor(range.startContainer, container);
-  const endMath = mathAncestor(range.endContainer, container);
-  if (startMath) range.setStartBefore(startMath);
-  if (endMath) range.setEndAfter(endMath);
-  if (!container.contains(range.commonAncestorContainer)) return null;
-  const fragment = range.cloneContents();
-  const wrapper = container.ownerDocument.createElement("div");
-  wrapper.append(fragment);
-  replaceMathForCopy(wrapper);
-  const text = copyTextFromNode(wrapper).replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
-  return text ? { text, html: wrapper.innerHTML } : null;
-}
-
-export function installMarkdownCopyHandler(container: HTMLElement) {
-  if (container.dataset.readerCopyBound === "true") return;
-  container.dataset.readerCopyBound = "true";
-  container.addEventListener("copy", (event) => {
-    const selection = container.ownerDocument.getSelection?.() ?? container.ownerDocument.defaultView?.getSelection?.();
-    const payload = selectedMarkdownFragment(container, selection);
-    if (!payload || !event.clipboardData) return;
-    event.clipboardData.setData("text/plain", payload.text);
-    event.clipboardData.setData("text/html", payload.html);
-    event.preventDefault();
-  });
-}
-
-function selectionPayload(container: HTMLElement): { text: string; html: string; source: string } | null {
-  const selection = container.ownerDocument.getSelection?.() ?? container.ownerDocument.defaultView?.getSelection?.();
-  const payload = selectedMarkdownFragment(container, selection);
-  if (!payload) return null;
-  const anchor = selection?.anchorNode;
-  const block = anchor && (anchor.nodeType === Node.ELEMENT_NODE ? anchor as Element : anchor.parentElement)?.closest<HTMLElement>("[data-md-block]");
-  const page = block?.dataset.mdPage;
-  const key = block?.dataset.mdBlock;
-  const source = [page ? `\u7b2c ${page} \u9875` : "", key ? `\u5757 ${key}` : ""].filter(Boolean).join("\uff0c") || "Markdown \u6b63\u6587";
-  return { ...payload, source };
-}
-
-function markdownFromNode(node: Node): string {
-  if (node.nodeType === Node.TEXT_NODE) return node.textContent || "";
-  if (node.nodeType !== Node.ELEMENT_NODE) return "";
-  const element = node as HTMLElement;
-  const children = Array.from(element.childNodes, markdownFromNode).join("");
-  switch (element.tagName) {
-    case "BR": return "\n";
-    case "STRONG":
-    case "B": return `**${children.trim()}**`;
-    case "EM":
-    case "I": return `*${children.trim()}*`;
-    case "CODE": return element.parentElement?.tagName === "PRE" ? children : `\`${children}\``;
-    case "PRE": return `\n\n\`\`\`\n${element.textContent || ""}\n\`\`\`\n\n`;
-    case "A": return `[${children.trim()}](${element.getAttribute("href") || ""})`;
-    case "IMG": return `![${element.getAttribute("alt") || ""}](${element.getAttribute("src") || element.getAttribute("data-reader-md-src") || ""})`;
-    case "H1": return `\n\n# ${children.trim()}\n\n`;
-    case "H2": return `\n\n## ${children.trim()}\n\n`;
-    case "H3": return `\n\n### ${children.trim()}\n\n`;
-    case "H4": return `\n\n#### ${children.trim()}\n\n`;
-    case "H5": return `\n\n##### ${children.trim()}\n\n`;
-    case "H6": return `\n\n###### ${children.trim()}\n\n`;
-    case "LI": return children.trim();
-    case "UL":
-    case "OL": return Array.from(element.children)
-      .map((item, index) => `${element.tagName === "OL" ? `${index + 1}.` : "-"} ${markdownFromNode(item).trim()}`)
-      .join("\n") + "\n\n";
-    case "P":
-    case "DIV": return `${children.trim()}\n\n`;
-    case "BLOCKQUOTE": return `${children.trim().split("\n").map((line) => `> ${line}`).join("\n")}\n\n`;
-    case "TABLE": return `\n\n${serializeMarkdownTable(element as HTMLTableElement, "Markdown")}\n\n`;
-    default: return children;
-  }
-}
-
-function htmlToMarkdown(html: string, doc: Document): string {
-  const wrapper = doc.createElement("div");
-  wrapper.innerHTML = html;
-  return markdownFromNode(wrapper).replace(/\n{3,}/g, "\n\n").trim();
-}
-
-async function copySelection(container: HTMLElement, format: "text" | "markdown" | "word" | "excerpt") {
-  const payload = selectionPayload(container);
-  if (!payload) return false;
-  if (format === "word") return copyReaderHtml(`<div>${payload.html}</div>`, payload.text);
-  if (format === "excerpt") return copyReaderText(`${payload.text}\n\n\u6765\u6e90\uff1a${payload.source}`);
-  return copyReaderText(format === "markdown" ? htmlToMarkdown(payload.html, container.ownerDocument) : payload.text);
-}
-
-function installSelectionActions(container: HTMLElement) {
-  if (container.dataset.readerSelectionActionsBound === "true") return;
-  container.dataset.readerSelectionActionsBound = "true";
-  const doc = container.ownerDocument;
-  const actions = doc.createElement("div");
-  actions.className = "reader-md-selection-actions";
-  actions.hidden = true;
-  actions.setAttribute("aria-label", "\u590d\u5236\u9009\u533a");
-  actions.append("\u590d\u5236\u9009\u533a");
-  const feedback = doc.createElement("span");
-  feedback.setAttribute("aria-live", "polite");
-  actions.append(feedback);
-  const options = [
-    ["text", "\u7eaf\u6587\u672c"],
-    ["markdown", "Markdown"],
-    ["word", "Word"],
-    ["excerpt", "\u6458\u5f55"],
-  ] as const;
-  for (const [format, label] of options) {
-    const button = doc.createElement("button");
-    button.type = "button";
-    button.textContent = label;
-    button.onclick = async () => {
-      feedback.textContent = "";
-      feedback.textContent = await copySelection(container, format) ? "\u5df2\u590d\u5236" : "\u8bf7\u9009\u62e9\u6b63\u6587\u5185\u5bb9";
-    };
-    actions.append(button);
-  }
-  container.prepend(actions);
-  doc.addEventListener("selectionchange", () => {
-    const selection = doc.getSelection?.();
-    actions.hidden = !selection || selection.isCollapsed || !selectionPayload(container);
-  });
+  root.querySelectorAll(".reader-md-copy-actions, .reader-md-internal-back").forEach((node) => node.remove());
 }
 
 function openImagePreview(image: HTMLImageElement) {
@@ -181,11 +31,12 @@ function openImagePreview(image: HTMLImageElement) {
 }
 
 function installMarkdownInteractions(container: HTMLElement) {
-  if (container.dataset.readerMarkdownInteractionsBound === "true") return;
-  container.dataset.readerMarkdownInteractionsBound = "true";
+  const interactionRoot = container.closest<HTMLElement>(".reader-markdown-content") || container;
+  if (interactionRoot.dataset.readerMarkdownInteractionsBound === "true") return;
+  interactionRoot.dataset.readerMarkdownInteractionsBound = "true";
   let previousScrollTop: number | null = null;
-  const doc = container.ownerDocument;
-  const scrollRoot = container.closest<HTMLElement>(".reader-notes-panel-body") || container;
+  const doc = interactionRoot.ownerDocument;
+  const scrollRoot = interactionRoot.closest<HTMLElement>(".reader-notes-panel-body") || interactionRoot;
   const back = doc.createElement("button");
   back.type = "button";
   back.className = "reader-md-internal-back";
@@ -196,14 +47,14 @@ function installMarkdownInteractions(container: HTMLElement) {
     scrollRoot.scrollTo({ top: previousScrollTop, behavior: "smooth" });
     back.hidden = true;
   };
-  container.prepend(back);
-  container.addEventListener("click", (event) => {
+  interactionRoot.prepend(back);
+  interactionRoot.addEventListener("click", (event) => {
     const target = event.target as HTMLElement;
     const link = target.closest<HTMLAnchorElement>("a[href^='#']");
-    if (!link || !container.contains(link)) return;
+    if (!link || !interactionRoot.contains(link)) return;
     const id = decodeURIComponent(link.getAttribute("href")!.slice(1));
-    const destination = container.ownerDocument.getElementById(id);
-    if (!destination || !container.contains(destination)) return;
+    const destination = interactionRoot.ownerDocument.getElementById(id);
+    if (!destination || !interactionRoot.contains(destination)) return;
     event.preventDefault();
     previousScrollTop = scrollRoot.scrollTop;
     destination.scrollIntoView?.({ block: "center", behavior: "smooth" });
@@ -317,8 +168,6 @@ async function imageAsPng(image: HTMLImageElement): Promise<Blob> {
 }
 
 export function addMarkdownCopyActions(container: HTMLElement) {
-  installMarkdownCopyHandler(container);
-  installSelectionActions(container);
   installMarkdownInteractions(container);
   for (const asset of container.querySelectorAll<HTMLImageElement | HTMLTableElement>("img[data-reader-md-src], table")) {
     const doc = asset.ownerDocument;
@@ -378,22 +227,27 @@ export function addMarkdownCopyActions(container: HTMLElement) {
     }
     (asset.closest("a") || asset).after(actions);
   }
-  for (const code of container.querySelectorAll<HTMLElement>("pre > code")) {
-    if (code.dataset.readerCodeActionsBound === "true") continue;
-    code.dataset.readerCodeActionsBound = "true";
-    const actions = code.ownerDocument.createElement("span");
-    actions.className = "reader-md-copy-actions reader-md-code-actions";
-    const button = code.ownerDocument.createElement("button");
-    button.type = "button";
-    button.textContent = "\u590d\u5236\u4ee3\u7801";
-    button.setAttribute("aria-label", "\u590d\u5236\u4ee3\u7801");
-    const feedback = code.ownerDocument.createElement("span");
+
+  for (const formula of container.querySelectorAll<HTMLElement>(".reader-md-math-display")) {
+    if (formula.closest("table") || formula.dataset.readerFormulaActionsBound === "true") continue;
+    const tex = formula.dataset.readerTex
+      || formula.querySelector<HTMLElement>(".reader-md-math-error")?.textContent?.trim()
+      || "";
+    if (!tex) continue;
+    formula.dataset.readerFormulaActionsBound = "true";
+    const actions = formula.ownerDocument.createElement("span");
+    actions.className = "reader-md-copy-actions reader-md-formula-actions";
+    const feedback = formula.ownerDocument.createElement("span");
     feedback.setAttribute("role", "status");
+    const button = formula.ownerDocument.createElement("button");
+    button.type = "button";
+    button.textContent = "复制 LaTeX";
+    button.setAttribute("aria-label", "复制公式 LaTeX");
     button.onclick = async (event) => {
       event.stopPropagation();
-      feedback.textContent = await copyReaderText(code.textContent || "") ? "\u5df2\u590d\u5236" : "\u590d\u5236\u5931\u8d25";
+      feedback.textContent = await copyReaderText(tex) ? "已复制" : "复制失败";
     };
     actions.append(button, feedback);
-    code.parentElement?.after(actions);
+    formula.after(actions);
   }
 }

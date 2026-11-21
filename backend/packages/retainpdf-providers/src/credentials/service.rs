@@ -6,6 +6,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{RwLock, RwLockReadGuard};
 
+#[cfg(windows)]
+use std::os::windows::io::AsRawHandle;
+
 use axum::http::StatusCode;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
@@ -13,6 +16,11 @@ use serde::{Deserialize, Serialize};
 use retainpdf_data::db::Db;
 use retainpdf_api_base::error::AppError;
 use retainpdf_core::models::domain::now_iso;
+
+#[cfg(windows)]
+use windows_sys::Win32::Storage::FileSystem::{LockFileEx, UnlockFileEx, LOCKFILE_EXCLUSIVE_LOCK};
+#[cfg(windows)]
+use windows_sys::Win32::System::IO::OVERLAPPED;
 
 // 文件格式（版本号、大小上限、路径、名字规则、读之前的安全检查）和任务运行时读密钥的一侧共用。
 use retainpdf_data::credentials::{
@@ -26,6 +34,8 @@ static VAULT_ACCESS_LOCK: Lazy<RwLock<()>> = Lazy::new(|| RwLock::new(()));
 
 struct VaultFileLock {
     file: fs::File,
+    #[cfg(windows)]
+    overlapped: OVERLAPPED,
 }
 
 #[cfg(unix)]
@@ -40,7 +50,25 @@ impl Drop for VaultFileLock {
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+impl Drop for VaultFileLock {
+    fn drop(&mut self) {
+        let handle = self.file.as_raw_handle() as windows_sys::Win32::Foundation::HANDLE;
+        // SAFETY: the handle and OVERLAPPED used for the lock remain valid for
+        // the lifetime of this guard.
+        let _ = unsafe {
+            UnlockFileEx(
+                handle,
+                0,
+                u32::MAX,
+                u32::MAX,
+                &mut self.overlapped,
+            )
+        };
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
 impl Drop for VaultFileLock {
     fn drop(&mut self) {}
 }
@@ -631,7 +659,26 @@ fn acquire_vault_file_lock(data_root: &Path, exclusive: bool) -> Result<VaultFil
             ));
         }
     }
-    Ok(VaultFileLock { file })
+    #[cfg(windows)]
+    let overlapped = {
+        let mut overlapped = unsafe { std::mem::zeroed::<OVERLAPPED>() };
+        let flags = if exclusive { LOCKFILE_EXCLUSIVE_LOCK } else { 0 };
+        let handle = file.as_raw_handle() as windows_sys::Win32::Foundation::HANDLE;
+        // SAFETY: the file handle and OVERLAPPED remain valid until the guard
+        // is dropped. Without FAIL_IMMEDIATELY Windows waits for the lock.
+        let locked = unsafe {
+            LockFileEx(handle, flags, 0, u32::MAX, u32::MAX, &mut overlapped)
+        };
+        if locked == 0 {
+            return Err(AppError::internal("credential vault lock cannot be acquired"));
+        }
+        overlapped
+    };
+    Ok(VaultFileLock {
+        file,
+        #[cfg(windows)]
+        overlapped,
+    })
 }
 
 fn validate_credential_ref(value: &str) -> Result<(), AppError> {

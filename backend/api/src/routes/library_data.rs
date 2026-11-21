@@ -214,7 +214,7 @@ pub async fn delete_document_route(
             run_library_blocking(&state, move |library| document_delete_job_ids_view(library, &id)).await?;
         jobs_facade(build_jobs_route_deps(&state))
             .cancel_before_delete(&job_ids)
-            .await;
+            .await?;
     }
     // 删库行、删任务目录都是同步活（几百 MB 的书要好几秒），放进阻塞线程。
     let force = query.force;

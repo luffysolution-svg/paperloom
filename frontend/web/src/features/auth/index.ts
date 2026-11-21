@@ -4,7 +4,7 @@
 // domain/ 启动检查（auth-gate）与错误文案
 // ui/     登录界面、改密码、账户页、账号管理、会话 context
 
-export { createUnauthorizedHandler, hiddenSettingsTabs, resolveAuthGate, isAdmin, isMultiUser, type AuthGate } from "./domain/auth-gate.js";
+export { canUseIntegrations, createUnauthorizedHandler, hiddenSettingsTabs, resolveAuthGate, isAdmin, isMultiUser, type AuthGate } from "./domain/auth-gate.js";
 export { AuthErrorScreen, ForcedPasswordScreen, LoginScreen } from "./ui/LoginScreen.jsx";
 export { AccountPanel } from "./ui/AccountPanel.jsx";
 export { PageLedger } from "./ui/PageLedger.jsx";

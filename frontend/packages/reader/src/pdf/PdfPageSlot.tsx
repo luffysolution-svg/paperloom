@@ -22,6 +22,7 @@ import {
 } from "./reader-dom-contract.js";
 import {
   projectReaderRegion,
+  type ReaderRegion,
   type ReaderRegionHighlight,
 } from "../shared/data/reader-regions.js";
 import {
@@ -59,12 +60,14 @@ type PdfPageSlotProps = {
   sentinelRef?: (el: HTMLDivElement | null) => void;
   regionHighlight?: ReaderRegionHighlight | null;
   regionTargets?: ReaderRegionHighlight[];
+  referenceRegions?: readonly ReaderRegion[];
   /**
    * 对照阅读时左右两栏共享的悬停块（itemId）。给了 onHoverRegion 就由外面管，
    * 鼠标在哪栏，两栏都画同一块的框；没给（单栏）就用本页自己的状态。
    */
   hoveredRegionId?: string | null;
   onHoverRegion?: (itemId: string | null) => void;
+  onJumpToRegion?: (itemId: string) => void;
   liveTranslationLayout?: LiveTranslationLayoutPage;
   liveTranslationPage?: LiveTranslationPageState;
   showLiveTranslation?: boolean;
@@ -84,8 +87,10 @@ function PdfPageSlotInner({
   sentinelRef,
   regionHighlight = null,
   regionTargets = [],
+  referenceRegions = [],
   hoveredRegionId,
   onHoverRegion,
+  onJumpToRegion,
   liveTranslationLayout,
   liveTranslationPage,
   showLiveTranslation = pane === "source",
@@ -301,6 +306,8 @@ function PdfPageSlotInner({
         target={active ? hoveredTextTarget : null}
         pane={pane === "translated" ? "translated" : "source"}
         revisedCount={hoveredTextTarget ? revisedBlocks?.get(hoveredTextTarget.itemId) || 0 : 0}
+        referenceRegions={referenceRegions}
+        onReferenceClick={onJumpToRegion}
       />
     </div>
   );

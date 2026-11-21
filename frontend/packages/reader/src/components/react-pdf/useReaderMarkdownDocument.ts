@@ -10,6 +10,7 @@ import {
 import { buildMarkdownOutline, type MarkdownOutlineItem } from "../../shared/content/markdown-outline.js";
 import { startMarkdownImageLoading } from "../../shared/content/markdown-images.js";
 import { loadMarked, mountRenderedMarkdown } from "../../shared/content/markdown-render.js";
+import { normalizeMarkdownFootnotes } from "../../shared/content/markdown-footnotes.js";
 import { normalizeMarkdownPayload } from "../../shared/data/markdown-payload.js";
 import { takeCompleteMarkdownChunk } from "../../shared/content/markdown-windowing.js";
 
@@ -165,7 +166,8 @@ export function useReaderMarkdownDocument({
         if (cancelled || !contentRef.current) return;
         // 与实时叠加一致：Markdown 原文也可能含未用 `$` 包裹的裸 LaTeX
         // （如 `\mathrm{Pd_2(dba)_3}`），开启 bareLatex 才能渲染。
-        const { text: protectedMarkdown, slots } = extractMarkdownMath(content, { bareLatex: true });
+        const normalizedMarkdown = normalizeMarkdownFootnotes(content);
+        const { text: protectedMarkdown, slots } = extractMarkdownMath(normalizedMarkdown, { bareLatex: true });
         const parsedHtml = String(marked.parse(protectedMarkdown, { async: false }));
         const fastHtml = materializeMarkdownMathFallbackHtml(parsedHtml, slots);
         mountRenderedMarkdown(contentRef.current, fastHtml, imagesBaseUrl, {
@@ -241,7 +243,8 @@ export function useReaderMarkdownDocument({
       const mountChunk = async (markdownChunk: string) => {
         const { marked } = await loadMarked();
         if (cancelled || !contentRef.current) return;
-        const { text, slots } = extractMarkdownMath(markdownChunk, { bareLatex: true });
+        const normalizedMarkdown = normalizeMarkdownFootnotes(markdownChunk);
+        const { text, slots } = extractMarkdownMath(normalizedMarkdown, { bareLatex: true });
         const parsedHtml = String(marked.parse(text, { async: false }));
         const html = slots.length > 0
           ? await materializeMarkdownMathHtml(parsedHtml, slots)

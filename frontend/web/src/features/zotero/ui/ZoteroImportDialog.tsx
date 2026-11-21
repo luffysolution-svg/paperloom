@@ -1,5 +1,5 @@
 // 从 Zotero 选择文献导入书库（桌面端读本地 API，Docker 读挂载的数据目录）。
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BookOpen, LoaderCircle, Search } from "lucide-react";
 
 import {
@@ -61,6 +61,7 @@ export function ZoteroImportDialog({
   const [translate, setTranslate] = useState(true);
   const [busy, setBusy] = useState(false);
   const [summary, setSummary] = useState<ZoteroImportSummary | null>(null);
+  const itemsRequestAbort = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -97,6 +98,9 @@ export function ZoteroImportDialog({
   }, [open, libraryId]);
 
   const loadItems = useCallback(async (start: number) => {
+    itemsRequestAbort.current?.abort();
+    const controller = new AbortController();
+    itemsRequestAbort.current = controller;
     setItemsLoading(true);
     setLoadError("");
     try {
@@ -106,20 +110,25 @@ export function ZoteroImportDialog({
         q: query || undefined,
         start,
         limit: PAGE_SIZE,
+        signal: controller.signal,
       });
+      if (controller.signal.aborted) return;
       setItems((previous) => (start === 0 ? page.items : [...previous, ...page.items]));
       setTotal(page.total);
     } catch (reason: any) {
+      if (controller.signal.aborted) return;
       setLoadError(`${reason?.message || reason}`);
     } finally {
-      setItemsLoading(false);
+      if (!controller.signal.aborted) setItemsLoading(false);
     }
   }, [collectionKey, libraryId, query]);
 
   useEffect(() => {
     if (!open || !libraryId) return;
     setItems([]);
+    setTotal(0);
     void loadItems(0);
+    return () => itemsRequestAbort.current?.abort();
   }, [open, libraryId, loadItems]);
 
   const orderedCollections = useMemo(() => orderCollections(collections), [collections]);
@@ -189,6 +198,7 @@ export function ZoteroImportDialog({
                       id="home-zotero-library"
                       value={libraryId}
                       onChange={(event) => {
+                        setSelected(new Map());
                         setCollectionKey("");
                         setLibraryId(event.target.value);
                       }}

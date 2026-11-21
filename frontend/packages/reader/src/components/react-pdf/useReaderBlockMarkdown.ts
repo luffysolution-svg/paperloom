@@ -9,6 +9,7 @@ import { extractMarkdownMath, materializeMarkdownMathHtml } from "../../shared/c
 import { buildMarkdownOutline, type MarkdownOutlineItem } from "../../shared/content/markdown-outline.js";
 import { startMarkdownImageLoading } from "../../shared/content/markdown-images.js";
 import { loadMarked, mountRenderedMarkdown } from "../../shared/content/markdown-render.js";
+import { normalizeMarkdownFootnotes } from "../../shared/content/markdown-footnotes.js";
 import {
   readerMdBlockMarkdown,
   type ReaderMdBlock,
@@ -51,7 +52,8 @@ export function useReaderBlockMarkdown(
     const scrollRoot = container.closest(".reader-notes-panel-body") as HTMLElement | null;
 
     const renderMarkdown = async (markdown: string, parse: (src: string) => string) => {
-      const { text, slots } = extractMarkdownMath(markdown, { bareLatex: true });
+      const normalizedMarkdown = normalizeMarkdownFootnotes(markdown);
+      const { text, slots } = extractMarkdownMath(normalizedMarkdown, { bareLatex: true });
       const html = parse(text);
       return slots.length > 0 ? materializeMarkdownMathHtml(html, slots) : html;
     };

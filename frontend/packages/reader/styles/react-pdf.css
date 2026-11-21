@@ -224,8 +224,8 @@
   }
 }
 
-/* 内容块悬停层：红色虚线框 + 翻译编号和「复制」（对照时左右两栏同一块一起画）。
-   这是阅读页上唯一的块级交互 —— 点块浮条、公式 / 表格点选层都删了。
+/* 内容块悬停层：红色虚线框 + 翻译编号和操作按钮（对照时左右两栏同一块一起画）。
+   这是阅读页上唯一的块级交互 —— 双击和三击仍留给浏览器原生文本选择。
    层本身不接事件，不阻断 textLayer 的拖选；只有工具条可点。 */
 .reader-text-hover-layer {
   position: absolute;
@@ -348,6 +348,36 @@
 .reader-text-hover-copy[data-copy-state="copied"] {
   border-color: color-mix(in srgb, var(--ok) 55%, transparent);
   color: var(--ok);
+}
+
+.reader-text-hover-reference {
+  display: grid;
+  max-width: min(360px, 42vw);
+  gap: 2px;
+  padding: 5px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: var(--ui-radius-md);
+  background: var(--paper);
+  color: var(--ink);
+  text-align: left;
+  font-size: var(--ui-text-xs);
+  line-height: 1.25;
+  cursor: pointer;
+  pointer-events: auto;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--ink) 10%, transparent);
+}
+
+.reader-text-hover-reference:hover,
+.reader-text-hover-reference:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.reader-text-hover-reference span {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @keyframes reader-text-hover-in {

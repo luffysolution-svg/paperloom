@@ -85,7 +85,7 @@ pub async fn delete_job(
         .await?;
         jobs_facade(build_jobs_route_deps(&state))
             .cancel_before_delete(&job_ids)
-            .await;
+            .await?;
     }
     // 删库里的行和整个任务目录，大任务要一会儿。
     run_state_blocking(&state, "job deletion", move |state| {

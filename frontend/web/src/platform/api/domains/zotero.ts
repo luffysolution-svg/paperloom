@@ -92,8 +92,13 @@ export async function listZoteroItems(params: {
   q?: string;
   start?: number;
   limit?: number;
+  signal?: AbortSignal;
 }): Promise<ZoteroItemPage> {
-  return readEnvelope(await fetchProtected(endpoint("/items", params)), "读取 Zotero 文献失败。");
+  const { signal, ...query } = params;
+  return readEnvelope(
+    await fetchProtected(endpoint("/items", query), signal ? { signal } : undefined),
+    "读取 Zotero 文献失败。",
+  );
 }
 
 export type ZoteroWritebackResult = {

@@ -47,11 +47,13 @@ import { buildProcessingTabProps } from "./processing-tab-props.js";
 import { useBookDetailTab } from "./use-book-detail-tab.js";
 import { useBookDetailArtifactCenter } from "./use-book-detail-artifact-center.js";
 import { useStoreSnapshot } from "@/ui/hooks/use-store.js";
+import { canUseIntegrations, useAuthSession } from "@/features/auth/index.js";
 
 export function BookDetailDialog() {
   const { dialogStore } = useHomeBookDetail();
   const library = useLibraryServices();
   const actions = library.actions;
+  const integrationsEnabled = canUseIntegrations(useAuthSession());
   const collections = useHomeCollections();
   const collectionsCtl = collections?.controller;
   const collectionsReload = collections?.reloadSignal;
@@ -243,6 +245,7 @@ export function BookDetailDialog() {
               downloadingId={artifactCenter.downloadingId}
               onDownload={(artifact) => void artifactCenter.download(artifact)}
               onDownloadMarkdown={(artifact, readingJobId) => void artifactCenter.downloadMarkdownBundle(artifact, readingJobId)}
+              canUseIntegrations={integrationsEnabled}
             />
           )}
         />

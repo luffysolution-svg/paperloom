@@ -23,6 +23,7 @@ type LibraryBatchToolbarProps = {
   collections?: CollectionRecord[];
   /** 合集 id 取自 CollectionRecord，记录上可能缺省，原样上抛。 */
   onAddToCollection?: (collectionId: CollectionRecord["collection_id"]) => void;
+  canUseIntegrations?: boolean;
   busy?: boolean;
 };
 
@@ -54,6 +55,7 @@ export function LibraryBatchToolbar({
   onExportObsidian,
   collections = [],
   onAddToCollection,
+  canUseIntegrations = true,
   busy = false,
 }: LibraryBatchToolbarProps) {
   const hasSelection = count > 0;
@@ -74,17 +76,21 @@ export function LibraryBatchToolbar({
         </div>
 
         <div className="flex flex-wrap items-center justify-center gap-2">
-          <Button variant="secondary" size="sm" disabled={busy || !hasSelection} onClick={onExport}>
-            <Download className="size-3.5 opacity-70" aria-hidden="true" />
-            批量导出
-          </Button>
-          <Button variant="secondary" size="sm" disabled={busy || !hasSelection} onClick={onWritebackZotero}>
-            写回 Zotero
-          </Button>
-          <Button variant="secondary" size="sm" disabled={busy || !hasSelection} onClick={onExportObsidian}>
-            <Gem className="size-3.5 opacity-70" aria-hidden="true" />
-            保存到 Obsidian
-          </Button>
+          {canUseIntegrations ? (
+            <>
+              <Button variant="secondary" size="sm" disabled={busy || !hasSelection} onClick={onExport}>
+                <Download className="size-3.5 opacity-70" aria-hidden="true" />
+                批量导出
+              </Button>
+              <Button variant="secondary" size="sm" disabled={busy || !hasSelection} onClick={onWritebackZotero}>
+                写回 Zotero
+              </Button>
+              <Button variant="secondary" size="sm" disabled={busy || !hasSelection} onClick={onExportObsidian}>
+                <Gem className="size-3.5 opacity-70" aria-hidden="true" />
+                保存到 Obsidian
+              </Button>
+            </>
+          ) : null}
           <Menu
             align="end"
             label="选择合集"

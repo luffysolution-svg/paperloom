@@ -1,7 +1,7 @@
 // 启动时的登录检查 + 接口层的鉴权方式：单机照旧；多用户带 Cookie、不带部署密钥、401 回登录。
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolveAuthGate, hiddenSettingsTabs, isAdmin } from "../../src/features/auth/domain/auth-gate.js";
+import { canUseIntegrations, resolveAuthGate, hiddenSettingsTabs, isAdmin } from "../../src/features/auth/domain/auth-gate.js";
 import { authErrorText, passwordProblem } from "../../src/features/auth/domain/auth-errors.js";
 import { apiFetch, buildApiHeaders, setApiAuthMode, setApiUnauthorizedHandler } from "../../../packages/api/src/internal/runtime.ts";
 import { resolveAuthSession } from "../../../packages/api/src/auth.ts";
@@ -31,6 +31,9 @@ test("设置分栏：单机不藏；多用户普通用户藏接口设置、同�
   assert.deepEqual([...hiddenSettingsTabs(multiUser({ role: "user" }))], ["api", "sync", "backup", "update"]);
   assert.deepEqual([...hiddenSettingsTabs(multiUser({ role: "admin" }))], ["update"]);
   assert.equal(isAdmin({ mode: "single" }), true, "单机的本机用户就是管理员");
+  assert.equal(canUseIntegrations({ mode: "single" }), true);
+  assert.equal(canUseIntegrations(multiUser({ role: "admin" })), true);
+  assert.equal(canUseIntegrations(multiUser({ role: "user" })), false);
 });
 
 test("接口层：多用户带 Cookie、不带部署密钥；401 回登录（登录接口自己的 401 不算）", async () => {

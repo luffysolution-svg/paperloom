@@ -37,12 +37,14 @@ import { useRecentJobsListDerivation } from "./useRecentJobsListDerivation.js";
 import { useRecentJobsBatchSelection } from "./useRecentJobsBatchSelection.js";
 import { VIEW_TEXT } from "./recent-jobs-library-helpers.js";
 import { useLibraryServices } from "../library-services-context.js";
+import { canUseIntegrations, useAuthSession } from "@/features/auth/index.js";
 
 export function RecentJobsLibrary({ onBatchModeChange }: { onBatchModeChange?: (active: boolean) => void } = {}) {
   const { viewPort, recentJobsStore, actions } = useLibraryServices();
   const homeStateStore = useHomeHomeStateStore();
   const { controller: collectionsController } = useHomeCollections();
   const workflowDialog = useHomeWorkflowDialog();
+  const integrationsEnabled = canUseIntegrations(useAuthSession());
 
   const recentJobs = useStoreSnapshot(recentJobsStore);
   const homeState = useStoreSnapshot(homeStateStore);
@@ -177,22 +179,27 @@ export function RecentJobsLibrary({ onBatchModeChange }: { onBatchModeChange?: (
           onExportObsidian={() => setObsidianBatchOpen(true)}
           onExport={() => setBatchExportOpen(true)}
           onWritebackZotero={() => setZoteroBatchOpen(true)}
+          canUseIntegrations={integrationsEnabled}
           collections={collections}
           onAddToCollection={handleBatchAddToCollection}
           busy={batchBusy}
         />
       ) : null}
-      <ObsidianExportDialog
-        open={obsidianBatchOpen}
-        onOpenChange={setObsidianBatchOpen}
-        documentIds={[...effectiveSelectedIds]}
-      />
+      {integrationsEnabled ? (
+        <ObsidianExportDialog
+          open={obsidianBatchOpen}
+          onOpenChange={setObsidianBatchOpen}
+          documentIds={[...effectiveSelectedIds]}
+        />
+      ) : null}
       {batchExportOpen ? <BatchExportDialog open onOpenChange={setBatchExportOpen} documentIds={[...effectiveSelectedIds]} /> : null}
-      <ZoteroBatchWritebackDialog
-        open={zoteroBatchOpen}
-        onOpenChange={setZoteroBatchOpen}
-        documentIds={[...effectiveSelectedIds]}
-      />
+      {integrationsEnabled ? (
+        <ZoteroBatchWritebackDialog
+          open={zoteroBatchOpen}
+          onOpenChange={setZoteroBatchOpen}
+          documentIds={[...effectiveSelectedIds]}
+        />
+      ) : null}
       <RecentJobsLibraryBatchDialogs
         pendingDeleteIds={pendingDeleteIds}
         batchBusy={batchBusy}
