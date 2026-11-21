@@ -67,17 +67,22 @@ export function readerCssSourceFiles() {
       for (const file of cssFilesUnder(source.path)) files.add(file);
     }
   }
-  return [...files].sort();
+  return [...files].sort((a, b) => {
+    const ap = relative(REPO_ROOT, a).split("\\").join("/");
+    const bp = relative(REPO_ROOT, b).split("\\").join("/");
+    return ap < bp ? -1 : ap > bp ? 1 : 0;
+  });
 }
 
 /** 指纹里带上路径，这样「新增/删除一个分片」也会变 —— 只哈希内容的话，
- *  把一个文件原封不动改个名就察觉不到。 */
+ *  把一个文件原封不动改个名就察觉不到。规范化 CRLF → LF，避免 Windows 与 Linux
+ *  checkout 行尾不同导致同一份构建产物指纹漂移。 */
 export function computeReaderCssFingerprint() {
   const hash = createHash("sha256");
   for (const file of readerCssSourceFiles()) {
     hash.update(relative(REPO_ROOT, file).split("\\").join("/"));
     hash.update("\0");
-    hash.update(readFileSync(file));
+    hash.update(readFileSync(file, "utf8").replace(/\r\n/g, "\n"), "utf8");
     hash.update("\0");
   }
   return hash.digest("hex");

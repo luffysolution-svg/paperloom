@@ -1,6 +1,6 @@
 [project]
 name = "retainpdf-backend-workspace"
-version = "0.3.0"
+version = "0.3.1"
 description = "RetainPDF backend Python workspace"
 requires-python = ">=3.11,<3.12"
 dependencies = [
