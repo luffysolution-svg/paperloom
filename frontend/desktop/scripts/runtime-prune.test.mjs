@@ -72,3 +72,53 @@ test("portable runtime pruning keeps application dependencies", () => {
     });
   }
 });
+
+test("windows runtime pruning drops the bundled python installer and pip launchers", () => {
+  withTempRuntime((root) => {
+    for (const relativePath of [
+      "python.exe",
+      "python3.exe",
+      "pythonw.exe",
+      "python311.dll",
+      "python-3.11.9-amd64.exe",
+      "Scripts/pip.exe",
+      "Scripts/pip3.exe",
+      "Scripts/pip3.11.exe",
+      "Scripts/keep-me.exe",
+      "Lib/site-packages/runtime_dependency/__init__.py",
+    ]) {
+      makeFile(root, relativePath);
+    }
+
+    pruneBundledPortablePythonRuntime(root, "windows");
+
+    for (const removed of [
+      "python-3.11.9-amd64.exe",
+      "Scripts/pip.exe",
+      "Scripts/pip3.exe",
+      "Scripts/pip3.11.exe",
+    ]) {
+      assert.equal(fs.existsSync(path.join(root, removed)), false, removed);
+    }
+    for (const kept of [
+      "python.exe",
+      "python3.exe",
+      "pythonw.exe",
+      "python311.dll",
+      "Scripts/keep-me.exe",
+      "Lib/site-packages/runtime_dependency/__init__.py",
+    ]) {
+      assert.equal(fs.existsSync(path.join(root, kept)), true, kept);
+    }
+  });
+});
+
+test("linux runtime pruning leaves python-* named files alone", () => {
+  withTempRuntime((root) => {
+    makeFile(root, "bin/python-3.11-config.exe");
+
+    pruneBundledPortablePythonRuntime(root, "linux");
+
+    assert.equal(fs.existsSync(path.join(root, "bin/python-3.11-config.exe")), true);
+  });
+});

@@ -70,7 +70,7 @@ test("create-job field lists are generated values, not hand-written ones", () =>
   );
   assert.match(
     generatedCreateJobFields,
-    /export const CREATE_JOB_SECTION_FIELDS: Readonly<\n\s*Record<JobPayloadSection, readonly string\[\]>\n>/,
+    /export const CREATE_JOB_SECTION_FIELDS: Readonly<\r?\n\s*Record<JobPayloadSection, readonly string\[\]>\r?\n>/,
   );
   // 五个段一个都不能少：少一个，mock 就会对那一段完全放行。
   for (const section of ["source", "ocr", "translation", "render", "runtime"]) {

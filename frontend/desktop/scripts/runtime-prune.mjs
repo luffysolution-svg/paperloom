@@ -20,6 +20,26 @@ function appendPythonPackagingToolTargets(removalTargets, sitePackagesRoot) {
   }
 }
 
+// setup-python 在 Windows 工具缓存目录里留着官方安装器（如 python-3.11.9-amd64.exe，
+// 约 25MiB），robocopy 会把它一起拷进来；它只是安装器，运行时用不到。pip 已从
+// site-packages 删掉，Scripts 下的 pip*.exe 启动器也成了死链接，一并去掉。
+function appendWindowsPythonInstallerTargets(removalTargets, root) {
+  for (const entry of fs.readdirSync(root)) {
+    if (/^python-\d+\.\d+.*\.exe$/i.test(entry)) {
+      removalTargets.push(path.join(root, entry));
+    }
+  }
+  const scriptsRoot = path.join(root, "Scripts");
+  if (!fs.existsSync(scriptsRoot)) {
+    return;
+  }
+  for (const entry of fs.readdirSync(scriptsRoot)) {
+    if (/^pip(\d+(\.\d+)?)?\.exe$/i.test(entry)) {
+      removalTargets.push(path.join(scriptsRoot, entry));
+    }
+  }
+}
+
 function pruneTransientPythonTree(currentPath) {
   if (!fs.existsSync(currentPath)) {
     return;
@@ -168,6 +188,9 @@ export function pruneBundledPortablePythonRuntime(root, platformName) {
       removalTargets,
       path.join(stdlibRoot, "site-packages"),
     );
+  }
+  if (platformName === "windows") {
+    appendWindowsPythonInstallerTargets(removalTargets, root);
   }
   removePythonRuntimeTargets(removalTargets);
   pruneTransientPythonTree(root);

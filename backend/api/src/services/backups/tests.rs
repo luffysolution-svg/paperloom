@@ -3,8 +3,8 @@ use crate::api_tests::jobs_common::test_state;
 use crate::models::domain::UploadRecord;
 use std::io::{Read, Write};
 
-fn library(state: &crate::AppState) {
-    let root = &state.config.data_root;
+fn library(config: &AppConfig, db: &Db) {
+    let root = &config.data_root;
     fs::create_dir_all(root.join("uploads/u1")).unwrap();
     fs::write(root.join("uploads/u1/论文.pdf"), b"%PDF-1.4 original").unwrap();
     fs::create_dir_all(root.join("jobs/j1/rendered")).unwrap();
@@ -13,23 +13,21 @@ fn library(state: &crate::AppState) {
         b"%PDF-1.4 translated",
     )
     .unwrap();
-    state
-        .db
-        .save_upload_with_document(&UploadRecord {
-            upload_id: "u1".into(),
-            filename: "论文.pdf".into(),
-            stored_path: root
-                .join("uploads/u1/论文.pdf")
-                .to_string_lossy()
-                .into_owned(),
-            bytes: 17,
-            page_count: 1,
-            uploaded_at: chrono::Utc::now().to_rfc3339(),
-            developer_mode: false,
-            content_hash: "fixture-hash".into(),
-        })
-        .unwrap();
-    rusqlite::Connection::open(&state.config.jobs_db_path)
+    db.save_upload_with_document(&UploadRecord {
+        upload_id: "u1".into(),
+        filename: "论文.pdf".into(),
+        stored_path: root
+            .join("uploads/u1/论文.pdf")
+            .to_string_lossy()
+            .into_owned(),
+        bytes: 17,
+        page_count: 1,
+        uploaded_at: chrono::Utc::now().to_rfc3339(),
+        developer_mode: false,
+        content_hash: "fixture-hash".into(),
+    })
+    .unwrap();
+    rusqlite::Connection::open(&config.jobs_db_path)
         .unwrap()
         .execute(
             "INSERT INTO collections(collection_id, name, parent_id, sort_order, created_at) VALUES ('c1','课题文献',NULL,0,'now')",
@@ -46,9 +44,8 @@ fn library(state: &crate::AppState) {
     .unwrap();
 }
 
-async fn create(state: &crate::AppState, credentials: bool) -> BackupItem {
-    state
-        .backups
+async fn create(backups: &Arc<BackupService>, credentials: bool) -> BackupItem {
+    backups
         .clone()
         .create(
             CreateBackupInput {
@@ -90,8 +87,8 @@ fn rewrite(
 #[tokio::test]
 async fn round_trip_to_different_root_preserves_database_files_and_old_library() {
     let source = test_state("backup-source");
-    library(&source);
-    let item = create(&source, false).await;
+    library(&source.config, &source.db);
+    let item = create(&source.backups, false).await;
     let path = source.backups.download_path(&item.name).unwrap();
     let mut zip = zip::ZipArchive::new(fs::File::open(&path).unwrap()).unwrap();
     assert!(zip.by_name("data/secrets/credentials.json").is_err());
@@ -156,8 +153,8 @@ async fn round_trip_to_different_root_preserves_database_files_and_old_library()
 #[tokio::test]
 async fn credentials_are_opt_in_and_webdav_password_is_never_exported() {
     let state = test_state("backup-secrets");
-    library(&state);
-    let item = create(&state, true).await;
+    library(&state.config, &state.db);
+    let item = create(&state.backups, true).await;
     let mut zip = zip::ZipArchive::new(
         fs::File::open(state.backups.download_path(&item.name).unwrap()).unwrap(),
     )
@@ -250,8 +247,8 @@ async fn frontend_ocr_and_translation_config_round_trips_only_when_requested() {
 #[tokio::test]
 async fn corrupt_newer_and_traversing_packages_never_publish_a_pending_restore() {
     let state = test_state("backup-invalid");
-    library(&state);
-    let item = create(&state, false).await;
+    library(&state.config, &state.db);
+    let item = create(&state.backups, false).await;
     let source = state.backups.download_path(&item.name).unwrap();
     for kind in ["hash", "version", "path", "format"] {
         let damaged = state.config.project_root.join(format!("{kind}.zip"));
@@ -300,7 +297,7 @@ async fn concurrent_mutations_block_snapshot_and_pending_restore_can_be_cancelle
         .await
         .is_err());
     drop(guard);
-    let item = create(&state, false).await;
+    let item = create(&state.backups, false).await;
     state
         .backups
         .clone()

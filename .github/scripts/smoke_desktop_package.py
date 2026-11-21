@@ -135,6 +135,9 @@ def main() -> None:
         assert isinstance(data("GET", "/api/v1/documents?limit=1"), dict)
         ocr_providers = data("GET", "/api/v1/providers/ocr")
         assert isinstance(ocr_providers, list) and len(ocr_providers) >= 1, ocr_providers
+        provider_ids = {item.get("id") for item in ocr_providers if isinstance(item, dict)}
+        for expected_provider in ("paddle", "mineru", "glm_ocr"):
+            assert expected_provider in provider_ids, f"Missing OCR provider {expected_provider}: {provider_ids}"
         try:
             with request("GET", "/api/v1/ai/runtime-config"):
                 raise AssertionError("Removed /api/v1/ai/runtime-config unexpectedly succeeded")
@@ -184,7 +187,7 @@ def main() -> None:
 
         eventually(renderer_restored, "renderer to persist restored OCR and translation keys")
         for document_id, source in documents:
-            with request("GET", f"/api/v1/documents/{document_id}/source.pdf") as response:
+            with request("GET", f"/api/v1/documents/{document_id}/files/source.pdf") as response:
                 assert response.read() == source
         logs = (profile / "logs/desktop-main.log").read_text(encoding="utf-8")
         assert f"app ready version={args.version} packaged=true" in logs

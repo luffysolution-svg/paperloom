@@ -120,9 +120,7 @@ def scan_all_rs_files() -> list:
 
 # 2026-11-02 清空：以前登记的 14 个文件 13 个在 APPSTATE_GUARDED_DIRS 外面（这项检查根本不扫），剩下那个
 # （src/services/jobs/support.rs）早就不碰 AppState 了。名单只许缩不许扩，条目过期会报错（report_stale_allowlist）。
-ALLOWED_APPSTATE_FILES: set[Path] = {
-    Path("src/services/backups/tests.rs"),
-}
+ALLOWED_APPSTATE_FILES: set[Path] = set()
 
 # ADR-002 Phase 2：壳只能经接缝碰任务运行时。job_runner 是 jobsd 的地盘，
 # 壳里唯二可以引用它的地方是 InProcess 落点的装配处与接缝本身——多一个
