@@ -135,7 +135,7 @@ def main() -> None:
         assert isinstance(data("GET", "/api/v1/documents?limit=1"), dict)
         ocr_providers = data("GET", "/api/v1/providers/ocr")
         assert isinstance(ocr_providers, list) and len(ocr_providers) >= 1, ocr_providers
-        provider_ids = {item.get("id") for item in ocr_providers if isinstance(item, dict)}
+        provider_ids = {item.get("key") for item in ocr_providers if isinstance(item, dict)}
         for expected_provider in ("paddle", "mineru", "glm_ocr"):
             assert expected_provider in provider_ids, f"Missing OCR provider {expected_provider}: {provider_ids}"
         try:

@@ -146,7 +146,7 @@ jobs:
             Remove-Item $sitePackages -Recurse -Force
           }
           New-Item -ItemType Directory -Path $sitePackages -Force | Out-Null
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip setuptools wheel
           python -m pip install --target $sitePackages -r frontend/desktop/requirements-desktop-windows.txt
           $pythonBundleExe = Join-Path $bundleRoot "python.exe"
           # 打包 retainpdf-pipeline console 入口：--no-deps 避免重复拉原生轮子；
@@ -376,7 +376,7 @@ jobs:
           rsync -aL --delete \
             --exclude '__pycache__' \
             "$python_root"/ "$bundle_root"/
-          "$bundle_root/bin/python3" -m pip install --upgrade pip
+          "$bundle_root/bin/python3" -m pip install --upgrade pip setuptools wheel
           py_minor="$("$bundle_root/bin/python3" - <<'PY'
           import sys
           print(f"{sys.version_info.major}.{sys.version_info.minor}")
