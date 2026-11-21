@@ -72,6 +72,8 @@ jobs:
 
       - name: Assemble bundled Typst runtime
         shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           $typstVersion = "${{ env.TYPST_VERSION }}"
           $typstAsset = "typst-x86_64-pc-windows-msvc.zip"
@@ -202,6 +204,7 @@ jobs:
         shell: pwsh
         env:
           RETAIN_PDF_VERSION: ${{ steps.version.outputs.version }}
+          PAPERLOOM_GITHUB_TOKEN: ${{ github.token }}
         run: python ../../ops/release/build_with_github_assets.py npm run dist:win32-installer
 
       - name: Report Windows package sizes
@@ -306,6 +309,8 @@ jobs:
 
       - name: Assemble bundled Typst runtime
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           typst_version="${{ env.TYPST_VERSION }}"
           typst_asset="typst-x86_64-unknown-linux-musl.tar.xz"
@@ -436,6 +441,7 @@ jobs:
         env:
           RETAIN_PDF_VERSION: ${{ steps.version.outputs.version }}
           RETAIN_PDF_DESKTOP_PLATFORM: linux
+          PAPERLOOM_GITHUB_TOKEN: ${{ github.token }}
         run: python3 ../../ops/release/build_with_github_assets.py npm run dist:linux
 
       - name: Report Linux package sizes
@@ -570,6 +576,8 @@ jobs:
 
       - name: Assemble bundled Typst runtime
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           typst_version="${{ env.TYPST_VERSION }}"
           typst_asset="typst-aarch64-apple-darwin.tar.xz"
@@ -994,6 +1002,7 @@ jobs:
           RETAIN_PDF_DESKTOP_PLATFORM: darwin
           RETAIN_PDF_BUNDLE_MAC_PYTHON: "1"
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          PAPERLOOM_GITHUB_TOKEN: ${{ github.token }}
         run: python3 ../../ops/release/build_with_github_assets.py npm run dist:mac
 
       - name: Report macOS package sizes

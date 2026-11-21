@@ -10,6 +10,7 @@ import re
 import signal
 import subprocess
 import time
+import urllib.error
 import urllib.request
 import zipfile
 
@@ -132,7 +133,12 @@ def main() -> None:
     try:
         base, key = start(1)
         assert isinstance(data("GET", "/api/v1/documents?limit=1"), dict)
-        eventually(lambda: data("GET", "/api/v1/ai/runtime-config"), "bundled AI service")
+        assert isinstance(data("GET", "/api/v1/providers/ocr"), dict)
+        try:
+            with request("GET", "/api/v1/ai/runtime-config"):
+                raise AssertionError("Removed /api/v1/ai/runtime-config unexpectedly succeeded")
+        except urllib.error.HTTPError as error:
+            assert error.code == 404, f"Expected 404 for removed AI route, got {error.code}"
         documents = []
         for number in (1, 2):
             source = pdf(f"PaperLoom package smoke {number}")
@@ -182,7 +188,7 @@ def main() -> None:
         logs = (profile / "logs/desktop-main.log").read_text(encoding="utf-8")
         assert f"app ready version={args.version} packaged=true" in logs
         result = {"version": args.version, "platform": os.sys.platform, "packaged_startup": True,
-                  "ai_runtime": True, "batch_source_export": True, "backup_import_restart": True,
+                  "ai_service_removed": True, "batch_source_export": True, "backup_import_restart": True,
                   "renderer_restored_ocr_translation_keys": True, "source_pdfs_preserved": True}
         (root / "result.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
         print(json.dumps(result), flush=True)

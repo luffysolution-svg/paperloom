@@ -132,3 +132,25 @@ def test_api_recovers_from_a_temporary_gateway_failure(tmp_path, github, monkeyp
     MODULE.download_release_asset("typst/typst", "v0.15.1", "typst.zip", target)
     assert target.read_bytes() == content
     assert len(requests) == 2
+
+
+def test_github_token_is_attached_and_stripped_on_cross_host_redirect(tmp_path, github, monkeypatch):
+    content, _asset, _release, requests = github
+    monkeypatch.setenv("GITHUB_TOKEN", "ghs_test_token")
+    target = tmp_path / "typst.zip"
+    MODULE.download_release_asset("typst/typst", "v0.15.1", "typst.zip", target)
+    assert target.read_bytes() == content
+    assert [request.get_header("Authorization") for request in requests] == [
+        "Bearer ghs_test_token",
+        "Bearer ghs_test_token",
+    ]
+
+    handler = MODULE._StripCrossHostAuthRedirectHandler()
+    same_host = handler.redirect_request(
+        requests[1], None, 302, "Found", {}, "https://api.github.com/repos/typst/typst/other"
+    )
+    assert same_host.get_header("Authorization") == "Bearer ghs_test_token"
+    cross_host = handler.redirect_request(
+        requests[1], None, 302, "Found", {}, "https://release-assets.githubusercontent.com/signed"
+    )
+    assert cross_host.get_header("Authorization") is None

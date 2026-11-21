@@ -5,6 +5,8 @@ runs:
   steps:
     - name: Install Typst 0.15.1
       shell: bash
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
       run: |
         set -euo pipefail
         test "$RUNNER_OS" = Linux

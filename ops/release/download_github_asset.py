@@ -4,14 +4,35 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import time
 from urllib.error import HTTPError
-from urllib.parse import quote
-from urllib.request import Request, urlopen
+from urllib.parse import quote, urlsplit
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
+class _StripCrossHostAuthRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if redirected is not None and urlsplit(newurl).netloc.lower() != urlsplit(req.full_url).netloc.lower():
+            for header_name in list(redirected.headers):
+                if header_name.lower() == "authorization":
+                    redirected.remove_header(header_name)
+        return redirected
+
+
+urlopen = build_opener(_StripCrossHostAuthRedirectHandler).open
 ASSET_PINS = json.loads(Path(__file__).with_name("github-assets.json").read_text(encoding="utf-8"))
+
+
+def _github_token() -> str:
+    return (
+        os.environ.get("PAPERLOOM_GITHUB_TOKEN")
+        or os.environ.get("GITHUB_TOKEN")
+        or os.environ.get("GH_TOKEN")
+        or ""
+    ).strip()
 
 
 def github_response(request: Request):
@@ -28,6 +49,9 @@ def github_response(request: Request):
 def download_release_asset(repository: str, tag: str, name: str, destination: Path) -> None:
     api = f"https://api.github.com/repos/{repository}/releases"
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "PaperLoom-Release"}
+    token = _github_token()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     asset = ASSET_PINS.get(repository, {}).get(tag, {}).get(name)
     if asset is None:
         with github_response(Request(f"{api}/tags/{quote(tag, safe='')}", headers=headers)) as response:
