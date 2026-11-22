@@ -4,10 +4,11 @@
 
 .reader-finder-toggles {
   position: fixed;
-  top: 12px;
+  top: 13px;
   left: 14px;
   z-index: var(--z-hud, 36);
   display: flex;
+  align-items: center;
   gap: 4px;
 }
 
@@ -59,8 +60,26 @@
     box-shadow: 8px 0 24px color-mix(in srgb, var(--ink) 10%, transparent);
   }
 
+  .reader-finder-toggle {
+    width: 34px;
+    padding: 0;
+    justify-content: center;
+  }
+
   .reader-finder-toggle span {
     display: none;
+  }
+}
+
+@media (max-width: 440px) {
+  .reader-finder-toggles {
+    left: 8px;
+    gap: 3px;
+  }
+
+  .reader-finder-toggle {
+    width: 32px;
+    height: 32px;
   }
 }
 

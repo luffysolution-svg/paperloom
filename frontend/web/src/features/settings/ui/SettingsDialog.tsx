@@ -76,7 +76,7 @@ const PANE_HEADS = {
   notify: { title: "通知", desc: "翻译、识别跑完（成功或失败）时提醒你，不用一直盯着页面。只对这台电脑、这个浏览器有效。" },
   appearance: { title: "外观", desc: "选择界面配色，立即生效并记住本机选择。" },
   update: { title: "更新", desc: "查看当前版本，并从 GitHub Releases 重新检查更新。" },
-  agents: { title: "MCP 与 Skills", desc: "为 Codex、Claude Code 和 Pi 安装 PaperLoom 的 MCP 与科研 Skills。" },
+  agents: { title: "MCP 与 Skills", desc: "全局接入 Codex、Claude Code、Pi、WorkBuddy 与 Hermes，共享科研 Skills 且自动去重。" },
 };
 
 function PaneHead({ tab, subtitle = null }: { tab: keyof typeof PANE_HEADS; subtitle?: React.ReactNode }) {

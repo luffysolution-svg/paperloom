@@ -27,7 +27,12 @@ const { createBackendRuntime } = require("./src/main/backend-runtime");
 const { stopChildGracefully } = require("./src/main/graceful-stop");
 const { createRetainpdfHome } = require("./src/main/retainpdf-home");
 const { createCliInstaller } = require("./src/main/cli-install");
-const { agentIntegrationStatus, installAgentIntegrations } = require("./src/main/agent-installer");
+const {
+  agentIntegrationStatus,
+  installAgentIntegrations,
+  uninstallAgentIntegrations,
+  testAgentMcp,
+} = require("./src/main/agent-installer");
 const { createDesktopConfigStore } = require("./src/main/desktop-config");
 const { createDesktopLogger } = require("./src/main/desktop-logging");
 const { createDesktopWindows } = require("./src/main/desktop-windows");
@@ -73,16 +78,22 @@ const { canReuseExistingBackend } = backendHttp;
 const portOccupant = createPortOccupant({ canConnectToPort, logger: console });
 const { killProcessTreeSync } = portOccupant;
 function retainpdfHomeCliPath() {
-  const fileName = process.platform === "win32" ? "retainpdf.exe" : "retainpdf";
+  const fileNames = process.platform === "win32"
+    ? ["paperloom.exe", "retainpdf.exe"]
+    : ["paperloom", "retainpdf"];
   const repoRoot = path.join(__dirname, "..", "..");
-  const candidates = [
-    process.env.RETAINPDF_CLI || "",
-    path.join(resolveBackendRoot(), "bin", fileName),
-    ...(app.isPackaged ? [] : [
-      path.join(repoRoot, "target", "release", fileName),
-      path.join(repoRoot, "target", "debug", fileName),
-    ]),
-  ];
+  const candidates = [process.env.RETAINPDF_CLI || ""];
+  for (const fileName of fileNames) {
+    candidates.push(path.join(resolveBackendRoot(), "bin", fileName));
+  }
+  if (!app.isPackaged) {
+    for (const fileName of fileNames) {
+      candidates.push(
+        path.join(repoRoot, "target", "release", fileName),
+        path.join(repoRoot, "target", "debug", fileName),
+      );
+    }
+  }
   return candidates.find((candidate) => candidate && fs.existsSync(candidate)) || "";
 }
 
@@ -679,12 +690,20 @@ ipcMain.handle("desktop:invoke", async (event, command, args = {}) => {
     case "agent_integration_status":
       return agentIntegrationStatus({
         ...agentInstallerOptions(),
-        projectRoot: args?.projectRoot,
       });
     case "install_agent_integrations":
       return installAgentIntegrations({
         ...agentInstallerOptions(),
         ...args,
+      });
+    case "uninstall_agent_integrations":
+      return uninstallAgentIntegrations({
+        ...agentInstallerOptions(),
+        ...args,
+      });
+    case "test_agent_mcp":
+      return testAgentMcp({
+        ...agentInstallerOptions(),
       });
     case "pick_directory": {
       const owner = BrowserWindow.fromWebContents(event.sender);

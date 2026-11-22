@@ -637,6 +637,11 @@ fn launch_mcp(ctx: &Ctx) -> Result<ExitCode> {
             python_candidates.push(backend_root.join("python").join("bin").join("python3"));
         }
     }
+    let repo_venv = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join(".venv");
+    python_candidates.push(repo_venv.join("Scripts").join("python.exe"));
+    python_candidates.push(repo_venv.join("bin").join("python3"));
     python_candidates.push(PathBuf::from("python"));
     python_candidates.push(PathBuf::from("python3"));
     let python = python_candidates
@@ -651,6 +656,9 @@ fn launch_mcp(ctx: &Ctx) -> Result<ExitCode> {
     command
         .arg(&script)
         .env("PAPERLOOM_DATA_DIR", &ctx.data_dir)
+        .env("PYTHONUTF8", "1")
+        .env("PYTHONIOENCODING", "utf-8")
+        .env("PYTHONUNBUFFERED", "1")
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
@@ -659,6 +667,9 @@ fn launch_mcp(ctx: &Ctx) -> Result<ExitCode> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Command::new("python3")
             .arg(&script)
             .env("PAPERLOOM_DATA_DIR", &ctx.data_dir)
+            .env("PYTHONUTF8", "1")
+            .env("PYTHONIOENCODING", "utf-8")
+            .env("PYTHONUNBUFFERED", "1")
             .stdin(Stdio::inherit())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())

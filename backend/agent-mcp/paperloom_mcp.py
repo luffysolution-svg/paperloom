@@ -20,10 +20,20 @@ import urllib.request
 import uuid
 from typing import Any
 
+_SCRIPT_DIR = str(pathlib.Path(__file__).resolve().parent)
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
+
 from paper_search import search as search_scholarly_records
 
 
 PROTOCOL_VERSION = "2025-06-18"
+SUPPORTED_PROTOCOL_VERSIONS = (
+    "2025-11-25",
+    "2025-06-18",
+    "2025-03-26",
+    "2024-11-05",
+)
 SERVER_VERSION = "0.4.4"
 
 
@@ -35,47 +45,88 @@ def _error(message: str, *, code: str = "agent_error") -> dict[str, Any]:
     return {"ok": False, "data": None, "warnings": [message], "references": [], "error": {"code": code, "message": message}}
 
 
-def _runtime_path() -> pathlib.Path:
+def _runtime_paths() -> list[pathlib.Path]:
     explicit = os.environ.get("RETAINPDF_HOME") or os.environ.get("PAPERLOOM_HOME")
     if explicit:
-        return pathlib.Path(explicit) / "run" / "backend.json"
+        return [pathlib.Path(explicit).expanduser() / "run" / "backend.json"]
     home = pathlib.Path(os.environ.get("USERPROFILE") or os.environ.get("HOME") or pathlib.Path.home())
-    return home / ".paperloom" / "run" / "backend.json"
+    return [
+        home / ".paperloom" / "run" / "backend.json",
+        home / ".retainpdf" / "run" / "backend.json",
+    ]
+
+
+def _runtime_path() -> pathlib.Path:
+    paths = _runtime_paths()
+    for candidate in paths:
+        if candidate.is_file():
+            return candidate
+    return paths[0]
+
+
+def _read_runtime_record() -> dict[str, Any]:
+    for candidate in _runtime_paths():
+        try:
+            data = json.loads(candidate.read_text(encoding="utf-8"))
+            if isinstance(data, dict) and data.get("api_base"):
+                return data
+        except (OSError, ValueError):
+            continue
+    return {}
 
 
 class PaperLoomApi:
     def __init__(self) -> None:
-        self.base = os.environ.get("PAPERLOOM_API_BASE", "").rstrip("/")
-        self.api_key = os.environ.get("PAPERLOOM_API_KEY", "")
-        if not self.base:
-            try:
-                runtime = json.loads(_runtime_path().read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                runtime = {}
-            self.base = str(runtime.get("api_base", "")).rstrip("/")
-            self.api_key = self.api_key or str(runtime.get("api_key", ""))
+        self._explicit_base = os.environ.get("PAPERLOOM_API_BASE", "").rstrip("/")
+        self._explicit_api_key = os.environ.get("PAPERLOOM_API_KEY", "")
+        self._override_base: str | None = None
+        self._override_api_key: str | None = None
+
+    def _resolve_connection(self) -> tuple[str, str]:
+        if self._override_base is not None:
+            return self._override_base.rstrip("/"), self._override_api_key or self._explicit_api_key
+        if self._explicit_base:
+            return self._explicit_base, self._explicit_api_key
+        runtime = _read_runtime_record()
+        base = str(runtime.get("api_base", "")).rstrip("/")
+        api_key = self._explicit_api_key or str(runtime.get("api_key", ""))
+        return base, api_key
+
+    @property
+    def base(self) -> str:
+        return self._resolve_connection()[0]
+
+    @base.setter
+    def base(self, value: str) -> None:
+        self._override_base = value.rstrip("/")
+
+    @property
+    def api_key(self) -> str:
+        return self._resolve_connection()[1]
+
+    @api_key.setter
+    def api_key(self, value: str) -> None:
+        self._override_api_key = value
 
     @property
     def data_dir(self) -> pathlib.Path:
         explicit = os.environ.get("PAPERLOOM_DATA_DIR")
         if explicit:
             return pathlib.Path(explicit).expanduser()
-        try:
-            runtime = json.loads(_runtime_path().read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            runtime = {}
+        runtime = _read_runtime_record()
         configured = runtime.get("data_dir")
         return pathlib.Path(configured).expanduser() if configured else pathlib.Path.home() / ".paperloom" / "data"
 
     def request(self, method: str, path: str, body: Any = None, *, query: dict[str, Any] | None = None) -> Any:
-        if not self.base:
-            raise RuntimeError("PaperLoom 后端未运行，且没有 PAPERLOOM_API_BASE 或 backend.json")
-        url = self.base + path
+        base, api_key = self._resolve_connection()
+        if not base:
+            raise RuntimeError("PaperLoom 后端未运行，请先打开 PaperLoom 桌面端，或设置 PAPERLOOM_API_BASE")
+        url = base + path
         if query:
             url += "?" + urllib.parse.urlencode({k: v for k, v in query.items() if v is not None and v != ""})
         headers = {"Accept": "application/json"}
-        if self.api_key:
-            headers["X-API-Key"] = self.api_key
+        if api_key:
+            headers["X-API-Key"] = api_key
         payload = None
         if body is not None:
             payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
@@ -100,8 +151,9 @@ class PaperLoomApi:
         return value
 
     def upload(self, path: pathlib.Path) -> Any:
-        if not self.base:
-            raise RuntimeError("PaperLoom 后端未运行，且没有 API 配置")
+        base, api_key = self._resolve_connection()
+        if not base:
+            raise RuntimeError("PaperLoom 后端未运行，请先打开 PaperLoom 桌面端，或设置 PAPERLOOM_API_BASE")
         boundary = "----paperloom-mcp-" + uuid.uuid4().hex
         filename = path.name or "upload.pdf"
         content = path.read_bytes()
@@ -111,9 +163,9 @@ class PaperLoomApi:
             f"\r\n--{boundary}--\r\n".encode(),
         ]
         headers = {"Content-Type": f"multipart/form-data; boundary={boundary}", "Accept": "application/json"}
-        if self.api_key:
-            headers["X-API-Key"] = self.api_key
-        req = urllib.request.Request(self.base + "/api/v1/uploads", data=b"".join(parts), headers=headers, method="POST")
+        if api_key:
+            headers["X-API-Key"] = api_key
+        req = urllib.request.Request(base + "/api/v1/uploads", data=b"".join(parts), headers=headers, method="POST")
         try:
             opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
             with opener.open(req, timeout=600) as response:
@@ -498,19 +550,46 @@ def _resource_read(uri: str, api: PaperLoomApi) -> dict[str, Any]:
     raise ValueError("未知 paperloom 资源 URI")
 
 
+RESOURCE_DEFINITIONS: list[dict[str, str]] = [
+    {"uri": "paperloom://documents/{document_id}/metadata", "name": "Document metadata", "mimeType": "application/json"},
+    {"uri": "paperloom://documents/{document_id}/outline", "name": "Document outline", "mimeType": "application/json"},
+    {"uri": "paperloom://jobs/{job_id}/markdown", "name": "Reader Markdown", "mimeType": "text/markdown"},
+    {"uri": "paperloom://jobs/{job_id}/regions", "name": "Reader regions", "mimeType": "application/json"},
+    {"uri": "paperloom://jobs/{job_id}/reports/{report}", "name": "Job report", "mimeType": "application/json"},
+    {"uri": "paperloom://jobs/{job_id}/pages/{page}/image", "name": "Page image", "mimeType": "image/jpeg"},
+    {"uri": "paperloom://runs/{run_id}/evidence", "name": "Batch evidence", "mimeType": "application/json"},
+    {"uri": "paperloom://runs/{run_id}/manifest", "name": "Batch manifest", "mimeType": "application/json"},
+]
+
+
+def _negotiate_protocol_version(params: Any) -> str:
+    requested = params.get("protocolVersion") if isinstance(params, dict) else None
+    if isinstance(requested, str) and requested in SUPPORTED_PROTOCOL_VERSIONS:
+        return requested
+    return PROTOCOL_VERSION
+
+
 def handle(request: dict[str, Any], api: PaperLoomApi) -> dict[str, Any] | None:
     method = request.get("method")
-    request_id = request.get("id")
-    if method == "notifications/initialized":
+    is_notification = "id" not in request or (isinstance(method, str) and method.startswith("notifications/"))
+    if is_notification:
         return None
+    request_id = request.get("id")
     if method == "initialize":
-        return {"jsonrpc": "2.0", "id": request_id, "result": {"protocolVersion": PROTOCOL_VERSION, "capabilities": {"tools": {}, "resources": {"subscribe": False, "listChanged": False}, "prompts": {"listChanged": False}}, "serverInfo": {"name": "paperloom", "version": SERVER_VERSION}}}
+        version = _negotiate_protocol_version(request.get("params"))
+        return {"jsonrpc": "2.0", "id": request_id, "result": {"protocolVersion": version, "capabilities": {"tools": {}, "resources": {"subscribe": False, "listChanged": False}, "prompts": {"listChanged": False}}, "serverInfo": {"name": "paperloom", "version": SERVER_VERSION}}}
     if method == "ping":
         return {"jsonrpc": "2.0", "id": request_id, "result": {}}
     if method == "tools/list":
         return {"jsonrpc": "2.0", "id": request_id, "result": {"tools": TOOLS}}
     if method == "resources/list":
-        return {"jsonrpc": "2.0", "id": request_id, "result": {"resources": [{"uri": "paperloom://documents/{document_id}/metadata", "name": "Document metadata", "mimeType": "application/json"}, {"uri": "paperloom://documents/{document_id}/outline", "name": "Document outline", "mimeType": "application/json"}, {"uri": "paperloom://jobs/{job_id}/markdown", "name": "Reader Markdown", "mimeType": "text/markdown"}, {"uri": "paperloom://jobs/{job_id}/regions", "name": "Reader regions", "mimeType": "application/json"}, {"uri": "paperloom://jobs/{job_id}/reports/{report}", "name": "Job report", "mimeType": "application/json"}, {"uri": "paperloom://jobs/{job_id}/pages/{page}/image", "name": "Page image", "mimeType": "image/jpeg"}, {"uri": "paperloom://runs/{run_id}/evidence", "name": "Batch evidence", "mimeType": "application/json"}, {"uri": "paperloom://runs/{run_id}/manifest", "name": "Batch manifest", "mimeType": "application/json"}]}}
+        return {"jsonrpc": "2.0", "id": request_id, "result": {"resources": RESOURCE_DEFINITIONS}}
+    if method == "resources/templates/list":
+        templates = [
+            {"uriTemplate": item["uri"], "name": item["name"], "mimeType": item["mimeType"]}
+            for item in RESOURCE_DEFINITIONS
+        ]
+        return {"jsonrpc": "2.0", "id": request_id, "result": {"resourceTemplates": templates}}
     if method == "resources/read":
         try:
             result = _resource_read(str(request.get("params", {}).get("uri", "")), api)
@@ -539,20 +618,32 @@ def handle(request: dict[str, Any], api: PaperLoomApi) -> dict[str, Any] | None:
     return {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32601, "message": f"method not found: {method}"}}
 
 
+def _write_jsonrpc_message(stream: Any, payload: dict[str, Any]) -> None:
+    encoded = (json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
+    stream.write(encoded)
+    stream.flush()
+
+
 def main() -> int:
     api = PaperLoomApi()
-    for line in sys.stdin:
-        if not line.strip():
+    stdin_buf = sys.stdin.buffer
+    stdout_buf = sys.stdout.buffer
+    while True:
+        raw_line = stdin_buf.readline()
+        if not raw_line:
+            break
+        line = raw_line.decode("utf-8", errors="replace").strip()
+        if not line:
             continue
         try:
             request = json.loads(line)
+            if not isinstance(request, dict):
+                raise ValueError("JSON-RPC request must be an object")
             response = handle(request, api)
             if response is not None:
-                sys.stdout.write(json.dumps(response, ensure_ascii=False, separators=(",", ":")) + "\n")
-                sys.stdout.flush()
+                _write_jsonrpc_message(stdout_buf, response)
         except (ValueError, TypeError, json.JSONDecodeError) as exc:
-            sys.stdout.write(json.dumps({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": str(exc)}}, ensure_ascii=False) + "\n")
-            sys.stdout.flush()
+            _write_jsonrpc_message(stdout_buf, {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": str(exc)}})
     return 0
 
 

@@ -116,9 +116,9 @@ export async function buildLayoutDocx(rawSpec, { baseDir = process.cwd() } = {})
     body,
     FORMULA_FONT_NAME,
     {
-      title: spec.job.title || "RetainPDF 保留排版译文",
-      creator: "RetainPDF",
-      description: "RetainPDF layout-preserving translation with native Office Math.",
+      title: spec.job.title || "PaperLoom 保留排版译文",
+      creator: "PaperLoom",
+      description: "PaperLoom layout-preserving translation with native Office Math.",
     },
     theme,
     embeddedFont,

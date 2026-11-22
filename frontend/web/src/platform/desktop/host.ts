@@ -48,6 +48,67 @@ export interface DesktopBridge {
   [key: string]: unknown;
 }
 
+export type AgentId = "codex" | "claude" | "pi" | "workbuddy" | "hermes";
+
+export interface AgentClientStatus {
+  detected: boolean;
+  mcpConfigured: boolean;
+  mcpCommand: string;
+  mcpConfigPath: string;
+  skillsConfigured: boolean;
+  skillsMode: "shared" | "linked" | "copied" | "external_dir" | "local" | "missing";
+  skillsPath: string;
+  duplicateSkillPaths: string[];
+  adapterInstalled?: boolean;
+  configDirName?: string;
+}
+
+export interface AgentIntegrationStatus {
+  platform: string;
+  homeDir: string;
+  cliPath: string;
+  cliAvailable: boolean;
+  sharedSkillsDir: string;
+  sharedSkills: string[];
+  allSkills: string[];
+  skillSourceFound: boolean;
+  agents: Record<AgentId, AgentClientStatus>;
+}
+
+export interface AgentIntegrationInstallResult {
+  ok: boolean;
+  scope?: "global";
+  agents?: AgentId[];
+  cliPath?: string;
+  configuredMcp?: Array<{ agent: AgentId; path: string }>;
+  files?: string[];
+  cleanedDuplicates?: string[];
+  warnings?: string[];
+  status?: AgentIntegrationStatus;
+  error?: string;
+}
+
+export interface AgentIntegrationUninstallResult {
+  ok: boolean;
+  agents?: AgentId[];
+  removedMcp?: Array<{ agent: AgentId; path: string }>;
+  removedSkills?: string[];
+  status?: AgentIntegrationStatus;
+  error?: string;
+}
+
+export interface AgentMcpTestResult {
+  ok: boolean;
+  cliPath: string;
+  protocolVersion?: string;
+  serverVersion?: string;
+  toolCount?: number;
+  hasSearchScholarly?: boolean;
+  backendConnected?: boolean;
+  backendMessage?: string;
+  error?: string;
+}
+
 /** Normalized host surface used by the rest of the frontend. */
 export interface DesktopHost {
   invoke(command: string, args?: DesktopInvokeArgs): DesktopIpcResult;
@@ -62,8 +123,10 @@ export interface DesktopHost {
   cliStatus(): Promise<{ available: boolean; installedAt: string; supported: boolean }>;
   /** 把 retainpdf 链接到终端找得到的地方。 */
   installCli(): Promise<{ ok: boolean; path?: string; onPath?: boolean; hint?: string; error?: string }>;
-  agentIntegrationStatus(options?: { projectRoot?: string }): Promise<unknown>;
-  installAgentIntegrations(options?: { scope?: "global" | "project"; agents?: string[]; installMcp?: boolean; installSkills?: boolean; projectRoot?: string }): Promise<unknown>;
+  agentIntegrationStatus(): Promise<AgentIntegrationStatus>;
+  installAgentIntegrations(options?: { agents?: AgentId[]; installMcp?: boolean; installSkills?: boolean }): Promise<AgentIntegrationInstallResult>;
+  uninstallAgentIntegrations(options?: { agents?: AgentId[]; removeMcp?: boolean; removeSkills?: boolean }): Promise<AgentIntegrationUninstallResult>;
+  testAgentMcp(): Promise<AgentMcpTestResult>;
   /** 系统的文件夹选择框；取消时为 null。 */
   pickDirectory(options?: { title?: string; defaultPath?: string }): Promise<string | null>;
   onStartupProgress(callback: (event: unknown) => void): () => void;
@@ -146,11 +209,17 @@ function resolveDesktopHost(): DesktopHost | null {
     async installCli() {
       return (await invokeAdapter!.invoke("install_cli")) || { ok: false, error: "没有结果" };
     },
-    async agentIntegrationStatus(options = {}) {
-      return invokeAdapter!.invoke("agent_integration_status", options);
+    async agentIntegrationStatus() {
+      return invokeAdapter!.invoke("agent_integration_status");
     },
     async installAgentIntegrations(options = {}) {
       return invokeAdapter!.invoke("install_agent_integrations", options);
+    },
+    async uninstallAgentIntegrations(options = {}) {
+      return invokeAdapter!.invoke("uninstall_agent_integrations", options);
+    },
+    async testAgentMcp() {
+      return invokeAdapter!.invoke("test_agent_mcp");
     },
     async pickDirectory(options: { title?: string; defaultPath?: string } = {}) {
       const result = await invokeAdapter!.invoke("pick_directory", options);

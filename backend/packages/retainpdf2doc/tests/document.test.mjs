@@ -283,6 +283,14 @@ describe("文档结构", () => {
     assert.ok(!documentXml.includes("<w:headerReference"), "引用了页眉");
     assert.ok(!documentXml.includes("<w:footerReference"), "引用了页脚");
   });
+
+  it("导出 Word 不带 RetainPDF 水印或品牌署名", () => {
+    const coreXml = strFromU8(parts["docProps/core.xml"]);
+    assert.ok(!documentXml.includes("RetainPDF"), "document.xml 里不应出现 RetainPDF 水印");
+    assert.ok(!documentXml.includes("watermark"), "document.xml 里不应出现水印锚点");
+    assert.ok(!coreXml.includes("RetainPDF"), "core.xml 署名应使用 PaperLoom");
+    assert.ok(coreXml.includes("PaperLoom"), "core.xml 缺少 PaperLoom 署名");
+  });
 });
 
 describe("规格校验", () => {

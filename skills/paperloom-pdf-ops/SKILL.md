@@ -5,17 +5,27 @@ description: Use PaperLoom to import PDFs, run OCR or translation, inspect jobs,
 
 # PaperLoom PDF operations
 
+## Interface priority
+
+Prefer the connected `paperloom` MCP server tools whenever available — they work across Windows, macOS, and Linux without requiring `paperloom` on shell `PATH`:
+
+- Health & discovery: `get_capabilities`, `list_documents`, `search_documents`, `get_document`
+- Ingest & jobs: `upload_pdf`, `submit_ocr`, `submit_translation`, `get_job_status`, `get_job_events`, `cancel_job`, `retry_job`, `run_batch_workflow`, `get_run_status`
+- Export & integrations: `export_markdown`, `zotero_status`, `zotero_collections`, `zotero_items`, `import_zotero_attachments`, `writeback_zotero`, `obsidian_status`, `export_obsidian`
+
+Only fall back to the `paperloom` terminal CLI when MCP tools are not attached in the current host session.
+
 ## Workflow
 
-1. Run `paperloom agent doctor --json` before a new session. Never print or request credentials in the chat.
-2. Inspect existing documents and artifacts before uploading or starting a duplicate job.
-3. For a batch, load the workflow file, run `paperloom agent workflow validate <file> --json`, then run it with `--dry-run` and show the item count, stages, estimated writes, and conflict policy.
-4. Ask for confirmation before OCR, translation, Zotero writeback, Obsidian overwrite, or any operation that can incur model cost. A caller that already supplied an explicit confirmation flag may proceed.
-5. Return the `run_id` or `job_id` immediately, then poll status or consume JSONL events. Keep each item result even when another item fails.
-6. On failure, inspect events and the resume plan before retrying. Retry only the failed stage and record the reason.
+1. Call `get_capabilities` (or run `paperloom agent doctor --json` if using CLI) before a new session. Never print or request credentials in the chat.
+2. Inspect existing documents and artifacts (`list_documents`, `get_document`) before uploading or starting a duplicate job.
+3. For a batch, call `run_batch_workflow` with `dry_run: true` first (or `paperloom agent workflow validate` + `--dry-run`) and show the item count, stages, estimated writes, and conflict policy.
+4. Ask for confirmation before OCR, translation, Zotero writeback, Obsidian overwrite, or any operation that can incur model cost. Pass `confirmed: true` (or `--confirm`) only after explicit confirmation.
+5. Return the `run_id` or `job_id` immediately, then poll status (`get_job_status`, `get_job_events`, `get_run_status`). Keep each item result even when another item fails.
+6. On failure, inspect events and the resume plan before retrying (`retry_job`). Retry only the failed stage and record the reason.
 7. Export Markdown or PDF only after the requested job reaches a terminal state. Include the output path and source identifiers.
 
-## Useful commands
+## Optional CLI fallback commands
 
 ```text
 paperloom agent document list --json

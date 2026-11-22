@@ -34,25 +34,93 @@ import { ReaderWorkspaceTabs }
   from "../../../packages/reader/src/components/react-pdf/ReaderWorkspaceTabs.tsx";
 import { ReaderDownloadActions }
   from "../../../packages/reader/src/components/react-pdf/ReaderDownloadActions.tsx";
+import { ReaderFinderToggles }
+  from "../../../packages/reader/src/components/react-pdf/ReaderFinder.tsx";
 
 const CSS_PATH = fileURLToPath(new URL("../../dist/css/reader.css", import.meta.url));
 const require_ = createRequire(fileURLToPath(new URL("../../package.json", import.meta.url)));
 
 /** 窄到 375（iPhone SE）—— 最坏那一档就在这附近。 */
-const WIDTHS = [1440, 900, 700, 580, 520, 465, 420, 375];
+const WIDTHS = [1440, 1100, 960, 900, 800, 720, 640, 600, 580, 520, 465, 420, 375];
 
-function buildPage() {
+function buildPage({ withLiveTranslation = false, withFinder = false, withPanelToggle = false } = {}) {
+  const finder = withFinder
+    ? renderToStaticMarkup(createElement(ReaderFinderToggles, { open: null, onToggle() {} }))
+    : "";
   const bar = renderToStaticMarkup(createElement(ReaderWorkspaceTabs, {
-    mode: "compare", documentReady: true, onModeChange() {},
+    mode: "compare",
+    documentReady: true,
+    onModeChange() {},
+    liveTranslation: withLiveTranslation ? {
+      visible: true,
+      onToggle() {},
+      state: {
+        layoutByPage: new Map(),
+        pagesByPage: new Map([[1, {}], [2, {}], [3, {}]]),
+        lastSeq: 3,
+        connection: "live",
+        jobStatus: "running",
+        error: "",
+      },
+    } : null,
   }));
   const tray = renderToStaticMarkup(createElement(ReaderDownloadActions, {
     download: { jobId: "j", urls: { source: "/a.pdf", sideBySide: "/b.pdf", translated: "/c.pdf" } },
   }));
+  const panelToggle = withPanelToggle
+    ? '<button type="button" class="reader-panel-toggle" aria-label="Markdown">M</button>'
+    : "";
   const css = readFileSync(CSS_PATH, "utf8");
   return `<!doctype html><meta charset="utf-8"><style>${css}</style>
-<div class="reader-react-root">${bar}
-<div class="reader-chrome-tray">${tray}<button class="reader-close-home-btn">关闭</button></div>
+<div class="reader-react-root">${finder}${bar}
+<div class="reader-chrome-tray">${panelToggle}${tray}<button class="reader-close-home-btn">关闭</button></div>
 </div>`;
+}
+
+async function assertAllControlsClickable(browser, html, minButtons) {
+  const failures = [];
+  for (const width of WIDTHS) {
+    const ctx = await browser.newContext({ viewport: { width, height: 700 } });
+    const page = await ctx.newPage();
+    await page.setContent(html);
+    const bad = await page.evaluate(() => {
+      const out = [];
+      const buttons = [...document.querySelectorAll(
+        ".reader-finder-toggles button, .reader-workspace-bar button, .reader-chrome-tray > button, .reader-chrome-tray summary",
+      )];
+      for (const b of buttons) {
+        const r = b.getBoundingClientRect();
+        const label = (b.textContent || "").trim().slice(0, 12) || b.getAttribute("aria-label") || b.className;
+        if (r.width < 2 || r.height < 2) { out.push(`${label}: 尺寸为 0`); continue; }
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        if (!hit) { out.push(`${label}: 命中不到任何元素`); continue; }
+        if (hit !== b && !b.contains(hit)) {
+          const blocker = hit.closest("[class]");
+          const name = blocker && typeof blocker.className === "string"
+            ? blocker.className.split(" ")[0] : hit.tagName;
+          out.push(`${label}: 被 .${name} 接走`);
+        }
+      }
+      // 几何检查：顶栏各组按钮互不重叠。
+      const liveBtn = document.querySelector(".reader-workspace-bar .reader-live-translation-toggle");
+      if (liveBtn) {
+        const lr = liveBtn.getBoundingClientRect();
+        for (const other of document.querySelectorAll(".reader-finder-toggles button, .reader-workspace-tabs button")) {
+          const or = other.getBoundingClientRect();
+          const overlapX = Math.min(lr.right, or.right) - Math.max(lr.left, or.left);
+          const overlapY = Math.min(lr.bottom, or.bottom) - Math.max(lr.top, or.top);
+          if (overlapX > 0.5 && overlapY > 0.5) {
+            out.push(`实时译文与 ${(other.textContent || other.getAttribute("aria-label") || other.className).trim()} 重叠 (${overlapX.toFixed(1)}x${overlapY.toFixed(1)}px)`);
+          }
+        }
+      }
+      return { bad: out, count: buttons.length };
+    });
+    assert.ok(bad.count >= minButtons, `${width}px 下顶栏只有 ${bad.count} 个按钮，页面八成没渲染出来`);
+    if (bad.bad.length) failures.push(`${width}px → ${bad.bad.join("; ")}`);
+    await ctx.close();
+  }
+  assert.deepEqual(failures, []);
 }
 
 test("顶栏每个控件在 375–1440px 都点得到", { concurrency: 1 }, async (t) => {
@@ -62,38 +130,15 @@ test("顶栏每个控件在 375–1440px 都点得到", { concurrency: 1 }, asyn
     t.skip("没有 playwright");
     return;
   }
-  const html = buildPage();
   const browser = await chromium.launch();
-  const failures = [];
   try {
-    for (const width of WIDTHS) {
-      const ctx = await browser.newContext({ viewport: { width, height: 700 } });
-      const page = await ctx.newPage();
-      await page.setContent(html);
-      const bad = await page.evaluate(() => {
-        const out = [];
-        for (const b of document.querySelectorAll(".reader-workspace-bar button")) {
-          const r = b.getBoundingClientRect();
-          const label = (b.textContent || "").trim().slice(0, 10) || b.className;
-          if (r.width < 2 || r.height < 2) { out.push(`${label}: 尺寸为 0`); continue; }
-          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-          if (!hit) { out.push(`${label}: 命中不到任何元素`); continue; }
-          if (hit !== b && !b.contains(hit)) {
-            const blocker = hit.closest("[class]");
-            const name = blocker && typeof blocker.className === "string"
-              ? blocker.className.split(" ")[0] : hit.tagName;
-            out.push(`${label}: 被 .${name} 接走`);
-          }
-        }
-        // 正对照：按钮真的渲染出来了，否则上面的循环是空的。
-        return { bad: out, count: document.querySelectorAll(".reader-workspace-bar button").length };
-      });
-      assert.ok(bad.count >= 3, `${width}px 下顶栏只有 ${bad.count} 个按钮，页面八成没渲染出来`);
-      if (bad.bad.length) failures.push(`${width}px → ${bad.bad.join("; ")}`);
-      await ctx.close();
-    }
+    await assertAllControlsClickable(browser, buildPage(), 5);
+    await assertAllControlsClickable(
+      browser,
+      buildPage({ withFinder: true, withLiveTranslation: true, withPanelToggle: true }),
+      8,
+    );
   } finally {
     await browser.close();
   }
-  assert.deepEqual(failures, []);
 });

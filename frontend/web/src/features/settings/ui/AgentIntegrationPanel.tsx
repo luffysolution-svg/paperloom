@@ -1,138 +1,380 @@
-import { useEffect, useMemo, useState } from "react";
-import { Button, Checkbox, Input, Select } from "@retainpdf/ui";
-import { getDesktopHost } from "@/platform/desktop/host.js";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Activity, CheckCircle2, RefreshCw, Sparkles, Trash2, Wrench } from "lucide-react";
+import { Badge, Button, Checkbox, SegmentedControl, type SegmentedOption } from "@retainpdf/ui";
+import {
+  getDesktopHost,
+  type AgentId,
+  type AgentIntegrationStatus,
+  type AgentMcpTestResult,
+} from "@/platform/desktop/host.js";
+import {
+  AGENT_CATALOG,
+  compactDisplayPath,
+  skillsModeLabel,
+} from "./agent-integration-catalog.js";
+import { AgentManualConfigSection } from "./AgentManualConfigSection.jsx";
 
-const AGENTS = [
-  { id: "codex", label: "Codex" },
-  { id: "claude", label: "Claude Code" },
-  { id: "pi", label: "Pi" },
-] as const;
+type ViewMode = "install" | "manual";
 
-type AgentId = (typeof AGENTS)[number]["id"];
-type Scope = "project" | "global";
+const VIEW_OPTIONS: ReadonlyArray<SegmentedOption<ViewMode>> = [
+  { value: "install", label: "一键全局安装" },
+  { value: "manual", label: "手动配置与代码" },
+];
+
+const ALL_AGENT_IDS: AgentId[] = AGENT_CATALOG.map((agent) => agent.id);
 
 export function AgentIntegrationPanel() {
   const desktop = getDesktopHost();
-  const [scope, setScope] = useState<Scope>("project");
-  const [agents, setAgents] = useState<AgentId[]>(AGENTS.map((agent) => agent.id));
+  const [view, setView] = useState<ViewMode>(desktop ? "install" : "manual");
+  const [status, setStatus] = useState<AgentIntegrationStatus | null>(null);
+  const [selectedAgents, setSelectedAgents] = useState<AgentId[]>(ALL_AGENT_IDS);
+  const [selectionSeeded, setSelectionSeeded] = useState(false);
   const [installMcp, setInstallMcp] = useState(true);
   const [installSkills, setInstallSkills] = useState(true);
-  const [projectRoot, setProjectRoot] = useState("");
-  const [status, setStatus] = useState<unknown>(null);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [busyKey, setBusyKey] = useState<string>("");
+  const [testing, setTesting] = useState(false);
+  const [probe, setProbe] = useState<AgentMcpTestResult | null>(null);
+  const [notice, setNotice] = useState<{ tone: "ok" | "warn" | "error"; text: string } | null>(null);
+
+  const refreshStatus = useCallback(async () => {
+    if (!desktop) return;
+    try {
+      const next = await desktop.agentIntegrationStatus();
+      setStatus(next);
+      if (!selectionSeeded && next?.agents) {
+        const detected = ALL_AGENT_IDS.filter((id) => next.agents[id]?.detected);
+        if (detected.length > 0) setSelectedAgents(detected);
+        setSelectionSeeded(true);
+      }
+    } catch {
+      setStatus(null);
+    }
+  }, [desktop, selectionSeeded]);
 
   useEffect(() => {
-    if (!desktop) return;
-    desktop.agentIntegrationStatus({ projectRoot }).then(setStatus).catch(() => setStatus(null));
-  }, [desktop, projectRoot]);
+    void refreshStatus();
+  }, [refreshStatus]);
 
-  const commandPreview = useMemo(() => {
-    const selected = agents.length === AGENTS.length ? "全部 Agent" : agents.join("、");
-    const components = [installMcp ? "MCP" : "", installSkills ? "Skills" : ""].filter(Boolean).join(" + ");
-    return `${scope === "global" ? "全局" : "当前项目"} · ${selected} · ${components || "未选择组件"}`;
-  }, [agents, installMcp, installSkills, scope]);
-
-  function toggleAgent(agent: AgentId) {
-    setAgents((current) => current.includes(agent)
-      ? current.filter((item) => item !== agent)
-      : [...current, agent]);
+  function toggleAgent(id: AgentId) {
+    setSelectedAgents((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
   }
 
-  async function chooseProject() {
+  async function runInstall(targets: AgentId[], key: string) {
     if (!desktop) return;
-    const selected = await desktop.pickDirectory({ title: "选择 Agent 项目目录", defaultPath: projectRoot || undefined });
-    if (selected) setProjectRoot(selected);
-  }
-
-  async function install() {
-    if (!desktop) return;
-    if (!agents.length) {
-      setMessage({ ok: false, text: "至少选择一个 Agent。" });
+    if (!targets.length) {
+      setNotice({ tone: "error", text: "请至少选择一个 Agent 客户端。" });
       return;
     }
     if (!installMcp && !installSkills) {
-      setMessage({ ok: false, text: "至少选择 MCP 或 Skills。" });
+      setNotice({ tone: "error", text: "请至少勾选「MCP 服务」或「科研 Skills」之一。" });
       return;
     }
-    if (scope === "project" && !projectRoot) {
-      setMessage({ ok: false, text: "项目级安装需要先选择项目目录。" });
-      return;
-    }
-    setBusy(true);
-    setMessage(null);
+    setBusyKey(key);
+    setNotice(null);
     try {
       const result = await desktop.installAgentIntegrations({
-        scope,
-        agents,
+        agents: targets,
         installMcp,
         installSkills,
-        projectRoot: projectRoot || undefined,
-      }) as { ok?: boolean; commands?: string[]; files?: string[]; warnings?: string[]; error?: string };
+      });
+      if (result?.status) setStatus(result.status);
+      else await refreshStatus();
       if (result?.ok) {
-        const details = [
-          result.commands?.length ? `已配置 ${result.commands.length} 项 MCP。` : "",
-          result.files?.length ? `已安装 ${result.files.length} 个 Skills 文件。` : "",
-          result.warnings?.join(" ") || "",
-        ].filter(Boolean).join(" ");
-        setMessage({ ok: true, text: details || "配置已完成。" });
-        setStatus(await desktop.agentIntegrationStatus({ projectRoot }));
+        const parts = [
+          result.configuredMcp?.length ? `已更新 ${result.configuredMcp.length} 个客户端全局 MCP` : "",
+          installSkills ? "已同步共享 Skills（零重复）" : "",
+          result.cleanedDuplicates?.length ? `已清理 ${result.cleanedDuplicates.length} 处旧重复目录` : "",
+        ].filter(Boolean);
+        const warningText = result.warnings?.length ? `；注意：${result.warnings.join(" ")}` : "";
+        setNotice({
+          tone: result.warnings?.length ? "warn" : "ok",
+          text: `${parts.join("，") || "全局配置已完成"}${warningText}`,
+        });
       } else {
-        setMessage({ ok: false, text: result?.error || "安装失败。" });
+        setNotice({ tone: "error", text: result?.error || "安装失败，请检查文件权限后重试。" });
       }
     } catch (error) {
-      setMessage({ ok: false, text: error instanceof Error ? error.message : `${error}` });
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : `${error}` });
     } finally {
-      setBusy(false);
+      setBusyKey("");
     }
   }
 
+  async function runUninstall(agentId: AgentId) {
+    if (!desktop) return;
+    setBusyKey(`remove:${agentId}`);
+    setNotice(null);
+    try {
+      const result = await desktop.uninstallAgentIntegrations({
+        agents: [agentId],
+        removeMcp: true,
+        removeSkills: true,
+      });
+      if (result?.status) setStatus(result.status);
+      else await refreshStatus();
+      const label = AGENT_CATALOG.find((item) => item.id === agentId)?.label || agentId;
+      setNotice({ tone: "ok", text: `已移除 ${label} 的 PaperLoom 全局配置。` });
+    } catch (error) {
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : `${error}` });
+    } finally {
+      setBusyKey("");
+    }
+  }
+
+  async function runMcpSelfTest() {
+    if (!desktop) return;
+    setTesting(true);
+    setProbe(null);
+    try {
+      const result = await desktop.testAgentMcp();
+      setProbe(result);
+    } catch (error) {
+      setProbe({
+        ok: false,
+        cliPath: status?.cliPath || "",
+        error: error instanceof Error ? error.message : `${error}`,
+      });
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  const summaryLine = useMemo(() => {
+    const names = selectedAgents
+      .map((id) => AGENT_CATALOG.find((item) => item.id === id)?.label || id)
+      .join("、");
+    const comps = [installMcp ? "MCP" : "", installSkills ? "Skills" : ""].filter(Boolean).join(" + ");
+    return `全局安装 · ${selectedAgents.length ? names : "未选择客户端"} · ${comps || "未选择组件"}`;
+  }, [installMcp, installSkills, selectedAgents]);
+
+  const cliDisplay = status?.cliPath
+    ? compactDisplayPath(status.cliPath, status.homeDir)
+    : desktop ? "未检测到内置 CLI" : "浏览器模式（请使用下方配置模板）";
+
+  const sharedSkillCount = status?.sharedSkills?.length ?? 0;
+  const totalSkillCount = status?.allSkills?.length ?? 3;
+
   return (
     <section className="agent-integration-panel" data-agent-integration-panel>
-      <div className="agent-integration-card">
-        <p className="agent-integration-lead">
-          把 PaperLoom 的 MCP 和科研 Skills 安装到 Agent。桌面版优先使用内置 CLI，避免每次启动都依赖 npx 网络下载。
-        </p>
-        <div className="agent-integration-grid">
-          <label className="agent-integration-field">
-            <span>安装范围</span>
-            <Select size="sm" value={scope} onChange={(event) => setScope(event.target.value as Scope)}>
-              <option value="project">当前项目</option>
-              <option value="global">全局</option>
-            </Select>
-          </label>
-          {scope === "project" ? (
-            <div className="agent-integration-field">
-              <span>项目目录</span>
-              <div className="agent-integration-inline">
-                <Input size="sm" value={projectRoot} onChange={(event) => setProjectRoot(event.target.value)} placeholder="选择项目目录" />
-                <Button variant="secondary" onClick={chooseProject}>选择</Button>
-              </div>
-            </div>
-          ) : null}
+      <div className="agent-integration-runtime">
+        <div className="agent-integration-runtime-info">
+          <div className="agent-integration-runtime-row">
+            <span
+              className={`agent-integration-dot ${status?.cliAvailable ? "is-ready" : "is-warn"}`}
+              aria-hidden
+            />
+            <strong className="agent-integration-runtime-title">内置 MCP 运行时</strong>
+            <Badge tone={status?.cliAvailable ? "done" : "warn"}>
+              {status?.cliAvailable ? "已就绪" : desktop ? "缺少 CLI" : "仅手动模板"}
+            </Badge>
+            <Badge tone={sharedSkillCount === totalSkillCount ? "done" : "muted"}>
+              共享 Skills {sharedSkillCount}/{totalSkillCount}
+            </Badge>
+          </div>
+          <p className="agent-integration-runtime-path" title={status?.cliPath || cliDisplay}>
+            {cliDisplay}
+          </p>
         </div>
-        <fieldset className="agent-integration-fieldset">
-          <legend>Agent</legend>
-          <div className="agent-integration-checks">
-            {AGENTS.map((agent) => (
-              <Checkbox key={agent.id} checked={agents.includes(agent.id)} onChange={() => toggleAgent(agent.id)} label={agent.label} />
-            ))}
+
+        {desktop ? (
+          <div className="agent-integration-runtime-actions">
+            <Button
+              variant="secondary"
+              size="sm"
+              pending={testing}
+              disabled={!status?.cliAvailable || Boolean(busyKey)}
+              onClick={runMcpSelfTest}
+              data-agent-action="test-mcp"
+            >
+              <Activity size={13} aria-hidden />
+              {testing ? "检测中…" : "检测 MCP"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={Boolean(busyKey) || testing}
+              onClick={() => void refreshStatus()}
+              data-agent-action="refresh"
+            >
+              <RefreshCw size={13} aria-hidden />
+              刷新
+            </Button>
           </div>
-        </fieldset>
-        <fieldset className="agent-integration-fieldset">
-          <legend>组件</legend>
-          <div className="agent-integration-checks">
-            <Checkbox checked={installMcp} onChange={(event) => setInstallMcp(event.target.checked)} label="MCP 服务器" />
-            <Checkbox checked={installSkills} onChange={(event) => setInstallSkills(event.target.checked)} label="科研 Skills" />
-          </div>
-        </fieldset>
-        <p className="agent-integration-command"><code>{commandPreview}</code></p>
-        <Button variant="primary" pending={busy} onClick={install} data-agent-action="install">
-          {busy ? "正在安装…" : "安装 MCP 与 Skills"}
-        </Button>
-        {message ? <p className={message.ok ? "agent-integration-message is-ok" : "agent-integration-message is-error"} role={message.ok ? "status" : "alert"}>{message.text}</p> : null}
-        {status ? <pre className="agent-integration-status">{JSON.stringify(status, null, 2)}</pre> : null}
+        ) : null}
       </div>
+
+      {probe ? (
+        <div
+          className={`agent-integration-banner ${probe.ok ? "is-ok" : "is-error"}`}
+          role={probe.ok ? "status" : "alert"}
+          data-agent-probe-result
+        >
+          <CheckCircle2 size={14} aria-hidden />
+          <span>
+            {probe.ok
+              ? `UTF-8 MCP 握手正常（协议 ${probe.protocolVersion} · ${probe.toolCount} 个工具就绪，${probe.backendMessage}）。`
+              : probe.error || "MCP 握手检测失败。"}
+          </span>
+        </div>
+      ) : null}
+
+      <div className="agent-integration-toolbar">
+        <SegmentedControl<ViewMode>
+          label="接入方式"
+          size="sm"
+          value={view}
+          options={VIEW_OPTIONS}
+          onChange={setView}
+        />
+        {view === "install" ? (
+          <div className="agent-integration-components">
+            <Checkbox
+              checked={installMcp}
+              onChange={(event) => setInstallMcp(event.target.checked)}
+              label="MCP 服务"
+            />
+            <Checkbox
+              checked={installSkills}
+              onChange={(event) => setInstallSkills(event.target.checked)}
+              label="科研 Skills"
+            />
+          </div>
+        ) : null}
+      </div>
+
+      {view === "install" ? (
+        <div className="agent-integration-install-view">
+          <p className="agent-integration-dedup-hint">
+            <Sparkles size={13} aria-hidden />
+            <span>
+              默认全部写入用户级全局配置，无需项目目录。Codex / Pi / Hermes 共享 <code>~/.agents/skills</code>，Claude Code / WorkBuddy 自动链接，避免重复加载。
+            </span>
+          </p>
+
+          <div className="agent-integration-cards">
+            {AGENT_CATALOG.map((agent) => {
+              const item = status?.agents?.[agent.id];
+              const checked = selectedAgents.includes(agent.id);
+              const configured = Boolean(item?.mcpConfigured || item?.skillsConfigured);
+              const hasDupes = Boolean(item?.duplicateSkillPaths?.length);
+              const mcpDisplay = compactDisplayPath(item?.mcpConfigPath || agent.defaultMcpFile, status?.homeDir);
+              const itemBusy = busyKey === `one:${agent.id}` || busyKey === `remove:${agent.id}`;
+
+              return (
+                <article
+                  key={agent.id}
+                  className={[
+                    "agent-integration-client",
+                    checked ? "is-selected" : "",
+                    configured ? "is-configured" : "",
+                  ].filter(Boolean).join(" ")}
+                  data-agent-card={agent.id}
+                >
+                  <div className="agent-integration-client-head">
+                    <div className="agent-integration-client-id">
+                      <Checkbox
+                        checked={checked}
+                        onChange={() => toggleAgent(agent.id)}
+                        label={agent.label}
+                      />
+                      <span className="agent-integration-client-sub">{agent.subtitle}</span>
+                    </div>
+                    <div className="agent-integration-client-badges">
+                      {item?.detected ? <Badge tone="active">已检测</Badge> : <Badge tone="muted">未检测</Badge>}
+                      {item?.mcpConfigured ? <Badge tone="done">MCP</Badge> : null}
+                      {item?.skillsConfigured ? <Badge tone="done">Skills</Badge> : null}
+                      {hasDupes ? <Badge tone="warn">待去重</Badge> : null}
+                    </div>
+                  </div>
+
+                  <dl className="agent-integration-client-meta">
+                    <div>
+                      <dt>MCP 配置</dt>
+                      <dd title={item?.mcpConfigPath || agent.defaultMcpFile}>{mcpDisplay}</dd>
+                    </div>
+                    <div>
+                      <dt>Skills</dt>
+                      <dd>{item?.skillsConfigured ? skillsModeLabel(agent.id, item) : agent.skillsStrategy}</dd>
+                    </div>
+                  </dl>
+
+                  <footer className="agent-integration-client-foot">
+                    <span className="agent-integration-client-note">
+                      {agent.id === "pi" && item && !item.adapterInstalled
+                        ? "未检测到 pi-mcp-adapter，请切到「手动配置」复制安装命令。"
+                        : agent.officialNote}
+                    </span>
+                    {desktop ? (
+                      <div className="agent-integration-client-actions">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          pending={busyKey === `one:${agent.id}`}
+                          disabled={Boolean(busyKey) && !itemBusy}
+                          onClick={() => void runInstall([agent.id], `one:${agent.id}`)}
+                        >
+                          <Wrench size={12} aria-hidden />
+                          {configured ? "更新" : "安装"}
+                        </Button>
+                        {configured ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            pending={busyKey === `remove:${agent.id}`}
+                            disabled={Boolean(busyKey) && !itemBusy}
+                            onClick={() => void runUninstall(agent.id)}
+                            aria-label={`移除 ${agent.label} 配置`}
+                            title={`移除 ${agent.label} 配置`}
+                          >
+                            <Trash2 size={12} aria-hidden />
+                          </Button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </footer>
+                </article>
+              );
+            })}
+          </div>
+
+          <div className="agent-integration-footer">
+            <span className="agent-integration-summary">{summaryLine}</span>
+            <Button
+              variant="primary"
+              pending={busyKey === "batch"}
+              disabled={!desktop || (Boolean(busyKey) && busyKey !== "batch")}
+              onClick={() => void runInstall(selectedAgents, "batch")}
+              data-agent-action="install"
+            >
+              {busyKey === "batch" ? "正在配置…" : "一键全局安装所选"}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <AgentManualConfigSection
+          cliPath={status?.cliPath || ""}
+          homeDir={status?.homeDir}
+          platform={status?.platform || desktop?.platform}
+          sharedSkillsDir={status?.sharedSkillsDir}
+          workbuddyConfigPath={status?.agents?.workbuddy?.mcpConfigPath}
+        />
+      )}
+
+      {notice ? (
+        <p
+          className={
+            notice.tone === "error"
+              ? "agent-integration-banner is-error"
+              : notice.tone === "warn"
+                ? "agent-integration-banner is-warn"
+                : "agent-integration-banner is-ok"
+          }
+          role={notice.tone === "error" ? "alert" : "status"}
+          data-agent-notice
+        >
+          {notice.text}
+        </p>
+      ) : null}
     </section>
   );
 }

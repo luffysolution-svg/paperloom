@@ -1,5 +1,7 @@
 import json
+import os
 import pathlib
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -140,6 +142,88 @@ class McpProtocolTests(unittest.TestCase):
         response = mcp.handle({"jsonrpc": "2.0", "id": 12, "method": "tools/call", "params": {"name": "run_batch_workflow", "arguments": {"action": "ocr", "items": [{"document_id": "doc-1"}], "dry_run": False}}}, BatchApi())
         self.assertTrue(response["result"]["isError"])
         self.assertIn("confirmed=true", response["result"]["structuredContent"]["error"]["message"])
+
+    def test_notifications_do_not_emit_responses(self):
+        api = FakeApi()
+        self.assertIsNone(mcp.handle({"jsonrpc": "2.0", "method": "notifications/initialized"}, api))
+        self.assertIsNone(mcp.handle({"jsonrpc": "2.0", "method": "notifications/cancelled", "params": {"requestId": 1}}, api))
+        self.assertIsNone(mcp.handle({"jsonrpc": "2.0", "method": "custom/ping"}, api))
+
+    def test_initialize_negotiates_supported_protocol_version(self):
+        api = FakeApi()
+        v1 = mcp.handle({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2024-11-05"}}, api)
+        self.assertEqual(v1["result"]["protocolVersion"], "2024-11-05")
+        v2 = mcp.handle({"jsonrpc": "2.0", "id": 2, "method": "initialize", "params": {"protocolVersion": "2099-01-01"}}, api)
+        self.assertEqual(v2["result"]["protocolVersion"], mcp.PROTOCOL_VERSION)
+
+    def test_resource_templates_list(self):
+        response = mcp.handle({"jsonrpc": "2.0", "id": 16, "method": "resources/templates/list", "params": {}}, FakeApi())
+        templates = {item["uriTemplate"] for item in response["result"]["resourceTemplates"]}
+        self.assertIn("paperloom://documents/{document_id}/metadata", templates)
+        self.assertIn("paperloom://jobs/{job_id}/markdown", templates)
+
+    def test_dynamic_runtime_file_discovery_without_restart(self):
+        with tempfile.TemporaryDirectory() as home:
+            old_home = os.environ.get("PAPERLOOM_HOME")
+            old_retain = os.environ.get("RETAINPDF_HOME")
+            old_base = os.environ.get("PAPERLOOM_API_BASE")
+            try:
+                os.environ["PAPERLOOM_HOME"] = home
+                os.environ.pop("RETAINPDF_HOME", None)
+                os.environ.pop("PAPERLOOM_API_BASE", None)
+                api = mcp.PaperLoomApi()
+                self.assertEqual(api.base, "")
+                run_dir = pathlib.Path(home) / "run"
+                run_dir.mkdir(parents=True, exist_ok=True)
+                (run_dir / "backend.json").write_text(
+                    json.dumps({"api_base": "http://127.0.0.1:46123", "api_key": "desktop-key"}),
+                    encoding="utf-8",
+                )
+                self.assertEqual(api.base, "http://127.0.0.1:46123")
+                self.assertEqual(api.api_key, "desktop-key")
+            finally:
+                if old_home is None:
+                    os.environ.pop("PAPERLOOM_HOME", None)
+                else:
+                    os.environ["PAPERLOOM_HOME"] = old_home
+                if old_retain is None:
+                    os.environ.pop("RETAINPDF_HOME", None)
+                else:
+                    os.environ["RETAINPDF_HOME"] = old_retain
+                if old_base is None:
+                    os.environ.pop("PAPERLOOM_API_BASE", None)
+                else:
+                    os.environ["PAPERLOOM_API_BASE"] = old_base
+
+    def test_stdio_subprocess_emits_strict_utf8_even_without_pythonutf8(self):
+        env = {k: v for k, v in os.environ.items() if k not in {"PYTHONUTF8", "PYTHONIOENCODING"}}
+        payload = (
+            json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-03-26"}})
+            + "\n"
+            + json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"})
+            + "\n"
+            + json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
+            + "\n"
+        ).encode("utf-8")
+        proc = subprocess.run(
+            [sys.executable, str(ROOT / "paperloom_mcp.py")],
+            input=payload,
+            capture_output=True,
+            env=env,
+            timeout=15,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr.decode("utf-8", errors="replace"))
+        # Strict UTF-8 decode must succeed on every platform (esp. Chinese Windows GBK default).
+        decoded = proc.stdout.decode("utf-8", errors="strict")
+        lines = [line for line in decoded.splitlines() if line.strip()]
+        self.assertEqual(len(lines), 2)
+        init_resp = json.loads(lines[0])
+        tools_resp = json.loads(lines[1])
+        self.assertEqual(init_resp["result"]["protocolVersion"], "2025-03-26")
+        tool_names = {tool["name"] for tool in tools_resp["result"]["tools"]}
+        self.assertIn("search_scholarly", tool_names)
+        self.assertIn("get_capabilities", tool_names)
 
 
 if __name__ == "__main__":

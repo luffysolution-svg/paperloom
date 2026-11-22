@@ -37,11 +37,15 @@
   -webkit-backdrop-filter: blur(20px);
 }
 
-/* 手机宽度：托盘多了面板按钮（Markdown）以后约 140px，两边都留这么宽，中间放不下原文 / 对照 / 译文（390px 宽时压在托盘上）。
-   左边只用让开「目录 / 搜索」（约 80px），两边不再对称，页签在剩下那块里居中。 */
+/* 手机宽度：托盘多了面板按钮（Markdown）以后约 126px，两边都留这么宽，中间放不下原文 / 对照 / 译文（375px 宽时压在托盘上）。
+   左边按是否渲染「实时译文」动态留位（目录 / 搜索约 86px，加上实时译文约 118px），页签在剩下那块里居中。 */
 @media (max-width: 440px) {
   .reader-workspace-bar {
-    padding-inline: 96px var(--reader-tray-width, 200px);
+    padding-inline: 86px var(--reader-tray-width, 104px);
+  }
+
+  .reader-workspace-bar:has(.reader-live-translation-toggle) {
+    padding-inline: 118px var(--reader-tray-width, 104px);
   }
 }
 
@@ -64,10 +68,21 @@
  * 0，按钮再 left:28px 就落到 PDF 栏**右边缘之外**，被 overflow-x 裁掉 ——
  * 而那条横向滚动条是刻意藏掉的，于是既看不见也点不到。
  *
+ * 有左上「目录 / 搜索」（.reader-finder-toggles）时必须排在它右边，避免被 z-index 更高的目录/搜索遮挡。
  * 那颗按钮是打开实时译文叠加的**唯一入口**（顶栏 pill 在任务终态不渲染）。 */
+.reader-react-root:has(.reader-finder-toggles) {
+  --reader-finder-toggles-end: 164px;
+}
+
 .reader-workspace-bar .reader-live-translation-toggle {
   position: absolute;
   left: clamp(12px, 2.2vw, 28px);
+  max-width: min(192px, max(36px, calc(50vw - 122px - clamp(12px, 2.2vw, 28px))));
+}
+
+.reader-react-root:has(.reader-finder-toggles) .reader-workspace-bar .reader-live-translation-toggle {
+  left: var(--reader-finder-toggles-end, 164px);
+  max-width: min(192px, max(36px, calc(50vw - 122px - var(--reader-finder-toggles-end, 164px))));
 }
 
 .reader-live-translation-toggle {
@@ -90,6 +105,13 @@
 
 .reader-live-translation-toggle svg {
   flex: 0 0 auto;
+}
+
+.reader-live-translation-toggle-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .reader-live-translation-toggle.is-active {
@@ -121,19 +143,36 @@
   50% { opacity: 1; }
 }
 
-@media (max-width: 720px) {
-  .reader-live-translation-toggle {
-    width: 36px;
+@media (max-width: 960px) {
+  .reader-workspace-bar .reader-live-translation-toggle {
+    width: 34px;
     padding: 0;
     justify-content: center;
   }
 
-  .reader-live-translation-toggle-label {
+  .reader-workspace-bar .reader-live-translation-toggle-label {
     position: absolute;
     width: 1px;
     height: 1px;
     overflow: hidden;
     clip: rect(0, 0, 0, 0);
+  }
+}
+
+@media (max-width: 599px) {
+  .reader-react-root:has(.reader-finder-toggles) {
+    --reader-finder-toggles-end: 94px;
+  }
+}
+
+@media (max-width: 440px) {
+  .reader-react-root:has(.reader-finder-toggles) {
+    --reader-finder-toggles-end: 80px;
+  }
+
+  .reader-workspace-bar .reader-live-translation-toggle {
+    width: 32px;
+    min-height: 32px;
   }
 }
 
@@ -223,6 +262,7 @@
 /* 手机宽度：托盘三颗按钮之间收到 4px，原文 / 对照 / 译文才放得下（360px 宽时差 8px）。写在基础规则后面，不然被盖回 8px。 */
 @media (max-width: 440px) {
   .reader-chrome-tray {
+    right: 8px;
     gap: 4px;
   }
 }
@@ -451,6 +491,16 @@
 
   .reader-close-home-label {
     display: none;
+  }
+}
+
+@media (max-width: 440px) {
+  .reader-react-root {
+    --reader-tray-width: 96px;
+  }
+
+  .reader-react-root:has(.reader-panel-toggle) {
+    --reader-tray-width: 128px;
   }
 }
 

@@ -1,109 +1,116 @@
-# Agent 宿主配置
+# Agent 宿主全局配置
 
-PaperLoom 提供一个本地 stdio MCP 入口。Codex、Claude Code、Pi、OpenCode、ZCode、DeepSeek Harness 和 WorkBuddy 都可以通过同一个入口访问文献、任务、Reader、Zotero、Obsidian 和学术检索能力。
+PaperLoom 提供统一的本地 stdio MCP 入口（`paperloom agent mcp` 或桌面端内置 `retainpdf` CLI），支持 **Codex**、**Claude Code**、**Pi**、**WorkBuddy / CodeBuddy** 与 **Hermes** 全局接入，并通过 `~/.agents/skills` 共享科研 Skills，避免重复安装和冲突提示。
 
-## 统一入口
+## 1. 全局配置与去重策略
 
-确保 `paperloom` 已安装到 `PATH`，或者使用构建产物的绝对路径。启动命令始终是：
+| 客户端 | 全局 MCP 配置文件 | Skills 加载与去重方式 |
+| --- | --- | --- |
+| **Codex** | `~/.codex/config.toml`（`$CODEX_HOME/config.toml`） | 原生扫描 `~/.agents/skills`，安装时自动清理旧 `~/.codex/skills/paperloom-*` 重复目录 |
+| **Claude Code** | `~/.claude.json`（User Scope `mcpServers`） | 链接 `~/.claude/skills/paperloom-*` → `~/.agents/skills/paperloom-*` |
+| **Pi** | `~/.pi/agent/mcp.json`（`$PI_CODING_AGENT_DIR/mcp.json`） | 原生扫描 `~/.agents/skills`，自动清理 `~/.pi/agent/skills/paperloom-*` 重复目录（需安装 `pi-mcp-adapter`） |
+| **WorkBuddy** | `~/.workbuddy/mcp.json`（或已有 `~/.codebuddy/mcp.json`） | 链接到 `~/.agents/skills/paperloom-*`，自动识别单一配置目录不双写 |
+| **Hermes** | `~/.hermes/config.yaml`（`$HERMES_HOME/config.yaml`） | 在 `skills.external_dirs` 中引用 `~/.agents/skills`，自动清理 `~/.hermes/skills/paperloom-*` |
 
-```text
-paperloom agent mcp
-```
+在桌面端「设置 → MCP 与 Skills」中可直接一键全局安装、去重并执行 UTF-8 MCP 握手自检，或切换到「手动配置与代码」复制对应客户端的 JSON / TOML / YAML 与命令。
 
-如果使用项目目录中的构建产物，把 `paperloom` 替换为：
+## 2. 各客户端手动配置参考
 
-```text
-<paperloom-project>/target/release/paperloom.exe
-```
-
-Windows 使用 `.exe`，Linux 和 macOS 使用对应的可执行文件名。宿主只负责启动 MCP，业务逻辑由 PaperLoom CLI 和后端提供。
-
-## Claude Code
-
-项目级配置：
+### Codex
 
 ```powershell
-claude mcp add --scope project --transport stdio paperloom -- paperloom agent mcp
-claude mcp list
+codex mcp add paperloom -- "<paperloom-cli-path>" agent mcp
 ```
 
-使用绝对路径时：
-
-```powershell
-claude mcp add --scope project --transport stdio paperloom -- `
-  "<paperloom-cli-path>" agent mcp
-```
-
-在 Claude Code 中执行 `/mcp`，确认 `paperloom` 已连接。将以下目录作为只读技能说明加载：
-
-```text
-skills/paperloom-pdf-ops
-skills/paperloom-paper-reader
-skills/paperloom-paper-search
-```
-
-## Codex
-
-```powershell
-codex mcp add paperloom -- paperloom agent mcp
-codex mcp list
-codex mcp get paperloom
-```
-
-手动配置用户级 `config.toml` 时使用：
+或写入 `~/.codex/config.toml`：
 
 ```toml
 [mcp_servers.paperloom]
 command = "<paperloom-cli-path>"
 args = ["agent", "mcp"]
-cwd = "<paperloom-project>"
-startup_timeout_sec = 15.0
+startup_timeout_sec = 30.0
 tool_timeout_sec = 600.0
 ```
 
-## Pi
+### Claude Code
 
 ```powershell
-pi mcp add paperloom --local --cwd <paperloom-project> -- paperloom agent mcp
-pi mcp list --json
+claude mcp add --scope user --transport stdio paperloom -- "<paperloom-cli-path>" agent mcp
 ```
 
-临时加载技能：
+或合并到 `~/.claude.json` 的顶层 `mcpServers`（注意不是 `~/.claude/mcp.json`）：
 
-```powershell
-pi --skill skills/paperloom-paper-reader/SKILL.md
+```json
+{
+  "mcpServers": {
+    "paperloom": {
+      "type": "stdio",
+      "command": "<paperloom-cli-path>",
+      "args": ["agent", "mcp"]
+    }
+  }
+}
 ```
 
-## OpenCode、ZCode、DeepSeek Harness 和 WorkBuddy
+### Pi
 
-在宿主的 MCP 设置中新增一个名为 `paperloom` 的 stdio server：
+先安装官方推荐的 MCP 适配器：
 
-```text
-command: paperloom
-args: agent mcp
+```bash
+pi install npm:pi-mcp-adapter
 ```
 
-宿主只接受绝对路径时，使用 `where paperloom` 或 `which paperloom` 找到可执行文件。将三个 `skills/paperloom-*` 目录作为只读指令挂载，不要把 API key 写入宿主配置或技能文件。
+再在 `~/.pi/agent/mcp.json` 中合并：
 
-## 连接检查
-
-```powershell
-paperloom agent doctor --json
-paperloom agent capabilities --json
+```json
+{
+  "mcpServers": {
+    "paperloom": {
+      "command": "<paperloom-cli-path>",
+      "args": ["agent", "mcp"]
+    }
+  }
+}
 ```
 
-直接检查 MCP 握手：
+### WorkBuddy / CodeBuddy
 
-```powershell
-'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' |
-  & <paperloom-cli-path> agent mcp
+写入 `~/.workbuddy/mcp.json`（若本机使用 `~/.codebuddy` 则写入 `~/.codebuddy/mcp.json`）：
+
+```json
+{
+  "mcpServers": {
+    "paperloom": {
+      "command": "<paperloom-cli-path>",
+      "args": ["agent", "mcp"]
+    }
+  }
+}
 ```
 
-初始化阶段不需要文献输入。后端未启动时，MCP 仍应完成握手，调用需要后端的工具时再返回连接错误。
+### Hermes
 
-## 权限和密钥
+写入 `~/.hermes/config.yaml`，保存后在会话中执行 `/reload-mcp`：
+
+```yaml
+mcp_servers:
+  paperloom:
+    command: "<paperloom-cli-path>"
+    args:
+      - "agent"
+      - "mcp"
+
+skills:
+  external_dirs:
+    - "~/.agents/skills"
+```
+
+## 3. 连接与 UTF-8 握手检查
+
+MCP bridge 强制使用二进制 UTF-8 读写 `stdin`/`stdout`，不会在 Windows 默认 GBK 环境下触发 `tools/list` 超时。初始化握手不依赖后端运行；当桌面端启动并写入 `~/.paperloom/run/backend.json` 后，MCP 工具会自动发现新端口，无需重启 Agent。
+
+## 4. 权限与安全边界
 
 - API key 由 PaperLoom 配置或环境变量读取，MCP 返回结果不会回显密钥。
-- OCR、翻译、批量工作流、Zotero 导入和写回、Obsidian 写入等操作需要明确确认。
-- 批量操作先使用 `dry_run` 或 `--dry-run`，确认数量、目标和冲突策略后再执行。
-- 运行记录写入 PaperLoom 数据目录的 `agent-runs/<run-id>/`，其中保存清单、事件和逐项结果。
+- OCR、翻译、批量工作流、Zotero 导入/写回与 Obsidian 写入需要显式确认（`confirmed: true`）。
+- 批量操作先执行 `dry_run: true` 预览数量与目标，再确认提交。

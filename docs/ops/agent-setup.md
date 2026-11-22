@@ -34,92 +34,68 @@ paperloom agent capabilities --json
 
 `doctor` 只报告连接和配置状态，不会上传文件、调用模型或显示密钥。
 
-## 2. 注册 MCP
+## 2. 全局注册 MCP（推荐桌面端一键配置）
 
-### Codex
+桌面端「设置 → MCP 与 Skills」默认提供 **全局一键安装**（Codex、Claude Code、Pi、WorkBuddy、Hermes），自动合并各客户端全局配置文件、共享 `~/.agents/skills` 并清理旧重复目录，同时提供「检测 MCP」按钮验证 UTF-8 握手与后端连通性，以及「手动配置与代码」复制面板。
+
+### Codex（`~/.codex/config.toml`）
 
 ```powershell
-codex mcp add paperloom -- paperloom agent mcp
+codex mcp add paperloom -- "<paperloom-cli-path>" agent mcp
 codex mcp list
 codex mcp get paperloom
 ```
 
-Codex 默认把这条命令写入用户配置。如果只想对当前项目启用，可以把项目 `.codex` 目录作为 `CODEX_HOME`：
+### Claude Code（`~/.claude.json`，User 全局）
 
 ```powershell
-$previousCodexHome = $env:CODEX_HOME
-try {
-  $env:CODEX_HOME = (Join-Path (Get-Location) ".codex")
-  codex mcp add paperloom -- paperloom agent mcp
-} finally {
-  if ($null -eq $previousCodexHome) { Remove-Item Env:CODEX_HOME } else { $env:CODEX_HOME = $previousCodexHome }
-}
-```
-
-项目配置需要在 Codex 信任该项目后生效。
-
-使用绝对路径：
-
-```powershell
-codex mcp add paperloom -- "<paperloom-cli-path>" agent mcp
-```
-
-### Claude Code
-
-```powershell
-claude mcp add --scope project --transport stdio paperloom -- paperloom agent mcp
+claude mcp add --scope user --transport stdio paperloom -- "<paperloom-cli-path>" agent mcp
 claude mcp list
 ```
 
-全局配置使用 `--scope user`：
+在 Claude Code 会话中执行 `/mcp`，确认 `paperloom` 已连接。
 
-```powershell
-claude mcp add --scope user --transport stdio paperloom -- paperloom agent mcp
+### Pi（`~/.pi/agent/mcp.json`）
+
+Pi 需先安装官方推荐的 MCP 适配器：
+
+```bash
+pi install npm:pi-mcp-adapter
 ```
 
-在 Claude Code 会话中执行 `/mcp`，确认服务器已连接。
+然后在 `~/.pi/agent/mcp.json` 中合并 `mcpServers.paperloom`（`command: "<paperloom-cli-path>"`, `args: ["agent", "mcp"]`）。
 
-### Pi
+### WorkBuddy / CodeBuddy（`~/.workbuddy/mcp.json` 或 `~/.codebuddy/mcp.json`）
 
-```powershell
-pi mcp add paperloom --local --cwd <paperloom-project> -- paperloom agent mcp
-pi mcp list --json
-```
+在对应全局 `mcp.json` 的 `mcpServers` 中新增 `paperloom`（`command: "<paperloom-cli-path>"`, `args: ["agent", "mcp"]`）。若本机已存在 `~/.codebuddy`，桌面端一键安装会自动写入该目录，不会双写。
 
-全局配置去掉 `--local --cwd <paperloom-project>`：
+### Hermes（`~/.hermes/config.yaml`）
 
-```powershell
-pi mcp add paperloom -- paperloom agent mcp
-```
+在 `~/.hermes/config.yaml` 中加入 `mcp_servers.paperloom` 与 `skills.external_dirs: ["~/.agents/skills"]`，保存后在会话内运行 `/reload-mcp`。
 
 ### 其他宿主
 
-在 OpenCode、ZCode、DeepSeek Harness 或 WorkBuddy 的 MCP 设置中添加一个 stdio server：
+在 Cursor、Windsurf、OpenCode、Cherry Studio 等宿主的 MCP 设置中直接粘贴通用 `mcpServers` JSON（桌面端「手动配置与代码 → 通用 JSON」可一键复制）。详细宿主配置与去重策略见 [agent-hosts.md](./agent-hosts.md)。
 
-```text
-name: paperloom
-command: paperloom
-args: agent mcp
-```
-
-宿主只接受绝对路径时，使用 `where paperloom` 或 `which paperloom` 找到 CLI。详细宿主配置见 [agent-hosts.md](./agent-hosts.md)。
-
-直接验证握手：
+直接验证 UTF-8 握手：
 
 ```powershell
-'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' |
+'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}' |
   & <paperloom-cli-path> agent mcp
 ```
 
-## 3. Skills
+## 3. Skills（全局共享、零重复）
 
-将以下目录作为只读指令加载：
+桌面端统一将以下三个科研 Skills 安装到开放标准共享目录 **`~/.agents/skills/`**：
 
-- `skills/paperloom-pdf-ops/SKILL.md` 负责导入、OCR、翻译、任务恢复、导出以及 Zotero/Obsidian 操作。
-- `skills/paperloom-paper-reader/SKILL.md` 负责按页码、区域和资源链接组织证据链阅读。
-- `skills/paperloom-paper-search/SKILL.md` 负责本地文献、Zotero 和外部学术来源检索与去重。
+- `paperloom-pdf-ops/SKILL.md`：优先通过 MCP 工具完成导入、OCR、翻译、任务恢复、批量工作流以及 Zotero/Obsidian 同步（CLI 作为终端备选）。
+- `paperloom-paper-reader/SKILL.md`：按页码、区域和资源链接组织证据链阅读。
+- `paperloom-paper-search/SKILL.md`：本地文献、Zotero 和外部学术来源检索与去重。
 
-Skills 只描述工作流和输出约束，不保存密钥、论文正文或对话历史。CLI 和 MCP 共用 PaperLoom 后端的任务与资源。
+去重策略：
+- **Codex**、**Pi** 原生扫描 `~/.agents/skills/`（一键安装会自动清理 `~/.codex/skills`、`~/.pi/agent/skills` 中的旧重复项）。
+- **Hermes** 通过 `skills.external_dirs` 指向 `~/.agents/skills/`。
+- **Claude Code**（`~/.claude/skills/`）与 **WorkBuddy**（`~/.workbuddy/skills/` 或 `~/.codebuddy/skills/`）通过目录链接指向 `~/.agents/skills/`，保持单一真源。
 
 ## 4. MCP 能力
 
