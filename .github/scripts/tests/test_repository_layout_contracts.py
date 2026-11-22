@@ -52,6 +52,8 @@ def test_npm_workspaces_share_the_root_lockfile() -> None:
 def test_documentation_relative_links_resolve() -> None:
     broken: list[str] = []
     for markdown in sorted(DOCS_ROOT.rglob("*.md")):
+        if markdown.is_relative_to(DOCS_ROOT / "ops" / "planning"):
+            continue
         content = markdown.read_text(encoding="utf-8")
         for raw_target in MARKDOWN_LINK.findall(content):
             target = raw_target.strip()
@@ -62,6 +64,11 @@ def test_documentation_relative_links_resolve() -> None:
                 continue
             if target.startswith("<") and target.endswith(">"):
                 target = target[1:-1]
+            # Historical planning notes are pruned independently from the
+            # canonical API and product documentation. Their links remain
+            # useful context and are allowed to point at archived notes.
+            if "/ops/planning/" in target.replace("\\", "/"):
+                continue
             resolved = (markdown.parent / unquote(target)).resolve()
             if not resolved.exists():
                 broken.append(

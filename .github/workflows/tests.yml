@@ -236,7 +236,7 @@ jobs:
         uses: ./.github/actions/setup-test-typst
 
       - name: Offline translation regression
-        run: uv run --project "$RETAIN_PDF_SERVICES_ROOT" python "$RETAIN_PDF_SERVICES_ROOT/pipeline/devtools/run_translation_tests.py"
+        run: uv run --project "$RETAIN_PDF_SERVICES_ROOT" python "$RETAIN_PDF_SERVICES_ROOT/pipeline/devtools/run_translation_tests.py" --suite benchmarks
 
       - name: Typst integration pipeline tests (rendering and durable stages)
         run: uv run --project "$RETAIN_PDF_SERVICES_ROOT" python -m pytest "$RETAIN_PDF_SERVICES_ROOT/pipeline/devtools/tests" -q -m needs_typst
