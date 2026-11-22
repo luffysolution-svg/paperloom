@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Button } from "@retainpdf/ui";
+import { Button, Checkbox, Input, Select } from "@retainpdf/ui";
 import { getDesktopHost } from "@/platform/desktop/host.js";
 
 const AGENTS = [
@@ -28,8 +28,9 @@ export function AgentIntegrationPanel() {
   }, [desktop, projectRoot]);
 
   const commandPreview = useMemo(() => {
-    const selected = agents.length === AGENTS.length ? "codex,claude,pi" : agents.join(",");
-    return `paperloom-agent install --scope ${scope} --agents ${selected}${installMcp ? " --mcp" : ""}${installSkills ? " --skills" : ""}`;
+    const selected = agents.length === AGENTS.length ? "全部 Agent" : agents.join("、");
+    const components = [installMcp ? "MCP" : "", installSkills ? "Skills" : ""].filter(Boolean).join(" + ");
+    return `${scope === "global" ? "全局" : "当前项目"} · ${selected} · ${components || "未选择组件"}`;
   }, [agents, installMcp, installSkills, scope]);
 
   function toggleAgent(agent: AgentId) {
@@ -48,6 +49,10 @@ export function AgentIntegrationPanel() {
     if (!desktop) return;
     if (!agents.length) {
       setMessage({ ok: false, text: "至少选择一个 Agent。" });
+      return;
+    }
+    if (!installMcp && !installSkills) {
+      setMessage({ ok: false, text: "至少选择 MCP 或 Skills。" });
       return;
     }
     if (scope === "project" && !projectRoot) {
@@ -91,16 +96,16 @@ export function AgentIntegrationPanel() {
         <div className="agent-integration-grid">
           <label className="agent-integration-field">
             <span>安装范围</span>
-            <select value={scope} onChange={(event) => setScope(event.target.value as Scope)}>
+            <Select size="sm" value={scope} onChange={(event) => setScope(event.target.value as Scope)}>
               <option value="project">当前项目</option>
               <option value="global">全局</option>
-            </select>
+            </Select>
           </label>
           {scope === "project" ? (
             <div className="agent-integration-field">
               <span>项目目录</span>
               <div className="agent-integration-inline">
-                <input value={projectRoot} onChange={(event) => setProjectRoot(event.target.value)} placeholder="选择项目目录" />
+                <Input size="sm" value={projectRoot} onChange={(event) => setProjectRoot(event.target.value)} placeholder="选择项目目录" />
                 <Button variant="secondary" onClick={chooseProject}>选择</Button>
               </div>
             </div>
@@ -110,18 +115,15 @@ export function AgentIntegrationPanel() {
           <legend>Agent</legend>
           <div className="agent-integration-checks">
             {AGENTS.map((agent) => (
-              <label key={agent.id}>
-                <input type="checkbox" checked={agents.includes(agent.id)} onChange={() => toggleAgent(agent.id)} />
-                {agent.label}
-              </label>
+              <Checkbox key={agent.id} checked={agents.includes(agent.id)} onChange={() => toggleAgent(agent.id)} label={agent.label} />
             ))}
           </div>
         </fieldset>
         <fieldset className="agent-integration-fieldset">
           <legend>组件</legend>
           <div className="agent-integration-checks">
-            <label><input type="checkbox" checked={installMcp} onChange={(event) => setInstallMcp(event.target.checked)} />MCP 服务器</label>
-            <label><input type="checkbox" checked={installSkills} onChange={(event) => setInstallSkills(event.target.checked)} />科研 Skills</label>
+            <Checkbox checked={installMcp} onChange={(event) => setInstallMcp(event.target.checked)} label="MCP 服务器" />
+            <Checkbox checked={installSkills} onChange={(event) => setInstallSkills(event.target.checked)} label="科研 Skills" />
           </div>
         </fieldset>
         <p className="agent-integration-command"><code>{commandPreview}</code></p>

@@ -63,25 +63,32 @@ function runCommand(command, args, cwd) {
   return `${result.stdout || ""}`.trim();
 }
 
-function readJsonFile(file) {
-  if (!fs.existsSync(file)) return {};
-  try {
-    return JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch (error) {
-    throw new Error(`配置文件无法读取：${file}`);
-  }
-}
-
-function writeJsonFile(file, value) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-}
-
 function installCodexProject(projectRoot, cli) {
-  const file = path.join(projectRoot, "mcp.json");
-  const config = readJsonFile(file);
-  config.mcpServers = { ...(config.mcpServers || {}), paperloom: { command: cli, args: ["agent", "mcp"] } };
-  writeJsonFile(file, config);
+  const configRoot = path.join(projectRoot, ".codex");
+  const file = path.join(configRoot, "config.toml");
+  const existing = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
+  const lines = existing.split(/\r?\n/);
+  const kept = [];
+  let removing = false;
+  for (const line of lines) {
+    const section = line.match(/^\s*\[([^\]]+)\]\s*$/)?.[1] || "";
+    if (section === "mcp_servers.paperloom" || section.startsWith("mcp_servers.paperloom.")) {
+      removing = true;
+      continue;
+    }
+    if (removing && section) removing = false;
+    if (!removing) kept.push(line);
+  }
+  while (kept.length && !kept.at(-1)) kept.pop();
+  kept.push(
+    "",
+    "[mcp_servers.paperloom]",
+    `command = ${JSON.stringify(cli)}`,
+    'args = ["agent", "mcp"]',
+    "",
+  );
+  fs.mkdirSync(configRoot, { recursive: true });
+  fs.writeFileSync(file, kept.join("\n"), "utf8");
   return file;
 }
 
@@ -99,16 +106,16 @@ function installAgentIntegrations(options = {}) {
   const files = [];
   const warnings = [];
 
-  if (installMcp && scope === "project" && agents.includes("codex")) {
-    files.push(installCodexProject(projectRoot, cli));
-    commands.push(`写入 ${path.join(projectRoot, "mcp.json")}`);
-  }
-
   for (const agent of agents) {
     if (!installMcp) break;
-    if (agent === "codex" && scope === "global") {
-      runCommand("codex", ["mcp", "add", "paperloom", "--", cli, "agent", "mcp"], projectRoot);
-      commands.push("codex mcp add paperloom");
+    if (agent === "codex") {
+      if (scope === "global") {
+        runCommand("codex", ["mcp", "add", "paperloom", "--", cli, "agent", "mcp"], projectRoot);
+        commands.push("codex mcp add paperloom");
+      } else {
+        files.push(installCodexProject(projectRoot, cli));
+        commands.push(`写入 ${path.join(projectRoot, ".codex", "config.toml")}`);
+      }
     }
     if (agent === "claude") {
       const scopeFlag = scope === "global" ? "user" : "project";
@@ -128,7 +135,9 @@ function installAgentIntegrations(options = {}) {
   if (installSkills) {
     const targets = [];
     if (scope === "project") {
-      targets.push({ agent: "project", root: path.join(projectRoot, "skills") });
+      if (agents.includes("codex")) targets.push({ agent: "codex", root: path.join(projectRoot, ".agents", "skills") });
+      if (agents.includes("claude")) targets.push({ agent: "claude", root: path.join(projectRoot, ".claude", "skills") });
+      if (agents.includes("pi")) targets.push({ agent: "pi", root: path.join(projectRoot, ".pi", "agent", "skills") });
     } else {
       if (agents.includes("codex")) targets.push({ agent: "codex", root: path.join(os.homedir(), ".agents", "skills") });
       if (agents.includes("claude")) targets.push({ agent: "claude", root: path.join(os.homedir(), ".claude", "skills") });
@@ -144,13 +153,29 @@ function installAgentIntegrations(options = {}) {
   return { ok: true, scope, agents, installMcp, installSkills, files, commands, warnings };
 }
 
+function hasPaperloomConfig(file) {
+  return fs.existsSync(file) && fs.readFileSync(file, "utf8").includes("paperloom");
+}
+
 function agentIntegrationStatus(options = {}) {
   const projectRoot = path.resolve(options.projectRoot || process.cwd());
+  const projectSkillRoots = [
+    path.join(projectRoot, ".agents", "skills"),
+    path.join(projectRoot, ".claude", "skills"),
+    path.join(projectRoot, ".pi", "agent", "skills"),
+  ];
+  const globalSkillRoots = [
+    path.join(os.homedir(), ".agents", "skills"),
+    path.join(os.homedir(), ".claude", "skills"),
+    path.join(os.homedir(), ".pi", "agent", "skills"),
+  ];
   return {
     projectRoot,
-    projectMcp: fs.existsSync(path.join(projectRoot, "mcp.json")),
-    projectSkills: SKILLS.filter((skill) => fs.existsSync(path.join(projectRoot, "skills", skill))),
-    globalSkills: SKILLS.filter((skill) => fs.existsSync(path.join(os.homedir(), ".agents", "skills", skill))),
+    projectMcp: hasPaperloomConfig(path.join(projectRoot, ".codex", "config.toml"))
+      || hasPaperloomConfig(path.join(projectRoot, ".mcp.json"))
+      || hasPaperloomConfig(path.join(projectRoot, ".pi", "mcp.json")),
+    projectSkills: SKILLS.filter((skill) => projectSkillRoots.some((root) => fs.existsSync(path.join(root, skill)))),
+    globalSkills: SKILLS.filter((skill) => globalSkillRoots.some((root) => fs.existsSync(path.join(root, skill)))),
   };
 }
 

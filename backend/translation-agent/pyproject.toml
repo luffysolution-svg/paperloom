@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "retainpdf-translation-agent"
-version = "0.4.2"
+version = "0.4.3"
 description = "RetainPDF translation agent: translates a page of classified blocks with an LLM, checks every block, and revises blocks on request from the layout agent"
 requires-python = ">=3.11,<3.12"
 # 不依赖第三方库：调模型用标准库 urllib，这样任何阶段都能放心装它。

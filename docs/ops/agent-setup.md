@@ -1,46 +1,42 @@
-# PaperLoom Agent、MCP、Skills 和 Obsidian 配置
+# PaperLoom Agent、MCP 和 Skills 使用指南
 
-本文面向 Windows 本地使用，Linux 和 macOS 只需要替换可执行文件路径与 shell 写法。
+PaperLoom 将 PDF 处理和科研阅读能力提供给外部 Agent。Agent 宿主通过本地 stdio MCP 与 PaperLoom 连接，OCR、翻译、任务调度、Zotero 和 Obsidian 文件写入由 PaperLoom 负责。
 
-PaperLoom 的连接结构是 Agent 宿主启动本地 stdio MCP，MCP 再连接 PaperLoom 后端。OCR、翻译、任务状态、Zotero 和 Obsidian 写回继续由 PaperLoom 后端负责。
+本文使用 `<paperloom-project>` 表示 PaperLoom 项目目录，使用 `<paperloom-cli-path>` 表示 `paperloom` 可执行文件的路径。不要把真实 API key、论文正文或个人文件路径写入仓库配置。
 
-## 一次性准备
+## 1. 准备 CLI
 
-在项目根目录执行：
+在项目目录构建 CLI：
 
 ```powershell
 cd <paperloom-project>
 cargo build --release --bin paperloom
 ```
 
-如果使用当前源码调试版本，可以使用：
+构建产物通常位于：
 
 ```text
-<paperloom-project>\target\debug\paperloom.exe
+<paperloom-project>/target/release/paperloom.exe
 ```
 
-发布版本或本地 release 构建优先使用 `target/release/paperloom.exe`。PaperLoom 后端需要先由桌面端启动，或者由开发栈启动。
+也可以将 CLI 加入当前终端的 `PATH`：
 
-检查 CLI：
+```powershell
+$env:Path = "<paperloom-project>\target\release;$env:Path"
+```
+
+PaperLoom 后端需要先由桌面端或部署环境启动。确认 CLI 和后端状态：
 
 ```powershell
 paperloom agent doctor --json
 paperloom agent capabilities --json
 ```
 
-当前机器没有把 CLI 放入 PATH 时，可以临时加入：
+`doctor` 只报告连接和配置状态，不会上传文件、调用模型或显示密钥。
 
-```powershell
-$env:Path = "<paperloom-project>\target\release;$env:Path"
-```
+## 2. 注册 MCP
 
-项目根目录的 [tools/paperloom-mcp.cmd](../../tools/paperloom-mcp.cmd) 会自动尝试 release、交叉编译 release、debug 和 PATH 中的 `paperloom.exe`。
-
-## Codex
-
-推荐用 Codex CLI 写入用户级 MCP 配置。这个配置会被 Codex CLI 和 Codex IDE 共用。官方支持 `codex mcp add` 和 `codex mcp list` 管理服务器。[Codex MCP 文档](https://developers.openai.com/learn/docs-mcp)
-
-使用已安装的 CLI：
+### Codex
 
 ```powershell
 codex mcp add paperloom -- paperloom agent mcp
@@ -48,108 +44,180 @@ codex mcp list
 codex mcp get paperloom
 ```
 
-使用本项目 debug 二进制：
+Codex 默认把这条命令写入用户配置。如果只想对当前项目启用，可以把项目 `.codex` 目录作为 `CODEX_HOME`：
+
+```powershell
+$previousCodexHome = $env:CODEX_HOME
+try {
+  $env:CODEX_HOME = (Join-Path (Get-Location) ".codex")
+  codex mcp add paperloom -- paperloom agent mcp
+} finally {
+  if ($null -eq $previousCodexHome) { Remove-Item Env:CODEX_HOME } else { $env:CODEX_HOME = $previousCodexHome }
+}
+```
+
+项目配置需要在 Codex 信任该项目后生效。
+
+使用绝对路径：
 
 ```powershell
 codex mcp add paperloom -- "<paperloom-cli-path>" agent mcp
 ```
 
-也可以在 `%USERPROFILE%\.codex\config.toml` 中手动加入：
-
-```toml
-[mcp_servers.paperloom]
-command = "<paperloom-cli-path>"
-args = ["agent", "mcp"]
-cwd = "<paperloom-project>"
-startup_timeout_sec = 15.0
-tool_timeout_sec = 600.0
-```
-
-安装器会按用户选择生成项目级 MCP 配置。用户级配置使用绝对路径时，更适合当前机器的 PATH 和构建状态。
-
-## Claude Code
-
-项目级配置由安装器写入项目 `.mcp.json`。安装完成后打开项目并执行：
-
-```powershell
-cd <paperloom-project>
-claude mcp list
-claude mcp get paperloom
-```
-
-在 Claude Code 会话中执行 `/mcp`，确认 `paperloom` 为 connected。Claude Code 的 stdio 配置命令格式如下，`--` 后面的内容原样传给 MCP 进程。[Claude Code MCP 文档](https://code.claude.com/docs/en/mcp)
-
-```powershell
-claude mcp add --scope local --transport stdio paperloom -- `
-  "<paperloom-cli-path>" agent mcp
-```
-
-项目级共享配置使用：
+### Claude Code
 
 ```powershell
 claude mcp add --scope project --transport stdio paperloom -- paperloom agent mcp
+claude mcp list
 ```
 
-Claude Code 的 `.claude/skills/` 包装文件会指向 `skills/` 中的单一真源。三个技能分别负责 PDF 操作、证据链阅读和文献检索。
-
-## Pi
-
-项目级配置由安装器写入 `.pi/mcp.json`，使用 `tools/paperloom-mcp.cmd` 自动定位 CLI：
+全局配置使用 `--scope user`：
 
 ```powershell
+claude mcp add --scope user --transport stdio paperloom -- paperloom agent mcp
+```
+
+在 Claude Code 会话中执行 `/mcp`，确认服务器已连接。
+
+### Pi
+
+```powershell
+pi mcp add paperloom --local --cwd <paperloom-project> -- paperloom agent mcp
 pi mcp list --json
 ```
 
-手动重新配置项目级 MCP：
+全局配置去掉 `--local --cwd <paperloom-project>`：
 
 ```powershell
-pi mcp add paperloom --local --cwd <paperloom-project> -- cmd.exe /d /c tools\\paperloom-mcp.cmd
-pi mcp list --json
+pi mcp add paperloom -- paperloom agent mcp
 ```
 
-Pi 还支持通过 `--skill` 临时加载某个技能：
+### 其他宿主
+
+在 OpenCode、ZCode、DeepSeek Harness 或 WorkBuddy 的 MCP 设置中添加一个 stdio server：
+
+```text
+name: paperloom
+command: paperloom
+args: agent mcp
+```
+
+宿主只接受绝对路径时，使用 `where paperloom` 或 `which paperloom` 找到 CLI。详细宿主配置见 [agent-hosts.md](./agent-hosts.md)。
+
+直接验证握手：
 
 ```powershell
-pi --skill skills/paperloom-paper-reader/SKILL.md
+'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' |
+  & <paperloom-cli-path> agent mcp
 ```
 
-## Obsidian
+## 3. Skills
 
-当前 Obsidian 接入形态是 Vault 写入、受管区块更新和 `obsidian://` 回跳。PaperLoom 没有单独的 Obsidian 聊天插件，Agent 对话在 Codex、Claude Code 或 Pi 中进行。
+将以下目录作为只读指令加载：
 
-先启动 Obsidian 并打开目标 Vault，然后检查发现结果：
+- `skills/paperloom-pdf-ops/SKILL.md` 负责导入、OCR、翻译、任务恢复、导出以及 Zotero/Obsidian 操作。
+- `skills/paperloom-paper-reader/SKILL.md` 负责按页码、区域和资源链接组织证据链阅读。
+- `skills/paperloom-paper-search/SKILL.md` 负责本地文献、Zotero 和外部学术来源检索与去重。
+
+Skills 只描述工作流和输出约束，不保存密钥、论文正文或对话历史。CLI 和 MCP 共用 PaperLoom 后端的任务与资源。
+
+## 4. MCP 能力
+
+只读能力包括：
+
+- 文献列表、元数据和全文搜索
+- Reader 目录、页面、区域、Markdown 和报告
+- 任务状态、事件、翻译质量和证据定位
+- OpenAlex、Crossref、Semantic Scholar 和 Europe PMC 的学术检索
+
+可执行能力包括：
+
+- 上传 PDF、提交 OCR 和翻译
+- 取消、续跑和阶段重试
+- 单篇或批量工作流
+- 导出 Markdown、写入 Obsidian 和写回 Zotero
+
+MCP 工具返回统一结构：
+
+```json
+{
+  "ok": true,
+  "data": {},
+  "warnings": [],
+  "references": []
+}
+```
+
+重要结论的 `references` 应包含 `source_kind`、`document_id` 或 `job_id`、页码、区域 ID、引用片段和资源 URI。支持等级使用 `direct`、`inferred`、`hypothesis`、`unsupported` 或 `conflicting`。
+
+## 5. 单篇 PDF 工作流
+
+```text
+检查文献和已有任务
+→ 必要时上传 PDF
+→ 提交 OCR
+→ 检查 Reader Markdown、页面和区域
+→ 提交翻译
+→ 查询任务和质量报告
+→ 导出 Markdown 或生成带证据的阅读笔记
+```
+
+CLI 示例：
 
 ```powershell
-paperloom agent obsidian status --json
+paperloom agent document import <paper.pdf> --json
+paperloom agent document list --json
+paperloom agent ocr submit <document-id> --json
+paperloom agent translate submit <document-id> --json
+paperloom agent job status <job-id> --json
+paperloom agent job events <job-id> --json
+paperloom agent reader outline <job-id> --json
+paperloom agent reader page <job-id> 3 --json
+paperloom agent reader region <job-id> <item-id> --json
 ```
 
-如果返回空列表，确认 `%APPDATA%\obsidian\obsidian.json` 存在。也可以在启动 PaperLoom 后端前设置：
+提交任务前先检查是否已有可复用的 OCR 或翻译结果。不要仅凭提交成功判断处理完成，应以终态和报告为准。
+
+## 6. 批量工作流
+
+批量工作流文件必须符合 `agent-batch-workflow.v1`。最小示例：
+
+```yaml
+schema_version: agent-batch-workflow.v1
+name: translate-papers
+inputs:
+  sources:
+    - kind: document_id
+      value: <document-id>
+steps:
+  - id: translate
+    action: translate
+    options: {}
+execution:
+  dry_run: true
+  max_items: 20
+  concurrency: 1
+  failure_policy: continue
+```
+
+先校验和预览：
 
 ```powershell
-$env:PAPERLOOM_OBSIDIAN_CONFIG = "$env:APPDATA\obsidian\obsidian.json"
+paperloom agent workflow validate <workflow.yml> --json
+paperloom agent workflow run <workflow.yml> --dry-run --json
 ```
 
-导出前先让 Agent 查询 `obsidian_status` 获取 `vault_id`，再使用 `export_obsidian`。该工具要求 `confirmed=true`。CLI 等价命令如下：
+确认输入数量、处理阶段、预计写入和冲突策略后再执行：
 
 ```powershell
-paperloom agent obsidian export `
-  --vault-id <vault_id> `
-  --folder Literature/PaperLoom `
-  --document-ids <document_id> `
-  --on-conflict ask `
-  --confirm `
-  --json
+paperloom agent workflow run <workflow.yml> --confirm --json
 ```
 
-重复导出只更新 PaperLoom 受管区块，保留手写内容。冲突策略支持 `ask`、`rename`、`overwrite` 和 `skip`。
+每次运行都会在 PaperLoom 数据目录的 `agent-runs/<run-id>/` 保存 manifest、事件和逐项结果。单项失败不会隐藏其他结果，`failure_policy: stop` 可在首个失败时停止。
 
-## Zotero
+## 7. Zotero
 
-Zotero 8 及以上需要在设置中允许本机其他应用通信：
-
-**设置 → 高级 → 允许此电脑上的其他应用与 Zotero 通信**
-
-保持 Zotero 运行后检查：
+启动 Zotero 后检查连接：
 
 ```powershell
 paperloom agent zotero status --json
@@ -157,115 +225,88 @@ paperloom agent zotero collections users/0 --json
 paperloom agent zotero items users/0 --limit 50 --json
 ```
 
-Agent 批量流程应按下面顺序执行：
-
-```text
-读取 collection
-→ 列出可用 PDF 附件
-→ 确认导入数量
-→ import_zotero_attachments confirmed=true
-→ 对返回的 document_id 执行 run_batch_workflow dry_run=true
-→ 用户确认后执行 confirmed=true 的 OCR/翻译
-→ 轮询 get_run_status 和 get_job_status
-→ 用户确认后 writeback_zotero confirmed=true
-```
-
-Zotero 导入 CLI 示例：
+导入附件需要显式确认：
 
 ```powershell
 paperloom agent zotero import users/0 `
   --attachments ITEM_KEY:ATTACHMENT_KEY `
-  --confirm `
-  --json
+  --confirm --json
 ```
 
-Zotero 本地 API 不可用时可设置 `PAPERLOOM_ZOTERO_DATA_DIR` 读取本地数据目录。数据目录模式适合浏览和导入，译文写回需要 Zotero 本地 API。
-
-## 让 Agent 自动完成配置
-
-把下面的提示词发送给 Codex、Claude Code 或 Pi，并在 PaperLoom 项目根目录执行：
-
-```text
-你正在配置 PaperLoom Agent 工作流。
-
-请先读取：
-- docs/ops/agent-setup.md
-- docs/ops/agent-hosts.md
-- skills/README.md
-- skills/paperloom-pdf-ops/SKILL.md
-- skills/paperloom-paper-reader/SKILL.md
-- skills/paperloom-paper-search/SKILL.md
-
-然后按以下顺序操作：
-1. 执行 paperloom agent doctor --json。
-2. 执行 paperloom agent capabilities --json。
-3. 检查 paperloom MCP 是否已连接，并列出 MCP tools。
-4. 调用 obsidian_status 和 zotero_status，只读检查外部库连接。
-5. 不提交 OCR、翻译、Zotero 导入、Obsidian 写入或 Zotero 写回，先输出检查结果。
-6. 如果发现 CLI 不在 PATH，使用 target/debug/paperloom.exe 或 target/release/paperloom.exe，并说明采用的路径。
-7. 任何写操作都先给出 dry-run 计划，等待我明确确认后再执行。
-```
-
-## 让 Agent 执行科研任务
-
-单篇精读：
-
-```text
-请处理当前选中的论文。先检查 OCR 和翻译状态，不要重复创建任务。
-读取目录和相关页面，解释方法、公式、表格和图表。
-所有重要结论都附 page、item_id、quote 和 support_level。
-```
-
-文献检索：
-
-```text
-检索 attention mechanism in scientific document understanding。
-调用 search_scholarly，使用 OpenAlex、Crossref、Semantic Scholar 和 Europe PMC。
-按 DOI、标题和第一作者年份去重，标记没有全文的记录。
-```
-
-批量翻译：
-
-```text
-处理 Zotero collection “AI材料设计”中的 PDF。
-先列出附件和数量，只做 dry-run，不提交任务。
-等我确认后再导入、OCR、翻译，并逐项跟踪失败任务。
-```
-
-## 验收命令
+典型批量流程是先列出 collection 中的 PDF，再导入并对返回的 `document_id` 执行批量 OCR/翻译。完成后确认目标任务，再写回译文：
 
 ```powershell
-paperloom agent doctor --json
-paperloom agent capabilities --json
-codex mcp list
-claude mcp list
-pi mcp list --json
+paperloom agent zotero writeback `
+  --document-ids <document-id> `
+  --confirm --json
 ```
 
-直接验证 MCP 握手：
+Zotero 写回会修改外部文献库，Agent 必须说明目标条目和文件名，并在执行前等待明确确认。
+
+## 8. Obsidian
+
+启动 Obsidian 并打开目标 Vault，然后查看可用 Vault：
 
 ```powershell
-@'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'@ |
-  & .\target\debug\paperloom.exe agent mcp
+paperloom agent obsidian status --json
 ```
 
-批处理运行记录位于 PaperLoom 数据目录的 `agent-runs/<run-id>/` 下。API Key 只从环境或 PaperLoom 凭据配置读取，不放入 MCP JSON 和技能文件。
-
-## 设置页「MCP 与 Skills」的后续设计
-
-设置页增加这个分栏是合适的。它可以把当前手动配置收成一个可预览的安装流程：
-
-- 安装范围选择全局或当前项目
-- Agent 选择 Codex、Claude Code、Pi，也可以选择全部
-- MCP 和 Skills 分开勾选
-- 执行前展示将要修改的文件、命令和目标目录
-- 全局安装和外部写入始终需要明确确认
-- 安装后立即运行 `doctor`、MCP initialize 和 tools/list 验收
-
-MCP 运行时优先使用桌面包内置的 PaperLoom CLI 和 stdio bridge。`npx` 适合首次引导或开发者手动安装，适合的形式是固定版本的安装器包，例如：
+导出示例：
 
 ```powershell
-npx --yes --package @paperloom/agent@0.4.2 paperloom-agent install --scope project --agents codex,claude,pi
+paperloom agent obsidian export `
+  --vault-id <vault-id> `
+  --folder Literature/PaperLoom `
+  --document-ids <document-id> `
+  --on-conflict ask `
+  --confirm --json
 ```
 
-正式桌面版不应依赖未固定版本的 `npx` 启动 MCP。这样可以避免启动时联网、版本漂移和额外的包供应链依赖。后续如果发布 npm 安装器，建议同时提供固定版本、`--dry-run`、`--scope global|project`、`--agents` 和 `--skills` 参数，设置页调用同一个安装器逻辑。
+冲突策略支持 `ask`、`rename`、`overwrite` 和 `skip`。导出只更新 PaperLoom 受管区块，保留用户手写内容。覆盖或批量写入前，Agent 应先展示目标 Vault、目录和冲突策略。
+
+## 9. 科研阅读和检索提示词
+
+### 配置检查
+
+```text
+请读取 docs/ops/agent-setup.md、docs/ops/agent-hosts.md 和三个 PaperLoom Skill。
+先执行 paperloom agent doctor --json 和 paperloom agent capabilities --json。
+列出 MCP tools，并只读检查 Zotero 和 Obsidian 状态。
+不要提交 OCR、翻译、导入或写回任务。发现写操作时先给出 dry-run 计划并等待明确确认。
+```
+
+### 单篇精读
+
+```text
+请处理指定论文。先检查 OCR、Markdown 和翻译状态，不要重复创建任务。
+按问题读取目录、页面和区域，解释方法、公式、表格和图表。
+每个重要结论附 document_id、job_id、page、item_id、quote 和 support_level。
+分别标记作者原文、Agent 解读和待验证假设。
+```
+
+### 学术检索和综述
+
+```text
+检索 <research question>。
+先搜索 PaperLoom 和 Zotero，再调用 search_scholarly 查询 OpenAlex、Crossref、Semantic Scholar 和 Europe PMC。
+按 DOI、标题、第一作者和年份去重，记录检索来源、时间、结果数量和失败来源。
+区分只有元数据的记录与实际读取过全文的文献，再生成证据矩阵和综述提纲。
+```
+
+### 批量翻译
+
+```text
+处理 Zotero collection <collection-name> 中的 PDF。
+先列出附件、文献数量和已有任务，只执行 dry-run，不提交任务。
+等我确认后再导入、OCR、翻译，逐项跟踪 job_id、失败原因和重试结果。
+完成后展示 Zotero 写回和 Obsidian 导出的目标，再等待确认。
+```
+
+## 10. 常见问题
+
+- CLI 找不到：使用 `<paperloom-cli-path>` 的绝对路径，或把构建目录加入 `PATH`。
+- MCP 无法握手：先直接运行 `paperloom agent mcp`，确认 stdout 只包含 JSON-RPC 响应。
+- 后端未连接：启动 PaperLoom 后端后重新执行 `doctor`，不要在 MCP 配置里写入 API key。
+- Zotero 没有可用附件：确认 Zotero 正在运行、collection 和 attachment key 正确。
+- Obsidian 导出冲突：改用 `ask` 查看冲突，或在明确确认后选择 `rename`、`overwrite` 或 `skip`。
+- 学术检索部分来源失败：查看返回的 `warnings`。成功来源仍可用于去重和建立阅读清单。

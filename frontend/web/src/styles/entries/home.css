@@ -54,6 +54,7 @@
 @import "../../features/backup/ui/BackupPanel.css";
 @import "../../features/notify/ui/NotifySettingsPanel.css";
 @import "../../features/settings/ui/CommandLinePanel.css";
+@import "../../features/settings/ui/AgentIntegrationPanel.css";
 @import "../pages/home/translation-workflow.utilities.css";
 @import "../pages/home/collections.utilities.css";
 /* 原 status-detail-translation.utilities.css 按组件拆分（顺序与拆分前一致）。 */

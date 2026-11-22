@@ -23,7 +23,7 @@ paperloom agent document search "query" --json
 paperloom agent ocr submit <document-id> --json
 paperloom agent translate submit <document-id> --json
 paperloom agent job status <job-id> --json
-paperloom agent job events <job-id> --events jsonl
+paperloom agent job events <job-id> --json
 paperloom agent workflow run workflow.yml --dry-run --json
 paperloom agent zotero items users/0 --limit 50 --json
 paperloom agent zotero import users/0 --attachments ITEM:ATTACHMENT --confirm --json
@@ -34,7 +34,7 @@ paperloom agent zotero writeback --document-ids <document-id> --confirm --json
 
 ## Safety and output rules
 
-- Use `--json` for machine-readable output. Progress belongs on stderr or `--events jsonl`.
+- Use `--json` for machine-readable output. Progress and diagnostics belong on stderr; job events are returned by `paperloom agent job events`.
 - Keep source PDFs immutable. PaperLoom artifacts are referenced by job ID and content hash.
 - Do not claim that OCR or translation is complete until the job status and report confirm it.
 - When writing to a vault or Zotero, report the exact target and conflict decision.
