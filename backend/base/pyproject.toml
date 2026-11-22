@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "retainpdf-base"
-version = "0.4.3"
+version = "0.4.4"
 description = "RetainPDF worker foundation shared by the pipeline and translation: stage events, stdout labels, JSON IO, paths, local secrets"
 requires-python = ">=3.11,<3.12"
 dependencies = []

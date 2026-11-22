@@ -17,7 +17,7 @@ PROVIDERS = ("openalex", "crossref", "semantic_scholar", "europe_pmc")
 def _request_json(url: str, *, headers: dict[str, str] | None = None) -> Any:
     request = urllib.request.Request(
         url,
-        headers={"Accept": "application/json", "User-Agent": "PaperLoom/0.4.3", **(headers or {})},
+        headers={"Accept": "application/json", "User-Agent": "PaperLoom/0.4.4", **(headers or {})},
     )
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     with opener.open(request, timeout=30) as response:
@@ -74,7 +74,7 @@ def _openalex(query: str, limit: int) -> list[dict[str, Any]]:
 def _crossref(query: str, limit: int) -> list[dict[str, Any]]:
     params = {"query.bibliographic": query, "rows": str(limit), "select": "DOI,title,author,published,container-title,URL"}
     email = os.environ.get("CROSSREF_EMAIL")
-    headers = {"User-Agent": f"PaperLoom/0.4.3 (mailto:{email})"} if email else None
+    headers = {"User-Agent": f"PaperLoom/0.4.4 (mailto:{email})"} if email else None
     data = _request_json("https://api.crossref.org/works?" + urllib.parse.urlencode(params), headers=headers)
     records: list[dict[str, Any]] = []
     for item in (data.get("message") or {}).get("items", []):
