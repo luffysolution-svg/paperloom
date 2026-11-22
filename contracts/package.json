@@ -66,6 +66,9 @@
       "import": "./dist/translation-revisions.js"
     },
     "./create-job.v1.schema.json": "./create-job.v1.schema.json",
+    "./agent-batch-workflow.v1.schema.json": "./agent-batch-workflow.v1.schema.json",
+    "./agent-envelope.v1.schema.json": "./agent-envelope.v1.schema.json",
+    "./agent-run-manifest.v1.schema.json": "./agent-run-manifest.v1.schema.json",
     "./glossaries.v1.schema.json": "./glossaries.v1.schema.json",
     "./job-actions.v1.schema.json": "./job-actions.v1.schema.json",
     "./job-data.v1.schema.json": "./job-data.v1.schema.json",

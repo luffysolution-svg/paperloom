@@ -41,10 +41,6 @@ export type ReaderContextValue = {
   regionHover?: RegionHoverStore;
   /** 滚到这一块所在的页并闪一下红框（和 AI 引用回跳同一条路）。 */
   jumpToBlock?: (itemId: string) => void;
-  /** 从 PDF 参考文献预览跳转，并保留跳转前的阅读位置。 */
-  jumpToReference?: (itemId: string) => void;
-  referenceReturnAvailable?: boolean;
-  restoreReferencePosition?: () => void;
   /** 改过的块（阅读页块编号 → 改过几次）：译文栏画小标记，悬停写「改过 N 次」。 */
   revisedBlocks?: ReadonlyMap<string, number>;
   // 和 regions 走同一条路下去，因为它们用的是同一套 bbox 投影。

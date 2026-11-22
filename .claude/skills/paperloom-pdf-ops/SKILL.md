@@ -1,0 +1,1 @@
+Use the canonical PaperLoom PDF operations skill at `skills/paperloom-pdf-ops/SKILL.md`. Follow it for import, OCR, translation, task recovery, exports, Zotero, and Obsidian. Do not copy its workflow into host-specific instructions.

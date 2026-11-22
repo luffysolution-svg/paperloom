@@ -12,7 +12,7 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 
-use crate::cmd::{backup, config, doctor, setup, status, sync};
+use crate::cmd::{agent, backup, config, doctor, setup, status, sync};
 use crate::context::Ctx;
 
 #[derive(Parser)]
@@ -51,6 +51,11 @@ enum Command {
         #[command(subcommand)]
         action: sync::SyncCommand,
     },
+    /// 面向 Codex、Claude Code、Pi 等 Agent 的统一入口
+    Agent {
+        #[command(subcommand)]
+        action: agent::AgentCommand,
+    },
 }
 
 fn main() -> ExitCode {
@@ -62,12 +67,22 @@ fn main() -> ExitCode {
         Command::Doctor => doctor::run(&ctx),
         Command::Backup { action } => backup::run(&ctx, action),
         Command::Sync { action } => sync::run(&ctx, action),
+        Command::Agent { action } => agent::run(&ctx, action),
     });
     match outcome {
         Ok(code) => code,
         Err(error) => {
             if cli.json {
-                eprintln!("{}", serde_json::json!({ "ok": false, "error": format!("{error:#}") }));
+                eprintln!(
+                    "{}",
+                    serde_json::json!({
+                        "ok": false,
+                        "data": null,
+                        "warnings": [],
+                        "references": [],
+                        "error": {"code": "cli_error", "message": format!("{error:#}")}
+                    })
+                );
             } else {
                 eprintln!("错误:{error:#}");
             }

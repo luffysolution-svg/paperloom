@@ -1,5 +1,5 @@
 import { type ReaderPaneId } from "./reader-dom-contract.js";
-import { type ReaderRegion, type ReaderRegionHighlight } from "../shared/data/reader-regions.js";
+import { type ReaderRegionHighlight } from "../shared/data/reader-regions.js";
 import type { ReaderLiveTranslationLayoutPage as LiveTranslationLayoutPage } from "../contracts/live-translation.js";
 import type { LiveTranslationPageState } from "../shared/data/live-translation-state.js";
 export declare const DEFAULT_ASPECT = 1.414;
@@ -22,19 +22,17 @@ type PdfPageSlotProps = {
     sentinelRef?: (el: HTMLDivElement | null) => void;
     regionHighlight?: ReaderRegionHighlight | null;
     regionTargets?: ReaderRegionHighlight[];
-    referenceRegions?: readonly ReaderRegion[];
     /**
      * 对照阅读时左右两栏共享的悬停块（itemId）。给了 onHoverRegion 就由外面管，
      * 鼠标在哪栏，两栏都画同一块的框；没给（单栏）就用本页自己的状态。
      */
     hoveredRegionId?: string | null;
     onHoverRegion?: (itemId: string | null) => void;
-    onJumpToRegion?: (itemId: string) => void;
     liveTranslationLayout?: LiveTranslationLayoutPage;
     liveTranslationPage?: LiveTranslationPageState;
     showLiveTranslation?: boolean;
 };
-declare function PdfPageSlotInner({ pageNumber, width, devicePixelRatio, pane, active, textLayer, syncedMinHeight, onMetrics, cachedAspect, onAspectChange, sentinelRef, regionHighlight, regionTargets, referenceRegions, hoveredRegionId, onHoverRegion, onJumpToRegion, liveTranslationLayout, liveTranslationPage, showLiveTranslation, }: PdfPageSlotProps): import("react").JSX.Element;
+declare function PdfPageSlotInner({ pageNumber, width, devicePixelRatio, pane, active, textLayer, syncedMinHeight, onMetrics, cachedAspect, onAspectChange, sentinelRef, regionHighlight, regionTargets, hoveredRegionId, onHoverRegion, liveTranslationLayout, liveTranslationPage, showLiveTranslation, }: PdfPageSlotProps): import("react").JSX.Element;
 export declare const PdfPageSlot: import("react").MemoExoticComponent<typeof PdfPageSlotInner>;
 export {};
 //# sourceMappingURL=PdfPageSlot.d.ts.map

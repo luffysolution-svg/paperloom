@@ -1,0 +1,24 @@
+schema_version: agent-batch-workflow.v1
+name: zotero-translate
+description: OCR and translate selected Zotero PDF attachments.
+inputs:
+  sources:
+    - kind: query
+      value: zotero:collection:TARGET_COLLECTION
+steps:
+  - id: import
+    action: import
+  - id: ocr
+    action: ocr
+    when: missing_ocr
+  - id: translate
+    action: translate
+execution:
+  dry_run: true
+  max_items: 50
+  concurrency: 2
+  failure_policy: continue
+writeback:
+  zotero: false
+  obsidian: false
+  conflict_policy: ask

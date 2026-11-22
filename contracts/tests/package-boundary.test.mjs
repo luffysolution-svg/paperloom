@@ -14,6 +14,9 @@ const generatedOcrProviders = readFileSync(resolve("src/ocr-providers.ts"), "utf
 const generatedGlossaries = readFileSync(resolve("src/glossaries.ts"), "utf8");
 const generatedReaderData = readFileSync(resolve("src/reader-data.ts"), "utf8");
 const RAW_SCHEMA_EXPORTS = [
+  "./agent-batch-workflow.v1.schema.json",
+  "./agent-envelope.v1.schema.json",
+  "./agent-run-manifest.v1.schema.json",
   "./create-job.v1.schema.json",
   "./glossaries.v1.schema.json",
   "./job-actions.v1.schema.json",

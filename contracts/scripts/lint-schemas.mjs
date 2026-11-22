@@ -6,6 +6,9 @@ import { fileURLToPath } from "node:url";
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const EXPECTED_DIALECT = "https://json-schema.org/draft/2020-12/schema";
 const EXPECTED_SCHEMAS = [
+  "agent-batch-workflow.v1.schema.json",
+  "agent-envelope.v1.schema.json",
+  "agent-run-manifest.v1.schema.json",
   "create-job.v1.schema.json",
   "glossaries.v1.schema.json",
   "job-actions.v1.schema.json",

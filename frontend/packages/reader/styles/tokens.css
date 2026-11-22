@@ -46,8 +46,6 @@
   /* 批注记号的弹窗：position: fixed，落在根栈里，所以得进这份契约而不是就地写死 */
   --z-popover: 60;
   --z-region-popover: 80;
-  /* 引用悬停预览卡：portal 到 body，必须压住其余所有浮层 */
-  --z-citation-hover: 90;
   /* 告知层：致命错误 / 产物失败 / 启动遮罩，压住以上全部。理由见本段开头。 */
   --z-dialog: 95;
   --reader-topbar-offset: 48px;

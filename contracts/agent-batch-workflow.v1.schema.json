@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "retainpdf/contracts/agent-batch-workflow/v1",
+  "title": "PaperLoom Agent batch workflow",
+  "description": "Declarative workflow consumed by paperloom agent workflow run.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "name", "inputs", "steps", "execution"],
+  "properties": {
+    "schema_version": { "const": "agent-batch-workflow.v1" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[A-Za-z0-9][A-Za-z0-9._ -]*$" },
+    "description": { "type": "string" },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sources"],
+      "properties": {
+        "sources": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/source" } },
+        "collection": { "type": "string" },
+        "query": { "type": "string" }
+      }
+    },
+    "steps": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/step" } },
+    "execution": { "$ref": "#/$defs/execution" },
+    "writeback": { "$ref": "#/$defs/writeback" }
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "value"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["path", "document_id", "zotero_item", "query"] },
+        "value": { "type": "string", "minLength": 1 },
+        "label": { "type": "string" }
+      }
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "action"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$" },
+        "action": { "type": "string", "enum": ["import", "ocr", "translate", "export_markdown", "export_obsidian", "zotero_writeback", "search", "evidence_matrix"] },
+        "when": { "type": "string" },
+        "options": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dry_run", "max_items", "concurrency", "failure_policy"],
+      "properties": {
+        "dry_run": { "type": "boolean" },
+        "max_items": { "type": "integer", "minimum": 1, "maximum": 10000 },
+        "concurrency": { "type": "integer", "minimum": 1, "maximum": 32 },
+        "failure_policy": { "type": "string", "enum": ["continue", "stop"] },
+        "resume_run_id": { "type": "string" }
+      }
+    },
+    "writeback": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "zotero": { "type": "boolean" },
+        "obsidian": { "type": "boolean" },
+        "conflict_policy": { "type": "string", "enum": ["ask", "rename", "overwrite", "skip"] }
+      }
+    }
+  }
+}

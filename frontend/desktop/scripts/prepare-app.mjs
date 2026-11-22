@@ -772,6 +772,19 @@ if (!frontendOnly) {
     force: true,
   });
 
+  // The CLI's stdio MCP entry point is a dependency-free Python bridge. Keep
+  // it beside the packaged CLI so `paperloom agent mcp` works without a repo
+  // checkout or a separately installed Python package.
+  const agentMcpRoot = path.join(repoRoot, "backend", "agent-mcp");
+  if (!fs.existsSync(path.join(agentMcpRoot, "paperloom_mcp.py"))) {
+    throw new Error(`missing Agent MCP bridge at ${agentMcpRoot}`);
+  }
+  fs.cpSync(agentMcpRoot, path.join(outputBackendRoot, "agent-mcp"), {
+    recursive: true,
+    force: true,
+    filter: (sourcePath) => !sourcePath.includes("__pycache__") && !sourcePath.endsWith(".pyc"),
+  });
+
   // Keep the bundled layout aligned with main.js and RUST_API_SCRIPTS_DIR.
   const pipelineScriptsRoot = servicesPipelineRoot;
   if (!fs.existsSync(path.join(pipelineScriptsRoot, "pyproject.toml"))) {
@@ -959,6 +972,7 @@ if (!frontendOnly) {
     providerConfigBundled: fs.existsSync(
       path.join(outputBackendRoot, "config", "ocr_providers.json"),
     ),
+    agentMcpBundled: fs.existsSync(path.join(outputBackendRoot, "agent-mcp", "paperloom_mcp.py")),
     pythonBundled,
     bundledPythonExecutable: bundledPythonDiagnostics ? path.relative(outputBackendRoot, bundledPythonDiagnostics.pythonCommand) : null,
     bundledPythonHome: bundledPythonDiagnostics && bundledPythonDiagnostics.pythonHome

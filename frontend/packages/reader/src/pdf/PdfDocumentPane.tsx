@@ -107,7 +107,6 @@ type PdfDocumentPaneProps = {
   /** 对照阅读时两栏共享的悬停块（见 PdfPageSlot）。 */
   hoveredRegionId?: string | null;
   onHoverRegion?: (itemId: string | null) => void;
-  onJumpToRegion?: (itemId: string) => void;
   liveTranslation?: LiveTranslationState;
   /** Render live translation blocks in this pane, independent of source/translated identity. */
   showLiveTranslation?: boolean;
@@ -138,7 +137,6 @@ const PdfDocumentPaneInner = forwardRef<HTMLElement, PdfDocumentPaneProps>(
       readerMetadata = null,
       hoveredRegionId = null,
       onHoverRegion,
-      onJumpToRegion,
       liveTranslation,
       showLiveTranslation = pane === "source",
       liveTranslationPendingLabel = "",
@@ -481,10 +479,6 @@ const PdfDocumentPaneInner = forwardRef<HTMLElement, PdfDocumentPaneProps>(
       }
       return map;
     }, [pane, readerMetadata, regions]);
-    const referenceRegions = useMemo(
-      () => regions.filter((region) => region.subType === "reference_entry"),
-      [regions],
-    );
     // 悬停块在本栏落在哪几页（跨页的块会有两页）。
     const hoveredPages = useMemo(() => {
       const pages = new Set<number>();
@@ -596,11 +590,9 @@ const PdfDocumentPaneInner = forwardRef<HTMLElement, PdfDocumentPaneProps>(
                       sentinelRef={getSentinelRef(pageNumber)}
                       regionHighlight={regionHighlight?.box.page === pageNumber ? regionHighlight : null}
                       regionTargets={regionTargetsByPage.get(pageNumber)}
-                      referenceRegions={referenceRegions}
                       // 只交给含这一块的页：悬停一变，其它页的 props 不变，不重渲染。
                       hoveredRegionId={hoveredRegionId && hoveredPages.has(pageNumber) ? hoveredRegionId : null}
                       onHoverRegion={onHoverRegion}
-                      onJumpToRegion={onJumpToRegion}
                       liveTranslationLayout={liveTranslation?.layoutByPage.get(pageNumber - 1)}
                       liveTranslationPage={liveTranslation?.pagesByPage.get(pageNumber - 1)}
                       showLiveTranslation={showLiveTranslation}

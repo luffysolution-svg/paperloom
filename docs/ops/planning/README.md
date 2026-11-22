@@ -8,6 +8,7 @@
 - [Rust API 业务目录与边界统一迁移计划](./api-boundary-migration.md)
 - [前端迁移计划与审计](./frontend-migration/README.md)
 - [Zotero / Obsidian 联动 PRD](./zotero-obsidian-integration.md)
+- [Agent Skills、CLI、MCP 与科研工作流设计](./agent-integration-design.md)
 - [架构与 API 契约任务台账](./architecture_tasks.csv)
 - [2026-04-15 Rust API 去耦任务清单](./250415_task.csv)
 - [2026-04-16 Normalize/翻译持续试错台账](./260416.csv)

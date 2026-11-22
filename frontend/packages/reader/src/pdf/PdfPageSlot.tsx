@@ -22,20 +22,15 @@ import {
 } from "./reader-dom-contract.js";
 import {
   projectReaderRegion,
-  type ReaderRegion,
   type ReaderRegionHighlight,
 } from "../shared/data/reader-regions.js";
 import {
   hitTestReaderTextHoverTarget,
-  buildReaderReferenceIndex,
-  extractReaderAuthorYearCitations,
-  extractReaderCitationLabels,
   HOVER_TOOLS_HEIGHT,
   HOVER_TOOLS_WIDTH,
   hoverToolsOutside,
   projectReaderTextHoverTargets,
   READER_TEXT_HOVER_TOOLS_CLASS,
-  type ReaderReferenceIndex,
   ReaderTextHoverLayer,
 } from "./ReaderTextHoverLayer.js";
 import { LiveTranslationOverlay } from "./LiveTranslationOverlay.js";
@@ -44,50 +39,6 @@ import type { ReaderLiveTranslationLayoutPage as LiveTranslationLayoutPage } fro
 import type { LiveTranslationPageState } from "../shared/data/live-translation-state.js";
 
 export const DEFAULT_ASPECT = 1.414;
-
-type CitationHover = {
-  key: string;
-  label: string;
-  rect: { left: number; top: number; width: number; height: number };
-};
-
-function citationHoverForElement(
-  element: HTMLElement | null,
-  referenceIndex: ReaderReferenceIndex,
-  hostRect: DOMRect,
-): CitationHover | null {
-  const span = element?.closest<HTMLElement>(".react-pdf__Page__textContent span, .react-pdf__Page__textLayer span")
-    || element?.closest<HTMLElement>("span");
-  if (!span) return null;
-  const text = span.textContent?.trim() || "";
-  const numericLabels = extractReaderCitationLabels(text).filter((label) => referenceIndex.has(label));
-  const authorYear = extractReaderAuthorYearCitations(text).find((citation) => referenceIndex.has(citation.key));
-  let key = numericLabels[0] || authorYear?.key || "";
-  let label = numericLabels[0] || authorYear?.label || "";
-  const parentText = span.parentElement?.textContent || "";
-  const textIndex = parentText.indexOf(text);
-  const before = textIndex > 0 ? parentText[textIndex - 1] : "";
-  const after = textIndex >= 0 ? parentText[textIndex + text.length] || "" : "";
-  const looksLikeSuperscript = Boolean(span.closest("sup"))
-    || Number.parseFloat(getComputedStyle(span).fontSize || "0") < Number.parseFloat(getComputedStyle(span.parentElement || span).fontSize || "0") * 0.85;
-  if (!key && looksLikeSuperscript && /^\d{1,3}$/.test(text) && referenceIndex.has(text)
-    && !/[A-Za-z0-9_^]/.test(`${before}${after}`)) {
-    key = text;
-    label = text;
-  }
-  if (!key) return null;
-  const rect = span.getBoundingClientRect();
-  return {
-    key,
-    label,
-    rect: {
-      left: rect.left - hostRect.left,
-      top: rect.top - hostRect.top,
-      width: rect.width,
-      height: rect.height,
-    },
-  };
-}
 
 type PdfPageSlotProps = {
   pageNumber: number;
@@ -108,14 +59,12 @@ type PdfPageSlotProps = {
   sentinelRef?: (el: HTMLDivElement | null) => void;
   regionHighlight?: ReaderRegionHighlight | null;
   regionTargets?: ReaderRegionHighlight[];
-  referenceRegions?: readonly ReaderRegion[];
   /**
    * 对照阅读时左右两栏共享的悬停块（itemId）。给了 onHoverRegion 就由外面管，
    * 鼠标在哪栏，两栏都画同一块的框；没给（单栏）就用本页自己的状态。
    */
   hoveredRegionId?: string | null;
   onHoverRegion?: (itemId: string | null) => void;
-  onJumpToRegion?: (itemId: string) => void;
   liveTranslationLayout?: LiveTranslationLayoutPage;
   liveTranslationPage?: LiveTranslationPageState;
   showLiveTranslation?: boolean;
@@ -135,10 +84,8 @@ function PdfPageSlotInner({
   sentinelRef,
   regionHighlight = null,
   regionTargets = [],
-  referenceRegions = [],
   hoveredRegionId,
   onHoverRegion,
-  onJumpToRegion,
   liveTranslationLayout,
   liveTranslationPage,
   showLiveTranslation = pane === "source",
@@ -205,21 +152,16 @@ function PdfPageSlotInner({
     () => textHoverTargets.find((target) => target.itemId === hoveredTextId) || null,
     [hoveredTextId, textHoverTargets],
   );
-  const referenceIndex = useMemo(() => buildReaderReferenceIndex(referenceRegions), [referenceRegions]);
-  const [citationHover, setCitationHover] = useState<CitationHover | null>(null);
-
   const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     // 触屏没有悬停：手指滑动（滚动）不该换框，框由点按决定（见 handlePointerDown）。
     if (event.pointerType === "touch") return;
     // 拖选正文时隐藏轮廓，绝不接管 PDF textLayer 的事件。
     if (event.buttons !== 0) {
       setHoveredTextId(null);
-      setCitationHover(null);
       return;
     }
     // 鼠标在工具条（编号 / 复制）上：工具条可能在框外，按坐标命中会把框收掉，按钮就点不到了。
     if ((event.target as HTMLElement | null)?.closest?.(`.${READER_TEXT_HOVER_TOOLS_CLASS}`)) return;
-    if ((event.target as HTMLElement | null)?.closest?.(".reader-text-hover-reference-popover")) return;
     const hostRect = event.currentTarget.getBoundingClientRect();
     const x = event.clientX - hostRect.left;
     const y = event.clientY - hostRect.top;
@@ -237,14 +179,12 @@ function PdfPageSlotInner({
     ) return;
     const target = hitTestReaderTextHoverTarget(textHoverTargets, x, y);
     setHoveredTextId(target?.itemId || null);
-    setCitationHover(citationHoverForElement(event.target as HTMLElement | null, referenceIndex, hostRect));
   };
 
   // 触屏 / 笔：点一下块就出框和「复制」（没有悬停可用）。点工具条本身不算（按钮自己
   // 拦了 pointerdown）。
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.pointerType === "mouse") return;
-    setCitationHover(null);
     const hostRect = event.currentTarget.getBoundingClientRect();
     const target = hitTestReaderTextHoverTarget(
       textHoverTargets,
@@ -282,7 +222,6 @@ function PdfPageSlotInner({
       // 触屏抬手也会触发 pointerleave：那时框得留着，不然「复制」一闪就没了。
       onPointerLeave={(event) => {
         if (event.pointerType === "mouse") setHoveredTextId(null);
-        if (event.pointerType === "mouse") setCitationHover(null);
       }}
       style={{
         width,
@@ -361,11 +300,6 @@ function PdfPageSlotInner({
         target={active ? hoveredTextTarget : null}
         pane={pane === "translated" ? "translated" : "source"}
         revisedCount={hoveredTextTarget ? revisedBlocks?.get(hoveredTextTarget.itemId) || 0 : 0}
-        referenceRegions={referenceRegions}
-        citationLabel={citationHover?.key}
-        citationDisplayLabel={citationHover?.label}
-        citationRect={citationHover?.rect}
-        onReferenceClick={onJumpToRegion}
       />
     </div>
   );

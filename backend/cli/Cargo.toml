@@ -1,11 +1,16 @@
 [package]
 name = "retainpdf-cli"
-version = "0.1.0"
+version = "0.4.0"
 edition = "2021"
 description = "RetainPDF 命令行:配置、状态、环境检查、备份、同步"
+default-run = "retainpdf"
 
 [[bin]]
 name = "retainpdf"
+path = "src/main.rs"
+
+[[bin]]
+name = "paperloom"
 path = "src/main.rs"
 
 [dependencies]
@@ -15,8 +20,9 @@ retainpdf-data = { path = "../packages/retainpdf-data" }
 anyhow = "1"
 chrono = "0.4"
 clap = { version = "4.5", features = ["derive"] }
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "multipart", "rustls-tls"] }
 rpassword = "7"
 rusqlite = { version = "0.31", features = ["bundled"] }
 serde_json = "1"
+serde_yaml = "0.9"
 toml_edit = "0.22"

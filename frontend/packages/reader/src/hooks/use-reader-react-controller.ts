@@ -92,9 +92,6 @@ export type ReaderReactController = {
   goToPage: (page: number, pane?: "source" | "translated") => void;
   activeRegion: ReaderRegion | null;
   jumpToAnchor: (target: ReaderAnchorTarget, pane?: "source" | "translated") => void;
-  jumpToReference: (target: ReaderAnchorTarget, pane?: "source" | "translated") => void;
-  referenceReturnAvailable: boolean;
-  restoreReferencePosition: () => void;
   setModeKeepingPage: (next: ReaderMode) => void;
   showHud: boolean;
   download: ReaderSessionState["download"];
@@ -234,7 +231,6 @@ export function useReaderReactController(): ReaderReactController {
   }, [goToPageWithTotal, panes.hudNumPages, panes.primaryNumPages, panes.numPagesByPane]);
 
   const [activeRegion, setActiveRegion] = useState<ReaderRegion | null>(null);
-  const [referenceReturnTop, setReferenceReturnTop] = useState<number | null>(null);
   const clearRegionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activateRegion = useCallback((region: ReaderRegion | null) => {
     if (clearRegionTimerRef.current) clearTimeout(clearRegionTimerRef.current);
@@ -282,16 +278,6 @@ export function useReaderReactController(): ReaderReactController {
     activateRegion(region);
     goToPage(page, targetPane);
   }, [activateRegion, goToPage, panes.primaryPane, session.regions]);
-  const jumpToReference = useCallback((target: ReaderAnchorTarget, pane?: "source" | "translated") => {
-    const scrollTop = shellRef.current?.scrollTop;
-    if (scrollTop != null) setReferenceReturnTop(scrollTop);
-    jumpToAnchor(target, pane);
-  }, [jumpToAnchor, shellRef]);
-  const restoreReferencePosition = useCallback(() => {
-    if (referenceReturnTop == null) return;
-    shellRef.current?.scrollTo({ top: referenceReturnTop, behavior: "smooth" });
-    setReferenceReturnTop(null);
-  }, [referenceReturnTop, shellRef]);
   // 收藏 / 搜索回跳：URL ?page_idx= → 页码（0 基 → 1 基）；
   // 阅读中反向把 currentPage 防抖写回 URL，使分享/刷新回到当前位置。
   useReaderUrlAnchorSync({
@@ -318,10 +304,7 @@ export function useReaderReactController(): ReaderReactController {
   // 点块 / 拖选文字后的浮条（复制 / 问 AI）整个删了：复制交给悬停框，
   // 拖选文字照旧是浏览器原生选区（Ctrl+C）。
   useEffect(() => {
-    // Citation highlights carry page/pane coordinates; they are invalid as soon
-    // as the displayed Reader content changes.
     activateRegion(null);
-    setReferenceReturnTop(null);
   }, [readerContentKey, activateRegion]);
 
   const showHud = !session.boot.loading && !session.boot.failed;
@@ -349,9 +332,6 @@ export function useReaderReactController(): ReaderReactController {
     goToPage,
     activeRegion,
     jumpToAnchor,
-    jumpToReference,
-    referenceReturnAvailable: referenceReturnTop != null,
-    restoreReferencePosition,
     setModeKeepingPage,
     download: session.download,
     showHud,
@@ -359,7 +339,7 @@ export function useReaderReactController(): ReaderReactController {
     liveTranslation,
     liveTranslationAvailable,
     revisedBlocks,
-  }), [session, shellMemo, panes, sessionFilesMemo, rowHeights, goToPage, activeRegion, jumpToAnchor, jumpToReference, referenceReturnTop, restoreReferencePosition, setModeKeepingPage, showHud, userZoom, onZoomChange, viewStateKey, liveTranslation, liveTranslationAvailable, revisedBlocks]);
+  }), [session, shellMemo, panes, sessionFilesMemo, rowHeights, goToPage, activeRegion, jumpToAnchor, setModeKeepingPage, showHud, userZoom, onZoomChange, viewStateKey, liveTranslation, liveTranslationAvailable, revisedBlocks]);
 
   return useMemo(() => ({
     ...stablePart,

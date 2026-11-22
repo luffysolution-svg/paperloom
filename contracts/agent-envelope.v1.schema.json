@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "retainpdf/contracts/agent-envelope/v1",
+  "title": "PaperLoom Agent envelope",
+  "description": "Stable JSON envelope returned by the paperloom agent CLI and MCP adapter.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ok", "data", "warnings", "references"],
+  "properties": {
+    "ok": { "type": "boolean" },
+    "data": {},
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "references": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/reference" }
+    },
+    "error": { "$ref": "#/$defs/error" }
+  },
+  "$defs": {
+    "reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_kind"],
+      "properties": {
+        "source_kind": { "type": "string", "enum": ["document", "job", "region", "page", "external", "user"] },
+        "document_id": { "type": "string" },
+        "job_id": { "type": "string" },
+        "page": { "type": "integer", "minimum": 1 },
+        "item_id": { "type": "string" },
+        "quote": { "type": "string" },
+        "uri": { "type": "string" }
+      }
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" },
+        "details": {}
+      }
+    }
+  }
+}

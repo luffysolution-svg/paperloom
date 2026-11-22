@@ -1,7 +1,7 @@
 import { copyReaderText } from "../shared/utils/clipboard.js";
 export { copyReaderText } from "../shared/utils/clipboard.js";
 import { fetchProtected, resolveMarkdownAssetUrl } from "../external.js";
-import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import {
   projectReaderRegion,
   readerRegionCopyText,
@@ -16,15 +16,6 @@ export type ReaderTextHoverTarget = {
   highlight: ReaderRegionHighlight;
   rect: ReaderRegionRect;
 };
-
-export type ReaderReferencePreview = {
-  itemId: string;
-  label: string;
-  text: string;
-  page: number;
-};
-
-export type ReaderReferenceIndex = ReadonlyMap<string, readonly ReaderRegion[]>;
 
 const HOVER_KINDS = new Set(["text", "formula", "table", "figure"]);
 
@@ -260,138 +251,15 @@ export function hoverToolsOutside(rect: ReaderRegionRect, toolsWidth = HOVER_TOO
   return rect.height < HOVER_TOOLS_HEIGHT * 2 || rect.width < toolsWidth;
 }
 
-function referenceNumber(text: string): string | null {
-  return text.match(/\[(\d+)\]/)?.[1] || null;
-}
-
-function expandCitationToken(token: string): string[] {
-  const values: string[] = [];
-  for (const part of token.split(/[,;，、]/)) {
-    const match = part.trim().match(/^(\d+)\s*[-–]\s*(\d+)$/);
-    if (match) {
-      const start = Number(match[1]);
-      const end = Math.min(start + 31, Number(match[2]));
-      for (let value = start; value <= end; value += 1) values.push(`${value}`);
-    } else if (/^\d+$/.test(part.trim())) {
-      values.push(`${Number(part.trim())}`);
-    }
-  }
-  return values;
-}
-
-export function extractReaderCitationLabels(text: string): string[] {
-  const labels: string[] = [];
-  const add = (token: string) => {
-    for (const label of expandCitationToken(token)) {
-      if (!labels.includes(label)) labels.push(label);
-    }
-  };
-  for (const match of text.matchAll(/\[((?:\d+\s*[-–]\s*\d+|\d+)(?:\s*[,;，、]\s*(?:\d+\s*[-–]\s*\d+|\d+))*)\]/g)) add(match[1]);
-  for (const match of text.matchAll(/【((?:\d+\s*[-–]\s*\d+|\d+)(?:\s*[,;，、]\s*(?:\d+\s*[-–]\s*\d+|\d+))*)】/g)) add(match[1]);
-  for (const match of text.matchAll(/<sup[^>]*>\s*(\d+(?:\s*[-–]\s*\d+)?)\s*<\/sup>/gi)) add(match[1]);
-  return labels.slice(0, 32);
-}
-
-type ReaderAuthorYearCitation = { key: string; label: string };
-
-function normalizeAuthorYearKey(author: string, year: string): string {
-  return `${author}`.normalize("NFKC").toLocaleLowerCase().replace(/[\p{P}\p{S}\s]+/gu, "")
-    + `|${year.toLocaleLowerCase()}`;
-}
-
-export function extractReaderAuthorYearCitations(text: string): ReaderAuthorYearCitation[] {
-  const citations: ReaderAuthorYearCitation[] = [];
-  const seen = new Set<string>();
-  const add = (author: string, year: string) => {
-    const cleanAuthor = author.trim().replace(/\s+/g, " ");
-    const cleanYear = year.trim().toLocaleLowerCase();
-    if (!cleanAuthor || !/^\d{4}[a-z]?$/.test(cleanYear)) return;
-    const key = normalizeAuthorYearKey(cleanAuthor, cleanYear);
-    if (seen.has(key)) return;
-    seen.add(key);
-    citations.push({ key, label: `${cleanAuthor}, ${cleanYear}` });
-  };
-  for (const match of text.matchAll(/([\p{L}][\p{L}'’.-]{1,}(?:\s+et\s+al\.?|\s+(?:and|&)\s+[\p{L}][\p{L}'’.-]{1,})?)\s*[,，]?\s*[（(]?\s*((?:19|20)\d{2}[a-z]?)\s*[)）]?/giu)) {
-    add(match[1], match[2]);
-  }
-  return citations.slice(0, 16);
-}
-
-export function buildReaderReferenceIndex(references: readonly ReaderRegion[]): ReaderReferenceIndex {
-  const index = new Map<string, ReaderRegion[]>();
-  for (const region of references) {
-    const text = region.source.text || region.translated.text || "";
-    const label = referenceNumber(text);
-    const keys = [label, ...extractReaderAuthorYearCitations(text).map((citation) => citation.key)].filter(Boolean) as string[];
-    for (const key of keys) {
-      const list = index.get(key) || [];
-      list.push(region);
-      index.set(key, list);
-    }
-  }
-  return index;
-}
-
-export function findReaderReferencePreview(
-  target: ReaderTextHoverTarget,
-  references: readonly ReaderRegion[] = [],
-): ReaderReferencePreview | null {
-  return findReaderReferencePreviews(target, buildReaderReferenceIndex(references))[0] || null;
-}
-
-export function findReaderReferencePreviews(
-  target: ReaderTextHoverTarget,
-  referenceIndex: ReaderReferenceIndex,
-  citationLabel?: string | null,
-  citationDisplayLabel?: string | null,
-): ReaderReferencePreview[] {
-  if (readerRegionKindForRegion(target.highlight.region) !== "text"
-    || target.highlight.region.subType === "reference_entry") return [];
-  const source = target.highlight.region.source.text || target.highlight.region.translated.text || "";
-  const numericLabels = citationLabel ? [citationLabel] : extractReaderCitationLabels(source);
-  const authorYearLabels = citationLabel ? [] : extractReaderAuthorYearCitations(source);
-  const matches = citationLabel
-    ? [{ key: citationLabel, label: citationDisplayLabel || citationLabel }]
-    : [
-      ...numericLabels.map((label) => ({ key: label, label })),
-      ...authorYearLabels,
-    ];
-  return matches.flatMap(({ key, label }) => (referenceIndex.get(key) || []).map((entry) => ({
-    itemId: entry.itemId,
-    label,
-    text: (entry.source.text || entry.translated.text || "").trim(),
-    page: entry.source.page,
-  }))).filter((preview, index, list) => list.findIndex((item) => item.itemId === preview.itemId) === index);
-}
-
-/**
- * 悬停内容块：红色虚线框 + 翻译编号 + 「复制」（行间公式是「复制 LaTeX」）。
- *
- * 对照阅读时左右两栏一起画（悬停的 itemId 由 ReaderCompareGrid 共享），左栏复制原文、
- * 右栏复制译文 —— 这是 4.1.x 旧引擎里最常用的那个交互，React 引擎替换时丢了。
- * 只有这一种块级交互：双击 / 三击留给浏览器选词选段（以前双击会整块复制，把选词弄坏了）。
- */
 export function ReaderTextHoverLayer({
   target,
   pane = "source",
   revisedCount = 0,
-  referenceIndex,
-  referenceRegions,
-  citationLabel,
-  citationDisplayLabel,
-  citationRect,
-  onReferenceClick,
 }: {
   target: ReaderTextHoverTarget | null;
   pane?: "source" | "translated";
   /** 这一块改过几次（精修、手改、助手改）；只在译文栏提示。 */
   revisedCount?: number;
-  referenceIndex?: ReaderReferenceIndex;
-  referenceRegions?: readonly ReaderRegion[];
-  citationLabel?: string | null;
-  citationDisplayLabel?: string | null;
-  citationRect?: ReaderRegionRect | null;
-  onReferenceClick?: (itemId: string) => void;
 }) {
   const [state, setState] = useState<CopyState>("idle");
   const [idState, setIdState] = useState<CopyState>("idle");
@@ -408,18 +276,10 @@ export function ReaderTextHoverLayer({
       timersRef.current = [];
     };
   }, [itemId]);
-  const fallbackReferenceIndex = useMemo(
-    () => (referenceRegions ? buildReaderReferenceIndex(referenceRegions) : undefined),
-    [referenceRegions],
-  );
   if (!target) return null;
   const text = readerRegionCopyText(target.highlight.region, pane);
   const kind = readerRegionKindForRegion(target.highlight.region);
   const figureUrl = kind === "figure" ? figureAssetUrl(target.highlight.region) : "";
-  const resolvedReferenceIndex = referenceIndex || fallbackReferenceIndex;
-  const referencePreviews = resolvedReferenceIndex && citationLabel
-    ? findReaderReferencePreviews(target, resolvedReferenceIndex, citationLabel, citationDisplayLabel)
-    : [];
   const copyWith = (value: string, set: (next: CopyState) => void) =>
     async (event: ReactMouseEvent<HTMLButtonElement>) => {
       // 不让这次点击冒到页面上（触屏下会被当成「点了另一块」）。
@@ -431,17 +291,6 @@ export function ReaderTextHoverLayer({
     };
   const idleLabel = kind === "formula" ? "复制 LaTeX" : "复制";
   const outside = hoverToolsOutside(target.rect);
-  const referencePopoverStyle = citationRect
-    ? (() => {
-      const above = citationRect.top > 220;
-      const viewportWidth = typeof window === "undefined" ? 1200 : window.innerWidth;
-      return {
-        left: Math.min(citationRect.left, Math.max(8, viewportWidth - 440)),
-        top: above ? citationRect.top - 10 : citationRect.top + citationRect.height + 10,
-        transform: above ? "translateY(-100%)" : undefined,
-      };
-    })()
-    : undefined;
   const figureAction = async (
     action: "copy" | "open" | "download",
     event: ReactMouseEvent<HTMLButtonElement>,
@@ -492,33 +341,6 @@ export function ReaderTextHoverLayer({
             <span className="reader-text-hover-revised" data-reader-revised-count={revisedCount}>
               改过 {revisedCount} 次
             </span>
-          ) : null}
-          {referencePreviews.length ? (
-            <div
-              className="reader-text-hover-reference-popover"
-              style={referencePopoverStyle}
-              onPointerDown={(event) => event.stopPropagation()}
-            >
-              <div className="reader-text-hover-reference-heading">参考文献</div>
-              {referencePreviews.map((preview) => (
-                <div className="reader-text-hover-reference-entry" key={preview.itemId}>
-                  <div className="reader-text-hover-reference-label">{preview.label}</div>
-                  <div className="reader-text-hover-reference-text">{preview.text}</div>
-                  <HoverToolButton
-                    className="reader-text-hover-reference-jump"
-                    state="idle"
-                    label={`跳转到参考文献 ${preview.label}`}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      onReferenceClick?.(preview.itemId);
-                    }}
-                  >
-                    跳转到参考文献
-                  </HoverToolButton>
-                </div>
-              ))}
-            </div>
           ) : null}
           {kind === "table" ? (
             <>

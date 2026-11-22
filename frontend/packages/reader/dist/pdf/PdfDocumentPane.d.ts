@@ -32,7 +32,6 @@ type PdfDocumentPaneProps = {
     /** 对照阅读时两栏共享的悬停块（见 PdfPageSlot）。 */
     hoveredRegionId?: string | null;
     onHoverRegion?: (itemId: string | null) => void;
-    onJumpToRegion?: (itemId: string) => void;
     liveTranslation?: LiveTranslationState;
     /** Render live translation blocks in this pane, independent of source/translated identity. */
     showLiveTranslation?: boolean;

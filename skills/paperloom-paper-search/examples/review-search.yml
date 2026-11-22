@@ -1,0 +1,17 @@
+schema_version: agent-batch-workflow.v1
+name: review-search
+description: Prepare a local evidence set for a literature review.
+inputs:
+  sources:
+    - kind: query
+      value: local:QUERY
+steps:
+  - id: search
+    action: search
+  - id: matrix
+    action: evidence_matrix
+execution:
+  dry_run: true
+  max_items: 100
+  concurrency: 1
+  failure_policy: continue

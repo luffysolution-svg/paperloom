@@ -95,7 +95,6 @@ const FLOATING_LAYERS = [
   "--z-selection-pop",
   "--z-popover",
   "--z-region-popover",
-  "--z-citation-hover",
 ];
 
 test("告知层压住所有浮层 —— 致命错误不能被浮窗盖住", () => {

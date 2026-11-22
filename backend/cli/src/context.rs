@@ -187,4 +187,24 @@ impl Backend {
     pub fn post(&self, path: &str, body: Option<&Value>) -> Result<Value> {
         self.call(reqwest::Method::POST, path, body)
     }
+
+    pub fn upload_pdf(&self, path: &Path) -> Result<Value> {
+        let file = std::fs::File::open(path).with_context(|| format!("无法打开 {}", path.display()))?;
+        let part = reqwest::blocking::multipart::Part::reader(file)
+            .file_name(path.file_name().and_then(|n| n.to_str()).unwrap_or("upload.pdf").to_string())
+            .mime_str("application/pdf")?;
+        let response = self.client
+            .post(self.url("/api/v1/uploads"))
+            .header("X-API-Key", &self.runtime.api_key)
+            .multipart(reqwest::blocking::multipart::Form::new().part("file", part))
+            .send()
+            .with_context(|| format!("连接不上后端 {}", self.runtime.api_base))?;
+        let status = response.status();
+        let value: Value = response.json().unwrap_or(Value::Null);
+        if !status.is_success() {
+            let message = value.get("message").and_then(Value::as_str).unwrap_or("后端返回了错误");
+            bail!("{message}(HTTP {})", status.as_u16());
+        }
+        Ok(value.get("data").cloned().unwrap_or(value))
+    }
 }
