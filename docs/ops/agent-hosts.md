@@ -1,5 +1,7 @@
 # Agent host configuration
 
+完整的本地配置、手动命令、Agent 自动配置提示词和 Obsidian 验收步骤见 [Agent setup guide](./agent-setup.md)。
+
 PaperLoom exposes one local stdio entry point. Configure each host to run `paperloom agent mcp`; do not duplicate tool logic in host-specific scripts.
 
 ## Claude Code

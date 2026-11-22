@@ -4,6 +4,8 @@
 
 技能文件不保存 API key、论文正文或对话历史。宿主配置见仓库根目录的 `mcp.json`、`.mcp.json` 和 `docs/ops/agent-hosts.md`。
 
+手动配置命令、Pi 项目配置、Obsidian 验收和可直接交给 Agent 的配置提示词见 [Agent setup guide](../docs/ops/agent-setup.md)。
+
 ## 技能
 
 - `paperloom-pdf-ops` 处理导入、OCR、翻译、任务恢复、导出、Zotero 和 Obsidian。

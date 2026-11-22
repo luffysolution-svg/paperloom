@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "paperloom": {
+      "command": "cmd.exe",
+      "args": ["/d", "/c", "tools\\paperloom-mcp.cmd"],
+      "cwd": "E:\\开发\\PaperLoom"
+    }
+  }
+}
