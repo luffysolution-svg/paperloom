@@ -250,3 +250,22 @@ pi mcp list --json
 ```
 
 批处理运行记录位于 PaperLoom 数据目录的 `agent-runs/<run-id>/` 下。API Key 只从环境或 PaperLoom 凭据配置读取，不放入 MCP JSON 和技能文件。
+
+## 设置页「MCP 与 Skills」的后续设计
+
+设置页增加这个分栏是合适的。它可以把当前手动配置收成一个可预览的安装流程：
+
+- 安装范围选择全局或当前项目
+- Agent 选择 Codex、Claude Code、Pi，也可以选择全部
+- MCP 和 Skills 分开勾选
+- 执行前展示将要修改的文件、命令和目标目录
+- 全局安装和外部写入始终需要明确确认
+- 安装后立即运行 `doctor`、MCP initialize 和 tools/list 验收
+
+MCP 运行时优先使用桌面包内置的 PaperLoom CLI 和 stdio bridge。`npx` 适合首次引导或开发者手动安装，适合的形式是固定版本的安装器包，例如：
+
+```powershell
+npx --yes --package @paperloom/agent@0.4.1 paperloom-agent install --scope project --agents codex,claude,pi
+```
+
+正式桌面版不应依赖未固定版本的 `npx` 启动 MCP。这样可以避免启动时联网、版本漂移和额外的包供应链依赖。后续如果发布 npm 安装器，建议同时提供固定版本、`--dry-run`、`--scope global|project`、`--agents` 和 `--skills` 参数，设置页调用同一个安装器逻辑。
