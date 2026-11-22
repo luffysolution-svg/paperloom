@@ -153,7 +153,7 @@ impl ConfigHome {
                 "api_key": secret(settings.translation.api_key.clone()),
             },
             "providers": providers,
-            "ocr": { "provider": settings.ocr_provider, "tokens": ocr_tokens },
+            "ocr": { "provider": settings.ocr_provider, "token": secret(settings.ocr_token), "tokens": ocr_tokens },
             "assistant": {
                 "provider": settings.assistant.provider,
                 "model": settings.assistant.model,

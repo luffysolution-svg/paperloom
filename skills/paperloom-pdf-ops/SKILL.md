@@ -19,11 +19,13 @@ Only fall back to the `paperloom` terminal CLI when MCP tools are not attached i
 
 1. Call `get_capabilities` (or run `paperloom agent doctor --json` if using CLI) before a new session. Never print or request credentials in the chat.
 2. Inspect existing documents and artifacts (`list_documents`, `get_document`) before uploading or starting a duplicate job.
-3. For a batch, call `run_batch_workflow` with `dry_run: true` first (or `paperloom agent workflow validate` + `--dry-run`) and show the item count, stages, estimated writes, and conflict policy.
+3. For a Zotero batch, import the selected PDF attachments and use the returned PaperLoom `document_id` values. For a batch of local PDFs, use `path` entries. Preview the batch with `run_batch_workflow` and `dry_run: true` (CLI: `workflow validate`, then `workflow run --dry-run`). Report the selected papers, page scope and writes. If preflight reports errors, resolve them before submitting. A preview without a configuration check verifies the plan only.
 4. Ask for confirmation before OCR, translation, Zotero writeback, Obsidian overwrite, or any operation that can incur model cost. Pass `confirmed: true` (or `--confirm`) only after explicit confirmation.
-5. Return the `run_id` or `job_id` immediately, then poll status (`get_job_status`, `get_job_events`, `get_run_status`). Keep each item result even when another item fails.
+5. After submission, return the execution `run_id` and each paper's `job_id`. Read `get_run_status` for the batch manifest and `get_job_status` for each job's current state. A submission can contain both queued and failed papers.
 6. On failure, inspect events and the resume plan before retrying (`retry_job`). Retry only the failed stage and record the reason.
 7. Export Markdown or PDF only after the requested job reaches a terminal state. Include the output path and source identifiers.
+
+PaperLoom's default translation target is Simplified Chinese. For the whole PDF, omit `ocr.page_ranges` and `translation.page_ranges`.
 
 ## Optional CLI fallback commands
 

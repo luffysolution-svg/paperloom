@@ -79,3 +79,14 @@ def test_rate_limit_errors_are_classified_as_retryable_rate_limit():
     assert payload["failure_category"] == "rate_limit"
     assert payload["retryable"] is True
     assert "限流" in payload["summary"]
+
+
+def test_windows_ocr_file_lock_does_not_change_the_failed_stage():
+    try:
+        raise PermissionError("[WinError 5] Access denied: document.v1.json.tmp -> document.v1.json")
+    except PermissionError as exc:
+        failure = classify_exception(exc, default_stage="provider", provider="paddle")
+
+    payload = json.loads(failure.to_json())
+    assert payload["failed_stage"] == "provider"
+    assert payload["retryable"] is True

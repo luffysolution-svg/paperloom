@@ -120,6 +120,7 @@ def _http_error(status: int) -> requests.HTTPError:
         (_http_error(429), RateLimited),
         (_http_error(503), RateLimited),
         (requests.ConnectionError("reset"), RateLimited),
+        (model_wire.EmptyResponsesOutputError("completed without text"), agent_openai.EmptyModelResponse),
     ],
 )
 def test_upstream_failures_stop_the_run_so_progress_is_kept(error: BaseException, expected: type) -> None:

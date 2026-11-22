@@ -12,6 +12,13 @@ import re
 import pytest
 
 from retainpdf_translation.core.payload.parts.group_split import split_group_protected_translation
+from retainpdf_translation.core.payload.parts.group_split import tokenize_group_translation
+
+
+def test_thousands_grouped_quantity_is_one_split_token():
+    tokens = tokenize_group_translation("共有 10,981 个结构，质量为 1,234,567.89。")
+    assert "10,981" in tokens and "1,234,567.89" in tokens
+    assert tokenize_group_translation("1, 2 and 3")[:3] == ["1", ",", " "]
 
 INLINE_MATH_RE = re.compile(r"(?<!\\)\$(?:\\.|[^$\\\n])+(?<!\\)\$")
 

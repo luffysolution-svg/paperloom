@@ -10,9 +10,10 @@ from retainpdf_translation.core.payload.parts.common import seed_orchestration_m
 from retainpdf_translation.services.policy.payload_rules.policy_mutations import reset_policy_state
 
 
-def test_reset_policy_preserves_completed_keep_origin_result() -> None:
+@pytest.mark.parametrize("label", ["skip_model_keep_origin", "skip_no_prose", "skip_citation_only", "skip_running_header", "skip_back_matter_index"])
+def test_reset_policy_preserves_completed_keep_origin_result(label: str) -> None:
     item = {"policy_translate": True, "source_text": "https://example.invalid/reference"}
-    mark_policy_skip(item, "skip_model_keep_origin", skip_reason="pure_url")
+    mark_policy_skip(item, label, skip_reason="pure_url")
     item["translation_diagnostics"] = {"route_path": ["fast_path_keep_origin"]}
     expected = dict(item)
 

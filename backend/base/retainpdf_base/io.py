@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import time
 from typing import Any
 
 
@@ -66,7 +67,15 @@ def save_json_atomic(path: Path, payload: Any, *, compact: bool = False) -> None
             json.dump(payload, handle, **dump_kwargs)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary_path, path)
+        for attempt in range(6):
+            try:
+                os.replace(temporary_path, path)
+                break
+            except PermissionError as error:
+                # A Windows reader can briefly lock an OCR stream snapshot against replacement.
+                if attempt == 5 or getattr(error, "winerror", None) not in (5, 32):
+                    raise
+                time.sleep(0.05 * 2**attempt)
         temporary_path = None
     finally:
         if temporary_path is not None:

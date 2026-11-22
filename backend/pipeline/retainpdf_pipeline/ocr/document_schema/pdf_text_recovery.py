@@ -55,6 +55,12 @@ def _line_text(line: dict) -> str:
     return ''.join(chunks).strip()
 
 
+def _set_recovered_text(block: dict, text: str) -> None:
+    block["text"] = text
+    if "content" in block:
+        block["content"]["text"] = text
+
+
 def recover_corrupted_pdf_text(document: dict, pdf) -> int:
     """Repair only replacement-character blocks with a close text-layer match.
 
@@ -92,10 +98,65 @@ def recover_corrupted_pdf_text(document: dict, pdf) -> int:
             if not plain or '\ufffd' in plain or not (close_text or formula_match):
                 continue
             restored_lines = [_line_text(line) for line in lines]
-            block['text'] = ' '.join(restored_lines)
+            _set_recovered_text(block, ' '.join(restored_lines))
             block['lines'] = [dict(bbox=list(line['bbox']), spans=[dict(
                 type='text', text=text, bbox=list(line['bbox']), score=1.0)])
                 for line, text in zip(lines, restored_lines)]
             block.setdefault('metadata', {})['pdf_text_recovered'] = True
             repaired += 1
+    return repaired
+
+
+_PROSE_TOKEN = re.compile(r"[^\W\d_]+|\d+(?:[.,]\d+)*")
+
+
+def _integer_contexts(tokens: list[str]) -> dict[tuple[str, ...], list[str]]:
+    contexts: dict[tuple[str, ...], list[str]] = {}
+    for index in range(3, len(tokens) - 3):
+        value = tokens[index]
+        if value.isdecimal() and len(value) >= 2:
+            context = tuple(tokens[index - 3:index] + tokens[index + 1:index + 4])
+            contexts.setdefault(context, []).append(value)
+    return contexts
+
+
+def recover_dropped_pdf_digits(document: dict, pdf) -> int:
+    """Recover a missing digit when the PDF has a unique matching six-token context."""
+    import fitz
+
+    repaired = 0
+    for page, pdf_page in zip(document.get("pages", []), pdf):
+        for block in page.get("blocks", []):
+            text = block.get("text", "")
+            if block.get("sub_type") != "body" or "$" in text or not re.search(r"\d{2}", text):
+                continue
+            tokens = _PROSE_TOKEN.findall(text)
+            contexts = _integer_contexts(tokens)
+            if not contexts:
+                continue
+            # The OCR box sometimes ends just before the missing digit at a line end.
+            region = fitz.Rect(block["bbox"]) + (-2, -2, 8, 2)
+            native = _integer_contexts(_PROSE_TOKEN.findall(pdf_page.get_text(clip=region)))
+            replacements = {}
+            spans = [span for line in block.get("lines", []) for span in line.get("spans", [])]
+            for context, values in contexts.items():
+                candidates = native.get(context, [])
+                if len(values) != 1 or len(candidates) != 1:
+                    continue
+                old, new = values[0], candidates[0]
+                if len(new) != len(old) + 1 or tokens.count(old) != 1:
+                    continue
+                if spans and sum(_PROSE_TOKEN.findall(span.get("text", "")).count(old) for span in spans) != 1:
+                    continue
+                if any(new[:i] + new[i + 1:] == old for i in range(len(new))):
+                    replacements[old] = new
+            if replacements:
+                def replace(match):
+                    return replacements.get(match.group(), match.group())
+                _set_recovered_text(block, _PROSE_TOKEN.sub(replace, text))
+                for span in spans:
+                    if "text" in span:
+                        span["text"] = _PROSE_TOKEN.sub(replace, span["text"])
+                block.setdefault("metadata", {})["pdf_text_digit_recovery"] = replacements
+                repaired += len(replacements)
     return repaired

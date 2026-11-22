@@ -119,6 +119,36 @@ fn status_and_doctor_work_without_a_library_or_backend() {
 }
 
 #[test]
+fn batch_preflight_keeps_independent_runs_and_reports_skipped_files() {
+    let sb = Sandbox::new();
+    let workflow = sb.root.join("batch.json");
+    let spec = serde_json::json!({
+        "schema_version": "agent-batch-workflow.v1", "name": "preflight",
+        "inputs": {"sources": [
+            {"kind": "path", "value": sb.root.join("missing.pdf")},
+            {"kind": "document_id", "value": "second"}
+        ]},
+        "steps": [{"id": "import", "action": "import"}],
+        "execution": {"dry_run": true, "max_items": 2, "concurrency": 1, "failure_policy": "stop"}
+    });
+    std::fs::write(&workflow, spec.to_string()).unwrap();
+    let args = ["--json", "agent", "workflow", "run", workflow.to_str().unwrap(), "--dry-run"];
+    let mut ids = Vec::new();
+    for _ in 0..2 {
+        let output = sb.run(&args);
+        assert!(!output.status.success());
+        let response: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(response["ok"], false);
+        let run = &response["data"];
+        assert_eq!(run["status"], "blocked");
+        assert_eq!(run["items"][0]["status"], "failed");
+        assert_eq!(run["items"][1]["status"], "skipped");
+        ids.push(run["run_id"].as_str().unwrap().to_owned());
+    }
+    assert_ne!(ids[0], ids[1]);
+}
+
+#[test]
 fn backups_and_sync_work_directly_on_the_data_directory_when_no_backend_runs() {
     let sb = Sandbox::new();
     sb.library();

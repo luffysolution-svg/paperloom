@@ -87,6 +87,18 @@ def test_thousands_separator_is_equivalent() -> None:
     assert _types(report, "numbers") == []
 
 
+def test_thousands_separator_at_old_page_boundary_preserves_the_original_group_whitespace():
+    group = dict(translation_unit_kind="group", translation_unit_id="__cg__:test",
+                 translation_unit_member_ids=["p009-b007", "p010-b006"],
+                 translation_unit_translated_text="包含 10,981 个结构。")
+    left = _item("p009-b007", "We generated 10,981", "包含 10,", page_idx=8, **group)
+    right = _item("p010-b006", "structures.", "981 个结构。", page_idx=9, **group)
+    assert _types(_run([left, right]), "numbers") == []
+    # A stale whole-group field must never hide a changed or missing digit in a rendered member.
+    right["translated_text"] = "98 个结构。"
+    assert _find(_run([left, right]), "number_missing")["evidence"]["missing"] == ["10981"]
+
+
 def test_missing_and_extra_numbers() -> None:
     missing = _run([_item("p001-b001", "The bond length is 74.1 pm at 298 K.", "键长为 74.1 pm。")])
     violation = _find(missing, "number_missing")

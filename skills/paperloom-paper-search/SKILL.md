@@ -14,6 +14,8 @@ description: Search PaperLoom's local library, Zotero collections, and configure
 5. Separate discoverable metadata from accessible full text. Do not imply that a missing PDF was reviewed.
 6. For a review, preserve the evidence matrix, excluded records, and unresolved conflicts as run outputs.
 
+For a known title, call `list_documents` with a distinctive title phrase in `q`. For a passage, call `search_documents` with `query` and the selected `document_id`. Keep each hit's job and page identifiers when handing it to the Reader.
+
 Use the MCP `search_scholarly` tool for OpenAlex, Crossref, Semantic Scholar,
 and Europe PMC. It returns normalized records and provider warnings, then
 deduplicates DOI matches before the Agent builds a reading set.

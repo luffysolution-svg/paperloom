@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import os
 from pathlib import Path
 
 import pytest
@@ -55,3 +56,24 @@ def test_atomic_json_round_trip(tmp_path: Path) -> None:
     path = tmp_path / "a" / "b.json"
     save_json_atomic(path, {"中文": [1, 2]})
     assert load_json(path) == {"中文": [1, 2]}
+
+
+def test_atomic_json_waits_for_a_windows_reader(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = tmp_path / "ocr-stream.json"
+    save_json_atomic(path, {"done": False})
+    replace = os.replace
+    attempts = 0
+
+    def replace_after_reader_closed(source: Path, destination: Path) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            error = PermissionError("destination is in use")
+            error.winerror = 5
+            raise error
+        replace(source, destination)
+
+    monkeypatch.setattr(os, "replace", replace_after_reader_closed)
+    save_json_atomic(path, {"done": True})
+    assert attempts == 2
+    assert load_json(path) == {"done": True}

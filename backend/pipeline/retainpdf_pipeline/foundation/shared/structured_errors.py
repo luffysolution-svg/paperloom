@@ -265,13 +265,8 @@ def classify_exception(exc: BaseException, *, default_stage: str, provider: str 
     elif any(token in lowered for token in ("failed to download package", "packages.typst.org", "downloading @preview/")):
         error_type = "typst_dependency_download_failed"
         summary = "Typst 渲染依赖下载失败"
-    elif any(
-        token in lowered
-        for token in (
-            "typst runtime failed to start",
-            "winerror 193",
-            "winerror 5",
-        )
+    elif "typst runtime failed to start" in lowered or (
+        stage == "render" and any(token in lowered for token in ("winerror 193", "winerror 5"))
     ):
         error_type = "typst_runtime_failed"
         summary = "Typst 运行时启动失败"

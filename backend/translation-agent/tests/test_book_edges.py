@@ -60,6 +60,20 @@ def test_fullwidth_citation_brackets_count_as_the_citation() -> None:
     assert not [i for i in check_block(source, translation) if i["code"] == "citation_lost"]
 
 
+def test_author_year_citations_are_counted_across_groups() -> None:
+    source = (
+        "The study cites earlier work (Malik and Singh, 2022; Shloul et al., 2024). "
+        "The authors discuss user communities (Shloul et al., 2024; Storey et al., 2025)."
+    )
+    translated = "研究引用了早期工作（Malik 和 Singh，2022；Shloul 等，2024）。作者讨论了用户社区。"
+    errors = [issue for issue in check_block(source, translated) if issue["code"] == "citation_lost"]
+    assert errors[0]["severity"] == "error"
+    assert "shloul 2024" in errors[0]["message"]
+    assert "storey 2025" in errors[0]["message"]
+    corrected = translated[:-1] + "（Shloul 等，2024；Storey 等，2025）。"
+    assert not [issue for issue in check_block(source, corrected) if issue["code"] == "citation_lost"]
+
+
 def test_citation_only_notes_may_stay_in_english() -> None:
     """尾注 "35. Keenan 2013, xxiv." 原样交回以前判 untranslated，重交两三次再退回原文，任务结束时还提示没翻。"""
     for note in ("35. Keenan 2013, xxiv.", "33. Scheper-Hughes 2001, xiii.", "Ibid., 45.", "See Smith and Jones 2019; Lee 2020, 12–14.", "Bourdieu et al. 1999, 3n2."):

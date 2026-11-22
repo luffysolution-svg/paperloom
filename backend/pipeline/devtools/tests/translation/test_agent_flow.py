@@ -214,14 +214,21 @@ def test_blocks_the_agent_gives_back_as_source_become_dead_letters(tmp_path: Pat
 
 
 def test_a_stopped_run_fails_the_stage_and_resumes_without_paying_again(tmp_path: Path, fake_transport) -> None:
+    request = _request(tmp_path)
+    document = json.loads(request.source_json_path.read_text(encoding="utf-8"))
+    document["pages"][0]["blocks"][0] = _block(
+        0, 0, "body", "https://doi.org/10.1057/s41599-026-08154-3", [50, 40, 550, 70]
+    )
+    request.source_json_path.write_text(json.dumps(document), encoding="utf-8")
     fake_transport(FakeModel(stop_after=3))  # 通读 + 第 1 页翻译 + 第 1 页审校，第 2 页时额度用完
     with pytest.raises(agent_flow.AgentRunStopped, match="quota_exhausted"):
-        execute_translation_request(_request(tmp_path))
+        execute_translation_request(request)
     items = _pages(tmp_path / "translated")
     assert items["p001-b001"]["translated_text"], "page 1 was written back before the stop"
+    assert items["p001-b000"]["skip_reason"] == "skip_no_prose"
 
     model = fake_transport(FakeModel())
-    execute_translation_request(_request(tmp_path))
+    execute_translation_request(request)
     tools = [b["tools"][0]["name"] if "tools" in b else "plain_text" for b in model.bodies]
     assert tools == ["plain_text", "submit_review"], "only page 2 is requested again"
 

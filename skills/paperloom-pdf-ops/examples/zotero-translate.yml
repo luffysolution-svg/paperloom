@@ -1,16 +1,13 @@
 schema_version: agent-batch-workflow.v1
 name: zotero-translate
-description: OCR and translate selected Zotero PDF attachments.
+description: Translate Zotero PDFs already imported into the PaperLoom library.
 inputs:
   sources:
-    - kind: query
-      value: zotero:collection:TARGET_COLLECTION
+    # Replace this value with a document_id returned by zotero import.
+    # Repeat the entry for each selected attachment.
+    - kind: document_id
+      value: REPLACE_WITH_IMPORTED_DOCUMENT_ID
 steps:
-  - id: import
-    action: import
-  - id: ocr
-    action: ocr
-    when: missing_ocr
   - id: translate
     action: translate
 execution:

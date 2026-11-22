@@ -10,6 +10,7 @@ translation_review 里 truncated_translation 误报的来源。
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from dataclasses import field
 
@@ -43,6 +44,7 @@ class QaItem:
     direct_math: bool
     unit_id: str = ""
     member_ids: list[str] = field(default_factory=list)
+    unit_translation: str = ""
 
     @property
     def page_number(self) -> int:
@@ -80,7 +82,14 @@ class QaUnit:
 
     @property
     def translated(self) -> str:
-        return _join(member.translated for member in self.content_members)
+        parts = [member.translated.strip() for member in self.content_members if member.translated.strip()]
+        if self.kind == "group" and self.first.unit_translation and parts:
+            # Use the original whitespace at page boundaries only if every visible
+            # member still matches. Older splits could end mid-number ("10," / "981").
+            whole = self.first.unit_translation.strip()
+            if re.fullmatch(r"\s*".join(re.escape(part) for part in parts), whole):
+                return whole
+        return " ".join(parts)
 
     @property
     def protected_source(self) -> str:
@@ -160,6 +169,7 @@ def build_qa_items(translated_pages_map: dict[int, list[dict]]) -> list[QaItem]:
                     direct_math=is_direct_math_mode(item),
                     unit_id=_unit_id(item, item_id),
                     member_ids=_member_ids(item),
+                    unit_translation=str(item.get("translation_unit_translated_text") or ""),
                 )
             )
             order += 1

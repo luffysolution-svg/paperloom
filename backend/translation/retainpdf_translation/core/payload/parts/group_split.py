@@ -8,10 +8,11 @@ from .formula_gaps import DISPLAY_FORMULA_RE
 
 TOKEN_RE = re.compile(r"(<[futnvc]\d+-[0-9a-z]{3}/>|\[\[FORMULA_\d+]]|\s+|[A-Za-z0-9_\-./]+|[\u4e00-\u9fff]|.)")
 INLINE_MATH_SPAN_RE = re.compile(r"(?<!\\)\$(?:\\.|[^$\\\n])+(?<!\\)\$")
+_GROUPED_NUMBER = r"\d{1,3}(?:,\d{3})+(?:\.\d+)?(?!\d)"
 # 独立公式 `$$ … $$` 整个算一个记号：以前只认不跨行的 `$…$`，模型写出多行的 `$$\n…\n$$` 时切点落进公式里，
 # 两块都渲染坏（2026-10-30 量子化学-14 p029-b019 以 `$$\n\` 结尾）
 MATH_AWARE_TOKEN_RE = re.compile(
-    rf"(<[futnvc]\d+-[0-9a-z]{{3}}/>|\[\[FORMULA_\d+]]|\s+|{DISPLAY_FORMULA_RE.pattern}|{INLINE_MATH_SPAN_RE.pattern}|[A-Za-z0-9_\-./]+|[\u4e00-\u9fff]|.)"
+    rf"(<[futnvc]\d+-[0-9a-z]{{3}}/>|\[\[FORMULA_\d+]]|\s+|{DISPLAY_FORMULA_RE.pattern}|{INLINE_MATH_SPAN_RE.pattern}|{_GROUPED_NUMBER}|[A-Za-z0-9_\-./]+|[\u4e00-\u9fff]|.)"
 )
 ANY_MATH_SPAN_RE = re.compile(rf"{DISPLAY_FORMULA_RE.pattern}|{INLINE_MATH_SPAN_RE.pattern}")
 # 引用角标 `$^{12}$`、`$ ^{26-28} $`：句末标点后面紧跟的角标属于前一句，切点放在角标后面
@@ -50,7 +51,7 @@ def token_units(token: str) -> float:
         return 0.2
     if token.startswith("<") or token.startswith("[[FORMULA_"):
         return 3.0
-    if re.fullmatch(r"[A-Za-z0-9_\-./]+", token):
+    if re.fullmatch(r"[A-Za-z0-9_\-./,]+", token):
         return max(1.0, len(token) * 0.55)
     return 1.0
 

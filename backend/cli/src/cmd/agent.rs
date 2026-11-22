@@ -15,6 +15,14 @@ use crate::ui;
 pub enum AgentCommand {
     Doctor,
     Capabilities,
+    /// Resolve only the request on stdin for the local stdio bridge.
+    #[command(hide = true)]
+    PrepareJobOptions {
+        #[arg(value_parser = ["ocr", "translate"])]
+        action: String,
+        #[arg(long)]
+        with_secrets: bool,
+    },
     Document {
         #[command(subcommand)]
         action: DocumentCommand,
@@ -205,6 +213,9 @@ fn payload(raw: &str, file: Option<&PathBuf>) -> Result<Value> {
     serde_json::from_str(raw).with_context(|| "--payload 必须是有效 JSON")
 }
 
+mod job_options;
+use job_options::prepare_job_options;
+
 fn read_workflow(file: &PathBuf) -> Result<Value> {
     let text = std::fs::read_to_string(file)
         .with_context(|| format!("无法读取工作流 {}", file.display()))?;
@@ -240,6 +251,14 @@ fn validate_workflow(spec: &Value) -> Result<()> {
     if sources.is_empty() {
         anyhow::bail!("inputs.sources 不能为空");
     }
+    for (index, source) in sources.iter().enumerate() {
+        if !matches!(source["kind"].as_str(), Some("document_id" | "path")) {
+            anyhow::bail!("inputs.sources[{index}].kind 需要 path 或 document_id。先用 agent zotero import 导入附件，再填写返回的 document_id");
+        }
+        if !source["value"].as_str().is_some_and(|value| !value.trim().is_empty()) {
+            anyhow::bail!("inputs.sources[{index}].value 不能为空");
+        }
+    }
     let steps = object
         .get("steps")
         .and_then(Value::as_array)
@@ -247,29 +266,36 @@ fn validate_workflow(spec: &Value) -> Result<()> {
     if steps.is_empty() {
         anyhow::bail!("steps 不能为空");
     }
+    for (index, step) in steps.iter().enumerate() {
+        if !matches!(step["action"].as_str(), Some("import" | "ocr" | "translate")) {
+            anyhow::bail!("steps[{index}].action 需要 import、ocr 或 translate");
+        }
+    }
     let execution = object
         .get("execution")
         .and_then(Value::as_object)
         .ok_or_else(|| anyhow::anyhow!("工作流缺少 execution"))?;
-    for field in ["dry_run", "max_items", "concurrency", "failure_policy"] {
-        if !execution.contains_key(field) {
-            anyhow::bail!("execution 缺少 {field}");
-        }
+    if !execution.get("dry_run").is_some_and(Value::is_boolean) {
+        anyhow::bail!("execution.dry_run 必须是布尔值");
+    }
+    if !matches!(execution.get("max_items").and_then(Value::as_u64), Some(1..=10000)) {
+        anyhow::bail!("execution.max_items 必须是 1 到 10000 之间的整数");
+    }
+    if !matches!(execution.get("concurrency").and_then(Value::as_u64), Some(1..=32)) {
+        anyhow::bail!("execution.concurrency 必须是 1 到 32 之间的整数");
+    }
+    if !matches!(execution.get("failure_policy").and_then(Value::as_str), Some("continue" | "stop")) {
+        anyhow::bail!("execution.failure_policy 必须是 continue 或 stop");
     }
     Ok(())
 }
 
 fn run_workflow(ctx: &Ctx, file: &PathBuf, dry_run: bool, confirm: bool) -> Result<Value> {
-    let text = std::fs::read_to_string(file)
-        .with_context(|| format!("无法读取工作流 {}", file.display()))?;
     let spec = read_workflow(file)?;
     validate_workflow(&spec)?;
     if !dry_run && !confirm {
         anyhow::bail!("批量工作流会上传或提交任务，请先用 --dry-run 检查，再用 --confirm 执行");
     }
-    let run_id = format!("local-{}", uuid_like(&text));
-    let run_dir = ctx.data_dir.join("agent-runs").join(&run_id);
-    std::fs::create_dir_all(run_dir.join("outputs"))?;
     let sources = spec
         .pointer("/inputs/sources")
         .and_then(Value::as_array)
@@ -282,27 +308,52 @@ fn run_workflow(ctx: &Ctx, file: &PathBuf, dry_run: bool, confirm: bool) -> Resu
         .get("max_items")
         .and_then(Value::as_u64)
         .unwrap_or(sources.len() as u64) as usize;
-    let action = spec
+    let step = spec
         .get("steps")
         .and_then(Value::as_array)
         .and_then(|steps| {
-            steps.iter().rev().find_map(|step| {
+            steps.iter().rev().find(|step| {
                 step.get("action")
                     .and_then(Value::as_str)
-                    .filter(|action| matches!(*action, "ocr" | "translate"))
+                    .is_some_and(|action| matches!(action, "ocr" | "translate"))
             })
-        })
-        .unwrap_or("import");
+        });
+    let action = step.and_then(|step| step["action"].as_str()).unwrap_or("import");
+    let (options, configuration_checked) = match step {
+        Some(step) => prepare_job_options(
+            ctx,
+            step.get("options").cloned().unwrap_or_else(|| json!({})),
+            action,
+        )?,
+        None => (json!({}), true),
+    };
+    let created_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+    let run_id = format!("local-{}", uuid_like(&format!("{created_at}-{}", std::process::id())));
+    let run_dir = ctx.data_dir.join("agent-runs").join(&run_id);
+    std::fs::create_dir_all(run_dir.join("outputs"))?;
     let mut items = Vec::new();
+    let mut stopped = false;
     for (index, source) in sources.iter().take(max_items).enumerate() {
         let kind = source.get("kind").and_then(Value::as_str).unwrap_or("");
         let value = source.get("value").and_then(Value::as_str).unwrap_or("");
-        if value.is_empty() {
-            anyhow::bail!("inputs.sources[{index}].value 不能为空");
-        }
         let mut item = json!({"item_id": index.to_string(), "source": value, "status": if dry_run { "planned" } else { "running" }});
-        if !dry_run {
-            let result = (|| -> Result<()> {
+        if stopped {
+            item["status"] = json!("skipped");
+            items.push(item);
+            continue;
+        }
+        let result = (|| -> Result<()> {
+            if dry_run && kind == "document_id" {
+                if let Some(api) = ctx.writer()? {
+                    api.get(&format!("/api/v1/documents/{}", encode(value)))?;
+                }
+            }
+            let path = std::path::Path::new(value);
+            if kind == "path" && (!path.is_file() || !path.extension().and_then(|ext| ext.to_str())
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("pdf"))) {
+                anyhow::bail!("inputs.sources[{index}] 需要存在的 PDF 文件");
+            }
+            if !dry_run {
                 let document_id = match kind {
                     "path" => {
                         let uploaded = ctx
@@ -316,25 +367,10 @@ fn run_workflow(ctx: &Ctx, file: &PathBuf, dry_run: bool, confirm: bool) -> Resu
                             .ok_or_else(|| anyhow::anyhow!("上传响应缺少 document_id"))?
                             .to_string()
                     }
-                    "document_id" => value.to_string(),
-                    _ => {
-                        anyhow::bail!("当前 CLI 工作流只支持 path 和 document_id 来源，收到 {kind}")
-                    }
+                    _ => value.to_string(), // validate_workflow already restricted the source kinds.
                 };
                 item["document_id"] = json!(document_id);
                 if matches!(action, "ocr" | "translate") {
-                    let step = spec
-                        .get("steps")
-                        .and_then(Value::as_array)
-                        .and_then(|steps| {
-                            steps.iter().rev().find(|step| {
-                                step.get("action").and_then(Value::as_str) == Some(action)
-                            })
-                        });
-                    let options = step
-                        .and_then(|step| step.get("options"))
-                        .cloned()
-                        .unwrap_or_else(|| json!({}));
                     let job = ctx
                         .writer()?
                         .ok_or_else(|| anyhow::anyhow!("PaperLoom 后端未运行"))?
@@ -342,37 +378,46 @@ fn run_workflow(ctx: &Ctx, file: &PathBuf, dry_run: bool, confirm: bool) -> Resu
                             &format!("/api/v1/documents/{}/{}", encode(&document_id), action),
                             Some(&options),
                         )?;
-                    if let Some(job_id) = job.get("job_id").or_else(|| job.get("id")) {
-                        item["job_id"] = job_id.clone();
+                    item["job_id"] = job.get("job_id").or_else(|| job.get("id"))
+                        .filter(|id| id.as_str().is_some_and(|id| !id.is_empty()))
+                        .context("任务提交响应没有 job_id")?.clone();
+                    if let Some(siblings) = job.get("sibling_job_ids").and_then(Value::as_array).filter(|ids| !ids.is_empty()) {
+                        item["sibling_job_ids"] = json!(siblings);
                     }
                     item["status"] = json!("queued");
                 } else {
                     item["status"] = json!("succeeded");
                 }
-                Ok(())
-            })();
-            if let Err(error) = result {
-                item["status"] = json!("failed");
-                item["error"] = json!(format!("{error:#}"));
-                if execution.get("failure_policy").and_then(Value::as_str) == Some("stop") {
-                    items.push(item);
-                    break;
-                }
             }
+            Ok(())
+        })();
+        if let Err(error) = result {
+            item["status"] = json!("failed");
+            item["error"] = json!(format!("{error:#}"));
+            stopped = execution.get("failure_policy").and_then(Value::as_str) == Some("stop");
         }
         items.push(item);
     }
+    let failed = items.iter().filter(|item| item["status"] == "failed").count();
+    let status = if failed > 0 {
+        if dry_run { "blocked" }
+        else if items.iter().any(|item| item["status"] == "queued" || item["status"] == "succeeded") { "partial" }
+        else { "failed" }
+    } else if dry_run { "planned" } else if action == "import" { "succeeded" } else { "submitted" };
+    let mut manifest_options = execution.clone();
+    manifest_options.insert("action".into(), json!(action));
+    manifest_options.insert("dry_run".into(), json!(dry_run));
     let manifest = json!({
         "schema_version": "agent-run-manifest.v1",
         "run_id": run_id,
-        "created_at": chrono::Utc::now().to_rfc3339(),
+        "created_at": created_at,
         "updated_at": chrono::Utc::now().to_rfc3339(),
         "command": "workflow run",
         "paperloom_version": env!("CARGO_PKG_VERSION"),
         "inputs": sources.iter().take(max_items).cloned().collect::<Vec<_>>(),
-        "options": execution,
+        "options": manifest_options,
         "items": items,
-        "outputs": ["manifest.json", "events.jsonl", "evidence.json", "claims.json"],
+        "outputs": ["manifest.json", "events.jsonl", "results.json", "evidence.json", "claims.json"],
     });
     std::fs::write(
         run_dir.join("manifest.json"),
@@ -387,8 +432,9 @@ fn run_workflow(ctx: &Ctx, file: &PathBuf, dry_run: bool, confirm: bool) -> Resu
     )?;
     std::fs::write(run_dir.join("evidence.json"), b"[]\n")?;
     std::fs::write(run_dir.join("claims.json"), b"[]\n")?;
+    std::fs::write(run_dir.join("results.json"), serde_json::to_vec_pretty(&manifest["items"])?)?;
     Ok(
-        json!({"run_id": run_id, "dry_run": dry_run, "items": manifest["items"], "run_dir": run_dir}),
+        json!({"run_id": run_id, "status": status, "action": action, "dry_run": dry_run, "configuration_checked": configuration_checked, "items": manifest["items"], "run_dir": run_dir}),
     )
 }
 
@@ -455,6 +501,14 @@ pub fn run(ctx: &Ctx, action: AgentCommand) -> Result<ExitCode> {
             "writes_require_confirmation": ["zotero.import", "zotero.writeback", "obsidian.export", "workflow.run"],
         }),
         AgentCommand::Mcp => unreachable!("MCP handled before command dispatch"),
+        AgentCommand::PrepareJobOptions { action, with_secrets } => {
+            if !with_secrets {
+                anyhow::bail!("内部 MCP 调用需要显式指定 --with-secrets");
+            }
+            let input = serde_json::from_reader(std::io::stdin().lock()).context("任务参数需要 JSON 对象")?;
+            let (options, checked) = prepare_job_options(ctx, input, &action)?;
+            json!({"options": options, "configuration_checked": checked})
+        }
         AgentCommand::Document { action } => match action {
             DocumentCommand::Import { file } => backend(ctx)?.upload_pdf(&file)?,
             DocumentCommand::List { limit, offset } => backend(ctx)?.get(&query_path(
@@ -473,13 +527,13 @@ pub fn run(ctx: &Ctx, action: AgentCommand) -> Result<ExitCode> {
             action: OcrCommand::Submit(args),
         } => backend(ctx)?.post(
             &format!("/api/v1/documents/{}/ocr", encode(&args.document_id)),
-            Some(&payload(&args.payload, args.payload_file.as_ref())?),
+            Some(&prepare_job_options(ctx, payload(&args.payload, args.payload_file.as_ref())?, "ocr")?.0),
         )?,
         AgentCommand::Translate {
             action: TranslateCommand::Submit(args),
         } => backend(ctx)?.post(
             &format!("/api/v1/documents/{}/translate", encode(&args.document_id)),
-            Some(&payload(&args.payload, args.payload_file.as_ref())?),
+            Some(&prepare_job_options(ctx, payload(&args.payload, args.payload_file.as_ref())?, "translate")?.0),
         )?,
         AgentCommand::Job { action } => match action {
             JobCommand::Status { job_id } => {
@@ -510,16 +564,21 @@ pub fn run(ctx: &Ctx, action: AgentCommand) -> Result<ExitCode> {
             ReaderCommand::Outline { job_id } => {
                 json!({ "metadata": backend(ctx)?.get(&format!("/api/v1/jobs/{}/reader/metadata", encode(&job_id)))?, "regions": backend(ctx)?.get(&format!("/api/v1/jobs/{}/reader/regions", encode(&job_id)))? })
             }
-            ReaderCommand::Page { job_id, page } => backend(ctx)?.get(&format!(
-                "/api/v1/jobs/{}/progress/pages/{}",
-                encode(&job_id),
-                page
-            ))?,
-            ReaderCommand::Region { job_id, item_id } => backend(ctx)?.get(&format!(
-                "/api/v1/jobs/{}/reader/regions/{}",
-                encode(&job_id),
-                encode(&item_id)
-            ))?,
+            ReaderCommand::Page { job_id, page } => {
+                if page == 0 {
+                    anyhow::bail!("page 从 1 起算");
+                }
+                let regions = backend(ctx)?.get(&format!("/api/v1/jobs/{}/reader/regions", encode(&job_id)))?;
+                let items: Vec<&Value> = reader_items(&regions)?
+                    .iter().filter(|item| item.pointer("/source/page").and_then(Value::as_u64) == Some(u64::from(page)))
+                    .collect();
+                json!({ "page": page, "items": items })
+            }
+            ReaderCommand::Region { job_id, item_id } => {
+                let regions = backend(ctx)?.get(&format!("/api/v1/jobs/{}/reader/regions", encode(&job_id)))?;
+                reader_items(&regions)?.iter().find(|item| item["item_id"] == item_id)
+                    .with_context(|| format!("未找到 Reader 区域 {item_id}"))?.clone()
+            }
             ReaderCommand::Search { job_id, query } => {
                 let regions = backend(ctx)?
                     .get(&format!("/api/v1/jobs/{}/reader/regions", encode(&job_id)))?;
@@ -585,7 +644,7 @@ pub fn run(ctx: &Ctx, action: AgentCommand) -> Result<ExitCode> {
         } => {
             let spec = read_workflow(&file)?;
             validate_workflow(&spec)?;
-            json!({"valid": true, "workflow": spec})
+            json!({"valid": true, "workflow": retainpdf_core::models::redact_json_value(&spec, &[])})
         }
         AgentCommand::Workflow {
             action:
@@ -594,26 +653,27 @@ pub fn run(ctx: &Ctx, action: AgentCommand) -> Result<ExitCode> {
                     dry_run,
                     confirm,
                 },
-        } => run_workflow(ctx, &file, dry_run, confirm)?,
+        } => {
+            let run = run_workflow(ctx, &file, dry_run, confirm)?;
+            if matches!(run["status"].as_str(), Some("failed" | "partial" | "blocked")) {
+                output(ctx, &json!({"ok": false, "data": run, "warnings": [], "references": []}));
+                return Ok(ExitCode::FAILURE);
+            }
+            run
+        }
     };
     output(ctx, &result);
     Ok(ExitCode::SUCCESS)
 }
 
 fn launch_mcp(ctx: &Ctx) -> Result<ExitCode> {
+    let executable = std::env::current_exe().context("无法定位 PaperLoom CLI")?;
     let mut script_candidates = Vec::new();
     if let Some(path) = std::env::var_os("PAPERLOOM_MCP_SCRIPT") {
         script_candidates.push(PathBuf::from(path));
     }
-    if let Ok(executable) = std::env::current_exe() {
-        if let Some(bin_dir) = executable.parent() {
-            script_candidates.push(
-                bin_dir
-                    .join("..")
-                    .join("agent-mcp")
-                    .join("paperloom_mcp.py"),
-            );
-        }
+    if let Some(bin_dir) = executable.parent() {
+        script_candidates.push(bin_dir.join("../agent-mcp/paperloom_mcp.py"));
     }
     script_candidates.push(
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -630,12 +690,9 @@ fn launch_mcp(ctx: &Ctx) -> Result<ExitCode> {
     if let Some(path) = std::env::var_os("PAPERLOOM_MCP_PYTHON") {
         python_candidates.push(PathBuf::from(path));
     }
-    if let Ok(executable) = std::env::current_exe() {
-        if let Some(bin_dir) = executable.parent() {
-            let backend_root = bin_dir.join("..");
-            python_candidates.push(backend_root.join("python").join("python.exe"));
-            python_candidates.push(backend_root.join("python").join("bin").join("python3"));
-        }
+    if let Some(bin_dir) = executable.parent() {
+        python_candidates.push(bin_dir.join("../python/python.exe"));
+        python_candidates.push(bin_dir.join("../python/bin/python3"));
     }
     let repo_venv = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("..")
@@ -656,6 +713,7 @@ fn launch_mcp(ctx: &Ctx) -> Result<ExitCode> {
     command
         .arg(&script)
         .env("PAPERLOOM_DATA_DIR", &ctx.data_dir)
+        .env("PAPERLOOM_CONFIG_CLI", &executable)
         .env("PYTHONUTF8", "1")
         .env("PYTHONIOENCODING", "utf-8")
         .env("PYTHONUNBUFFERED", "1")
@@ -667,6 +725,7 @@ fn launch_mcp(ctx: &Ctx) -> Result<ExitCode> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Command::new("python3")
             .arg(&script)
             .env("PAPERLOOM_DATA_DIR", &ctx.data_dir)
+            .env("PAPERLOOM_CONFIG_CLI", &executable)
             .env("PYTHONUTF8", "1")
             .env("PYTHONIOENCODING", "utf-8")
             .env("PYTHONUNBUFFERED", "1")
@@ -688,6 +747,10 @@ fn encode(value: &str) -> String {
         .replace('/', "%2F")
         .replace('?', "%3F")
         .replace('#', "%23")
+}
+
+fn reader_items(regions: &Value) -> Result<&[Value]> {
+    regions["items"].as_array().map(Vec::as_slice).context("Reader 没有返回区块列表")
 }
 
 fn search_value(value: &Value, query: &str) -> Value {

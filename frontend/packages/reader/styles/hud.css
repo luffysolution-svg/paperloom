@@ -152,14 +152,19 @@
   position: absolute;
   right: 0;
   bottom: calc(100% + 12px);
-  width: min(320px, calc(100vw - 32px));
-  width: min(320px, calc(100dvw - 32px));
+  width: min(360px, calc(100vw - 24px));
+  width: min(360px, calc(100dvw - 24px));
+  max-height: min(620px, calc(100dvh - var(--reader-topbar-offset, 48px) - 76px));
+  display: flex;
+  flex-direction: column;
   padding: 12px 12px 10px;
+  background: var(--paper);
   color: var(--ink);
   text-align: left;
 }
 .reader-react-shortcuts-head {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 8px;
@@ -175,6 +180,9 @@
 }
 .reader-react-shortcuts-body {
   display: grid;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   gap: 10px;
 }
 .reader-react-shortcuts-group h3 {
@@ -215,9 +223,21 @@
   font-weight: 550;
 }
 .reader-react-shortcuts-foot {
+  flex-shrink: 0;
   margin: 10px 0 0;
   font-size: 11px;
   color: var(--muted, var(--muted));
+}
+
+@media (max-width: 460px) {
+  .reader-react-shortcuts {
+    position: static;
+  }
+  .reader-react-shortcuts-panel {
+    right: auto;
+    left: 50%;
+    translate: -50% 0;
+  }
 }
 
 

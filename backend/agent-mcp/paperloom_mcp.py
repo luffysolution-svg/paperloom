@@ -12,6 +12,8 @@ import json
 import os
 import pathlib
 import re
+import shutil
+import subprocess
 import sys
 from datetime import datetime, timezone
 import urllib.error
@@ -117,6 +119,37 @@ class PaperLoomApi:
         configured = runtime.get("data_dir")
         return pathlib.Path(configured).expanduser() if configured else pathlib.Path.home() / ".paperloom" / "data"
 
+    def prepare_job_options(self, action: str, options: dict[str, Any]) -> tuple[dict[str, Any], bool, list[str]]:
+        if urllib.parse.urlsplit(self.base).hostname not in {"localhost", "127.0.0.1", "::1"}:
+            return options, False, []
+        bundled = pathlib.Path(_SCRIPT_DIR).parent / "bin" / ("retainpdf.exe" if os.name == "nt" else "retainpdf")
+        cli = os.environ.get("PAPERLOOM_CONFIG_CLI")
+        if not cli:
+            cli = str(bundled) if bundled.is_file() else (shutil.which("paperloom") or shutil.which("retainpdf"))
+        if not cli:
+            return options, False, []
+        # The request may contain an explicit key: pass it on stdin, never argv.
+        try:
+            result = subprocess.run(
+                [cli, "agent", "prepare-job-options", action, "--json", "--with-secrets"],
+                input=json.dumps(options).encode("utf-8"), capture_output=True, timeout=15,
+            )
+        except FileNotFoundError:
+            return options, False, []
+        except subprocess.TimeoutExpired:
+            return options, False, ["读取 PaperLoom 本地任务配置超时"]
+        if result.returncode == 2 and b"unrecognized subcommand" in result.stderr:
+            # Older separately installed CLIs still forward explicit API payloads.
+            return options, False, []
+        if result.returncode:
+            try:
+                message = json.loads(result.stderr)["error"]["message"]
+            except (ValueError, KeyError, TypeError):
+                message = "无法读取 PaperLoom 本地任务配置"
+            return options, False, [message]
+        prepared = json.loads(result.stdout)["data"]
+        return prepared["options"], prepared["configuration_checked"], []
+
     def request(self, method: str, path: str, body: Any = None, *, query: dict[str, Any] | None = None) -> Any:
         base, api_key = self._resolve_connection()
         if not base:
@@ -214,7 +247,7 @@ def _required(args: dict[str, Any], names: list[str]) -> None:
 
 
 def _run_dir(api: PaperLoomApi, run_id: str) -> pathlib.Path:
-    if not re.fullmatch(r"[a-f0-9]{32}", run_id):
+    if not re.fullmatch(r"(?:[a-f0-9]{32}|local-[a-f0-9]{16})", run_id):
         raise ValueError("run_id 格式无效")
     return api.data_dir / "agent-runs" / run_id
 
@@ -222,6 +255,17 @@ def _run_dir(api: PaperLoomApi, run_id: str) -> pathlib.Path:
 def _write_run_event(run_dir: pathlib.Path, event: dict[str, Any]) -> None:
     with (run_dir / "events.jsonl").open("a", encoding="utf-8") as stream:
         stream.write(json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n")
+
+
+def _manifest_parameters(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _manifest_parameters(item) for key, item in value.items()
+            if key not in {"api_key", "token", "credential"} and not key.endswith(("_api_key", "_token"))
+        }
+    if isinstance(value, list):
+        return [_manifest_parameters(item) for item in value]
+    return value
 
 
 def _batch_workflow(args: dict[str, Any], api: PaperLoomApi) -> dict[str, Any]:
@@ -240,7 +284,7 @@ def _batch_workflow(args: dict[str, Any], api: PaperLoomApi) -> dict[str, Any]:
     if failure_policy not in {"continue", "stop"}:
         raise ValueError("failure_policy 只能是 continue 或 stop")
     max_items = args.get("max_items", len(items))
-    if not isinstance(max_items, int) or max_items < 1 or max_items > 10000:
+    if type(max_items) is not int or not 1 <= max_items <= 10000:
         raise ValueError("max_items 必须在 1 到 10000 之间")
     selected = items[:max_items]
     plan: list[dict[str, Any]] = []
@@ -259,7 +303,13 @@ def _batch_workflow(args: dict[str, Any], api: PaperLoomApi) -> dict[str, Any]:
                 raise ValueError(f"items[{index}] path 必须是存在的 PDF 文件")
             plan.append({"index": index, "path": str(source), "document_id": None})
         else:
-            plan.append({"index": index, "path": None, "document_id": str(document_id)})
+            if not isinstance(document_id, str) or not document_id.strip():
+                raise ValueError(f"items[{index}] 的 document_id 必须是非空字符串")
+            plan.append({"index": index, "path": None, "document_id": document_id.strip()})
+    options = args.get("options", {})
+    if not isinstance(options, dict):
+        raise ValueError("options 必须是对象")
+    options, configuration_checked, preflight_errors = api.prepare_job_options(action, options)
     run_id = uuid.uuid4().hex
     run_dir = api.data_dir / "agent-runs" / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
@@ -277,7 +327,9 @@ def _batch_workflow(args: dict[str, Any], api: PaperLoomApi) -> dict[str, Any]:
             "dry_run": dry_run,
             "max_items": max_items,
             "failure_policy": failure_policy,
-            "parameters": args.get("options") if isinstance(args.get("options"), dict) else {},
+            "parameters": _manifest_parameters(options),
+            "configuration_checked": configuration_checked,
+            "preflight_errors": preflight_errors,
         },
         "items": [
             {
@@ -297,40 +349,67 @@ def _batch_workflow(args: dict[str, Any], api: PaperLoomApi) -> dict[str, Any]:
     (run_dir / "outputs").mkdir(exist_ok=True)
     results: list[dict[str, Any]] = []
     _write_run_event(run_dir, {"event": "run_created", "run_id": run_id, "items": len(plan), "dry_run": dry_run})
-    if dry_run:
-        results = [{**item, "status": "planned", "job_id": None} for item in plan]
+    if preflight_errors:
+        error = " ".join(preflight_errors)
+        results = [{**item, "status": "failed", "job_id": None, "error": error} for item in plan]
+        for entry in manifest["items"]:
+            entry.update(status="failed", error=error)
+        _write_run_event(run_dir, {"event": "preflight_failed", "error": error})
     else:
         for item in plan:
             current = {**item, "status": "running", "job_id": None}
             try:
                 document_id = item["document_id"]
+                if dry_run:
+                    if document_id:
+                        api.request("GET", "/api/v1/documents/" + urllib.parse.quote(document_id, safe=""))
+                    results.append({**item, "status": "planned", "job_id": None})
+                    continue
                 if item["path"]:
                     uploaded = api.upload(pathlib.Path(item["path"]))
                     document_id = uploaded.get("document_id") or uploaded.get("id") if isinstance(uploaded, dict) else None
                     if not document_id:
                         raise RuntimeError("上传响应没有 document_id")
                     current["document_id"] = document_id
-                body = manifest["options"]["parameters"]
-                submitted = api.request("POST", f"/api/v1/documents/{urllib.parse.quote(str(document_id), safe='')}/{action}", body)
+                submitted = api.request("POST", f"/api/v1/documents/{urllib.parse.quote(str(document_id), safe='')}/{action}", options)
                 job_id = submitted.get("job_id") or submitted.get("id") if isinstance(submitted, dict) else None
+                if not job_id:
+                    raise RuntimeError("任务提交响应没有 job_id")
                 current.update({"status": "submitted", "job_id": job_id})
-                manifest_item = next(entry for entry in manifest["items"] if entry["item_id"] == str(item["index"]))
+                manifest_item = manifest["items"][item["index"]]
                 manifest_item.update({"status": "queued", "document_id": document_id, "job_id": job_id})
+                if submitted.get("sibling_job_ids"):
+                    current["sibling_job_ids"] = manifest_item["sibling_job_ids"] = submitted["sibling_job_ids"]
                 _write_run_event(run_dir, {"event": "item_submitted", "index": item["index"], "document_id": document_id, "job_id": job_id})
             except Exception as exc:
                 current.update({"status": "failed", "error": str(exc)})
-                manifest_item = next(entry for entry in manifest["items"] if entry["item_id"] == str(item["index"]))
+                manifest_item = manifest["items"][item["index"]]
                 manifest_item.update({"status": "failed", "error": str(exc)})
                 _write_run_event(run_dir, {"event": "item_failed", "index": item["index"], "error": str(exc)})
                 if failure_policy == "stop":
                     results.append(current)
+                    for skipped in plan[item["index"] + 1:]:
+                        manifest["items"][skipped["index"]]["status"] = "skipped"
+                        results.append({**skipped, "status": "skipped", "job_id": None})
                     break
             results.append(current)
     manifest["updated_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     (run_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     (run_dir / "results.json").write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
     _write_run_event(run_dir, {"event": "run_finished", "run_id": run_id, "completed": len(results)})
-    return {"run_id": run_id, "status": "planned" if dry_run else "submitted", "dry_run": dry_run, "items": results, "run_dir": str(run_dir)}
+    submitted_count = sum(item["status"] == "submitted" for item in results)
+    if preflight_errors or (dry_run and any(item["status"] == "failed" for item in results)):
+        status = "blocked"
+    elif dry_run:
+        status = "planned"
+    elif submitted_count == len(plan):
+        status = "submitted"
+    else:
+        status = "partially_submitted" if submitted_count else "failed"
+    return {
+        "run_id": run_id, "status": status, "dry_run": dry_run, "items": results, "run_dir": str(run_dir),
+        "configuration_checked": configuration_checked, "preflight_errors": preflight_errors,
+    }
 
 
 def _run_status(args: dict[str, Any], api: PaperLoomApi) -> dict[str, Any]:
@@ -348,7 +427,26 @@ def _run_status(args: dict[str, Any], api: PaperLoomApi) -> dict[str, Any]:
         events = [json.loads(line) for line in (run_dir / "events.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
     except OSError:
         pass
-    return {"run_id": args["run_id"], "manifest": read_json("manifest.json", {}), "items": read_json("results.json", []), "events": events}
+    manifest = read_json("manifest.json", {})
+    items = read_json("results.json", manifest.get("items", []))
+    for item in items:
+        if item.get("job_id") and item.get("status") in {"submitted", "queued", "running"}:
+            jobs = []
+            for job_id in [item["job_id"], *item.get("sibling_job_ids", [])]:
+                try:
+                    job = api.request("GET", "/api/v1/jobs/" + urllib.parse.quote(job_id, safe=""))
+                except RuntimeError as exc:
+                    jobs.append({"job_id": job_id, "status": "unknown", "status_error": str(exc)})
+                    continue
+                jobs.append({"job_id": job_id, "status": job["status"], "stage": (job.get("stage_snapshot") or {}).get("stage_detail"),
+                             "completion_note": job.get("completion_note")})
+            if len(jobs) == 1:
+                item.update(jobs[0])
+            else:
+                item["jobs"] = jobs
+                states = {job["status"] for job in jobs}
+                item["status"] = next((s for s in ("running", "queued", "unknown", "failed", "canceled") if s in states), jobs[0]["status"])
+    return {"run_id": args["run_id"], "manifest": manifest, "items": items, "events": events}
 
 
 def _call_tool(name: str, args: dict[str, Any], api: PaperLoomApi) -> dict[str, Any]:
@@ -376,7 +474,12 @@ def _call_tool(name: str, args: dict[str, Any], api: PaperLoomApi) -> dict[str, 
     if name in {"submit_ocr", "submit_translation"}:
         _required(args, ["document_id"])
         route = "ocr" if name == "submit_ocr" else "translate"
-        body = args.get("options") if isinstance(args.get("options"), dict) else {}
+        body = args.get("options", {})
+        if not isinstance(body, dict):
+            raise ValueError("options 必须是对象")
+        body, _, errors = api.prepare_job_options(route, body)
+        if errors:
+            raise ValueError(" ".join(errors))
         return _envelope(api.request("POST", f"/api/v1/documents/{urllib.parse.quote(args['document_id'], safe='')}/{route}", body))
     if name == "get_job_status":
         _required(args, ["job_id"])
@@ -393,34 +496,48 @@ def _call_tool(name: str, args: dict[str, Any], api: PaperLoomApi) -> dict[str, 
         return _envelope(api.request("POST", f"/api/v1/jobs/{urllib.parse.quote(args['job_id'], safe='')}/actions/{action}", body))
     if name == "get_document_outline":
         _required(args, ["job_id"])
-        return _envelope(api.request("GET", f"/api/v1/jobs/{urllib.parse.quote(args['job_id'], safe='')}/reader/metadata"))
+        metadata = api.request("GET", f"/api/v1/jobs/{urllib.parse.quote(args['job_id'], safe='')}/reader/metadata")
+        headings = [
+            {"item_id": item["item_id"], "page": _reader_item_page(item), "level": item["heading_level"],
+             "source": (item.get("source") or {}).get("text"), "translated": (item.get("translated") or {}).get("text")}
+            for item in _reader_regions(api, args["job_id"]) if item.get("heading_level")
+        ]
+        return _envelope({**metadata, "headings": headings})
     if name == "get_page_context":
         _required(args, ["job_id"])
         page = args.get("page")
         if not isinstance(page, int) or page < 1:
             raise ValueError("page 必须是正整数")
-        result = {"metadata": api.request("GET", f"/api/v1/jobs/{urllib.parse.quote(args['job_id'], safe='')}/reader/metadata"), "page": api.request("GET", f"/api/v1/jobs/{urllib.parse.quote(args['job_id'], safe='')}/progress/pages/{page}"), "regions": api.request("GET", f"/api/v1/jobs/{urllib.parse.quote(args['job_id'], safe='')}/reader/regions", query={"page": page})}
+        metadata = api.request("GET", f"/api/v1/jobs/{urllib.parse.quote(args['job_id'], safe='')}/reader/metadata")
+        if page > metadata["source"]["page_count"]:
+            raise ValueError("页码超出任务源 PDF 的页数")
+        page_items = [item for item in _reader_regions(api, args["job_id"]) if _reader_item_page(item) == page]
+        result = {
+            "metadata": metadata,
+            "page": {"page": page, "page_idx": page - 1, "items": [
+                {"item_id": item["item_id"], "translated_text": (item.get("translated") or {}).get("text"),
+                 "status": item.get("status")} for item in page_items
+            ]},
+            "regions": {"items": page_items},
+        }
         return _envelope(result, references=[{"job_id": args["job_id"], "page": page, "source_kind": "page"}])
     if name == "get_region_context":
         _required(args, ["job_id", "item_id"])
-        return _envelope(api.request("GET", f"/api/v1/jobs/{urllib.parse.quote(args['job_id'], safe='')}/reader/regions/{urllib.parse.quote(args['item_id'], safe='')}"), references=[{"job_id": args["job_id"], "item_id": args["item_id"], "source_kind": "region"}])
+        item = _reader_region(api, args["job_id"], args["item_id"])
+        if item is None:
+            raise ValueError(f"未找到 Reader 区域 {args['item_id']}")
+        return _envelope(item, references=[{"job_id": args["job_id"], "item_id": args["item_id"], "page": _reader_item_page(item), "source_kind": "region"}])
     if name == "get_figure_resource":
         _required(args, ["job_id", "item_id"])
         job_id = urllib.parse.quote(args["job_id"], safe="")
-        item_id = urllib.parse.quote(args["item_id"], safe="")
-        region = api.request("GET", f"/api/v1/jobs/{job_id}/reader/regions/{item_id}")
-        page = None
-        if isinstance(region, dict):
-            for key in ("page", "page_idx", "page_number"):
-                value = region.get(key)
-                if isinstance(value, int):
-                    page = value if key != "page_idx" else value + 1
-                    break
+        region = _reader_region(api, args["job_id"], args["item_id"])
+        page = _reader_item_page(region) if region else None
         if page is None:
             raise ValueError("图表区域没有可用页码")
-        image_uri = f"{api.base}/api/v1/jobs/{job_id}/files/pages/{page}"
+        image_uri = f"{api.base}/api/v1/jobs/{job_id}/files/pages/{page}.jpg"
+        asset_uris = [_reader_asset_uri(api, job_id, asset) for asset in (region.get("asset_urls") or []) if isinstance(asset, str)]
         return _envelope(
-            {"region": region, "page": page, "image": {"uri": image_uri, "mime_type": "image/jpeg"}},
+            {"region": region, "page": page, "image": {"uri": image_uri, "mime_type": "image/jpeg"}, "assets": [{"uri": uri, "mime_type": "image/*"} for uri in asset_uris]},
             references=[{"job_id": args["job_id"], "item_id": args["item_id"], "page": page, "source_kind": "region", "uri": image_uri}],
         )
     if name == "validate_evidence":
@@ -430,6 +547,7 @@ def _call_tool(name: str, args: dict[str, Any], api: PaperLoomApi) -> dict[str, 
         allowed = {"document", "job", "region", "page", "external", "user"}
         valid: list[dict[str, Any]] = []
         invalid: list[dict[str, Any]] = []
+        job_regions: dict[str, list[dict[str, Any]]] = {}
         for index, reference in enumerate(references):
             if not isinstance(reference, dict):
                 invalid.append({"index": index, "reason": "引用必须是对象"})
@@ -446,6 +564,21 @@ def _call_tool(name: str, args: dict[str, Any], api: PaperLoomApi) -> dict[str, 
                 reason = "page 必须是正整数"
             elif source_kind in {"document", "region", "page"} and not str(reference.get("quote") or "").strip():
                 reason = "缺少 quote"
+            elif source_kind in {"region", "page"}:
+                job_id = reference["job_id"]
+                if job_id not in job_regions:
+                    job_regions[job_id] = _reader_regions(api, job_id)
+                quote = " ".join(str(reference["quote"]).split())
+                matched = any(
+                    quote in " ".join(content.split())
+                    for item in job_regions[job_id]
+                    if (not reference.get("item_id") or reference["item_id"] == item["item_id"])
+                    and (reference.get("page") is None or reference["page"] == _reader_item_page(item))
+                    for content in ((item.get("source") or {}).get("text"), (item.get("translated") or {}).get("text"), item.get("markdown"))
+                    if content
+                )
+                if not matched:
+                    reason = "在所引页或区域中找不到这段引文"
             if reason:
                 invalid.append({"index": index, "reason": reason})
             else:
@@ -456,13 +589,39 @@ def _call_tool(name: str, args: dict[str, Any], api: PaperLoomApi) -> dict[str, 
         return _envelope({"valid": len(invalid) == 0, "support_level": support_level, "valid_references": valid, "invalid_references": invalid})
     if name == "search_document":
         _required(args, ["query"])
-        return _envelope(api.request("GET", "/api/v1/search", query={"q": args["query"], "limit": args.get("limit", 20), "document_id": args.get("document_id")}))
+        document_id = args.get("document_id")
+        if args.get("job_id"):
+            job_id = args["job_id"]
+            limit = args.get("limit", 20)
+            if not isinstance(limit, int) or not 1 <= limit <= 100:
+                raise ValueError("limit 必须在 1 到 100 之间")
+            pattern = re.compile(re.escape(args["query"].strip()), re.IGNORECASE)
+            hits = []
+            for item in _reader_regions(api, job_id):
+                snippets = {}
+                for side in ("source", "translated"):
+                    content = (item.get(side) or {}).get("text") or ""
+                    match = pattern.search(content)
+                    if match:
+                        snippets[side + "_snippet"] = content[max(0, match.start() - 45):match.end() + 75]
+                if snippets:
+                    page = _reader_item_page(item)
+                    hits.append({"job_id": job_id, "block_id": item["item_id"], "page": page,
+                                 "page_idx": page - 1 if page else None, **snippets})
+                    if len(hits) > limit:
+                        break
+            return _envelope({"query": args["query"], "hits": hits[:limit], "limit": limit, "has_more": len(hits) > limit})
+        return _envelope(api.request("GET", "/api/v1/search", query={"q": args["query"], "limit": args.get("limit", 20), "document_id": document_id}))
     if name == "export_markdown":
         _required(args, ["job_id"])
         data = api.request("GET", f"/api/v1/jobs/{urllib.parse.quote(args['job_id'], safe='')}/reader/markdown")
         if args.get("output"):
-            pathlib.Path(args["output"]).expanduser().write_text(data if isinstance(data, str) else json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-            data = {"output": str(pathlib.Path(args["output"]).expanduser()), "content": data}
+            content = data if isinstance(data, str) else data.get("content_with_absolute_image_urls") or data.get("content")
+            if not isinstance(content, str):
+                raise ValueError("任务还没有可导出的 Markdown 正文")
+            path = pathlib.Path(args["output"]).expanduser()
+            path.write_text(content, encoding="utf-8")
+            data = {"output": str(path), "content": content}
         return _envelope(data, references=[{"job_id": args["job_id"], "source_kind": "job"}])
     if name == "zotero_status":
         return _envelope(api.request("GET", "/api/v1/integrations/zotero"))
@@ -500,6 +659,39 @@ def _call_tool(name: str, args: dict[str, Any], api: PaperLoomApi) -> dict[str, 
     raise KeyError(name)
 
 
+def _reader_regions(api: PaperLoomApi, job_id: str) -> list[dict[str, Any]]:
+    result = api.request("GET", f"/api/v1/jobs/{urllib.parse.quote(job_id, safe='')}/reader/regions")
+    if isinstance(result, dict):
+        result = result.get("items", [])
+    return [item for item in result if isinstance(item, dict)] if isinstance(result, list) else []
+
+
+def _reader_region(api: PaperLoomApi, job_id: str, item_id: str) -> dict[str, Any] | None:
+    return next((item for item in _reader_regions(api, job_id) if item.get("item_id") == item_id), None)
+
+
+def _reader_item_page(item: dict[str, Any] | None) -> int | None:
+    if not isinstance(item, dict):
+        return None
+    source = item.get("source")
+    if isinstance(source, dict) and isinstance(source.get("page"), int):
+        return source["page"]
+    for key in ("page", "page_number"):
+        if isinstance(item.get(key), int):
+            return item[key]
+    if isinstance(item.get("page_idx"), int):
+        return item["page_idx"] + 1
+    return None
+
+
+def _reader_asset_uri(api: PaperLoomApi, job_id: str, asset: str) -> str:
+    if asset.startswith(("http://", "https://")):
+        return asset
+    if asset.startswith("/api/"):
+        return f"{api.base}{asset}"
+    return f"{api.base}/api/v1/jobs/{job_id}/files/output/ocr/images/{asset.lstrip('/')}"
+
+
 PROMPTS = {
     "read_paper": "按问题检索 PaperLoom 的 Reader 资源，先给出带页码和 item_id 的证据，再分别写作者原文、Agent 解读和待验证假设。",
     "explain_method": "拆解论文的方法、假设、数据集、基线、指标和实验条件，并为每个关键结论保留证据定位。",
@@ -519,19 +711,28 @@ def _resource_read(uri: str, api: PaperLoomApi) -> dict[str, Any]:
     bits = [urllib.parse.unquote(part) for part in ([parsed.netloc] + parsed.path.strip("/").split("/")) if part]
     if bits[:1] == ["documents"] and len(bits) == 3 and bits[2] in {"metadata", "outline"}:
         endpoint = "" if bits[2] == "metadata" else "/reading"
-        return _envelope(api.request("GET", f"/api/v1/documents/{urllib.parse.quote(bits[1], safe='')}{endpoint}"))
+        data = api.request("GET", f"/api/v1/documents/{urllib.parse.quote(bits[1], safe='')}{endpoint}")
+        if bits[2] == "outline":
+            outline = _call_tool("get_document_outline", {"job_id": data["job_id"]}, api)["data"] if data.get("job_id") else {"headings": []}
+            data = {**data, **outline}
+        return _envelope(data)
     if bits[:1] == ["jobs"] and len(bits) >= 3:
         job = urllib.parse.quote(bits[1], safe="")
         if bits[2] == "markdown":
             return _envelope(api.request("GET", f"/api/v1/jobs/{job}/reader/markdown"))
         if bits[2] == "regions":
-            path = f"/api/v1/jobs/{job}/reader/regions" + (f"/{urllib.parse.quote(bits[3], safe='')}" if len(bits) > 3 else "")
-            return _envelope(api.request("GET", path))
+            if len(bits) > 3:
+                item_id = bits[3]
+                item = _reader_region(api, bits[1], item_id)
+                if item is None:
+                    raise ValueError(f"未找到 Reader 区域 {item_id}")
+                return _envelope(item)
+            return _envelope({"items": _reader_regions(api, bits[1])})
         if bits[2] == "reports" and len(bits) == 4:
             return _envelope(api.request("GET", f"/api/v1/jobs/{job}/reports/{bits[3]}"))
         if bits[2] == "pages" and len(bits) == 5 and bits[4] == "image":
             page = urllib.parse.quote(bits[3], safe="")
-            return _envelope({"uri": f"{api.base}/api/v1/jobs/{job}/files/pages/{page}", "mime_type": "image/jpeg"})
+            return _envelope({"uri": f"{api.base}/api/v1/jobs/{job}/files/pages/{page}.jpg", "mime_type": "image/jpeg"})
     if bits[:1] == ["runs"] and len(bits) == 3:
         run_id = bits[1]
         run_dir = _run_dir(api, run_id)

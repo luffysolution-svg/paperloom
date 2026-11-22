@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 
 _CITE_BODY = r"\d{1,4}(?:\s*[,，–—\-−]\s*\d{1,4})*"
 _BARE_CITATION_RE = re.compile(r"\[\s*(" + _CITE_BODY + r")\s*\]")
@@ -29,11 +30,46 @@ _SOURCE_SUPERSCRIPT_RE = re.compile(
 # 找「行内方括号」前先挖掉公式和上标：MinerU 会把 Wiley 的上标引用写成 `<sup>[1]</sup>`、
 # 也会出现不带 $ 的 `^{[1]}`，里面的 [1] 不是行内引用。
 _SOURCE_NON_INLINE_RE = re.compile(r"\$\$.*?\$\$|\$[^$]*\$|<sup>.*?</sup>|\^\s*\{[^}]*\}", re.S)
+_INLINE_MATH = re.compile(r"(?<![\\$])\$([^$\n]+)\$(?!\$)")
+_UNIT_AFTER_MATH = re.compile(r"[ \t]+([A-Za-zµμ]+(?:/[A-Za-zµμ]+)+)(?![/A-Za-zµμ])")
 
 
 def _citation_key(body: str) -> str:
     compact = re.sub(r"\s+", "", body or "").replace("，", ",")
     return re.sub(r"[–—−]", "-", compact)
+
+
+def _quantity_anchors(text: str) -> dict[tuple[str, str], list[int]]:
+    anchors: dict[tuple[str, str], list[int]] = {}
+    for formula in _INLINE_MATH.finditer(text):
+        unit = _UNIT_AFTER_MATH.match(text, formula.end())
+        if unit:
+            key = (re.sub(r"\s+", "", formula[1]), unit[1])
+            anchors.setdefault(key, []).append(unit.end())
+    return anchors
+
+
+def restore_quantity_citations(source: str, translation: str) -> str:
+    """Restore a missing numeric superscript following a unique unchanged formula and unit."""
+    if "^" not in source or "/" not in source or "$" not in translation:
+        return translation
+    translated_anchors = _quantity_anchors(translation)
+    insertions = []
+    for key, source_offsets in _quantity_anchors(source).items():
+        offsets = translated_anchors.get(key, [])
+        if len(source_offsets) != 1 or len(offsets) != 1:
+            continue
+        citation = _SUPERSCRIPT_SPAN_RE.match(source, source_offsets[0])
+        if not citation:
+            continue
+        number = citation[2]
+        # An alternative citation notation (e.g. [51] or ⁵¹) already carries the number.
+        if not number.isdecimal() or re.search(rf"(?<!\d){number}(?!\d)", unicodedata.normalize("NFKC", translation)):
+            continue
+        insertions.append((offsets[0], f" $^{{{number}}}$"))
+    for offset, marker in sorted(insertions, reverse=True):
+        translation = translation[:offset] + marker + translation[offset:]
+    return translation
 
 
 def restore_bracket_citations(source_text: str, translated_text: str) -> str:
@@ -71,4 +107,4 @@ def restore_bracket_citations(source_text: str, translated_text: str) -> str:
     return _SUPERSCRIPT_SPAN_RE.sub(_replace, translated)
 
 
-__all__ = ["restore_bracket_citations"]
+__all__ = ["restore_bracket_citations", "restore_quantity_citations"]

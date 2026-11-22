@@ -34,10 +34,12 @@ from retainpdf_translation.artifacts.aggregator import TranslationRunDiagnostics
 from retainpdf_translation.artifacts.aggregator import thread_translation_run_diagnostics_scope
 from retainpdf_translation.llm.shared import upstream_resilience
 from retainpdf_translation.llm.shared.executor_context import unit_scope
+from retainpdf_translation.llm.shared.model_wire import EmptyResponsesOutputError
 from retainpdf_translation.llm.shared.provider_runtime import request_chat_content
 from retainpdf_translation_agent import AuthFailed
 from retainpdf_translation_agent import QuotaExhausted
 from retainpdf_translation_agent import RateLimited
+from retainpdf_translation_agent.agent import StopRun
 
 REQUEST_TIMEOUT_SECS = 300
 # 和 legacy 翻译请求一样（translation_client 的翻译请求都是 0.0）；不收 temperature 的模型由共用请求层挨一次 400 后记住、不再带
@@ -131,7 +133,13 @@ def anthropic_usage_fields(token_usage: dict[str, Any]) -> dict[str, int]:
     }
 
 
+class EmptyModelResponse(StopRun):
+    reason = "empty_model_response"
+
+
 def _stop_error(error: BaseException) -> BaseException | None:
+    if isinstance(error, EmptyResponsesOutputError):
+        return EmptyModelResponse(str(error))
     status = upstream_resilience.http_status_of(error)
     if upstream_resilience.is_quota_error(error):
         return QuotaExhausted(f"model API HTTP {status}: {upstream_resilience.describe_upstream_error(error)}")

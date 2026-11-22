@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -31,6 +32,56 @@ class BatchApi(FakeApi):
     def upload(self, path):
         self.calls.append(("UPLOAD", str(path), None, None))
         return {"document_id": "uploaded-doc"}
+
+    def prepare_job_options(self, action, options):
+        return options, False, []
+
+    def request(self, method, path, body=None, *, query=None):
+        self.calls.append((method, path, body, query))
+        if method == "POST" and path.startswith("/api/v1/documents/"):
+            return {"job_id": "job-1"}
+        if method == "GET" and path == "/api/v1/jobs/job-1":
+            return {"job_id": "job-1", "status": "succeeded"}
+        return {"path": path, "body": body, "query": query}
+
+
+class ReaderApi(FakeApi):
+    @property
+    def base(self):
+        return "http://127.0.0.1:46000"
+
+    def request(self, method, path, body=None, *, query=None):
+        self.calls.append((method, path, body, query))
+        if path.endswith("/reader/metadata"):
+            return {"source": {"page_count": 2}, "translated": {"page_count": 2}}
+        if path.endswith("/reader/markdown"):
+            return {"content": "# Title", "content_with_absolute_image_urls": "# Title\n\n![Figure](http://localhost/figure)"}
+        if path.endswith("/reader/regions"):
+            return {"items": [
+                {
+                    "item_id": "p002-b0001",
+                    "source": {"page": 2, "text": "330 valid responses"},
+                    "translated": {"page": 2, "text": "共收集到 330 份有效答卷"},
+                    "region_type": "paragraph",
+                    "asset_urls": [],
+                },
+                {
+                    "item_id": "p001-b0001",
+                    "source": {"page": 1, "text": "Figure 1"},
+                    "translated": {"page": 1, "text": "图 1"},
+                    "region_type": "figure",
+                    "asset_urls": ["/api/v1/jobs/job-1/files/output/ocr/images/page-1/figure.png"],
+                },
+            ]}
+        return super().request(method, path, body, query=query)
+
+
+class ConfiguredBatchApi(BatchApi):
+    def prepare_job_options(self, action, options):
+        return {
+            "translation": {"model": "deepseek-flash", "api_key": "translation-secret"},
+            "ocr": {"provider": "paddle", "paddle_token": "paddle-secret"},
+        }, True, []
 
 
 class McpProtocolTests(unittest.TestCase):
@@ -75,6 +126,13 @@ class McpProtocolTests(unittest.TestCase):
         self.assertEqual(response["result"]["contents"][0]["uri"], "paperloom://documents/doc-1/metadata")
         self.assertEqual(api.calls[0][1], "/api/v1/documents/doc-1")
 
+    def test_markdown_export_writes_the_document_text(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = pathlib.Path(root) / "reader.md"
+            result = mcp._call_tool("export_markdown", {"job_id": "job-1", "output": str(path)}, ReaderApi())
+            self.assertEqual(path.read_text(encoding="utf-8"), result["data"]["content"])
+            self.assertTrue(result["data"]["content"].startswith("# Title\n"))
+
     def test_run_resources_include_manifest_and_evidence(self):
         resources = mcp.handle({"jsonrpc": "2.0", "id": 11, "method": "resources/list", "params": {}}, FakeApi())
         uris = {resource["uri"] for resource in resources["result"]["resources"]}
@@ -83,19 +141,33 @@ class McpProtocolTests(unittest.TestCase):
         self.assertIn("paperloom://jobs/{job_id}/pages/{page}/image", uris)
 
     def test_figure_resource_and_evidence_validation(self):
-        api = FakeApi()
-        api.base = "http://127.0.0.1:46000"
-        original = api.request
-        def request(method, path, body=None, *, query=None):
-            if path.endswith("/reader/regions/fig-1"):
-                return {"item_id": "fig-1", "page_idx": 2, "text": "Figure 1"}
-            return original(method, path, body, query=query)
-        api.request = request
-        figure = mcp.handle({"jsonrpc": "2.0", "id": 14, "method": "tools/call", "params": {"name": "get_figure_resource", "arguments": {"job_id": "job-1", "item_id": "fig-1"}}}, api)
-        figure_data = figure["result"]["structuredContent"]["data"]
-        self.assertEqual(figure_data["page"], 3)
-        evidence = mcp.handle({"jsonrpc": "2.0", "id": 15, "method": "tools/call", "params": {"name": "validate_evidence", "arguments": {"references": [{"source_kind": "page", "job_id": "job-1", "page": 3, "quote": "Figure 1"}]}}}, api)
-        self.assertTrue(evidence["result"]["structuredContent"]["data"]["valid"])
+        api = ReaderApi()
+        reference = {"source_kind": "region", "job_id": "job-1", "item_id": "p001-b0001", "page": 1, "quote": "Figure 1"}
+        evidence = mcp._call_tool("validate_evidence", {"references": [
+            reference, {**reference, "page": 2}, {**reference, "quote": "unsupported quotation"}
+        ]}, api)["data"]
+        self.assertEqual(evidence["valid_references"], [reference])
+        self.assertEqual([row["index"] for row in evidence["invalid_references"]], [1, 2])
+        self.assertEqual(len(api.calls), 1)
+
+    def test_reader_page_region_and_figure_tools_use_collection_endpoint(self):
+        api = ReaderApi()
+        page = mcp.handle({"jsonrpc": "2.0", "id": 21, "method": "tools/call", "params": {"name": "get_page_context", "arguments": {"job_id": "job-1", "page": 2}}}, api)
+        self.assertEqual(page["result"]["structuredContent"]["data"]["page"]["items"][0]["item_id"], "p002-b0001")
+        region = mcp.handle({"jsonrpc": "2.0", "id": 22, "method": "tools/call", "params": {"name": "get_region_context", "arguments": {"job_id": "job-1", "item_id": "p002-b0001"}}}, api)
+        self.assertEqual(region["result"]["structuredContent"]["data"]["source"]["page"], 2)
+        figure = mcp.handle({"jsonrpc": "2.0", "id": 23, "method": "tools/call", "params": {"name": "get_figure_resource", "arguments": {"job_id": "job-1", "item_id": "p001-b0001"}}}, api)
+        self.assertEqual(figure["result"]["structuredContent"]["data"]["page"], 1)
+        self.assertTrue(figure["result"]["structuredContent"]["data"]["image"]["uri"].endswith("/files/pages/1.jpg"))
+        self.assertEqual(figure["result"]["structuredContent"]["data"]["assets"][0]["uri"], api.base + "/api/v1/jobs/job-1/files/output/ocr/images/page-1/figure.png")
+
+    def test_search_document_reads_only_the_requested_job(self):
+        api = ReaderApi()
+        result = mcp.handle({"jsonrpc": "2.0", "id": 24, "method": "tools/call", "params": {"name": "search_document", "arguments": {"job_id": "job-1", "query": "responses"}}}, api)
+        self.assertTrue(result["result"]["structuredContent"]["ok"])
+        self.assertEqual(api.calls[-1][1], "/api/v1/jobs/job-1/reader/regions")
+        hit, = result["result"]["structuredContent"]["data"]["hits"]
+        self.assertEqual((hit["page"], hit["block_id"]), (2, "p002-b0001"))
 
     def test_invalid_arguments_are_mcp_tool_errors(self):
         api = FakeApi()
@@ -137,11 +209,76 @@ class McpProtocolTests(unittest.TestCase):
             value = response["result"]["structuredContent"]["data"]
             self.assertEqual(value["items"][0]["status"], "submitted")
             self.assertEqual(api.calls[0][1], "/api/v1/documents/doc-1/ocr")
+            refreshed = mcp._run_status({"run_id": value["run_id"]}, api)
+            self.assertEqual(refreshed["items"][0]["status"], "succeeded")
+
+    def test_batch_uses_local_provider_defaults_and_redacts_the_manifest(self):
+        with tempfile.TemporaryDirectory() as root:
+            api = ConfiguredBatchApi()
+            api._data_dir = root
+            response = mcp.handle({"jsonrpc": "2.0", "id": 11, "method": "tools/call", "params": {"name": "run_batch_workflow", "arguments": {"action": "translate", "items": [{"document_id": "doc-1"}], "dry_run": False, "confirmed": True}}}, api)
+            value = response["result"]["structuredContent"]["data"]
+            self.assertEqual(value["status"], "submitted")
+            body = api.calls[0][2]
+            self.assertEqual(body["ocr"]["paddle_token"], "paddle-secret")
+            self.assertEqual(body["translation"]["model"], "deepseek-flash")
+            manifest = json.loads((pathlib.Path(root) / "agent-runs" / value["run_id"] / "manifest.json").read_text(encoding="utf8"))
+            self.assertNotIn("secret", json.dumps(manifest))
+
+    def test_batch_rejects_a_missing_local_provider_configuration_before_submit(self):
+        with tempfile.TemporaryDirectory() as root:
+            api = ConfiguredBatchApi()
+            api._data_dir = root
+            api.prepare_job_options = lambda action, options: (options, False, ["OCR 未配置凭据"])
+            response = mcp.handle({"jsonrpc": "2.0", "id": 12, "method": "tools/call", "params": {"name": "run_batch_workflow", "arguments": {"action": "translate", "items": [{"document_id": "doc-1"}], "dry_run": False, "confirmed": True}}}, api)
+            value = response["result"]["structuredContent"]["data"]
+            self.assertEqual(value["status"], "blocked")
+            self.assertEqual(api.calls, [])
 
     def test_batch_write_requires_confirmation(self):
         response = mcp.handle({"jsonrpc": "2.0", "id": 12, "method": "tools/call", "params": {"name": "run_batch_workflow", "arguments": {"action": "ocr", "items": [{"document_id": "doc-1"}], "dry_run": False}}}, BatchApi())
         self.assertTrue(response["result"]["isError"])
         self.assertIn("confirmed=true", response["result"]["structuredContent"]["error"]["message"])
+
+    def test_preflight_marks_unknown_and_skipped_documents_without_submitting(self):
+        with tempfile.TemporaryDirectory() as root:
+            api = BatchApi()
+            api._data_dir = root
+            with mock.patch.object(api, "request", side_effect=RuntimeError("document not found")) as request:
+                result = mcp._batch_workflow({"action": "ocr", "failure_policy": "stop", "items": [
+                    {"document_id": "unknown"}, {"document_id": "second"},
+                ]}, api)
+            self.assertEqual(result["status"], "blocked")
+            self.assertEqual([item["status"] for item in result["items"]], ["failed", "skipped"])
+            request.assert_called_once_with("GET", "/api/v1/documents/unknown")
+
+    def test_status_tracks_every_job_of_a_split_translation(self):
+        with tempfile.TemporaryDirectory() as root:
+            api = BatchApi()
+            api._data_dir = root
+            replies = [
+                {"job_id": "first-page", "sibling_job_ids": ["second-page"]},
+                {"status": "succeeded"}, {"status": "running"},
+            ]
+            with mock.patch.object(api, "request", side_effect=replies):
+                run = mcp._batch_workflow({"action": "translate", "items": [{"document_id": "doc"}],
+                                           "dry_run": False, "confirmed": True}, api)
+                item, = mcp._run_status({"run_id": run["run_id"]}, api)["items"]
+            self.assertEqual(item["status"], "running")
+            self.assertEqual([(job["job_id"], job["status"]) for job in item["jobs"]],
+                             [("first-page", "succeeded"), ("second-page", "running")])
+
+    def test_remote_backend_and_older_cli_preserve_explicit_options(self):
+        api = mcp.PaperLoomApi()
+        options = {"translation": {"base_url": "https://models.example", "credential_ref": "ref"}}
+        api.base = "https://library.example"
+        with mock.patch.object(subprocess, "run") as run:
+            self.assertEqual(api.prepare_job_options("translate", options), (options, False, []))
+            run.assert_not_called()
+        api.base = "http://localhost:46000"
+        unknown = subprocess.CompletedProcess([], 2, b"", b"error: unrecognized subcommand 'prepare-job-options'")
+        with mock.patch.dict(os.environ, {"PAPERLOOM_CONFIG_CLI": "old-cli"}), mock.patch.object(subprocess, "run", return_value=unknown):
+            self.assertEqual(api.prepare_job_options("translate", options), (options, False, []))
 
     def test_notifications_do_not_emit_responses(self):
         api = FakeApi()

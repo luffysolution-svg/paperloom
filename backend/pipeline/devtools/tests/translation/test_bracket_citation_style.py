@@ -90,6 +90,25 @@ def test_canonicalizer_restores_bracket_citations_for_direct_typst_items():
     assert result["p001-b024"]["translated_text"] == "咔唑衍生物是马钱子碱类生物碱的一个重要类别[12–17]。"
 
 
+def test_direct_typst_restores_a_missing_reference_after_an_unchanged_quantity():
+    source = r"Verified oxides lie below $ E_{hull} \leq 0.08 $ eV/atom $ ^{51} $."
+    translated = r"验证过的氧化物位于 $E_{hull}\leq 0.08$ eV/atom 范围内。"
+    item = {"item_id": "p010-b007", "math_mode": "direct_typst", "source_text": source}
+
+    def canonical(text):
+        return canonicalize_batch_result([item], {item["item_id"]: {"translated_text": text}})[item["item_id"]]["translated_text"]
+
+    corrected = translated.replace("eV/atom", "eV/atom $^{51}$")
+    assert canonical(translated) == corrected
+    assert canonical(corrected) == corrected
+    for existing in ("[51]", "⁵¹"):
+        with_reference = translated.replace("eV/atom", "eV/atom" + existing)
+        assert canonical(with_reference).count("$^{51}$") == 0
+    # Ambiguous location and different numeric conditions require review.
+    assert "$^{51}$" not in canonical(translated + translated)
+    assert "$^{51}$" not in canonical(translated.replace("0.08", "0.8"))
+
+
 _TRANSLATED_SUP = re.compile(r"\$\s*\^\s*\{\s*([^}]*)\}\s*\$")
 _SOURCE_SUP = re.compile(r"<sup>\s*([^<]*)</sup>|\^\s*\{\s*([^}]*)\}")
 

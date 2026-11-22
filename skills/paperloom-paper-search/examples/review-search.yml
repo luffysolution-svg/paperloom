@@ -1,3 +1,6 @@
+# Agent reading plan. Run the search with search_documents or search_scholarly,
+# then use paperloom-paper-reader to collect evidence for the matrix.
+# The CLI batch runner handles PDF import, OCR and translation.
 schema_version: agent-batch-workflow.v1
 name: review-search
 description: Prepare a local evidence set for a literature review.

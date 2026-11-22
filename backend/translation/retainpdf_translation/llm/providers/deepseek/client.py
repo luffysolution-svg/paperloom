@@ -583,7 +583,8 @@ def request_chat_content(
             dns_failure = is_dns_resolution_error(exc)
             if dns_failure and attempt_limit < dns_retry_limit:
                 attempt_limit = dns_retry_limit
-            retryable_transport = _is_retryable_http_error(exc) and is_transport_error(exc)
+            retryable_http = _is_retryable_http_error(exc)
+            retryable_transport = retryable_http and is_transport_error(exc)
             if retryable_transport and transport_recovery_seconds > 0:
                 if transport_recovery_started_at is None:
                     transport_recovery_started_at = time.perf_counter()
@@ -593,7 +594,7 @@ def request_chat_content(
                     and recovery_elapsed < transport_recovery_seconds
                 ):
                     attempt_limit = max(attempt_limit, attempt + 1)
-            if attempt >= attempt_limit or not _is_retryable_http_error(exc):
+            if attempt >= attempt_limit or not (retryable_http or isinstance(exc, model_wire.EmptyResponsesOutputError)):
                 raise
             if _should_drop_session_after_error(exc):
                 _drop_session(_request_session_key())

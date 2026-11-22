@@ -23,6 +23,13 @@ _CITE_PART = (
 )
 CITATION_ONLY_RE = re.compile(r"^\s*(?:\d{1,4}\.?\s+)?" + _CITE_PART + r"(?:\s*;\s*" + _CITE_PART + r")*\s*\.?\s*$")
 CITATION_RE = re.compile(r"\[\d+(?:\s*[,–-]\s*\d+)*\]")
+_CITATION_GROUP_RE = re.compile(r"[（(]([^（）()]+)[)）]")
+_SURNAME = r"[A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ÿ’'.-]+"
+_AUTHOR_YEAR_RE = re.compile(
+    rf"({_SURNAME})"
+    rf"(?:\s+et\s+al\.?|\s*等|\s*(?:\band\b|&|和|与)\s*{_SURNAME})?"
+    r"(?:\s*[,，]\s*|\s+)([12]\d{3}[a-z]?)"
+)
 FN_RE = re.compile(r"\{\{fn:[^}]+\}\}")
 CODE_RE = re.compile(r"`[^`\n]+`")
 # 中文中间紧贴着的小写英文词（"实际上those崩溃"）：模型漏翻的残片
@@ -56,7 +63,8 @@ SHORT_SOURCE = 40  # 原文不到这么多字符（去掉公式等）不查"太�
 #    译文里成对的直引号换成中文引号（normalize_translation）
 # 10：2026-11-20 三个以上作者的引注（"Petriglieri, Ashford, and Wrzesniewski 2019."）也算只有引注
 # 11：2026-11-22 数字开头的公式（"$1 / r^{2}$"）不当价格转义；全角的引用编号（"［8，14］"）换回半角再查
-CHECKS_VERSION = "translation-agent-checks-11"
+# 12：检查括号内作者—年份引用的出现次数，避免漏掉论文中重复引用的来源。
+CHECKS_VERSION = "translation-agent-checks-12"
 
 
 # `$` 加数字后面到下一个 `$` 之间像公式（"$1 / r^{2}$"、"$1/\epsilon_0$"、"$2e$"），就不是价格（"$12.59 to $17"）：
@@ -92,6 +100,16 @@ _CITATION_CHARS = str.maketrans({"［": "[", "］": "]", "，": ",", "、": ",",
 
 def normalize_citations(text: str) -> str:
     return _LOOSE_CITATION_RE.sub(lambda m: m.group(0).translate(_CITATION_CHARS), text)
+
+
+def _author_year_citations(text: str) -> Counter[tuple[str, str]]:
+    citations = Counter()
+    for group in _CITATION_GROUP_RE.findall(FORMULA_RE.sub(" ", CODE_RE.sub(" ", text))):
+        entries = re.split(r"[;；]", group)
+        matches = [match for entry in entries if (match := _AUTHOR_YEAR_RE.fullmatch(entry.strip()))]
+        if len(matches) == len(entries):
+            citations.update((match[1].casefold(), match[2]) for match in matches)
+    return citations
 
 
 def is_citation_only(text: str) -> bool:
@@ -237,6 +255,10 @@ def check_block(source: str, translation: str | None) -> list[dict]:
         if lost:
             label = "引用标记" if name == "citation" else "脚注标记"
             issues.append(_issue(f"{name}_lost", "error", f"{label}丢了：{sorted(lost.elements())}"))
+    lost_citations = _author_year_citations(source) - _author_year_citations(translation)
+    if lost_citations:
+        missing = ", ".join(f"{author} {year}" for author, year in sorted(lost_citations.elements()))
+        issues.append(_issue("citation_lost", "error", f"作者—年份引用丢了：{missing}"))
     src_numbers = Counter(NUMBER_RE.findall(_strip_protected(source)))
     # 原文正文里的数字被译文套进了公式（"n/2" → "$n/2$"）：数数字时这种公式按普通文字算
     unwrapped = FORMULA_RE.sub(lambda m: m.group(0)[1:-1] if _formula_key(m.group(0)) not in src_formulas else m.group(0), translation)

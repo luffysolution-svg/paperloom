@@ -504,6 +504,13 @@ def test_responses_without_text_raise(payload, needle):
         model_wire.responses_content(payload)
 
 
+def test_completed_responses_without_text_are_retried():
+    empty = _response(payload={"status": "completed", "output": []})
+    content, session = _responses_call([empty, _response(payload=RESPONSES_OK)], max_attempts=2)
+    assert content == "译文"
+    assert session.post.call_count == 2
+
+
 def test_registered_responses_connection_is_used_without_explicit_arguments():
     model_wire.register_connection(base_url="https://api.openai.com/v1", model="gpt-5.6-luna",
                                    protocol="openai_responses", thinking="low")

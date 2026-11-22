@@ -35,11 +35,16 @@ def reset_policy_state(payload: list[dict]) -> int:
             mark_policy_skip(item, label, skip_reason=skip_reason)
             continue
         label = str(item.get("classification_label", "") or "")
-        # A completed model/fast-path decision is a translation result, not
-        # a temporary page-policy label. Resetting it on resume would reopen
-        # committed work before the batch fast path can run again.
+        # Retain decisions made by the translation engine after page policy.
+        # The preparing checkpoint on resume already counts these as completed.
         if (
-            label == KEEP_ORIGIN_LABEL
+            label in (
+                KEEP_ORIGIN_LABEL,
+                "skip_no_prose",
+                "skip_citation_only",
+                "skip_running_header",
+                "skip_back_matter_index",
+            )
             and item.get("final_status") == KEPT_ORIGIN_STATUS
             and item.get("should_translate") is False
         ):

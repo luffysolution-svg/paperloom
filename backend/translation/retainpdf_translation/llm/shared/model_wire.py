@@ -337,8 +337,12 @@ def responses_body(
     return body
 
 
+class EmptyResponsesOutputError(ValueError):
+    """The provider completed the request without returning usable text."""
+
+
 def responses_content(data: dict[str, Any]) -> str:
-    """拼出 ``output`` 里所有 message 的 ``output_text``；拒答、未完成、出错都抛 ValueError（会重试）。"""
+    """拼出 ``output`` 里所有 message 的 ``output_text``。"""
     error = data.get("error")
     if isinstance(error, dict) and error:
         raise ValueError(f"Responses API error: {error.get('code') or ''} {error.get('message') or ''}".strip())
@@ -360,7 +364,9 @@ def responses_content(data: dict[str, Any]) -> str:
     if refusals:
         raise ValueError(f"Responses API refused: {' '.join(refusals)[:200]}")
     reason = (data.get("incomplete_details") or {}).get("reason") if isinstance(data.get("incomplete_details"), dict) else None
-    raise ValueError(f"Responses API returned no text (status={data.get('status')}, reason={reason}).")
+    status = data.get("status")
+    error_type = EmptyResponsesOutputError if status == "completed" else ValueError
+    raise error_type(f"Responses API returned no text (status={status}, reason={reason}).")
 
 
 def responses_usage(data: dict[str, Any]) -> dict[str, Any] | None:
