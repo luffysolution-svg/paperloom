@@ -78,6 +78,22 @@ class McpProtocolTests(unittest.TestCase):
         uris = {resource["uri"] for resource in resources["result"]["resources"]}
         self.assertIn("paperloom://runs/{run_id}/manifest", uris)
         self.assertIn("paperloom://runs/{run_id}/evidence", uris)
+        self.assertIn("paperloom://jobs/{job_id}/pages/{page}/image", uris)
+
+    def test_figure_resource_and_evidence_validation(self):
+        api = FakeApi()
+        api.base = "http://127.0.0.1:46000"
+        original = api.request
+        def request(method, path, body=None, *, query=None):
+            if path.endswith("/reader/regions/fig-1"):
+                return {"item_id": "fig-1", "page_idx": 2, "text": "Figure 1"}
+            return original(method, path, body, query=query)
+        api.request = request
+        figure = mcp.handle({"jsonrpc": "2.0", "id": 14, "method": "tools/call", "params": {"name": "get_figure_resource", "arguments": {"job_id": "job-1", "item_id": "fig-1"}}}, api)
+        figure_data = figure["result"]["structuredContent"]["data"]
+        self.assertEqual(figure_data["page"], 3)
+        evidence = mcp.handle({"jsonrpc": "2.0", "id": 15, "method": "tools/call", "params": {"name": "validate_evidence", "arguments": {"references": [{"source_kind": "page", "job_id": "job-1", "page": 3, "quote": "Figure 1"}]}}}, api)
+        self.assertTrue(evidence["result"]["structuredContent"]["data"]["valid"])
 
     def test_invalid_arguments_are_mcp_tool_errors(self):
         api = FakeApi()

@@ -24,7 +24,7 @@ from paper_search import search as search_scholarly_records
 
 
 PROTOCOL_VERSION = "2025-06-18"
-SERVER_VERSION = "0.4.0"
+SERVER_VERSION = "0.4.1"
 
 
 def _envelope(data: Any = None, *, warnings: list[str] | None = None, references: list[dict[str, Any]] | None = None) -> dict[str, Any]:
@@ -139,6 +139,8 @@ TOOLS: list[dict[str, Any]] = [
     {"name": "get_document_outline", "description": "读取 Reader 文献目录。", "inputSchema": {"type": "object", "required": ["job_id"], "properties": {"job_id": {"type": "string", "minLength": 1}}}},
     {"name": "get_page_context", "description": "读取指定页面的 OCR、Markdown 和区域上下文。", "inputSchema": {"type": "object", "required": ["job_id", "page"], "properties": {"job_id": {"type": "string", "minLength": 1}, "page": {"type": "integer", "minimum": 1}}}},
     {"name": "get_region_context", "description": "读取一个 Reader 区域及其证据定位。", "inputSchema": {"type": "object", "required": ["job_id", "item_id"], "properties": {"job_id": {"type": "string", "minLength": 1}, "item_id": {"type": "string", "minLength": 1}}}},
+    {"name": "get_figure_resource", "description": "读取图表区域、图注上下文和对应页面图像资源。", "inputSchema": {"type": "object", "required": ["job_id", "item_id"], "properties": {"job_id": {"type": "string", "minLength": 1}, "item_id": {"type": "string", "minLength": 1}}}},
+    {"name": "validate_evidence", "description": "校验 Agent 回答中的页码、区域、引用和支持等级。", "inputSchema": {"type": "object", "required": ["references"], "properties": {"references": {"type": "array", "minItems": 1, "items": {"type": "object"}}, "support_level": {"type": "string", "enum": ["direct", "inferred", "hypothesis", "unsupported", "conflicting"]}}}},
     {"name": "search_document", "description": "在任务的 Reader 内容中检索。", "inputSchema": {"type": "object", "required": ["query"], "properties": {"query": {"type": "string", "minLength": 1}, "job_id": {"type": "string"}, "document_id": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}}}},
     {"name": "export_markdown", "description": "导出任务 Markdown。", "inputSchema": {"type": "object", "required": ["job_id"], "properties": {"job_id": {"type": "string", "minLength": 1}, "output": {"type": "string"}}}},
     {"name": "zotero_status", "description": "读取本机 Zotero 连接状态。", "inputSchema": {"type": "object", "properties": {}}},
@@ -216,7 +218,7 @@ def _batch_workflow(args: dict[str, Any], api: PaperLoomApi) -> dict[str, Any]:
         "created_at": now,
         "updated_at": now,
         "command": "run_batch_workflow",
-        "paperloom_version": "0.4.0",
+        "paperloom_version": "0.4.1",
         "inputs": plan,
         "options": {
             "action": action,
@@ -350,6 +352,56 @@ def _call_tool(name: str, args: dict[str, Any], api: PaperLoomApi) -> dict[str, 
     if name == "get_region_context":
         _required(args, ["job_id", "item_id"])
         return _envelope(api.request("GET", f"/api/v1/jobs/{urllib.parse.quote(args['job_id'], safe='')}/reader/regions/{urllib.parse.quote(args['item_id'], safe='')}"), references=[{"job_id": args["job_id"], "item_id": args["item_id"], "source_kind": "region"}])
+    if name == "get_figure_resource":
+        _required(args, ["job_id", "item_id"])
+        job_id = urllib.parse.quote(args["job_id"], safe="")
+        item_id = urllib.parse.quote(args["item_id"], safe="")
+        region = api.request("GET", f"/api/v1/jobs/{job_id}/reader/regions/{item_id}")
+        page = None
+        if isinstance(region, dict):
+            for key in ("page", "page_idx", "page_number"):
+                value = region.get(key)
+                if isinstance(value, int):
+                    page = value if key != "page_idx" else value + 1
+                    break
+        if page is None:
+            raise ValueError("图表区域没有可用页码")
+        image_uri = f"{api.base}/api/v1/jobs/{job_id}/files/pages/{page}"
+        return _envelope(
+            {"region": region, "page": page, "image": {"uri": image_uri, "mime_type": "image/jpeg"}},
+            references=[{"job_id": args["job_id"], "item_id": args["item_id"], "page": page, "source_kind": "region", "uri": image_uri}],
+        )
+    if name == "validate_evidence":
+        references = args.get("references")
+        if not isinstance(references, list) or not references:
+            raise ValueError("references 必须是非空数组")
+        allowed = {"document", "job", "region", "page", "external", "user"}
+        valid: list[dict[str, Any]] = []
+        invalid: list[dict[str, Any]] = []
+        for index, reference in enumerate(references):
+            if not isinstance(reference, dict):
+                invalid.append({"index": index, "reason": "引用必须是对象"})
+                continue
+            source_kind = reference.get("source_kind")
+            reason = None
+            if source_kind not in allowed:
+                reason = "source_kind 无效"
+            elif source_kind in {"job", "region", "page"} and not str(reference.get("job_id") or "").strip():
+                reason = "缺少 job_id"
+            elif source_kind == "region" and not str(reference.get("item_id") or "").strip():
+                reason = "缺少 item_id"
+            elif source_kind == "page" and (not isinstance(reference.get("page"), int) or reference["page"] < 1):
+                reason = "page 必须是正整数"
+            elif source_kind in {"document", "region", "page"} and not str(reference.get("quote") or "").strip():
+                reason = "缺少 quote"
+            if reason:
+                invalid.append({"index": index, "reason": reason})
+            else:
+                valid.append(reference)
+        support_level = args.get("support_level", "direct")
+        if support_level not in {"direct", "inferred", "hypothesis", "unsupported", "conflicting"}:
+            raise ValueError("support_level 无效")
+        return _envelope({"valid": len(invalid) == 0, "support_level": support_level, "valid_references": valid, "invalid_references": invalid})
     if name == "search_document":
         _required(args, ["query"])
         return _envelope(api.request("GET", "/api/v1/search", query={"q": args["query"], "limit": args.get("limit", 20), "document_id": args.get("document_id")}))
@@ -425,6 +477,9 @@ def _resource_read(uri: str, api: PaperLoomApi) -> dict[str, Any]:
             return _envelope(api.request("GET", path))
         if bits[2] == "reports" and len(bits) == 4:
             return _envelope(api.request("GET", f"/api/v1/jobs/{job}/reports/{bits[3]}"))
+        if bits[2] == "pages" and len(bits) == 5 and bits[4] == "image":
+            page = urllib.parse.quote(bits[3], safe="")
+            return _envelope({"uri": f"{api.base}/api/v1/jobs/{job}/files/pages/{page}", "mime_type": "image/jpeg"})
     if bits[:1] == ["runs"] and len(bits) == 3:
         run_id = bits[1]
         run_dir = _run_dir(api, run_id)
@@ -455,7 +510,7 @@ def handle(request: dict[str, Any], api: PaperLoomApi) -> dict[str, Any] | None:
     if method == "tools/list":
         return {"jsonrpc": "2.0", "id": request_id, "result": {"tools": TOOLS}}
     if method == "resources/list":
-        return {"jsonrpc": "2.0", "id": request_id, "result": {"resources": [{"uri": "paperloom://documents/{document_id}/metadata", "name": "Document metadata", "mimeType": "application/json"}, {"uri": "paperloom://jobs/{job_id}/markdown", "name": "Reader Markdown", "mimeType": "text/markdown"}, {"uri": "paperloom://jobs/{job_id}/regions", "name": "Reader regions", "mimeType": "application/json"}, {"uri": "paperloom://jobs/{job_id}/reports/{report}", "name": "Job report", "mimeType": "application/json"}, {"uri": "paperloom://runs/{run_id}/evidence", "name": "Batch evidence", "mimeType": "application/json"}, {"uri": "paperloom://runs/{run_id}/manifest", "name": "Batch manifest", "mimeType": "application/json"}]}}
+        return {"jsonrpc": "2.0", "id": request_id, "result": {"resources": [{"uri": "paperloom://documents/{document_id}/metadata", "name": "Document metadata", "mimeType": "application/json"}, {"uri": "paperloom://documents/{document_id}/outline", "name": "Document outline", "mimeType": "application/json"}, {"uri": "paperloom://jobs/{job_id}/markdown", "name": "Reader Markdown", "mimeType": "text/markdown"}, {"uri": "paperloom://jobs/{job_id}/regions", "name": "Reader regions", "mimeType": "application/json"}, {"uri": "paperloom://jobs/{job_id}/reports/{report}", "name": "Job report", "mimeType": "application/json"}, {"uri": "paperloom://jobs/{job_id}/pages/{page}/image", "name": "Page image", "mimeType": "image/jpeg"}, {"uri": "paperloom://runs/{run_id}/evidence", "name": "Batch evidence", "mimeType": "application/json"}, {"uri": "paperloom://runs/{run_id}/manifest", "name": "Batch manifest", "mimeType": "application/json"}]}}
     if method == "resources/read":
         try:
             result = _resource_read(str(request.get("params", {}).get("uri", "")), api)

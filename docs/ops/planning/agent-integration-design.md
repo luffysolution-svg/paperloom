@@ -208,6 +208,8 @@ Claude Code、Codex、Pi、ZCode 和其他宿主只配置这一入口。远程 S
 - get_document_outline
 - get_page_context
 - get_region_context
+- get_figure_resource
+- validate_evidence
 - search_document
 - get_figure_resource
 - validate_evidence
