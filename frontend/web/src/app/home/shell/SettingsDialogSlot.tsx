@@ -12,6 +12,7 @@ import { AppUpdateBanner } from "@/features/app-update/index.js";
 import { CredentialsWorkbench } from "@/features/credentials/index.js";
 import { CREDENTIAL_DOM_IDS } from "@/features/credentials/ui/credentials-dom-ids.js";
 import { SettingsDialog, BackupPanel } from "@/features/settings/index.js";
+import { AgentIntegrationPanel } from "@/features/settings/ui/AgentIntegrationPanel.jsx";
 import { BackupPanel as DatabaseBackupPanel } from "@/features/backup/index.js";
 import { SyncSettingsPanel } from "@/features/sync/index.js";
 import { UsageSettingsPanel } from "@/features/usage/index.js";
@@ -59,6 +60,7 @@ export function SettingsDialogSlot() {
       notifyPanelSlot={<NotifySettingsPanel />}
       accountPanelSlot={multi ? <AccountPanel /> : null}
       adminPanelSlot={multi && admin ? <AdminConsoleEntry /> : null}
+      agentPanelSlot={<AgentIntegrationPanel />}
       hiddenTabs={hiddenSettingsTabs(session)}
     />
   );

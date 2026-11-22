@@ -59,3 +59,25 @@ test("旧备份入口打开同步与备份中的整库迁移，三个页面均�
   }
   root.unmount();
 });
+
+test("MCP 与 Skills 分栏可见并挂载安装面板", async () => {
+  const dom = makeDomWith("", {
+    html: "<!doctype html><html><body><div id='root'></div></body></html>",
+    keys: [...DOM_GLOBAL_KEYS, "HTMLSelectElement"],
+  });
+  const React = await import("react");
+  const { createRoot } = await import("react-dom/client");
+  const { SettingsDialog } = await import("../../src/features/settings/ui/SettingsDialog.jsx");
+  const { createDialogStore } = await import("../../src/platform/store/dialog-store.js");
+  const store = createDialogStore(null);
+  const root = createRoot(dom.window.document.getElementById("root"));
+  root.render(React.createElement(SettingsDialog, {
+    dialogStore: store,
+    onOpenGlossaries: () => {},
+    agentPanelSlot: React.createElement("p", { id: "agent-panel-body" }, "MCP 与 Skills"),
+  }));
+  store.open({ tab: "agents" });
+  await waitFor(() => dom.window.document.getElementById("agent-panel-body"), "MCP 与 Skills 分栏");
+  assert.equal(dom.window.document.querySelector('[data-settings-tab="agents"]').textContent, "MCP 与 Skills");
+  root.unmount();
+});

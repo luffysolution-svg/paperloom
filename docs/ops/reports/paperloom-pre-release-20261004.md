@@ -95,7 +95,7 @@
 - 最小运行时恢复：只有 `https://cdn-mineru.openxlab.org.cn:443` 的证书过期错误才触发 HTTPS DNS 刷新，解析只包含 CDN 域名；接受公开 IPv4，再以原 URL、原域名/SNI 和完整 TLS 校验重试。非官方域名、HTTP、其他端口与普通 HTTP 错误不触发。上传 token 不传给 DNS/CDN。
 - DNS 策略与响应过滤回归先失败再通过；MinerU focused **25/25** 通过。新 debug 后端在用户当前的无代理环境中完成真实 OCR，Markdown、规范化文档、报告与 bundle 均 ready；key 已清除。响应过滤排除私网、loopback、链路本地、CGNAT、benchmark 等非公网地址；判断证书错误只使用异常 source chain，不读取 URL 中的匹配文字。
 - 另补实际任务详情的证书下载失败文案：`ocr_result_download_failed`，明确提示检查 DNS/网络与系统代理，保持 TLS 校验。失败分类 focused **27/27** 通过。独立复核指出历史 MinerU 日志可能误判后续渲染失败；回归先复现，再将匹配限制为当前错误，保持渲染阶段恢复。
-- **2026-10-05 最终 release 构建和 Windows NSIS/便携包重建成功；已将验证通过的修复更新至用户实际安装目录 `F:\软件安装\Paperloom`，保留原安装备份。**
+- **2026-10-05 最终 release 构建和 Windows NSIS/便携包重建成功；已将验证通过的修复更新至本机安装目录，保留原安装备份。**
 - **当前安装版无代理实测成功**：安装器退出 0；从该目录 `PaperLoom.exe` 启动，网关 200，无 React 启动错误；Electron 返回直连，系统代理关闭，无代理环境变量。真实 key 有效，真实第一方 PDF 的 OCR 任务 `20261004160329-51d72b` 返回 `succeeded`，规范化文档、报告、Markdown、bundle 全部 ready，测试代理 CONNECT 数为 0。
 - 测试使用独立数据目录；之后重启修复后的程序使用原用户数据，书库仍为原来的 6 篇。实际安装的 Rust API/jobsd SHA-256 与最终构建一致；原注册项和快捷方式保持原路径。按用户优先解决 MinerU 的请求保留修复版本，未恢复旧二进制；旧版备份位于本地审计目录的 `original-install-backup`。
 - 没有修改系统 DNS、hosts 或禁用 HTTPS 校验；当前系统代理仍关闭。测试凭据已清除，检查日志、测试数据库和 app.asar 后没有残留用户提供的 key。源码的既有 generated dist 仍为 0 项变化，未 commit/push/tag/release/upload。

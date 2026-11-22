@@ -27,6 +27,7 @@ const { createBackendRuntime } = require("./src/main/backend-runtime");
 const { stopChildGracefully } = require("./src/main/graceful-stop");
 const { createRetainpdfHome } = require("./src/main/retainpdf-home");
 const { createCliInstaller } = require("./src/main/cli-install");
+const { agentIntegrationStatus, installAgentIntegrations } = require("./src/main/agent-installer");
 const { createDesktopConfigStore } = require("./src/main/desktop-config");
 const { createDesktopLogger } = require("./src/main/desktop-logging");
 const { createDesktopWindows } = require("./src/main/desktop-windows");
@@ -96,6 +97,11 @@ function readRetainpdfSettings() {
 }
 const retainpdfHome = createRetainpdfHome({ resolveCli: retainpdfHomeCliPath });
 const cliInstaller = createCliInstaller({ resolveSource: retainpdfHomeCliPath });
+const agentInstallerOptions = () => ({
+  repoRoot: path.join(__dirname, "..", ".."),
+  backendRoot: resolveBackendRoot(),
+  cliPath: retainpdfHomeCliPath(),
+});
 let activeDataRoot;
 function resolveDataRoot() {
   return activeDataRoot || path.join(app.getPath("userData"), "data");
@@ -670,6 +676,16 @@ ipcMain.handle("desktop:invoke", async (event, command, args = {}) => {
       return cliInstaller.status();
     case "install_cli":
       return cliInstaller.install();
+    case "agent_integration_status":
+      return agentIntegrationStatus({
+        ...agentInstallerOptions(),
+        projectRoot: args?.projectRoot,
+      });
+    case "install_agent_integrations":
+      return installAgentIntegrations({
+        ...agentInstallerOptions(),
+        ...args,
+      });
     case "pick_directory": {
       const owner = BrowserWindow.fromWebContents(event.sender);
       const result = await dialog.showOpenDialog(owner, {

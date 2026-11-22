@@ -6,11 +6,11 @@ PaperLoom exposes one local stdio entry point. Configure each host to run `paper
 
 ## Claude Code
 
-Copy the root `.mcp.json` into the project or register the same server in Claude Code settings. Load the three canonical skills from `skills/`.
+Register the server with `claude mcp add`. The installer creates the project configuration when project scope is selected. Load the three canonical skills from `skills/`.
 
 ## Codex
 
-Use the root `mcp.json` as the project MCP configuration. The command must resolve to the same PaperLoom binary used by the local CLI.
+Register the server with `codex mcp add`, or use the global `config.toml` entry described in [agent-setup.md](./agent-setup.md). The command must resolve to the same PaperLoom binary used by the local CLI.
 
 ## Pi, OpenCode, ZCode, DeepSeek Harness and WorkBuddy
 

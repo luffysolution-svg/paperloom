@@ -11,7 +11,7 @@
 
 两篇真实 Zotero PDF 在独立 PaperLoom 数据目录中重新导入，使用 MinerU VLM 完整解析与 DeepSeek 翻译，生成保留排版 PDF。最终批量写入 2 篇、失败 0 篇。Paddle 对照使用相同原文的既有成功任务，也使用 `deepseek-flash`；本次未重跑 Paddle，运行时间、并发和翻译随机性不是严格控制变量。
 
-用户实际 vault 的结果：`F:\个人知识库\PaperLoom\MinerU-vs-Paddle-20261005\Comparison.md`。相邻 `MinerU/`、`Paddle/` 保存各自笔记与 PDF，`screenshots/` 保存真实 Obsidian 预览截图。均未上传。
+真实 Obsidian Vault 的结果已完成并清理测试目录。测试笔记、PDF 和截图均未上传。
 
 ## 发现、修复与回归
 

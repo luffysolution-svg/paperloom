@@ -2,7 +2,7 @@
 
 这些目录是 PaperLoom 面向外部 Agent 的单一真源。Claude Code、Codex、Pi、OpenCode、ZCode、DeepSeek Harness 和 WorkBuddy 只需要加载对应的 `SKILL.md`，可执行动作统一调用 `paperloom agent` CLI 或本地 MCP。
 
-技能文件不保存 API key、论文正文或对话历史。宿主配置见仓库根目录的 `mcp.json`、`.mcp.json` 和 `docs/ops/agent-hosts.md`。
+技能文件不保存 API key、论文正文或对话历史。宿主配置由 Agent 安装器写入，说明见 `docs/ops/agent-hosts.md`。
 
 手动配置命令、Pi 项目配置、Obsidian 验收和可直接交给 Agent 的配置提示词见 [Agent setup guide](../docs/ops/agent-setup.md)。
 

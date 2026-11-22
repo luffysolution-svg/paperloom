@@ -62,6 +62,8 @@ export interface DesktopHost {
   cliStatus(): Promise<{ available: boolean; installedAt: string; supported: boolean }>;
   /** 把 retainpdf 链接到终端找得到的地方。 */
   installCli(): Promise<{ ok: boolean; path?: string; onPath?: boolean; hint?: string; error?: string }>;
+  agentIntegrationStatus(options?: { projectRoot?: string }): Promise<unknown>;
+  installAgentIntegrations(options?: { scope?: "global" | "project"; agents?: string[]; installMcp?: boolean; installSkills?: boolean; projectRoot?: string }): Promise<unknown>;
   /** 系统的文件夹选择框；取消时为 null。 */
   pickDirectory(options?: { title?: string; defaultPath?: string }): Promise<string | null>;
   onStartupProgress(callback: (event: unknown) => void): () => void;
@@ -143,6 +145,12 @@ function resolveDesktopHost(): DesktopHost | null {
     },
     async installCli() {
       return (await invokeAdapter!.invoke("install_cli")) || { ok: false, error: "没有结果" };
+    },
+    async agentIntegrationStatus(options = {}) {
+      return invokeAdapter!.invoke("agent_integration_status", options);
+    },
+    async installAgentIntegrations(options = {}) {
+      return invokeAdapter!.invoke("install_agent_integrations", options);
     },
     async pickDirectory(options: { title?: string; defaultPath?: string } = {}) {
       const result = await invokeAdapter!.invoke("pick_directory", options);

@@ -21,7 +21,7 @@
 // 与本组件是否挂载无关。
 
 import { useEffect, useState } from "react";
-import { IconKey, IconBook, IconSync, IconChart, IconBell, IconPalette, IconUpdate, IconUser, IconUsers } from "./settings-icons.jsx";
+import { IconKey, IconBook, IconSync, IconChart, IconBell, IconPalette, IconUpdate, IconUser, IconUsers, IconPlug } from "./settings-icons.jsx";
 import { Tabs as TabsPrimitive } from "radix-ui";
 import {
   Dialog,
@@ -57,6 +57,7 @@ const TABS = [
   { id: "notify", label: "通知", Icon: IconBell },
   { id: "appearance", label: "外观", Icon: IconPalette },
   { id: "update", label: "更新", Icon: IconUpdate },
+  { id: "agents", label: "MCP 与 Skills", Icon: IconPlug },
 ];
 
 const SYNC_SECTIONS = [
@@ -75,6 +76,7 @@ const PANE_HEADS = {
   notify: { title: "通知", desc: "翻译、识别跑完（成功或失败）时提醒你，不用一直盯着页面。只对这台电脑、这个浏览器有效。" },
   appearance: { title: "外观", desc: "选择界面配色，立即生效并记住本机选择。" },
   update: { title: "更新", desc: "查看当前版本，并从 GitHub Releases 重新检查更新。" },
+  agents: { title: "MCP 与 Skills", desc: "为 Codex、Claude Code 和 Pi 安装 PaperLoom 的 MCP 与科研 Skills。" },
 };
 
 function PaneHead({ tab, subtitle = null }: { tab: keyof typeof PANE_HEADS; subtitle?: React.ReactNode }) {
@@ -118,6 +120,7 @@ export type SettingsDialogProps = {
   /** 多用户模式的「账户」「账号管理」分栏（不给就不出现，单机模式不给）。 */
   accountPanelSlot?: React.ReactNode | null;
   adminPanelSlot?: React.ReactNode | null;
+  agentPanelSlot?: React.ReactNode | null;
   /** 不显示的分栏：多用户模式下普通用户看不到接口设置、同步、备份等单机才有的东西。 */
   hiddenTabs?: readonly string[];
 };
@@ -136,6 +139,7 @@ export function SettingsDialog({
   notifyPanelSlot = null,
   accountPanelSlot = null,
   adminPanelSlot = null,
+  agentPanelSlot = null,
   hiddenTabs = [],
 }: SettingsDialogProps) {
   const visibleTabs = TABS.filter(({ id }) => (
@@ -143,6 +147,7 @@ export function SettingsDialog({
     && (id !== "account" || accountPanelSlot)
     && (id !== "admin" || adminPanelSlot)
     && (id !== "notify" || notifyPanelSlot)
+    && (id !== "agents" || agentPanelSlot)
   ));
   // 要打开的分栏被藏了（比如普通用户点到「接口设置」），就落到第一个能看的分栏。
   const pickTab = (requested?: string) => {
@@ -337,6 +342,19 @@ export function SettingsDialog({
                   {appUpdateBannerSlot}
                   {activeTab === "update" ? <CommandLinePanel /> : null}
                 </TabsPrimitive.Content>
+
+                {agentPanelSlot ? (
+                  <TabsPrimitive.Content
+                    value="agents"
+                    forceMount
+                    hidden={activeTab !== "agents"}
+                    className={panelClass("agents")}
+                    data-settings-panel="agents"
+                  >
+                    <PaneHead tab="agents" />
+                    {activeTab === "agents" ? agentPanelSlot : null}
+                  </TabsPrimitive.Content>
+                ) : null}
               </div>
             </TabsPrimitive.Root>
           </DialogShell>

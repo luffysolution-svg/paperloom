@@ -9,14 +9,14 @@ PaperLoom 的连接结构是 Agent 宿主启动本地 stdio MCP，MCP 再连接 
 在项目根目录执行：
 
 ```powershell
-cd E:\开发\PaperLoom
+cd <paperloom-project>
 cargo build --release --bin paperloom
 ```
 
 如果使用当前源码调试版本，可以使用：
 
 ```text
-E:\开发\PaperLoom\target\debug\paperloom.exe
+<paperloom-project>\target\debug\paperloom.exe
 ```
 
 发布版本或本地 release 构建优先使用 `target/release/paperloom.exe`。PaperLoom 后端需要先由桌面端启动，或者由开发栈启动。
@@ -31,7 +31,7 @@ paperloom agent capabilities --json
 当前机器没有把 CLI 放入 PATH 时，可以临时加入：
 
 ```powershell
-$env:Path = "E:\开发\PaperLoom\target\release;$env:Path"
+$env:Path = "<paperloom-project>\target\release;$env:Path"
 ```
 
 项目根目录的 [tools/paperloom-mcp.cmd](../../tools/paperloom-mcp.cmd) 会自动尝试 release、交叉编译 release、debug 和 PATH 中的 `paperloom.exe`。
@@ -51,28 +51,28 @@ codex mcp get paperloom
 使用本项目 debug 二进制：
 
 ```powershell
-codex mcp add paperloom -- "E:\开发\PaperLoom\target\debug\paperloom.exe" agent mcp
+codex mcp add paperloom -- "<paperloom-cli-path>" agent mcp
 ```
 
 也可以在 `%USERPROFILE%\.codex\config.toml` 中手动加入：
 
 ```toml
 [mcp_servers.paperloom]
-command = "E:\\开发\\PaperLoom\\target\\debug\\paperloom.exe"
+command = "<paperloom-cli-path>"
 args = ["agent", "mcp"]
-cwd = "E:\\开发\\PaperLoom"
+cwd = "<paperloom-project>"
 startup_timeout_sec = 15.0
 tool_timeout_sec = 600.0
 ```
 
-项目里的 [mcp.json](../../mcp.json) 是可移植配置。用户级配置使用绝对路径时，更适合当前机器的 PATH 和调试构建状态。
+安装器会按用户选择生成项目级 MCP 配置。用户级配置使用绝对路径时，更适合当前机器的 PATH 和构建状态。
 
 ## Claude Code
 
-项目根目录已有 [.mcp.json](../../.mcp.json)。打开项目后执行：
+项目级配置由安装器写入项目 `.mcp.json`。安装完成后打开项目并执行：
 
 ```powershell
-cd E:\开发\PaperLoom
+cd <paperloom-project>
 claude mcp list
 claude mcp get paperloom
 ```
@@ -81,7 +81,7 @@ claude mcp get paperloom
 
 ```powershell
 claude mcp add --scope local --transport stdio paperloom -- `
-  "E:\开发\PaperLoom\target\debug\paperloom.exe" agent mcp
+  "<paperloom-cli-path>" agent mcp
 ```
 
 项目级共享配置使用：
@@ -94,7 +94,7 @@ Claude Code 的 `.claude/skills/` 包装文件会指向 `skills/` 中的单一�
 
 ## Pi
 
-项目已经包含 [`.pi/mcp.json`](../../.pi/mcp.json)，使用 `tools/paperloom-mcp.cmd` 自动定位 CLI：
+项目级配置由安装器写入 `.pi/mcp.json`，使用 `tools/paperloom-mcp.cmd` 自动定位 CLI：
 
 ```powershell
 pi mcp list --json
@@ -103,7 +103,7 @@ pi mcp list --json
 手动重新配置项目级 MCP：
 
 ```powershell
-pi mcp add paperloom --local --cwd E:\开发\PaperLoom -- cmd.exe /d /c tools\\paperloom-mcp.cmd
+pi mcp add paperloom --local --cwd <paperloom-project> -- cmd.exe /d /c tools\\paperloom-mcp.cmd
 pi mcp list --json
 ```
 
@@ -265,7 +265,7 @@ pi mcp list --json
 MCP 运行时优先使用桌面包内置的 PaperLoom CLI 和 stdio bridge。`npx` 适合首次引导或开发者手动安装，适合的形式是固定版本的安装器包，例如：
 
 ```powershell
-npx --yes --package @paperloom/agent@0.4.1 paperloom-agent install --scope project --agents codex,claude,pi
+npx --yes --package @paperloom/agent@0.4.2 paperloom-agent install --scope project --agents codex,claude,pi
 ```
 
 正式桌面版不应依赖未固定版本的 `npx` 启动 MCP。这样可以避免启动时联网、版本漂移和额外的包供应链依赖。后续如果发布 npm 安装器，建议同时提供固定版本、`--dry-run`、`--scope global|project`、`--agents` 和 `--skills` 参数，设置页调用同一个安装器逻辑。

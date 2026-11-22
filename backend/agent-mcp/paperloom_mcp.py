@@ -24,7 +24,7 @@ from paper_search import search as search_scholarly_records
 
 
 PROTOCOL_VERSION = "2025-06-18"
-SERVER_VERSION = "0.4.1"
+SERVER_VERSION = "0.4.2"
 
 
 def _envelope(data: Any = None, *, warnings: list[str] | None = None, references: list[dict[str, Any]] | None = None) -> dict[str, Any]:
@@ -218,7 +218,7 @@ def _batch_workflow(args: dict[str, Any], api: PaperLoomApi) -> dict[str, Any]:
         "created_at": now,
         "updated_at": now,
         "command": "run_batch_workflow",
-        "paperloom_version": "0.4.1",
+        "paperloom_version": "0.4.2",
         "inputs": plan,
         "options": {
             "action": action,

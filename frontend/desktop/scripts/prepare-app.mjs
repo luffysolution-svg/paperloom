@@ -784,6 +784,15 @@ if (!frontendOnly) {
     force: true,
     filter: (sourcePath) => !sourcePath.includes("__pycache__") && !sourcePath.endsWith(".pyc"),
   });
+  const agentSkillsRoot = path.join(repoRoot, "skills");
+  if (!fs.existsSync(agentSkillsRoot)) {
+    throw new Error(`missing Agent Skills at ${agentSkillsRoot}`);
+  }
+  fs.cpSync(agentSkillsRoot, path.join(outputBackendRoot, "agent-skills"), {
+    recursive: true,
+    force: true,
+    filter: (sourcePath) => !sourcePath.includes("__pycache__") && !sourcePath.endsWith(".pyc"),
+  });
 
   // Keep the bundled layout aligned with main.js and RUST_API_SCRIPTS_DIR.
   const pipelineScriptsRoot = servicesPipelineRoot;
@@ -973,6 +982,7 @@ if (!frontendOnly) {
       path.join(outputBackendRoot, "config", "ocr_providers.json"),
     ),
     agentMcpBundled: fs.existsSync(path.join(outputBackendRoot, "agent-mcp", "paperloom_mcp.py")),
+    agentSkillsBundled: fs.existsSync(path.join(outputBackendRoot, "agent-skills", "paperloom-pdf-ops", "SKILL.md")),
     pythonBundled,
     bundledPythonExecutable: bundledPythonDiagnostics ? path.relative(outputBackendRoot, bundledPythonDiagnostics.pythonCommand) : null,
     bundledPythonHome: bundledPythonDiagnostics && bundledPythonDiagnostics.pythonHome

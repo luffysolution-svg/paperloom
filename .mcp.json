@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "paperloom": {
-      "command": "paperloom",
-      "args": ["agent", "mcp"],
-      "env": {}
-    }
-  }
-}

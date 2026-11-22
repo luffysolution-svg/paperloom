@@ -204,6 +204,120 @@
   }
 }
 
+@utility agent-integration-panel {
+  display: grid;
+  gap: 12px;
+}
+
+@utility agent-integration-card {
+  display: grid;
+  gap: 14px;
+  max-width: 680px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--ui-radius-lg);
+  background: color-mix(in srgb, var(--paper) 92%, var(--bg));
+}
+
+@utility agent-integration-lead {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--ui-text-sm);
+  line-height: 1.6;
+}
+
+@utility agent-integration-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@utility agent-integration-field {
+  display: grid;
+  gap: 6px;
+
+  & > span,
+  & > legend {
+    color: var(--muted);
+    font-size: var(--ui-text-xs);
+    font-weight: 650;
+  }
+
+  & input,
+  & select {
+    width: 100%;
+    min-height: 36px;
+    padding: 0 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--ui-radius-md);
+    background: var(--paper);
+    color: var(--ink);
+  }
+}
+
+@utility agent-integration-inline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+@utility agent-integration-fieldset {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+@utility agent-integration-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+
+  & label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--ink);
+    font-size: var(--ui-text-sm);
+  }
+}
+
+@utility agent-integration-command {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--ui-radius-md);
+  background: color-mix(in srgb, var(--ink) 5%, var(--paper));
+  color: var(--muted);
+  font-size: var(--ui-text-xs);
+  overflow-wrap: anywhere;
+}
+
+@utility agent-integration-message {
+  margin: 0;
+  font-size: var(--ui-text-sm);
+  line-height: 1.5;
+
+  &.is-ok { color: var(--ok); }
+  &.is-error { color: var(--danger); }
+}
+
+@utility agent-integration-status {
+  max-height: 160px;
+  margin: 0;
+  padding: 10px;
+  overflow: auto;
+  border-radius: var(--ui-radius-md);
+  background: color-mix(in srgb, var(--ink) 4%, var(--paper));
+  color: var(--muted);
+  font-size: 11px;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 720px) {
+  .agent-integration-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* —— 外观：主题卡片网格 —— */
 
 @utility theme-appearance {
