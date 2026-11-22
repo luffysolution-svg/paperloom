@@ -5,7 +5,7 @@ import type {
 } from "@retainpdf/contracts/create-job";
 import type { WorkflowPreferences } from "../workflow-preferences.js";
 
-import { getOcrProviderDefinition, normalizeOcrProvider } from "@/platform/config/providers.js";
+import { translationProtocolFor, getOcrProviderDefinition, normalizeOcrProvider } from "@/platform/config/providers.js";
 import { RENDER_FONT_STORAGE_KEY } from "@/platform/config/storage-keys.js";
 
 /** Developer/workflow config fields consumed by payload builders. */
@@ -72,7 +72,7 @@ export interface BuildTranslationPayloadOptions {
   modelApiKey?: string;
   translationCredentialRef?: string;
   selectedGlossaryId?: string;
-  /** 用户偏好（workflow-preferences.ts）。这里用 translationQuality；缺省按 standard。 */
+  /** 用户偏好（workflow-preferences.ts）。这里用 translationQuality（缺省按 standard）和 tableTranslation（缺省保留原文）。 */
   preferences?: Partial<WorkflowPreferences>;
   constants: WorkflowPayloadConstants;
 }
@@ -137,15 +137,14 @@ export function buildTranslationPayload({
   preferences,
   constants,
 }: BuildTranslationPayloadOptions): TranslationInput {
-  const engine = translationEngineFields(preferences?.translationEngine, developerConfig.apiProtocol);
   return {
-    // agent 自带通读和审校，再发 preparation / refine 后端会照跑一遍，重复花钱。
-    ...(engine.engine === "agent" ? engine : translationQualityFields(preferences?.translationQuality)),
+    ...translationQualityFields(preferences?.translationQuality),
+    ...tableTranslationFields(preferences?.tableTranslation),
     mode: constants.DEFAULT_MODE,
     math_mode: developerConfig.mathMode,
     model: developerConfig.model,
     base_url: developerConfig.baseUrl,
-    api_protocol: developerConfig.apiProtocol || "openai_responses",
+    api_protocol: translationProtocolFor(developerConfig.baseUrl, developerConfig.apiProtocol || "openai_responses"),
     thinking: developerConfig.thinking || "off",
     ...(modelApiKey?.trim()
       ? { api_key: modelApiKey.trim() }
@@ -175,21 +174,18 @@ export function buildTranslationPayload({
 /**
  * 下拉档位 → 后端字段。standard 一个字段都不加：后端缺省就是 preparation=off，
  * 这样「普通」档发出去的请求和以前逐字相同。
+ * 精翻 = 翻译 agent（engine=agent），三种接口协议都能用；agent 自带通读和审校，不再带 preparation / refine
+ * （带了后端会照跑一遍，重复花钱）。2026-11-18 以前精翻发的是编辑部（preparation=editorial、refine=editorial）。
  */
-export function translationQualityFields(quality: unknown): Pick<TranslationInput, "preparation" | "refine"> {
+export function translationQualityFields(quality: unknown): Pick<TranslationInput, "preparation" | "engine"> {
   if (quality === "terms") return { preparation: "terms+style" };
-  // 精翻 = 编辑部：术语专员审定术语表，翻完由审校挑错、主编分派局部改或整块重写，最多两轮。
-  if (quality === "refined") return { preparation: "editorial", refine: "editorial" };
+  if (quality === "refined") return { engine: "agent" };
   return {};
 }
 
-/** agent 只在 anthropic 协议下发（否则后端 400）；legacy 不发字段，跟着后端默认走。 */
-export function agentEngineAvailable(apiProtocol: unknown): boolean {
-  return apiProtocol === "anthropic";
-}
-
-export function translationEngineFields(engine: unknown, apiProtocol: unknown): Pick<TranslationInput, "engine"> {
-  return engine === "agent" && agentEngineAvailable(apiProtocol) ? { engine: "agent" } : {};
+/** 「表格」下拉 → translation.tables。keep 不发字段（后端缺省就是保留原文）。 */
+export function tableTranslationFields(mode: unknown): Pick<TranslationInput, "tables"> {
+  return mode === "translate" ? { tables: "translate" } : {};
 }
 
 function resolveStoredFontFamily(fallback: unknown): string {

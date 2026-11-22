@@ -48,9 +48,15 @@ from retainpdf_translation_agent.memory import quote_around
 from retainpdf_translation_agent.memory import term_pattern
 from retainpdf_translation_agent.reader import Reading
 from retainpdf_translation_agent.reader import apply_reading
+from retainpdf_translation_agent.section import plan_sections
+from retainpdf_translation_agent.section import translate_section
 from retainpdf_translation_agent.reader import read_document
 from retainpdf_translation_agent.review import review_page
 from retainpdf_translation_agent.review import reviewable
+from retainpdf_translation_agent.rewrite import REWRITE_GENRES
+from retainpdf_translation_agent.rewrite import rewrite_page
+from retainpdf_translation_agent.tools import BookTools
+from retainpdf_translation_agent.typography import fix_page_typography
 from retainpdf_translation_agent.units import merge_groups
 from retainpdf_translation_agent.units import split_units
 
@@ -86,11 +92,21 @@ class DocumentRun:
         budget: int = DEFAULT_BUDGET,
         memory: bool = True,
         read_first: bool = False,
-        review: bool = False,
+        review: bool | str = False,
+        tools: bool = False,
+        structure: str = "page",
     ) -> None:
         """`memory=False` 时不带上下文包、不记术语（和第 1 版以前一样），用来做对比。
         `read_first=True` 时先通读整篇（`reader.py`）：定体裁、文风、全文统一的术语和人名、全部标题的译法，再逐页翻。
-        `review=True` 时每页翻完审校一遍（`review.py`），按问题单改被指出的片段。"""
+        `review=True` 时每页翻完审校一遍：通读判成人文社科、通俗读物（`rewrite.REWRITE_GENRES`）的分两轮（`split_review`，
+        2026-11-19 起）：先对照原文只审意思（`review.py` 的问题单），再由编辑把译文当中文读、只改文笔（`rewrite.py`）；
+        其余体裁只按问题单改被指出的片段。`review="split"` / `"rewrite"`（一次做完，11-18 到 11-19 的人文书默认）/ `"tickets"`
+        强制用其中一种。
+        `tools=True` 时初译能调只读工具（全书搜原文、查术语表，`tools.py`），交卷后的检查问题在同一段对话里回给模型改；
+        只接 Anthropic 的原生工具调用，OpenAI 协议的 transport 不要开。
+        `structure="section"`（第二版，2026-11-19 起）：人文社科、通俗读物（没通读时也算）按节翻（`section.py`）：几页接成一份
+        带段号的稿子一次翻，段号对回各块；断点、写回、编辑部事件照旧按页。`review` 为真时整节对照原文审一次意思（只收意思类单子，
+        不做文笔那一轮）；`tools` 不起作用。别的体裁照旧逐页。默认 `"page"`（第一版）。"""
         self.agent = agent
         self.state_dir = Path(state_dir)
         self.initial_glossary = glossary
@@ -101,6 +117,10 @@ class DocumentRun:
         self.read_first = read_first and memory
         self.reading: Reading | None = None
         self.review = review
+        self.tools = tools
+        if structure not in ("page", "section"):
+            raise ValueError(f"unknown structure: {structure}")
+        self.structure = structure
         self._event_page = 0  # 编辑部事件里的页号：正在做第几页（1 起），通读是 0
         self._tickets_seen = 0
 
@@ -157,12 +177,16 @@ class DocumentRun:
             return self._run(pages, on_page)
         finally:
             self.agent.on_event = None
+            self.agent.tools = None
+            self.agent.narrative = False
 
     def _run(self, pages: list[PageInput], on_page: Callable[[int, PageInput, dict[str, BlockResult]], None] | None) -> RunOutcome:
         progress_path = self._path("progress.json")
         progress = json.loads(progress_path.read_text(encoding="utf-8")) if progress_path.exists() else {}
         done: list[str] = list(progress.get("pages_done") or [])
         self._event_page = 0
+        # 章首小型大写（OCR 成全大写）先还原，通读、初译、编辑看到的都是修过的原文（`typography.py`）
+        pages = fix_page_typography(pages)
         title = str((pages[0].document or {}).get("title") or "") if pages else ""
         self._event("run_started", pages=len(pages), model=self.agent.model, doc_title=title, resumed=len(done))
         if self._path("glossary.json").exists():
@@ -198,9 +222,16 @@ class DocumentRun:
                 pages = apply_reading(self.reading, Glossary(), pages)  # 术语已经登记过，只要标题的已定译文
             if not self.style:
                 self.style = self.reading.style_text()
-        self._ledger("start", pages=len(pages), resumed=len(done), prompt_version=PROMPT_VERSION, contract_version=CONTRACT_VERSION, memory=self.memory)
+            self.agent.narrative = self.reading.genre in REWRITE_GENRES
+        self._ledger("start", pages=len(pages), resumed=len(done), prompt_version=PROMPT_VERSION, contract_version=CONTRACT_VERSION, memory=self.memory, structure=self.structure)
+        if self.structure == "section":
+            if self.reading is None or self.reading.genre in REWRITE_GENRES:
+                return self._run_sections(pages, glossary, done, on_page)
+            self._ledger("section_skipped", genre=self.reading.genre)
 
         results: dict[str, BlockResult] = {}
+        book_tools = BookTools(pages, glossary) if self.tools else None
+        self.agent.tools = book_tools
         previous: list[dict] = []
         seen_abbreviations: set[str] = set()
         # 缩写和人名：全书第一次用到要写全称、"中文译名（原文）"，之后不用
@@ -227,6 +258,8 @@ class DocumentRun:
                         budget=self.budget,
                     )
                 page_input = replace(page, context=context)
+                if book_tools is not None:
+                    book_tools.current = index
                 calls_before = len(self.agent.calls)
                 changes_before = len(glossary.changes)
                 self._event_page = index + 1
@@ -244,7 +277,13 @@ class DocumentRun:
                     reviewed = reviewable(units, unit_results)
                     self._event("review_started", page=self._event_page, blocks=sum(len(b.members) or 1 for b in reviewed))
                     try:
-                        review_report = review_page(self.agent, units, unit_results)
+                        genre = self.reading.genre if self.reading is not None else "other"
+                        if self.review == "split" or (self.review is True and genre in REWRITE_GENRES):
+                            review_report = split_review(self.agent, units, unit_results, genre=genre)
+                        elif self.review == "rewrite":
+                            review_report = rewrite_page(self.agent, units, unit_results, genre=genre)
+                        else:
+                            review_report = review_page(self.agent, units, unit_results)
                     except StopRun as stop:
                         self._log_calls(page, key, context, calls_before)
                         self._stopped(page, key, stop, done, len(pages))
@@ -256,6 +295,7 @@ class DocumentRun:
                         tickets=review_report["tickets"],
                         applied=len(review_report["applied"]),
                         rejected=len(review_report["rejected"]),
+                        withdrawn=withdrawn_count(review_report),
                     )
                 page_results = split_units(unit_results, groups)
                 self._log_calls(page, key, context, calls_before)
@@ -276,6 +316,8 @@ class DocumentRun:
                 done.append(key)
                 self._progress(done, RUNNING, total=len(pages))
             results.update(page_results)
+            if book_tools is not None:
+                book_tools.record(page_results)
             if on_page is not None:
                 on_page(index, page, page_results)
             text = " ".join(b.text for b in page.to_translate())
@@ -285,6 +327,115 @@ class DocumentRun:
                 for b in page.to_translate()
                 if b.id in page_results and page_results[b.id].translation
             ]
+        self._progress(done, DONE, total=len(pages))
+        self._ledger("done", pages=len(pages), glossary_version=glossary.version, tickets=len(glossary.tickets))
+        self._event("run_done", pages=len(pages), glossary_version=glossary.version, tickets=len(glossary.tickets))
+        return RunOutcome(DONE, "", results, glossary, len(done), len(pages))
+
+    def _run_sections(
+        self,
+        pages: list[PageInput],
+        glossary: Glossary,
+        done: list[str],
+        on_page: Callable[[int, PageInput, dict[str, BlockResult]], None] | None,
+    ) -> RunOutcome:
+        """按节翻（`section.py`）。节的边界落在页边界上；一节翻完才把这几页一起记进断点（按页写文件、发 page_done、调 `on_page`），
+        中途停下的话这一节从头再翻（请求有缓存，不重复花钱）。续跑时整节都做过的直接读回。"""
+        results: dict[str, BlockResult] = {}
+        title = str((pages[0].document or {}).get("title") or "") if pages else ""
+        previous: list[dict] = []
+        seen_names: set[str] = set()  # 前面几节出现过的人名、缩写（原文写法）：后面的节只写中文译名、只写缩写
+        story: dict[str, list[str]] = {}  # 章 → 各节的一句话梗概（译者附的「@@ 梗概」）
+
+        def saved_summary(key: str) -> str:
+            return str((json.loads(self._path("pages", f"{key}.json").read_text(encoding="utf-8")).get("info") or {}).get("summary") or "")
+
+        def load_page(key: str) -> dict[str, BlockResult]:
+            return {
+                r["id"]: BlockResult(r["id"], r["translation"], r["issues"], r["attempts"], r["status"], r.get("history") or [], r.get("meta") or {})
+                for r in json.loads(self._path("pages", f"{key}.json").read_text(encoding="utf-8"))["results"]
+            }
+
+        for start, end in plan_sections(pages):
+            keys = [f"{index:04d}" for index in range(start, end)]
+            section_pages = pages[start:end]
+            todo = [index for index, key in zip(range(start, end), keys) if key not in done]
+            chapter = section_pages[-1].chapter
+            summary = ""
+            if not todo:
+                outcome_by_page = {index: load_page(f"{index:04d}") for index in range(start, end)}
+                summary = saved_summary(keys[0])
+            else:
+                calls_before = len(self.agent.calls)
+                for index in todo:
+                    self._event_page = index + 1
+                    self._event("page_started", page=self._event_page, label=pages[index].page_label, blocks=len(pages[index].to_translate()))
+                self._event_page = todo[0] + 1
+                changes_before = len(glossary.changes)
+                try:
+                    outcome = translate_section(
+                        self.agent,
+                        [pages[index] for index in todo],
+                        glossary,
+                        title=title,
+                        style=self.style,
+                        previous=previous,
+                        seen_names=seen_names,
+                        review=bool(self.review),
+                        story=story.get(chapter, []),
+                    )
+                except StopRun as stop:
+                    self._log_calls(pages[todo[0]], f"{todo[0]:04d}", {}, calls_before)
+                    self._stopped(pages[todo[0]], f"{todo[0]:04d}", stop, done, len(pages))
+                    return RunOutcome(STOPPED, stop.reason, results, glossary, len(done), len(pages))
+                self._log_calls(pages[todo[0]], f"{todo[0]:04d}", {}, calls_before)
+                self._save_glossary(glossary, changes_before)
+                summary = str(outcome.info.get("summary") or "")
+                self._ledger("section", pages=[pages[i].page_label for i in todo], paragraphs=outcome.info["paragraphs"], attempts=outcome.info["attempts"], fallback=outcome.info["fallback"], learned=outcome.info.get("learned"))
+                report = outcome.info.get("review")
+                if report is not None:
+                    # 审校在整节一次（请求时就审完了），事件补在翻译之后，页号记这一节的第一页
+                    self._event_page = todo[0] + 1
+                    self._event("review_started", page=self._event_page, blocks=report["reviewed"])
+                    self._event("review_done", page=self._event_page, tickets=report["tickets"], applied=len(report["applied"]), rejected=len(report["rejected"]), withdrawn=withdrawn_count(report))
+                    self._ledger("review", page=pages[todo[0]].page_label, page_key=f"{todo[0]:04d}", reviewed=report["reviewed"], tickets=report["tickets"], applied=len(report["applied"]))
+                outcome_by_page = {}
+                for index in range(start, end):
+                    key = f"{index:04d}"
+                    if key in done:
+                        outcome_by_page[index] = load_page(key)
+                        continue
+                    page_results = {b.id: outcome.results[b.id] for b in pages[index].blocks if b.id in outcome.results}
+                    outcome_by_page[index] = page_results
+                    self._write_json(
+                        self._path("pages", f"{key}.json"),
+                        {"page": pages[index].page_label, "chapter": pages[index].chapter, "context": {}, "info": outcome.info, "results": [r.to_dict() for r in page_results.values()]},
+                    )
+                    statuses: dict[str, int] = {}
+                    for result in page_results.values():
+                        statuses[result.status] = statuses.get(result.status, 0) + 1
+                    self._ledger("page", page=pages[index].page_label, page_key=key, statuses=statuses, glossary_version=glossary.version)
+                    self._event_page = index + 1
+                    self._event("page_done", page=self._event_page, statuses={"ok": 0, "warn": 0, "error": 0, "fallback_source": 0, **statuses})
+                    done.append(key)
+                    self._progress(done, RUNNING, total=len(pages))
+            for index in range(start, end):
+                page_results = outcome_by_page[index]
+                results.update(page_results)
+                if on_page is not None:
+                    on_page(index, pages[index], page_results)
+            if summary:
+                story.setdefault(chapter, []).append(summary)
+            text = " ".join(b.text for p in section_pages for b in p.to_translate())
+            # 每节重新取：前面几节学到的人名、缩写也算（11-20 以前只取开头通读定的人名）
+            known = [(t.source, t.category) for t in glossary.terms.values() if t.category in (NAME, ABBR)]
+            seen_names |= {source for source, category in known if term_pattern(source, category).search(text)}
+            previous = [
+                {"source": b.text, "translation": results[b.id].translation}
+                for p in section_pages
+                for b in p.to_translate()
+                if b.id in results and results[b.id].translation
+            ][-2:]
         self._progress(done, DONE, total=len(pages))
         self._ledger("done", pages=len(pages), glossary_version=glossary.version, tickets=len(glossary.tickets))
         self._event("run_done", pages=len(pages), glossary_version=glossary.version, tickets=len(glossary.tickets))
@@ -371,6 +522,28 @@ class DocumentRun:
                 glossary.declare_exception(
                     source, used, block_id=block.id, page=page.page_label, chapter=page.chapter, quote=quote, reason=str(item.get("reason", ""))[:200]
                 )
+
+
+def split_review(agent: TranslationAgent, page: PageInput, results: dict[str, BlockResult], *, genre: str) -> dict:
+    """两轮分开（2026-11-19 起人文社科、通俗读物默认）：先对照原文审校，只管意思（`review_page(accuracy_only=True)`）；再由编辑把译文当中文读、
+    只改文笔（`rewrite_page(polish=True)`）。返回的记录把两轮的单子合在一起（编辑部事件、台账照常数），两轮各自的在 accuracy / polish。"""
+    accuracy = review_page(agent, page, results, accuracy_only=True)
+    polish = rewrite_page(agent, page, results, genre=genre, polish=True)
+    return {
+        "mode": "split",
+        "reviewed": max(accuracy["reviewed"], polish["reviewed"]),
+        "tickets": accuracy["tickets"] + polish["tickets"],
+        "applied": accuracy["applied"] + polish["applied"],
+        "rejected": accuracy["rejected"] + polish["rejected"],
+        "accuracy": accuracy,
+        "polish": polish,
+    }
+
+
+def withdrawn_count(report: dict) -> int:
+    """审校单里审校自己撤回的张数（`must_fix=false`，verdict 是 withdrawn）。编辑部事件 `review_done` 的 `withdrawn`
+    （2026-11-20，前端把「审校撤回」和「没收」分开显示）；`rejected` 照旧包含撤回的，旧前端不受影响。"""
+    return sum(1 for ticket in report.get("rejected") or [] if ticket.get("verdict") == "withdrawn")
 
 
 def blocks_using(results: dict[str, BlockResult], term_id: str) -> list[str]:

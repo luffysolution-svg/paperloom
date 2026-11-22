@@ -37,6 +37,7 @@ export interface CredentialDialogElements {
   apiKeyInput?: HTMLInputElement | null;
   modelBaseUrlInput?: HTMLInputElement | null;
   modelNameInput?: HTMLInputElement | null;
+  extraModelsInput?: HTMLInputElement | null;
   translationWorkersInput?: HTMLInputElement | null;
   translationProtocolSelect?: HTMLSelectElement | null;
   translationThinkingSelect?: HTMLSelectElement | null;

@@ -1,8 +1,18 @@
 # 前端对接说明：图书馆数据层 API
 
-> 当前实现说明，更新于 2026-09-02。现有 `/api/v1/library/books` 兼容接口保留；
+> 当前实现说明，更新于 2026-09-02。书架 `/api/v1/library/books` 已经删光：2026-10-19 冻结并删了
+> `GET /library/books/:job_id`，2026-10-22 前端改调 `GET /api/v1/jobs?job_ids=`、`DELETE /api/v1/jobs/:job_id` 以后，
+> 列表 `GET /library/books` 和删除旧地址 `DELETE /library/books/:job_id` 也删了，请求得 404（见
+> [书架冻结与删任务新地址](../../ops/planning/api-reorg/20261019-书架冻结与删任务新地址.md)、
+> [删书架旧地址](../../ops/planning/api-reorg/20261022-删书架旧地址.md)、[给前端的交接](backend-changes-handoff.md)）；
 > 所有业务接口使用 `X-API-Key` 认证，JSON 响应统一采用
 > `{code, message, data}` 包装。
+>
+> 字段以契约为准：书、合集、全文检索、阅读入口、翻译覆盖、书的文件清单、元数据建议，以及书的任务列表、翻译这本书、给这本书做 OCR（第 1b 期）见
+> [`library-documents.v1.schema.json`](../../../contracts/library-documents.v1.schema.json)（2026-10-22 起，TS 类型从
+> `@retainpdf/contracts/library-documents` 导入，可以换掉 `frontend/packages/api` 里手写的类型，见
+> [给前端的交接](backend-changes-handoff.md)）；任务列表见 `job-status.v1.schema.json`，删任务的返回见 `library-books.v1.schema.json`（名字沿用书架时期，
+> 书架的类型 2026-10-22 删了）。
 
 ## 核心概念(前端需要理解的唯一模型变化)
 
@@ -16,24 +26,54 @@
 ### 1. 文档列表 / 详情 / 编辑
 
 ```
-GET  /api/v1/documents?limit=50&offset=0&reading_status=reading&tag=化学&collection_id=xxx
+GET  /api/v1/documents?limit=50&offset=0&reading_status=reading&collection_id=xxx&tag_id=xxx&q=xxx
 GET  /api/v1/documents?job_id=xxx          ← 任意 job_id(含历史 run)直查所属文档,勿再扫列表反查 active_job_id
-     → data.documents[]: { document_id, title, source_filename, page_count, bytes,
-                           active_job_id, reading_status, tags[], added_at,
-                           last_opened_at, updated_at, authors_json, year, doi }
+     → data: { documents[], total, limit, offset, has_more }
+       documents[]: DocumentRecord { document_id, title, title_source, title_locked,
+                      source_filename, page_count, bytes, active_job_id, active_version_id?,
+                      reading_status, added_at, updated_at, source_pdf_url, cover_url,
+                      thumbnail_url, has_translation, tags[],
+                      authors_json, year, doi, last_opened_at }   ← 最后四个没有功能,见下
 
 GET  /api/v1/documents/:document_id
 
 PATCH /api/v1/documents/:document_id
-     body: { title?, reading_status?, tags? }
+     body: { title?, reading_status? }
 ```
 
 - `reading_status` 只接受 `unread | reading | done`,其他值返回 400;
-- `tags` 是**整体替换**语义(传 `[]` 即清空);
-- `active_job_id` 是该文档当前生效的处理 run——**打开阅读器就用它**;
-- 列表按 `added_at` 倒序,`limit` 上限 500。
+- `active_job_id` 是书卡当前对应的任务(在跑的优先,其次最好的成功任务,再次最近提交的);打开阅读器用 `GET /api/v1/documents/:id/reading` 给的 `job_id`
+  (分次范围翻译时是合并后的虚拟任务),不要直接用 `active_job_id`;
+- 译文版本(2026-11-18):一本书翻过几次就有几份译文。书详情「概览」的「译文版本」卡(`TranslationVersionsPanel`、
+  `use-translation-versions.ts`)列 `GET .../translation-versions?include_hidden=true`,切换走 `PUT .../translation-version`
+  (「自动(最新)」= `version_id: null`),改名、隐藏、恢复走 `PATCH .../translation-versions/:version_id`。选择记在后端,
+  阅读入口照旧调 `/reading`(不带 `version`)就读到书的当前版本,`resolve-reading-target.ts` 不用改。只有一份译文的书不显示这张卡;
+  阅读页里还不能切版本;
+- `active_version_id` 没有时整个键不出现(不是 `null`);它是早已删掉的 AI 改写文档留下的,2026-11-21(数据库 v36)起恒不出现,不要再用;
+- `authors_json`(恒为字符串 `"[]"`)、`year`(恒 `null`)、`doi`(恒 `""`)、`last_opened_at`(恒 `null`)没有写入点,
+  留着只为不破坏旧客户端,不要拿来显示;
+- 列表按 `added_at` 倒序、同一秒的按 `document_id` 倒序,`limit` 默认 50、范围 1..=500,越界 400(2026-10-22 前静默夹)。
+- `limit`、`offset`、`has_more` 2026-10-22 起回显;有没有下一页看 `has_more`,不用再拿 `offset + 条数 < total` 算(两者结果一样)。
+- 带 `job_id` 时其余参数都不起作用,最多返回 1 条,`has_more` 恒为 `false`。
+- `tags`(2026-11-21 起):书上的标签 `[{ tag_id, name, color }]`,按名字排,没有是 `[]`;按标签筛用 `tag_id`,见第 8 节。
+- 只认上面这些查询参数,不认识的 400(例如已删的 `tag`,按标签筛现在是 `tag_id`)。PATCH 只认 `title`、`reading_status`,别的字段 400。
+- `DELETE /api/v1/documents/:document_id?force=true`:只认 `force`,拼错 400(以前当成不强删)。
+
+书上的两个列表(2026-10-22 起同样回显 `limit`、给 `has_more`,不认识的查询参数 400):
+
+```
+GET /api/v1/documents/:document_id/jobs?limit=50&offset=0
+    → data: { items[], invocation_summary, total, limit, offset, has_more }   ← limit 1..=500,默认 20
+GET /api/v1/documents/:document_id/metadata-suggestions?limit=20
+    → data: { suggestions[], limit, has_more }                                ← limit 1..=100,默认 20,没有 offset
+```
+
+- 书的任务列表的 `has_more` 改成多取一条判断(以前用 `total` 算,库里有读不出来的任务行时最后一页会误报还有);
+  `total` 照旧是 `COUNT(*)`。一本书超过 50 个任务时,按 `has_more` 翻页才能看全。
 
 ### 2. 收藏
+
+> 已删除：收藏功能 2026-09 整体删除，下面的 `/api/v1/favorites` 接口都已不存在（返回 404），只保留原记录。
 
 ```
 POST /api/v1/favorites
@@ -64,115 +104,95 @@ DELETE /api/v1/favorites/:favorite_id
 ### 3. 全文检索(中英文都可)
 
 ```
-GET /api/v1/search?q=光学光谱&limit=20
-    → data.hits[]: { document_id, job_id, page_idx, block_id,
-                     source_snippet, translated_snippet }
+GET /api/v1/search?q=光学光谱&limit=20[&document_id=xxx]
+    → data: { query, hits[], limit, has_more }
+      hits[]: { document_id, job_id, page_idx, block_id,
+                source_snippet, translated_snippet, document_page }
 ```
+
+- `page_idx`（0 起）是建索引那个任务（`job_id`）自己的本地页号；`document_page`（1 起，2026-11-03 加）是这一块在
+  整本书里的页号。分段翻译的书两者不同：要跳到 `GET /documents/{id}/reading` 给的阅读任务（合并任务按整本书编页），
+  用 `document_page - 1`；直接打开 `job_id` 那个任务才用 `page_idx`。任务记录读不到时 `document_page` 是 `null`。
 
 - snippet 里命中词用 `[` `]` 包裹,前端可替换成高亮标签;
 - 任意长度的 `q` 都能查(≥3 字符走 FTS5 全文索引,更短自动回退模糊匹配);
-- `limit` 上限 100。
+- `limit` 默认 20、范围 1..=100,越界 400(2026-10-22 前静默夹);`has_more` 表示命中不止这些(没有 `offset`,要更多就加大 `limit`);
+- 只认 `q`、`limit`、`document_id`,不认识的参数 400。
 
-### 4. 资产(收藏截图等图片附件)
+### 4. AI 问答与 PDF Agent（已删）
 
-```
-POST /api/v1/assets                    ← multipart,字段名 file(png/jpeg/webp,≤20MB)
-     → data: { asset_id, mime, bytes, created_at }
-GET  /api/v1/assets/:asset_id          ← 文件本体;内容寻址,响应带 immutable 缓存头,可放心 <img src>
-```
+> 2026-11-03 起前端不再调 `/api/v1/ai/*`：RetainPDF 自己的 AI（阅读页的 agent 终端和画板、主页「AI 问答」、设置里的
+> AI Agent）删了，产品里只留笔记软件 Studio 的 AI（`frontend/studio`）。后端接口 2026-11-03 也删了，见
+> [RetainPDF 不要自己的 AI](../../ops/planning/frontend-migration/20261103-RetainPDF不要自己的AI.md)。
 
-- `asset_id` = 文件 sha256:同一张图重复上传自动归并,拿到相同 id;
-- **图片收藏流程**:canvas 导出 PNG → POST assets 拿 asset_id → POST favorites 时带
-  `asset_id`(建议 `kind: "figure"`)和 `rect_json`(剪裁矩形几何原样存,换设备可还原);
-- favorites 记录现在返回 `asset_id` / `rect_json` 字段,空串 = 纯文字收藏。
+### 5. 资产
 
-### 6. AI 问答会话（消息树 + durable operation）
+> 已删除：`POST /api/v1/assets`、`GET /api/v1/assets/:asset_id` 2026-10-19 删除（返回 404）。
+> 它们原本给收藏截图用，收藏 2026-09 删掉以后没有调用方。标签同样已删（2026-09-26），
+> 书的列表不认 `tag`，PATCH 不认 `tags`。
 
-```
-POST   /api/v1/ai/conversations                      body: { title?, document_id? }
-GET    /api/v1/ai/conversations?document_id=&limit=50&offset=0
-POST   /api/v1/ai/conversations/fork
-GET    /api/v1/ai/conversations/:id                  → 会话字段 + `messages[]`（seq 正序）
-PATCH  /api/v1/ai/conversations/:id                  body: { title?, head_id? }
-DELETE /api/v1/ai/conversations/:id                  级联删消息
-POST   /api/v1/ai/conversations/:id/messages
-GET    /api/v1/ai/conversations/:id/operations
-```
+### 6. AI 问答会话（已删）
 
-- 消息通过 `parent_id` 组成树，conversation 的 `head_id` 决定当前可见分支；
-- `/ai/ask` 自动写入本轮 user/assistant 消息，前端不要再调用 messages 重复写入；
-- `citations_json` 是软锚点快照：job 删除后保留 snippet，但跳转应降级；
-- PDF 操作必须从 operation 查询接口恢复。`agent_operation` SSE 只是刷新提示；
-- run/retry/cancel/commit 请求必须带稳定幂等键和最新的状态、attempt、program hash，
-  过期提交返回 409 后应立即刷新。
+> 同上，2026-11-03 起前端不再用。
 
 ### 7. 分类(合集):建文件夹给 PDF 分组
 
 > `collections`/`collection_documents` 表随图书馆数据层一起建好,一直没接
-> 路由;现在补上。v1 只做扁平文件夹(不支持嵌套,`parent_id` 传了也接受,
-> 但前端目前不需要用)。
+> 路由;现在补上。v1 只做扁平文件夹:建的时候可以带 `parent_id`(前端不发),
+> 改的时候不能改上级——`PATCH` 传 `parent_id` 2026-10-22 起返回 400(以前 200 但不生效)。
+> 合集的请求体不认识的字段一律 400。
 
 ```
 POST   /api/v1/collections                body: { name, parent_id? }
 GET    /api/v1/collections                → `data.collections[]`（按 sort_order 排序，含 document_count）
-PATCH  /api/v1/collections/:id             body: { name?, sort_order? }
+PATCH  /api/v1/collections/:id             body: { name?, sort_order? }   ← 只认这两个
 DELETE /api/v1/collections/:id             ← 只删文件夹本身,文档不受影响
 
 POST   /api/v1/collections/:id/documents              body: { document_ids: [...] }
 DELETE /api/v1/collections/:id/documents/:document_id
 ```
 
-- 加入不存在的 `document_id` 返回 404;重复加入同一文档幂等(不报错、不重复计数);
+- `POST /api/v1/collections/:id/agent-workspace`（物化文件夹的 Agent 工作区）2026-11-03 跟 RetainPDF 自己的 AI 一起删了。
+  删文件夹时后端照旧顺手清掉它在磁盘上的目录（以前建过的工作区在里面）。
+
+- 加入不存在的 `document_id` 返回 404(书的记录在、库里读不出来是 500,不说成不存在);重复加入同一文档幂等(不报错、不重复计数);
 - 查看某个文件夹里有哪些文档:`GET /api/v1/documents?collection_id=xxx`(见第 1 节),
   拿到的每条记录里的 `active_job_id` 就是该文档当前可打开的处理记录;
-- 如果前端仍在用旧世界的 `/api/v1/library/books` 渲染卡片(而不是 `/api/v1/documents`
-  投影),把上一步拿到的 `active_job_id` 集合拼进新加的 `job_ids` 参数
-  (逗号分隔,见下方对 `/api/v1/library/books` 的说明),就能拿到与首页图书馆
-  卡片同构的数据,不用另外做一套"文件夹详情卡片"渲染。
+- 要叠加任务活态(状态、进度、阶段)时,把上一步拿到的 `active_job_id` 集合拼进
+  `GET /api/v1/jobs?job_ids=a,b&limit=n&include_live_stage=true`(`n` ≤ 500,超了分批;
+  不排除 OCR 任务),标题读 `display_name`,阶段和进度读 `stage_snapshot`。
+  旧的做法是同样拼进 `/api/v1/library/books?job_ids=`,书架 2026-10-22 删了。
 
-### `/api/v1/library/books` 新增可选参数:`job_ids`
+### 8. 标签(2026-11-21 起,只增)
+
+一个标签可以打在很多本书上,一本书可以有很多标签。同名的标签(不分大小写、不看首尾空白)只有一个;
+编号由名字算出来,两台设备各自建的同名标签同步以后是同一个。前端还没接,不接也不影响别的。
 
 ```
-GET /api/v1/library/books?job_ids=job-a,job-b,job-c
+GET    /api/v1/tags                         → data: { tags[] }   TagRecord { tag_id, name, color, document_count, created_at, updated_at },按名字排
+POST   /api/v1/tags                         body: { name, color? }   ← 同名的已经有了就返回那个
+PATCH  /api/v1/tags/:tag_id                 body: { name?, color? }  ← 改成别的标签在用的名字 409
+DELETE /api/v1/tags/:tag_id                 → data: { tag_id, deleted: true }   ← 打了它的书上一起去掉,书不动
+
+PUT    /api/v1/documents/:document_id/tags  body: { tag_ids: [...] }   ← 设成正好这几个,空数组 = 全去掉;返回改完的书
+GET    /api/v1/documents?tag_id=xxx         ← 打了这个标签的书
 ```
 
-- 逗号分隔的 job_id 白名单,只返回命中的记录,形状与不传该参数时完全一致;
-- 不传就是现状(分页 `limit`/`offset`),这是纯增量参数,不影响任何现有调用方;
-- 传了 `job_ids` 时不做分页截断——语义是"精确给我这几个 job",不是"翻到第几页"。
+- `name` 去掉首尾空白后 1–64 个字;`color` 是 `#RRGGBB`,空字符串或不给 = 不设颜色,别的写法 400;
+- 书或任何一个标签不存在 404;请求体不认识的字段 400。
 
 ## 两个必须处理的边界
 
-1. **删除保护**:删除书籍(`DELETE /api/v1/library/books/:job_id`)或文档
-   (`DELETE /api/v1/documents/:document_id`)时,如果被收藏锚点引用,后端返回
-   **409**,`error.code` 为 `DELETE_BLOCKED_BY_FAVORITES`。
-
-   条数和"清空收藏"的目标路径都在 `error.details` 里,**不要从 message 里正则
-   抠数字**——那句话会随文案改动和多语言而变:
-
-   ```json
-   {
-     "error": {
-       "code": "DELETE_BLOCKED_BY_FAVORITES",
-       "http_status": 409,
-       "details": {
-         "scope": "document",
-         "document_id": "6f1c…",
-         "favorite_count": 2,
-         "clear_favorites_path": "/api/v1/documents/6f1c…/favorites"
-       }
-     }
-   }
-   ```
-
-   `scope` 为 `"job"` 时 details 里换成 `job_id`,`clear_favorites_path` 换成
-   `/api/v1/library/books/{job_id}/favorites`。两种情况前端只需一个分支:
-
-   > 该文档有 `favorite_count` 条收藏 → 询问用户 → `DELETE clear_favorites_path`
-   > → 重试原来的删除
-
-   `DELETE clear_favorites_path` 返回 `{"data": {"deleted_count": N}}`,幂等
-   (没有收藏就是 `0`);但文档/任务不存在是 **404**,不要和"存在但没有收藏"
-   混为一谈。`force=true` 不绕过收藏保护,它只绕过"运行中的任务不可删"。
+1. **删除保护**:删除单个任务(`DELETE /api/v1/jobs/:job_id`;旧地址 `DELETE /api/v1/library/books/:job_id` 2026-10-22 删了)或文档
+   (`DELETE /api/v1/documents/:document_id`)时,如果名下还有排队或运行中的任务,后端返回
+   **409**(`error.code` 为 `CONFLICT`,2026-10-19 起带 `error.details.reason = "job_active"`,
+   和任务操作同一个值;前端可以按它判断,不用再靠"409 且不是 job_has_dependents"去推)。带 `?force=true` 才会连运行中的任务一起删;前端不自动
+   force,提示用户先取消任务再删除。删单个书籍时,如果别的任务还在用它的产物(比如换字体重排出的
+   render 任务),也返回 409,`error.details.reason` 为 `job_has_dependents`,message 里列出依赖它的任务;
+   前端按 reason 单独提示"先删掉那些任务",不说成"任务在跑"。整本删除不受这条影响。以前被收藏锚点挡住时的 `DELETE_BLOCKED_BY_FAVORITES` 和
+   `clear_favorites_path` 已随收藏功能一起删掉。
+   强删（`force=true`）会先取消运行中的任务再删；删单个任务时若别的任务还在用它的产物（重新排版的 render 任务），
+   不带 `force` 返回 409 + `error.details.reason = "job_has_dependents"`。
 2. **重复上传**:同一 PDF 再次上传不会产生新文档(documents 列表数量不变),
    前端不要假设"上传成功 = 列表多一条"。
 
@@ -181,7 +201,7 @@ GET /api/v1/library/books?job_ids=job-a,job-b,job-c
 1. **第一步只做增量**:阅读器里加"选中 → 收藏"和收藏侧栏(纯新增,不动现有页面)。
    收藏跳转:用锚点里的 `job_id + page_idx + block_id` 复用现有阅读器定位。
 2. **第二步**再把图书馆主页从 `/api/v1/library/books` 投影切到 `/api/v1/documents`,
-   拿到标签 / 阅读状态 / 合集能力。
+   拿到阅读状态 / 合集能力。(已完成:前端 2026-10 切完,书架 2026-10-22 删了。)
 
 ## 附:字段速查
 

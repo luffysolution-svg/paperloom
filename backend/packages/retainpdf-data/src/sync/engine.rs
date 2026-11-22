@@ -14,11 +14,11 @@ use super::files::{
     checked_relative, entity_files, file_hash, has_content, path_outside_data_root, remove_file,
 };
 use super::folder::{hex, FolderBackend};
-use super::store::{Backend, BlobLocation, DeviceState, Segment, SyncStore};
+use super::store::{Backend, BlobLocation, DeviceState, Segment, SyncStore, SYNC_FORMAT_VERSION};
 use super::{ChangeRecord, SyncFileEntry};
 use crate::db::sync::{
-    entity_spec, SyncApplyOutcome, SyncDirty, SyncEntityState, SyncEntityUpdate, SyncFileRef,
-    SyncRows, SYNC_SEED_VERSIONS,
+    entity_spec, SyncApplyOutcome, SyncDirty, SyncEntityState, SyncEntityUpdate, SyncFileRef, RETIRED_SYNC_KINDS,
+    SyncRows, SYNC_SEED_VERSIONS, upgrade_legacy_sync_record,
 };
 use crate::db::Db;
 
@@ -170,7 +170,7 @@ fn is_kind_name(kind: &str) -> bool {
     !kind.is_empty() && kind.len() <= 40 && kind.bytes().all(|b| b.is_ascii_lowercase() || b == b'_')
 }
 
-/// 还没结束的:任务在排队或运行、AI 计算没算完、AI 改文档还没出结果(或结果不确定)。
+/// 还没结束的:任务在排队或运行。
 /// 不发,结束后会再发;本机这一条还没结束时,收到别的设备的版本也先不覆盖。
 fn in_progress(kind: &str, rows: &SyncRows) -> bool {
     let root = |table: &str, column: &str| {
@@ -183,16 +183,12 @@ fn in_progress(kind: &str, rows: &SyncRows) -> bool {
     };
     match kind {
         // 失败的任务也可能已经翻好了一部分。
-        "job" => !matches!(
-            root("jobs", "status_json").as_str(),
-            "\"succeeded\"" | "\"failed\"" | "\"canceled\""
-        ),
-        "calculation" => !matches!(root("agent_calculation_runs", "status").as_str(), "completed" | "failed"),
-        // 出了结果、等人确认采用的(result_ready)也发:可以在另一台设备上采用。
-        "operation" => !matches!(
-            root("document_operations", "status").as_str(),
-            "result_ready" | "committed" | "failed" | "cancelled"
-        ),
+        // v32 起是 `status`（纯文本）；旧版本设备发来的、同步文件夹里老的包是 `status_json`（`"succeeded"`）。
+        "job" => {
+            let status = root("jobs", "status");
+            let status = if status.is_empty() { root("jobs", "status_json").trim_matches('"').to_string() } else { status };
+            !matches!(status.as_str(), "succeeded" | "failed" | "canceled")
+        }
         _ => false,
     }
 }
@@ -355,7 +351,12 @@ impl SyncEngine {
 
     /// 跑一轮同步。第一次跑时把本机现有的书库全部放进去。
     pub fn run_cycle(&self) -> Result<SyncReport> {
-        let (folder_id, format_version) = self.store.ensure_version()?;
+        let (folder_id, mut format_version) = self.store.ensure_version()?;
+        // 新格式的行(任务、书)旧版本读不了:发任何东西之前先把文件夹升上去(见 SYNC_FORMAT_VERSION)。
+        if format_version < SYNC_FORMAT_VERSION {
+            self.store.upgrade_format(&folder_id)?;
+            format_version = SYNC_FORMAT_VERSION;
+        }
         let mut folder_changed = false;
         match self.db.sync_state_get(STATE_FOLDER_ID)? {
             Some(known) if known == folder_id => {}
@@ -757,6 +758,19 @@ impl SyncEngine {
     }
 
     fn consider(&self, record: &ChangeRecord, hlc: &mut Hlc) -> Result<Considered> {
+        // 旧版本设备发来的(同步文件夹里的老包也是)先按现在的表结构改写,逐字段合并才比得上本机的字段。
+        let upgraded = record.rows.as_ref().and_then(|rows| {
+            upgrade_legacy_sync_record(&record.kind, rows, &record.clocks).map(|(rows, clocks)| ChangeRecord {
+                rows: Some(rows),
+                clocks,
+                ..record.clone()
+            })
+        });
+        let record = upgraded.as_ref().unwrap_or(record);
+        if RETIRED_SYNC_KINDS.contains(&record.kind.as_str()) {
+            // 删掉的种类（收藏、RetainPDF 自己的 AI 留下的，2026-11-20）：旧版本设备发来的当过时改动忽略
+            return Ok(Considered::Stale);
+        }
         if entity_spec(&record.kind).is_none() && is_kind_name(&record.kind) && is_valid_key(&record.key) {
             // 新版本才有的种类:留着,升级后再应用(丢掉的话升级后也收不到了)。
             return Ok(Considered::Parked(format!("{} needs a newer version of the app", record.kind)));

@@ -47,10 +47,21 @@ before(async () => {
   const navigate = () => { navigated = true; };
   await act(() => root.render(h(BookDetailShell, {
     open: true, title: "Test book", onOpenChange: navigate,
-    right: h(BookDetailRightTabs, { open: true, defaultTab: "artifacts",
-      artifactsTab: h(BookDetailArtifactsTab, { onOpenJob: navigate, onOpenSource: navigate,
-        artifactCenter: { sections, loading: false, error: "", downloadingId: "", download: navigate },
-      }),
+    right: h(BookDetailRightTabs, {
+      open: true,
+      defaultTab: "artifacts",
+      tabs: [{
+        id: "artifacts",
+        label: "文件",
+        title: "文件与产物",
+        Icon: () => null,
+        order: 30,
+        render: () => h(BookDetailArtifactsTab, {
+          onOpenJob: navigate,
+          onOpenSource: navigate,
+          artifactCenter: { sections, loading: false, error: "", downloadingId: "", download: navigate },
+        }),
+      }],
     }),
   })));
 });

@@ -1,12 +1,19 @@
 //! 数据库结构：编号迁移的执行器，以及任务系统老表后来加的列（`LEGACY_COLUMNS`）。
 //!
-//! 迁移本身在 `migrations/` 下，一个迁移一个 `.sql` 文件，见那里的说明。`apply_schema` 的
-//! 幂等建表和 `ensure_legacy_columns` 补列继续负责任务系统的老表；新表、新列都从编号迁移走。
+//! 开库时按顺序：`base.sql`（最早几张表的幂等建表）→ `ensure_legacy_columns`（很老的库补 `jobs.document_id`）→
+//! 编号迁移（`migrations/`，一个迁移一个 `.sql` 文件）→ 补 `idx_uploads_content_hash`（见 `db.rs` 的 `apply_schema`）。
+//! 新表、新列都从编号迁移走。**现在每张表的完整样子看 `database/retainpdf-db/schema.sql`**（`describe.rs` 生成的快照，
+//! 测试守着；老库升上来和新建的库一样也有测试）。
 
 use anyhow::{Context, Result};
 use rusqlite::{Connection, Transaction, TransactionBehavior};
 
+#[cfg(test)]
+mod describe;
 mod migrations;
+
+#[cfg(test)]
+pub(crate) use describe::describe_schema;
 
 use migrations::MIGRATIONS;
 
@@ -16,34 +23,97 @@ pub(crate) fn versioned_migration_count() -> i64 {
     MIGRATIONS.len() as i64
 }
 
+const LEGACY_EXTERNAL_REF_OWNERS_SQL: &str = r#"
+ALTER TABLE document_external_refs RENAME TO old_external_refs;
+CREATE TABLE document_external_refs (
+    owner_user_id   TEXT NOT NULL,
+    source          TEXT NOT NULL,
+    library_id      TEXT NOT NULL,
+    item_key        TEXT NOT NULL,
+    attachment_key  TEXT NOT NULL,
+    document_id     TEXT NOT NULL REFERENCES documents(document_id) ON DELETE CASCADE,
+    metadata_json   TEXT NOT NULL DEFAULT '{}',
+    collection_path TEXT NOT NULL DEFAULT '',
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL,
+    PRIMARY KEY(owner_user_id, source, library_id, attachment_key)
+);
+INSERT INTO document_external_refs
+SELECT d.owner_user_id, r.source, r.library_id, r.item_key, r.attachment_key, r.document_id,
+       r.metadata_json, r.collection_path, r.created_at, r.updated_at
+FROM old_external_refs r JOIN documents d ON d.document_id = r.document_id;
+DROP TABLE old_external_refs;
+CREATE INDEX idx_document_external_refs_document
+    ON document_external_refs(document_id);
+"#;
+
+fn table_exists(conn: &Connection, table: &str) -> Result<bool> {
+    Ok(conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1)",
+        [table],
+        |row| row.get(0),
+    )?)
+}
+
+fn ensure_legacy_external_ref_owner_column(tx: &Transaction<'_>) -> Result<()> {
+    if !table_exists(tx, "document_external_refs")? || !table_exists(tx, "documents")? {
+        return Ok(());
+    }
+    let has_owner: bool = tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM pragma_table_info('document_external_refs') WHERE name='owner_user_id')",
+        [],
+        |row| row.get(0),
+    )?;
+    if !has_owner {
+        tx.execute_batch(LEGACY_EXTERNAL_REF_OWNERS_SQL)
+            .context("backfilling owner_user_id on legacy document_external_refs failed")?;
+    }
+    Ok(())
+}
+
 pub(super) fn run_versioned_migrations(conn: &Connection) -> Result<()> {
-    let initial_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    // PaperLoom v0.2.8 used v17 for `document_external_refs` (now v30). If an existing
+    let mut initial_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    let mut migrated = false;
+
+    // PaperLoom v0.2.8 used v17 for `document_external_refs` (now v38). If an existing
     // PaperLoom v17 database is opened, its user_version is 17 but `sync_state` from
     // upstream's v17_sync_bookkeeping.sql is not present yet. Backfill v17_sync_bookkeeping
-    // before running v18..v30 so existing PaperLoom libraries upgrade cleanly.
-    if initial_version == 17 {
-        let has_sync_state: bool = conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='sync_state')",
-            [],
-            |row| row.get(0),
-        )?;
-        if !has_sync_state {
-            let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
-            let still_missing: bool = tx.query_row(
-                "SELECT NOT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='sync_state')",
-                [],
-                |row| row.get(0),
-            )?;
-            if still_missing {
-                let v17 = &MIGRATIONS[16];
-                debug_assert_eq!(v17.version, 17);
-                tx.execute_batch(v17.sql)
-                    .with_context(|| format!("schema migration v17 ({}) backfill failed", v17.name))?;
-            }
-            tx.commit()?;
+    // before running v18..v38 so existing PaperLoom libraries upgrade cleanly.
+    if initial_version == 17 && !table_exists(conn, "sync_state")? {
+        let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
+        if !table_exists(&tx, "sync_state")? {
+            let v17 = &MIGRATIONS[16];
+            debug_assert_eq!(v17.version, 17);
+            tx.execute_batch(v17.sql)
+                .with_context(|| format!("schema migration v17 ({}) backfill failed", v17.name))?;
+            migrated = true;
         }
+        tx.commit()?;
     }
+
+    // PaperLoom v0.3.x–v0.4.x used v30 (`external_refs`) and v31 (`external_ref_owners`),
+    // before upstream introduced v30 (`translation_versions`) through v37 (`library_tags`).
+    // Detect that legacy PaperLoom branch (user_version 30 or 31 without `translation_versions`),
+    // normalize `document_external_refs` to include `owner_user_id`, and rewind `user_version`
+    // to 29 so upstream v30..v37 + PaperLoom v38 execute in order without losing Zotero refs.
+    if matches!(initial_version, 30 | 31)
+        && table_exists(conn, "document_external_refs")?
+        && !table_exists(conn, "translation_versions")?
+    {
+        let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
+        let current: i64 = tx.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+        if matches!(current, 30 | 31)
+            && table_exists(&tx, "document_external_refs")?
+            && !table_exists(&tx, "translation_versions")?
+        {
+            ensure_legacy_external_ref_owner_column(&tx)?;
+            tx.pragma_update(None, "user_version", 29)?;
+            initial_version = 29;
+            migrated = true;
+        }
+        tx.commit()?;
+    }
+
     for migration in MIGRATIONS {
         let version = migration.version;
         if version <= initial_version {
@@ -56,12 +126,62 @@ pub(super) fn run_versioned_migrations(conn: &Connection) -> Result<()> {
         if version <= current {
             continue;
         }
-        tx.execute_batch(migration.sql)
-            .with_context(|| format!("schema migration v{version} ({}) failed", migration.name))?;
+        // Before v36 renames `documents` -> `item_files` and moves `owner_user_id` to
+        // `library_items`, upgrade any legacy v17 `document_external_refs` table that still
+        // lacks `owner_user_id` (v22 added `documents.owner_user_id`).
+        if version == 36 {
+            ensure_legacy_external_ref_owner_column(&tx)?;
+        }
+        if !already_applied(&tx, version)? {
+            tx.execute_batch(migration.sql)
+                .with_context(|| format!("schema migration v{version} ({}) failed", migration.name))?;
+        }
         tx.pragma_update(None, "user_version", version)?;
+        tx.commit()?;
+        migrated = true;
+    }
+    // 迁移删表、重建表腾出来的页，提交以后才收得回来：库是增量收缩模式时当场还给磁盘（v35 进度流瘦身腾出约 200MB）。
+    // 不是这个模式时什么都不做。
+    if migrated {
+        super::maintenance::incremental_vacuum(conn)?;
+    }
+    Ok(())
+}
+
+/// 测试用：把一个新库建到第 `version` 个迁移为止（老库的样子），好往里写老结构的数据，再用 `Db::init` 升上来。
+/// 比「把版本号拨回去重跑」干净：不用手动撤掉后面迁移做的改动。`conn` 要是直接开的连接（`Db` 的连接一开就升到最新）。
+#[cfg(test)]
+pub(crate) fn create_at_version(conn: &Connection, version: i64) -> Result<()> {
+    conn.execute_batch(include_str!("base.sql"))?;
+    ensure_legacy_columns(conn)?;
+    for migration in MIGRATIONS.iter().filter(|migration| migration.version <= version) {
+        let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
+        tx.execute_batch(migration.sql)
+            .with_context(|| format!("schema migration v{} ({}) failed", migration.version, migration.name))?;
+        tx.pragma_update(None, "user_version", migration.version)?;
         tx.commit()?;
     }
     Ok(())
+}
+
+/// 不能重跑的迁移（改列的取值、删列、加带外键的列）：库里已经是迁移后的样子，就只记版本、不再执行。
+/// 正常升级碰不到（版本号只往上走）；是给把 `user_version` 倒回去重跑后面迁移的测试用的——它们的惯例是先手动撤掉
+/// 后面迁移加的东西（见 `event_feed_tests`），可 SQLite 删不掉带外键的列，v32 的 `parent_job_id` 撤不掉。
+/// 每项是（版本，查询；返回非 0 表示已经是迁移后的样子）。
+const APPLIED_CHECKS: &[(i64, &str)] = &[
+    (32, "SELECT COUNT(*) FROM pragma_table_info('jobs') WHERE name = 'status'"),
+    (33, "SELECT COUNT(*) FROM pragma_table_info('jobs') WHERE name = 'stage_entered_at'"),
+    (36, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'library_items'"),
+];
+
+/// 从这个版本起不再补 `LEGACY_COLUMNS`（v33 删了其中的 `jobs.runtime_json`）。
+const LEGACY_COLUMNS_SETTLED_AT: i64 = 33;
+
+fn already_applied(conn: &Connection, version: i64) -> Result<bool> {
+    let Some((_, check)) = APPLIED_CHECKS.iter().find(|(v, _)| *v == version) else {
+        return Ok(false);
+    };
+    Ok(conn.query_row(check, [], |row| row.get::<_, i64>(0))? > 0)
 }
 
 /// 编号迁移以前就有的老表后来加的列：(表, 列, 定义)。只许往后加。
@@ -98,6 +218,11 @@ const LEGACY_COLUMNS: &[(&str, &str, &str)] = &[
 /// 会同时起来，以前两边都看到缺列、都去 `ALTER`，后到的那个报 "duplicate column" 起不来。和编号迁移一样用
 /// IMMEDIATE 事务，加列要么全加上要么一个不加。
 pub(super) fn ensure_legacy_columns(conn: &Connection) -> Result<()> {
+    // v33 起删掉了其中的 `jobs.runtime_json`：升到这个版本以后老列都早已补齐，不再看（否则会把删掉的列加回来）。
+    let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    if version >= LEGACY_COLUMNS_SETTLED_AT {
+        return Ok(());
+    }
     if missing_legacy_columns(conn)?.is_empty() {
         return Ok(());
     }
@@ -165,23 +290,33 @@ pub(super) fn ensure_no_legacy_artifacts_json(conn: &Connection) -> Result<()> {
 mod tests {
     use super::*;
 
+    const LEGACY_V30_EXTERNAL_REFS_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS document_external_refs (
+    source          TEXT NOT NULL,
+    library_id      TEXT NOT NULL,
+    item_key        TEXT NOT NULL,
+    attachment_key  TEXT NOT NULL,
+    document_id     TEXT NOT NULL REFERENCES documents(document_id) ON DELETE CASCADE,
+    metadata_json   TEXT NOT NULL DEFAULT '{}',
+    collection_path TEXT NOT NULL DEFAULT '',
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL,
+    PRIMARY KEY(source, library_id, attachment_key)
+);
+CREATE INDEX IF NOT EXISTS idx_document_external_refs_document
+    ON document_external_refs(document_id);
+"#;
+
     #[test]
     fn upgrades_paperloom_v17_external_refs_db_with_sync_state_backfill() {
         let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE uploads (upload_id TEXT PRIMARY KEY, filename TEXT NOT NULL, stored_path TEXT NOT NULL, bytes INTEGER NOT NULL, page_count INTEGER NOT NULL, uploaded_at TEXT NOT NULL, developer_mode INTEGER NOT NULL, content_hash TEXT NOT NULL DEFAULT '');
-             CREATE TABLE jobs (job_id TEXT PRIMARY KEY, workflow TEXT NOT NULL, status_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, command_json TEXT NOT NULL, request_json TEXT NOT NULL, log_tail_json TEXT NOT NULL, upload_id TEXT, document_id TEXT, run_generation INTEGER NOT NULL DEFAULT 0);
-             CREATE TABLE artifacts (job_id TEXT PRIMARY KEY, artifacts_json TEXT NOT NULL, updated_at TEXT NOT NULL);
-             CREATE TABLE job_artifact_entries (job_id TEXT NOT NULL, artifact_key TEXT NOT NULL, PRIMARY KEY(job_id, artifact_key));
-             CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT, job_id TEXT NOT NULL, seq INTEGER NOT NULL DEFAULT 0, ts TEXT NOT NULL, level TEXT NOT NULL DEFAULT '', stage TEXT, stage_detail TEXT, provider TEXT, provider_stage TEXT, event TEXT NOT NULL DEFAULT '', event_type TEXT, progress_current INTEGER, progress_total INTEGER, payload_json TEXT NOT NULL DEFAULT '{}', retry_count INTEGER, elapsed_ms INTEGER, message TEXT NOT NULL);
-             CREATE TABLE glossaries (glossary_id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-             CREATE TABLE glossary_entries (entry_id TEXT PRIMARY KEY, glossary_id TEXT NOT NULL, source_term TEXT NOT NULL, target_term TEXT NOT NULL);",
-        ).unwrap();
+        conn.execute_batch(include_str!("base.sql")).unwrap();
+        ensure_legacy_columns(&conn).unwrap();
         for m in &MIGRATIONS[..16] {
             conn.execute_batch(m.sql).unwrap();
         }
-        // Apply PaperLoom v0.2.8's v17 (document_external_refs, now v30) and set user_version = 17
-        conn.execute_batch(MIGRATIONS[29].sql).unwrap();
+        // Apply PaperLoom v0.2.8's v17 (document_external_refs, now v38) and set user_version = 17
+        conn.execute_batch(LEGACY_V30_EXTERNAL_REFS_SQL).unwrap();
         conn.execute_batch(
             "INSERT INTO documents(document_id, title, source_filename, added_at, updated_at)
              VALUES ('legacy-paper', 'Title', 'paper.pdf', 't', 't');
@@ -206,5 +341,43 @@ mod tests {
             .unwrap();
         assert_eq!(has_sync, 1);
         assert_eq!(has_ext, 1);
+    }
+
+    #[test]
+    fn upgrades_paperloom_v30_and_v31_external_refs_db_to_latest() {
+        for legacy_version in [30_i64, 31_i64] {
+            let conn = Connection::open_in_memory().unwrap();
+            create_at_version(&conn, 29).unwrap();
+            conn.execute_batch(LEGACY_V30_EXTERNAL_REFS_SQL).unwrap();
+            conn.execute_batch(
+                "INSERT INTO documents(document_id, title, source_filename, added_at, updated_at, owner_user_id)
+                 VALUES ('zotero-paper', 'Title', 'paper.pdf', 't', 't', 'u1');
+                 INSERT INTO document_external_refs(source, library_id, item_key, attachment_key, document_id, created_at, updated_at)
+                 VALUES ('zotero', 'users/0', 'item', 'att', 'zotero-paper', 't', 't');",
+            )
+            .unwrap();
+            if legacy_version == 31 {
+                conn.execute_batch(LEGACY_EXTERNAL_REF_OWNERS_SQL).unwrap();
+            }
+            conn.pragma_update(None, "user_version", legacy_version).unwrap();
+
+            run_versioned_migrations(&conn).expect("upgrade legacy PaperLoom v30/v31");
+            let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+            assert_eq!(version, versioned_migration_count());
+            let owner: String = conn.query_row(
+                "SELECT owner_user_id FROM document_external_refs WHERE document_id='zotero-paper'",
+                [],
+                |r| r.get(0),
+            ).unwrap();
+            assert_eq!(owner, "u1");
+            assert!(table_exists(&conn, "translation_versions").unwrap());
+            assert!(table_exists(&conn, "library_items").unwrap());
+            assert!(table_exists(&conn, "item_files").unwrap());
+            let fresh = Connection::open_in_memory().unwrap();
+            fresh.execute_batch(include_str!("base.sql")).unwrap();
+            ensure_legacy_columns(&fresh).unwrap();
+            run_versioned_migrations(&fresh).unwrap();
+            assert_eq!(describe_schema(&conn, true).unwrap(), describe_schema(&fresh, true).unwrap());
+        }
     }
 }

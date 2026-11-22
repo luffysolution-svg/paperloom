@@ -6,6 +6,7 @@ from pathlib import Path
 from devtools.architecture_checks.common import parse_python_file
 from devtools.architecture_checks.common import rel
 from devtools.architecture_checks.common import scan_py_files
+from devtools.architecture_checks.translation_engines import AGENT_ENGINE_ROOT
 from devtools.architecture_checks.translation_rules import TRANSLATION_ROOT
 
 
@@ -69,7 +70,7 @@ SOURCE_TEXT_READER_ALLOWLIST: dict[str, int] = {
     "translation/retainpdf_translation/services/quality/qa/units.py": 2,  # 例外:块内原文
     # 翻译引擎 agent 按块交原文：接续组由 agent 自己合起来翻、再按比例分回各块,
     # 走完整链会把整组原文塞给每个成员,同一段话翻好几遍。收在 _block_source 一个函数里。
-    "translation/retainpdf_translation/workflow/agent_flow.py": 2,  # 例外:块内原文
+    "translation-agent/retainpdf_translation_agent_engine/agent_flow.py": 2,  # 例外:块内原文
     # ---- frozen-debt:逐处判断后再收敛,不能无脑替换 ----
     "translation/retainpdf_translation/artifacts/debug_index.py": 1,
     "translation/retainpdf_translation/core/context/models.py": 1,
@@ -84,32 +85,31 @@ SOURCE_TEXT_READER_ALLOWLIST: dict[str, int] = {
     "translation/retainpdf_translation/core/payload/parts/units.py": 2,
     "translation/retainpdf_translation/core/payload/template_sync.py": 5,
     "translation/retainpdf_translation/core/text_rules.py": 1,
-    "translation/retainpdf_translation/llm/decision_hints.py": 2,
-    "translation/retainpdf_translation/llm/shared/cache.py": 3,
-    "translation/retainpdf_translation/llm/shared/orchestration/common.py": 11,
-    "translation/retainpdf_translation/llm/shared/orchestration/direct_typst_long_text.py": 4,
-    "translation/retainpdf_translation/llm/shared/orchestration/direct_typst_repair.py": 3,
-    "translation/retainpdf_translation/llm/shared/orchestration/heavy_formula.py": 4,
-    "translation/retainpdf_translation/llm/shared/orchestration/metadata.py": 2,
-    "translation/retainpdf_translation/llm/shared/orchestration/segment_parsing.py": 1,
-    "translation/retainpdf_translation/llm/shared/orchestration/segment_plan.py": 3,
-    "translation/retainpdf_translation/llm/shared/orchestration/segment_prompts.py": 1,
-    "translation/retainpdf_translation/llm/shared/orchestration/segment_risk.py": 1,
-    "translation/retainpdf_translation/llm/shared/orchestration/sentence_level.py": 2,
-    "translation/retainpdf_translation/llm/shared/orchestration/short_text_retry.py": 3,
-    "translation/retainpdf_translation/llm/shared/orchestration/single_item_flow.py": 2,
-    "translation/retainpdf_translation/llm/shared/orchestration/tagged_placeholder.py": 4,
+    "translation-classic/retainpdf_translation_classic/llm/shared/cache.py": 3,
+    "translation-classic/retainpdf_translation_classic/llm/shared/orchestration/common.py": 11,
+    "translation-classic/retainpdf_translation_classic/llm/shared/orchestration/direct_typst_long_text.py": 4,
+    "translation-classic/retainpdf_translation_classic/llm/shared/orchestration/direct_typst_repair.py": 3,
+    "translation-classic/retainpdf_translation_classic/llm/shared/orchestration/heavy_formula.py": 4,
+    "translation-classic/retainpdf_translation_classic/llm/shared/orchestration/metadata.py": 2,
+    "translation-classic/retainpdf_translation_classic/llm/shared/orchestration/segment_parsing.py": 1,
+    "translation-classic/retainpdf_translation_classic/llm/shared/orchestration/segment_plan.py": 3,
+    "translation-classic/retainpdf_translation_classic/llm/shared/orchestration/segment_prompts.py": 1,
+    "translation-classic/retainpdf_translation_classic/llm/shared/orchestration/segment_risk.py": 1,
+    "translation-classic/retainpdf_translation_classic/llm/shared/orchestration/sentence_level.py": 2,
+    "translation-classic/retainpdf_translation_classic/llm/shared/orchestration/short_text_retry.py": 3,
+    "translation-classic/retainpdf_translation_classic/llm/shared/orchestration/single_item_flow.py": 2,
+    "translation-classic/retainpdf_translation_classic/llm/shared/orchestration/tagged_placeholder.py": 4,
     "translation/retainpdf_translation/llm/validation/english_residue.py": 4,
     "translation/retainpdf_translation/services/agents/review_artifact.py": 3,
-    "translation/retainpdf_translation/services/classification/prompting.py": 1,
+    "translation-classic/retainpdf_translation_classic/services/classification/prompting.py": 1,
     "translation/retainpdf_translation/services/classification/rule_engine.py": 2,
     "translation/retainpdf_translation/services/continuation/pairs.py": 4,
     "translation/retainpdf_translation/services/continuation/rules.py": 6,
     "translation/retainpdf_translation/services/continuation/state.py": 5,
-    "translation/retainpdf_translation/services/fast_path/keep_origin.py": 4,
+    "translation-classic/retainpdf_translation_classic/services/fast_path/keep_origin.py": 4,
     "translation/retainpdf_translation/services/finalization/untranslated.py": 3,
-    "translation/retainpdf_translation/services/memory/job_memory.py": 3,
-    "translation/retainpdf_translation/services/memory/text.py": 3,
+    "translation-classic/retainpdf_translation_classic/services/memory/job_memory.py": 3,
+    "translation-classic/retainpdf_translation_classic/services/memory/text.py": 3,
     "translation/retainpdf_translation/services/policy/literal_block_rules.py": 1,
     "translation/retainpdf_translation/services/policy/metadata_filter.py": 1,
     "translation/retainpdf_translation/services/policy/payload_rules/legacy_policy_checks.py": 3,
@@ -117,9 +117,9 @@ SOURCE_TEXT_READER_ALLOWLIST: dict[str, int] = {
     "translation/retainpdf_translation/services/policy/soft_hints.py": 1,
     "translation/retainpdf_translation/services/policy/structured_technical_blocks.py": 1,
     "translation/retainpdf_translation/services/policy/verdict.py": 4,
-    "translation/retainpdf_translation/services/postprocess/garbled_reconstruction.py": 3,
+    "translation-classic/retainpdf_translation_classic/services/postprocess/garbled_reconstruction.py": 3,
     "translation/retainpdf_translation/services/terms/usage.py": 4,
-    "translation/retainpdf_translation/workflow/batching/dedupe.py": 4,
+    "translation-classic/retainpdf_translation_classic/workflow/batching/dedupe.py": 4,
     "translation/retainpdf_translation/workflow/recovery.py": 2,
 }
 
@@ -192,7 +192,8 @@ def check_translation_source_text_readers(errors: list[str]) -> None:
     seen_keys: set[str] = set()
     seen_files: set[str] = set()
 
-    for path in scan_py_files(TRANSLATION_ROOT):
+    # agent 接线（2026-11-20 从翻译包挪进 backend/translation-agent）照旧在门禁里
+    for path in [*scan_py_files(TRANSLATION_ROOT), *scan_py_files(AGENT_ENGINE_ROOT)]:
         rel_path = Path(rel(path)).as_posix()
         tree = parse_python_file(path)
         reads = gated_source_text_reads(tree)

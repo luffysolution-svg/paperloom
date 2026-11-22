@@ -78,6 +78,19 @@ async fn serve_with_shutdown(
         spawn_periodic_route_usage_flush()
     });
 
+    // 模型价格（用量汇总估算花费）：每天从 models.dev 同步一次。单测不开，免得测试进程连外网。
+    let _price_sync_handle = (!cfg!(test))
+        .then(|| crate::services::providers::spawn_daily_price_sync(state.config.data_root.clone()))
+        .flatten();
+
+    // 安装包不带字体、Typst 时（桌面端设了 RETAIN_PDF_RUNTIME_ASSETS=download），首次启动在后台下好。单测不开。
+    if !cfg!(test) {
+        crate::services::platform::spawn_runtime_assets_prefetch(
+            state.config.data_root.clone(),
+            Some(state.config.project_root.clone()),
+        );
+    }
+
     let sync_service = state.sync.clone();
     let backup_service = state.backup.clone();
     let app = build_app(state.clone());

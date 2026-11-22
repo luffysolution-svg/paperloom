@@ -8,6 +8,12 @@
 - [统一 React SPA 目标架构](./spa-architecture.md)
 - [主题皮肤系统](./theme-system/THEME_SYSTEM.md)
 - [主页与阅读器软导航](./reader-home-navigation/soft-reader-no-refresh.md)
+- [阅读页改译文](./reader-block-edit.md) —— 在译文的框里直接改一段、看修订历史，攒几处再点一次重新排版
+- [阅读页对比版本、待处理](./reader-version-compare-issues.md) —— 左栏换成另一份译文逐段对着看、一键换用；底栏列出没翻成和质检挑出问题的段落，N 跳下一处
+- [上传弹窗（添加 PDF）](./upload-dialog.md) —— 标题、模式、普通 / Agent 翻译、流程条、拖放区，从上到下各是什么
+- [阅读页画笔](./reader-ink.md) —— 书页上右键出画笔小菜单（Shift+右键是浏览器菜单），P 进出画笔模式，笔迹按页按栏存在本机
+- [阅读页悬停框的「改」「复制」放哪](./reader-hover-tools.md) —— 候选位置 + 碰撞检测，放框外不挡字，页边窄换图标版
+- [翻译编辑部可视化组件](./editorial-room.md) —— 翻译 agent 各角色分工的动画，editorial.v1 事件回放
 - [历史前端优化记录](../../ops/reports/frontend-optimization-notes.md)
 - [React 迁移计划与审计](../../ops/planning/frontend-migration/)
 - [前端状态 Smoke 最新报告](../../ops/reports/frontend-status-smoke-latest.json)

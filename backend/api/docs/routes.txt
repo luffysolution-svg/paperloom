@@ -1,7 +1,7 @@
 # 全部 HTTP 路由：方法 路径 多用户下网站账号的访问策略（signed 登录可用 / admin 只给管理员 /
 # closed 关闭 / public 不需要登录）。由 src/api_tests/route_manifest.rs 从接口登记表生成，不要手改：
 #   UPDATE_ROUTES=1 cargo test -p retainpdf-api --lib route_manifest
-# 127 条路径，150 个接口
+# 137 条路径，162 个接口
 GET    /api/v1/account/pages  signed
 GET    /api/v1/admin/invites  admin
 POST   /api/v1/admin/invites  admin
@@ -70,9 +70,14 @@ POST   /api/v1/documents/:document_id/metadata-suggestions  signed
 POST   /api/v1/documents/:document_id/metadata-suggestions/:suggestion_id/apply  signed
 POST   /api/v1/documents/:document_id/ocr  signed
 GET    /api/v1/documents/:document_id/reading  signed
+PUT    /api/v1/documents/:document_id/tags  signed
 POST   /api/v1/documents/:document_id/translate  signed
 GET    /api/v1/documents/:document_id/translation-coverage  signed
+PUT    /api/v1/documents/:document_id/translation-version  signed
+GET    /api/v1/documents/:document_id/translation-versions  signed
+PATCH  /api/v1/documents/:document_id/translation-versions/:version_id  signed
 GET    /api/v1/documents/:document_id/usage  signed
+GET    /api/v1/documents/:document_id/usage/estimate  signed
 POST   /api/v1/documents/export-batch  admin
 GET    /api/v1/documents/export-batch/:name  admin
 GET    /api/v1/fonts  signed
@@ -122,11 +127,9 @@ GET    /api/v1/jobs/:job_id/progress/stream  signed
 GET    /api/v1/jobs/:job_id/reader/markdown  signed
 GET    /api/v1/jobs/:job_id/reader/metadata  signed
 GET    /api/v1/jobs/:job_id/reader/regions  signed
-GET    /api/v1/jobs/:job_id/reader/regions/:item_id  signed
 GET    /api/v1/jobs/:job_id/reports/failure  signed
 GET    /api/v1/jobs/:job_id/reports/layout-fit  signed
 GET    /api/v1/jobs/:job_id/reports/quality  signed
-GET    /api/v1/jobs/:job_id/reports/quality/items  signed
 GET    /api/v1/jobs/:job_id/reports/refine  signed
 GET    /api/v1/jobs/:job_id/reports/translation  signed
 GET    /api/v1/jobs/:job_id/reports/translation-qa  signed
@@ -143,12 +146,21 @@ POST   /api/v1/providers/mineru/validate-token  admin
 POST   /api/v1/providers/models  admin
 GET    /api/v1/providers/ocr  signed
 POST   /api/v1/providers/paddle/validate-token  admin
+POST   /api/v1/providers/translation/models  admin
+GET    /api/v1/runtime-assets  signed
+POST   /api/v1/runtime-assets/download  admin
 GET    /api/v1/search  signed
 GET    /api/v1/sync  admin
 PUT    /api/v1/sync  admin
 POST   /api/v1/sync/run  admin
 POST   /api/v1/sync/test  admin
+GET    /api/v1/tags  signed
+POST   /api/v1/tags  signed
+DELETE /api/v1/tags/:tag_id  signed
+PATCH  /api/v1/tags/:tag_id  signed
 POST   /api/v1/uploads  signed
 GET    /api/v1/usage  signed
+GET    /api/v1/usage/estimate  signed
+POST   /api/v1/usage/prices  signed
 GET    /health  public
 GET    /ready  public

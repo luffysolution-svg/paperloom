@@ -20,7 +20,8 @@ use crate::models::api::{
     AddCollectionDocumentsInput, ApplyDocumentMetadataSuggestionInput, CreateCollectionInput,
     CreateDocumentMetadataSuggestionInput, DeleteDocumentQuery, FtsBlockRow,
     ListDocumentMetadataSuggestionsQuery, ListDocumentsQuery, PatchCollectionInput,
-    ListDocumentJobsQuery, PatchDocumentInput, SearchQuery,
+    ListDocumentJobsQuery, PatchDocumentInput, SearchQuery, CreateTagInput, PatchTagInput, SetDocumentTagsInput,
+    DocumentReadingQuery, PatchTranslationVersionInput, SetCurrentTranslationVersionInput, TranslationVersionsQuery,
 };
 use crate::models::CreateJobInput;
 
@@ -44,13 +45,7 @@ async fn book_collection_search_and_delete_views_match_published_schema() {
     let contract = contract(CONTRACT);
     let book = seed_document(&state, b"library-documents-contract-a");
     let versioned = seed_document(&state, b"library-documents-contract-b");
-    // `active_version_id` 没有时整个键不出现；给第二本书填上，键集合就该正好是契约的全部属性。
-    let conn = rusqlite::Connection::open(state.config.jobs_db_path.clone()).unwrap();
-    conn.execute(
-        "UPDATE documents SET active_version_id = 'ver-contract' WHERE document_id = ?1",
-        rusqlite::params![versioned],
-    )
-    .unwrap();
+    // `active_version_id`（AI 改写文档留下的，v36 删了那一列）没有时整个键不出现，现在恒不出现；契约里照旧是可选的。
 
     // 书列表、一本书。
     let list = ok_data(&state, "GET", "/api/v1/documents", None).await;
@@ -72,8 +67,6 @@ async fn book_collection_search_and_delete_views_match_published_schema() {
         .map(|key| key.as_str().unwrap().to_string())
         .collect();
     assert_eq!(object_keys(&plain, "document"), required, "没有版本的书正好是 required 那些键");
-    let with_version = ok_data(&state, "GET", &format!("/api/v1/documents/{versioned}"), None).await;
-    assert_exact(&with_version, &contract, "DocumentRecord", "document (versioned)");
     required.insert("active_version_id".to_string());
     assert_eq!(required, schema_keys(&contract, "DocumentRecord"), "只有 active_version_id 可以不出现");
     // 契约里写着「未使用，恒为空」的四个键，实际的空值就是这些。
@@ -262,6 +255,44 @@ async fn book_collection_search_and_delete_views_match_published_schema() {
     assert_exact(&removed, &contract, "CollectionDocumentRemoveResultView", "collection remove");
     let deleted = ok_data(&state, "DELETE", &format!("/api/v1/collections/{collection_id}"), None).await;
     assert_exact(&deleted, &contract, "CollectionDeleteResultView", "collection delete");
+
+    // 标签：建（同名不重复建）、给书设、按标签筛、改、列表、删。
+    let tag = ok_data(&state, "POST", "/api/v1/tags", Some(json!({ "name": "光谱", "color": "#3366AA" }))).await;
+    assert_exact(&tag, &contract, "TagRecord", "tag (created)");
+    let tag_id = tag["tag_id"].as_str().unwrap().to_string();
+    let same = ok_data(&state, "POST", "/api/v1/tags", Some(json!({ "name": " 光谱 " }))).await;
+    assert_eq!(same["tag_id"], tag_id.as_str(), "同名的返回已有的");
+    let tagged = ok_data(
+        &state,
+        "PUT",
+        &format!("/api/v1/documents/{book}/tags"),
+        Some(json!({ "tag_ids": [tag_id, tag_id] })),
+    )
+    .await;
+    assert_object_keys_allowing_absent(&tagged, &contract, "DocumentRecord", "tagged", &["active_version_id"]);
+    assert_eq!(tagged["tags"].as_array().unwrap().len(), 1, "{tagged}");
+    assert_exact(&tagged["tags"][0], &contract, "DocumentTag", "tagged.tags[0]");
+    let by_tag = ok_data(&state, "GET", &format!("/api/v1/documents?tag_id={tag_id}"), None).await;
+    assert_eq!(by_tag["total"], 1);
+    assert_eq!(by_tag["documents"][0]["document_id"], book.as_str());
+    let recolored = ok_data(&state, "PATCH", &format!("/api/v1/tags/{tag_id}"), Some(json!({ "color": "" }))).await;
+    assert_exact(&recolored, &contract, "TagRecord", "tag (patched)");
+    assert_eq!(recolored["document_count"], 1);
+    let other = ok_data(&state, "POST", "/api/v1/tags", Some(json!({ "name": "荧光" }))).await;
+    let (status, _) = send(&state, "PATCH", &format!("/api/v1/tags/{}", other["tag_id"].as_str().unwrap()), Some(json!({ "name": "光谱" }))).await;
+    assert_eq!(status, StatusCode::CONFLICT, "改成别的标签在用的名字");
+    let (status, _) = send(&state, "POST", "/api/v1/tags", Some(json!({ "name": "坏颜色", "color": "red" }))).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let (status, _) =
+        send(&state, "PUT", &format!("/api/v1/documents/{book}/tags"), Some(json!({ "tag_ids": ["tag-missing"] }))).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let tags = ok_data(&state, "GET", "/api/v1/tags", None).await;
+    assert_exact(&tags, &contract, "TagListView", "tags");
+    assert_eq!(tags["tags"].as_array().unwrap().len(), 2);
+    let tag_deleted = ok_data(&state, "DELETE", &format!("/api/v1/tags/{tag_id}"), None).await;
+    assert_exact(&tag_deleted, &contract, "TagDeleteResultView", "tag delete");
+    let untagged = ok_data(&state, "GET", &format!("/api/v1/documents/{book}"), None).await;
+    assert_eq!(untagged["tags"], json!([]));
 
     // 删书。
     let deleted = ok_data(&state, "DELETE", &format!("/api/v1/documents/{versioned}"), None).await;
@@ -463,8 +494,15 @@ fn request_bodies_and_queries_accept_exactly_the_contract_fields() {
     assert_request_fields_match::<ApplyDocumentMetadataSuggestionInput>(&contract, "ApplyDocumentMetadataSuggestionInput");
     assert_request_fields_match::<CreateCollectionInput>(&contract, "CreateCollectionInput");
     assert_request_fields_match::<PatchCollectionInput>(&contract, "PatchCollectionInput");
+    assert_request_fields_match::<CreateTagInput>(&contract, "CreateTagInput");
+    assert_request_fields_match::<PatchTagInput>(&contract, "PatchTagInput");
+    assert_request_fields_match::<SetDocumentTagsInput>(&contract, "SetDocumentTagsInput");
     assert_request_fields_match::<AddCollectionDocumentsInput>(&contract, "AddCollectionDocumentsInput");
     assert_request_fields_match::<ListDocumentJobsQuery>(&contract, "ListDocumentJobsQuery");
+    assert_request_fields_match::<DocumentReadingQuery>(&contract, "DocumentReadingQuery");
+    assert_request_fields_match::<TranslationVersionsQuery>(&contract, "TranslationVersionsQuery");
+    assert_request_fields_match::<SetCurrentTranslationVersionInput>(&contract, "SetCurrentTranslationVersionInput");
+    assert_request_fields_match::<PatchTranslationVersionInput>(&contract, "PatchTranslationVersionInput");
     // 翻译、OCR 的请求体是 POST /jobs 的 CreateJobInput：顶层字段在这里对上，五个段从 create-job.v1 原样抄来，
     // 由 contracts/tests/library-documents-shared-definitions.test.mjs 锁成一致，段和 Rust 的对照在
     // retainpdf-core 的 models/input/request.rs contract_tests。

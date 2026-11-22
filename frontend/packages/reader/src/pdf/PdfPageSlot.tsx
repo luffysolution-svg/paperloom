@@ -26,15 +26,17 @@ import {
 } from "../shared/data/reader-regions.js";
 import {
   hitTestReaderTextHoverTarget,
-  HOVER_TOOLS_HEIGHT,
-  HOVER_TOOLS_WIDTH,
-  hoverToolsOutside,
   projectReaderTextHoverTargets,
   READER_TEXT_HOVER_TOOLS_CLASS,
   ReaderTextHoverLayer,
 } from "./ReaderTextHoverLayer.js";
+import { EditedTranslationOverlay } from "./EditedTranslationOverlay.js";
+import { inHoverToolsZone, useHoverPresentation } from "./hover-presentation.js";
+import { InkLayer } from "./InkLayer.js";
+import { READER_INLINE_EDIT_CLASS, ReaderInlineBlockEditor } from "./ReaderInlineBlockEditor.js";
 import { LiveTranslationOverlay } from "./LiveTranslationOverlay.js";
 import { useReaderContext } from "../components/react-pdf/reader-context.js";
+import { highlightFindTerm } from "../shared/content/reader-find.js";
 import type { ReaderLiveTranslationLayoutPage as LiveTranslationLayoutPage } from "../contracts/live-translation.js";
 import type { LiveTranslationPageState } from "../shared/data/live-translation-state.js";
 
@@ -91,7 +93,18 @@ function PdfPageSlotInner({
   showLiveTranslation = pane === "source",
 }: PdfPageSlotProps) {
   // 改过的块（来自阅读器上下文；单测里直接渲染时没有，就不画标记）。
-  const revisedBlocks = useReaderContext()?.revisedBlocks;
+  const readerContext = useReaderContext();
+  const revisedBlocks = readerContext?.revisedBlocks;
+  const blockEdit = readerContext?.blockEdit;
+  const pendingEdits = blockEdit?.pendingEdits;
+  const editBlock = readerContext?.editBlock;
+  // 左栏搜索的词：文字层里每处命中包一个 <mark>（reader-find.ts 的 highlightFindTerm）。没有词时不给 renderer，
+  // react-pdf 照原样画文字层，不多一遍 innerHTML。
+  const findTerm = readerContext?.findTerm || "";
+  const customTextRenderer = useMemo(
+    () => (findTerm ? ({ str }: { str: string }) => highlightFindTerm(str, findTerm) : undefined),
+    [findTerm],
+  );
   const aspectRef = useRef(cachedAspect ?? DEFAULT_ASPECT);
   const [aspect, setAspect] = useState(aspectRef.current);
 
@@ -152,9 +165,23 @@ function PdfPageSlotInner({
     () => textHoverTargets.find((target) => target.itemId === hoveredTextId) || null,
     [hoveredTextId, textHoverTargets],
   );
+  // 正在框里改的那一段（只在译文栏、只在它所在的那一页）。
+  const editingItemId = pane === "translated" ? blockEdit?.target?.itemId || "" : "";
+  const editingTarget = useMemo(
+    () => (editingItemId ? textHoverTargets.find((target) => target.itemId === editingItemId) || null : null),
+    [editingItemId, textHoverTargets],
+  );
+
+  // 悬停框贴着字画、工具条放页边（hover-presentation）。
+  const hoverPresentation = useHoverPresentation(pageBoxRef, active ? hoveredTextTarget : null, textHoverTargets, width);
   const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     // 触屏没有悬停：手指滑动（滚动）不该换框，框由点按决定（见 handlePointerDown）。
     if (event.pointerType === "touch") return;
+    // 画笔模式：拖动是画，不出悬停框。
+    if (readerContext?.ink?.tool) {
+      setHoveredTextId(null);
+      return;
+    }
     // 拖选正文时隐藏轮廓，绝不接管 PDF textLayer 的事件。
     if (event.buttons !== 0) {
       setHoveredTextId(null);
@@ -162,21 +189,13 @@ function PdfPageSlotInner({
     }
     // 鼠标在工具条（编号 / 复制）上：工具条可能在框外，按坐标命中会把框收掉，按钮就点不到了。
     if ((event.target as HTMLElement | null)?.closest?.(`.${READER_TEXT_HOVER_TOOLS_CLASS}`)) return;
+    // 鼠标在编辑框里：底下是别的段，不换框。
+    if ((event.target as HTMLElement | null)?.closest?.(`.${READER_INLINE_EDIT_CLASS}`)) return;
     const hostRect = event.currentTarget.getBoundingClientRect();
     const x = event.clientX - hostRect.left;
     const y = event.clientY - hostRect.top;
-    // 工具条在框外上方时（矮 / 窄的块，比如行间公式），鼠标斜着走向按钮可能先经过上面
-    // 别的块。只在工具条自己那一小块范围里保持当前框 —— 以前保持的是框上方整条带，
-    // 紧贴在上面的短块（比如图注）从下面就再也悬停不到了。
-    const current = hoveredTextTarget?.rect;
-    if (
-      current
-      && hoverToolsOutside(current)
-      && x >= current.left - 4
-      && x <= current.left + HOVER_TOOLS_WIDTH
-      && y >= current.top - HOVER_TOOLS_HEIGHT
-      && y <= current.top
-    ) return;
+    // 工具条在框外上方 / 下方时，鼠标斜着走向按钮可能先经过别的块：在工具条那一小块范围里保持当前框。
+    if (inHoverToolsZone(hoverPresentation, x, y)) return;
     const target = hitTestReaderTextHoverTarget(textHoverTargets, x, y);
     setHoveredTextId(target?.itemId || null);
   };
@@ -235,6 +254,7 @@ function PdfPageSlotInner({
           width={width}
           devicePixelRatio={devicePixelRatio}
           renderTextLayer={textLayer}
+          customTextRenderer={customTextRenderer}
           renderAnnotationLayer={false}
           className={READER_PDF_PAGE_CLASS}
           loading={
@@ -284,6 +304,19 @@ function PdfPageSlotInner({
           height={naturalHeight}
         />
       ) : null}
+      {active && pane === "translated" && pendingEdits?.size ? (
+        <EditedTranslationOverlay targets={textHoverTargets} edits={pendingEdits} width={width} excludeId={editingTarget?.itemId} />
+      ) : null}
+      {active && editingTarget && blockEdit ? (
+        <ReaderInlineBlockEditor
+          target={editingTarget}
+          page={{ width, height: naturalHeight }}
+          edit={blockEdit}
+          showSource={Boolean(readerContext?.editShowsSource)}
+          regions={readerContext?.regions}
+          jumpToBlock={readerContext?.jumpToBlock}
+        />
+      ) : null}
       {active && pane === "translated" && revisedBlocks?.size ? (
         <div className="reader-revised-markers" aria-hidden="true">
           {textHoverTargets.filter((target) => revisedBlocks.has(target.itemId)).map((target) => (
@@ -296,10 +329,23 @@ function PdfPageSlotInner({
           ))}
         </div>
       ) : null}
+      {active && readerContext?.ink ? (
+        <InkLayer
+          page={pageNumber}
+          pane={pane === "translated" ? "translated" : readerContext.compareVersion ? "compare" : "source"}
+          width={width}
+          height={naturalHeight}
+          ink={readerContext.ink}
+        />
+      ) : null}
       <ReaderTextHoverLayer
-        target={active ? hoveredTextTarget : null}
+        target={active && !readerContext?.ink?.tool && hoveredTextTarget?.itemId !== editingTarget?.itemId ? hoveredTextTarget : null}
         pane={pane === "translated" ? "translated" : "source"}
         revisedCount={hoveredTextTarget ? revisedBlocks?.get(hoveredTextTarget.itemId) || 0 : 0}
+        onEdit={editBlock}
+        frameRect={hoverPresentation?.rect}
+        placement={hoverPresentation?.placement}
+        tailTop={hoverPresentation?.tailTop}
       />
     </div>
   );

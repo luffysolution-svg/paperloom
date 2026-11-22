@@ -2,6 +2,7 @@ import { copyReaderText } from "../shared/utils/clipboard.js";
 export { copyReaderText } from "../shared/utils/clipboard.js";
 import { fetchProtected, resolveMarkdownAssetUrl } from "../external.js";
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { Check, Copy, PenLine, X } from "lucide-react";
 import {
   projectReaderRegion,
   readerRegionCopyText,
@@ -10,6 +11,7 @@ import {
   type ReaderRegionHighlight,
   type ReaderRegionRect,
 } from "../shared/data/reader-regions.js";
+import { canEditReaderKind } from "../shared/data/block-edit.js";
 
 export type ReaderTextHoverTarget = {
   itemId: string;
@@ -54,7 +56,21 @@ export function hitTestReaderTextHoverTarget(
 }
 
 export const READER_TEXT_HOVER_COPY_CLASS = "reader-text-hover-copy";
+export const READER_TEXT_HOVER_EDIT_CLASS = "reader-text-hover-edit";
 export const READER_TEXT_HOVER_ID_CLASS = "reader-text-hover-id";
+
+/**
+ * 框上要不要显示翻译编号（和翻译调试、日志里的 item_id 同一个）：读者用不上，默认不显示；排查翻译问题时在阅读页地址后
+ * 加 `?debug=1`（或 `&debug=1`）就出来，点一下复制。2026-11-12 以前每个读者都看得到。
+ */
+export function readerShowsItemIds(search: string = typeof window === "undefined" ? "" : window.location.search): boolean {
+  try {
+    const value = new URLSearchParams(search).get("debug");
+    return value === "1" || value === "true";
+  } catch {
+    return false;
+  }
+}
 export const READER_TEXT_HOVER_TOOLS_CLASS = "reader-text-hover-tools";
 
 type CopyState = "idle" | "copied" | "failed";
@@ -221,7 +237,7 @@ function escapeLatexCell(value: string): string {
 
 function serializeTableForCopy(region: ReaderRegion, pane: "source" | "translated", format: TableCopyFormat): string {
   const box = pane === "translated" ? region.translated : region.source;
-  const raw = region.markdown.trim() || box.text.trim();
+  const raw = box.text.trim() || region.markdown.trim();
   if (format === "text") return readerRegionCopyText(region, pane);
   const rows = tableRowsFromText(raw);
   if (!rows.length) return readerRegionCopyText(region, pane);
@@ -239,9 +255,15 @@ function serializeTableForCopy(region: ReaderRegion, pane: "source" | "translate
   ].join("\n");
 }
 
+/**
+ * 工具条放哪（hover-presentation 的 placeHoverTools 选）：框外右边 / 左边的页边（竖排）、框外上方（outside）、
+ * 框外下方（below）、框里最后一行的右边（tail，段尾空着的地方）；inside（框里右上角）只在没量位置时用。
+ */
+export type HoverToolsPlacement = "side-right" | "side-left" | "inside" | "outside" | "below" | "tail";
+
 /** 工具条（编号 + 复制）大约占的尺寸：放进框内放不下时才挪到框外上方。 */
 export const HOVER_TOOLS_HEIGHT = 26;
-export const HOVER_TOOLS_WIDTH = 250;
+export const HOVER_TOOLS_WIDTH = 220;
 
 /**
  * 工具条放哪：一般的块放在框内右上角 —— 它就在块的命中范围里，鼠标走过去不会换块，
@@ -251,18 +273,43 @@ export function hoverToolsOutside(rect: ReaderRegionRect, toolsWidth = HOVER_TOO
   return rect.height < HOVER_TOOLS_HEIGHT * 2 || rect.width < toolsWidth;
 }
 
+/** 「复制」的图标：复制好了变勾、失败变叉。 */
+function CopyStateIcon({ state }: { state: CopyState }) {
+  const Icon = state === "copied" ? Check : state === "failed" ? X : Copy;
+  return <Icon size={13} strokeWidth={2.2} aria-hidden />;
+}
+
+/**
+ * 悬停内容块：淡色的框 + 「改」「复制」两个图标按钮（2026-11-20 起只画图标，名字在悬停提示和读屏里；
+ * 行间公式的复制是「复制 LaTeX」；表格和图片保留格式复制与放大/下载操作）。地址带 ?debug=1 时前面多一个翻译编号。
+ * 框和工具条位置由页面量好传进来（frameRect 贴着字、placement 放页边，见 hover-presentation）；不传就照原块、按旧规则放。
+ */
 export function ReaderTextHoverLayer({
   target,
   pane = "source",
   revisedCount = 0,
+  onEdit,
+  frameRect,
+  placement,
+  tailTop = 0,
 }: {
   target: ReaderTextHoverTarget | null;
+  /** 框画多大：贴着字的范围（不给就是原块）。 */
+  frameRect?: ReaderRegionRect | null;
+  /** 工具条放哪（不给按框的大小选框里 / 框外上方）。 */
+  placement?: HoverToolsPlacement;
+  /** placement 是 tail 时，工具条离框顶多高（对齐最后一行）。 */
+  tailTop?: number;
   pane?: "source" | "translated";
-  /** 这一块改过几次（精修、手改、助手改）；只在译文栏提示。 */
+  /** 这一块改过几次（精修、手改、助手改）；写在译文栏「改」的提示里。 */
   revisedCount?: number;
+  /** 译文栏的「改」：打开侧栏「改译文」改这一块。不给就不画。 */
+  onEdit?: (itemId: string) => void;
 }) {
   const [state, setState] = useState<CopyState>("idle");
   const [idState, setIdState] = useState<CopyState>("idle");
+  // 地址不会在阅读页里变，算一次。
+  const [showItemId] = useState(() => readerShowsItemIds());
   const timersRef = useRef<number[]>([]);
   const itemId = target?.itemId || "";
   // 换了块，「已复制」必须跟着消 —— 否则它在说另一段的话；上一块的定时器也一起清掉，
@@ -290,7 +337,8 @@ export function ReaderTextHoverLayer({
       timersRef.current.push(window.setTimeout(() => set("idle"), 1200));
     };
   const idleLabel = kind === "formula" ? "复制 LaTeX" : "复制";
-  const outside = hoverToolsOutside(target.rect);
+  const rect = frameRect || target.rect;
+  const where: HoverToolsPlacement = placement || (hoverToolsOutside(rect) ? "outside" : "inside");
   const figureAction = async (
     action: "copy" | "open" | "download",
     event: ReactMouseEvent<HTMLButtonElement>,
@@ -321,31 +369,44 @@ export function ReaderTextHoverLayer({
         className="reader-text-hover-frame"
         data-reader-text-hover-id={target.itemId}
         data-reader-text-hover-kind={kind}
-        style={target.rect}
+        style={rect}
       >
-        {/* 编号（和翻译调试、日志里的 item_id 同一个，点一下复制）+ 复制。 */}
+        {/* 复制；地址带 ?debug=1 时前面多一个编号（和翻译调试、日志里的 item_id 同一个，点一下复制）。 */}
         <div
           className={READER_TEXT_HOVER_TOOLS_CLASS}
-          data-placement={outside ? "outside" : "inside"}
+          data-placement={where}
+          style={where === "tail" ? { top: tailTop } : undefined}
         >
-          <HoverToolButton
-            className={READER_TEXT_HOVER_ID_CLASS}
-            state={idState}
-            label={`复制翻译编号 ${target.itemId}`}
-            title="翻译编号，点击复制"
-            onClick={copyWith(target.itemId, setIdState)}
-          >
-            {idState === "copied" ? "已复制编号" : target.itemId}
-          </HoverToolButton>
-          {pane === "translated" && revisedCount > 0 ? (
-            <span className="reader-text-hover-revised" data-reader-revised-count={revisedCount}>
-              改过 {revisedCount} 次
-            </span>
+          {showItemId ? (
+            <HoverToolButton
+              className={READER_TEXT_HOVER_ID_CLASS}
+              state={idState}
+              label={`复制翻译编号 ${target.itemId}`}
+              title="翻译编号，点击复制"
+              onClick={copyWith(target.itemId, setIdState)}
+            >
+              {idState === "copied" ? "已复制编号" : target.itemId}
+            </HoverToolButton>
+          ) : null}
+          {pane === "translated" && onEdit && canEditReaderKind(kind) ? (
+            <HoverToolButton
+              className={READER_TEXT_HOVER_EDIT_CLASS}
+              state="idle"
+              label="改这段译文"
+              title={revisedCount > 0 ? `改这段译文（E；改过 ${revisedCount} 次）` : "改这段译文（E）"}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onEdit(target.itemId);
+              }}
+            >
+              <PenLine size={13} strokeWidth={2.2} aria-hidden />
+            </HoverToolButton>
           ) : null}
           {kind === "table" ? (
             <>
               <HoverToolButton
-                className={READER_TEXT_HOVER_COPY_CLASS}
+                className={`${READER_TEXT_HOVER_COPY_CLASS} is-labeled`}
                 state={state}
                 label="复制表格"
                 title="复制表格"
@@ -354,7 +415,7 @@ export function ReaderTextHoverLayer({
                 {state === "copied" ? "已复制" : state === "failed" ? "复制失败" : "复制表格"}
               </HoverToolButton>
               <HoverToolButton
-                className={READER_TEXT_HOVER_COPY_CLASS}
+                className={`${READER_TEXT_HOVER_COPY_CLASS} is-labeled`}
                 state={state}
                 label="复制表格为 Markdown"
                 title="复制表格为 Markdown"
@@ -363,7 +424,7 @@ export function ReaderTextHoverLayer({
                 Markdown
               </HoverToolButton>
               <HoverToolButton
-                className={READER_TEXT_HOVER_COPY_CLASS}
+                className={`${READER_TEXT_HOVER_COPY_CLASS} is-labeled`}
                 state={state}
                 label="复制表格为 LaTeX"
                 title="复制表格为 LaTeX"
@@ -375,7 +436,7 @@ export function ReaderTextHoverLayer({
           ) : kind === "figure" ? (
             <>
               <HoverToolButton
-                className={READER_TEXT_HOVER_COPY_CLASS}
+                className={`${READER_TEXT_HOVER_COPY_CLASS} is-labeled`}
                 state={state}
                 label="复制图片"
                 title="复制图片"
@@ -384,7 +445,7 @@ export function ReaderTextHoverLayer({
                 {state === "copied" ? "已复制" : state === "failed" ? "复制失败" : "复制图片"}
               </HoverToolButton>
               <HoverToolButton
-                className={READER_TEXT_HOVER_COPY_CLASS}
+                className={`${READER_TEXT_HOVER_COPY_CLASS} is-labeled`}
                 state={state}
                 label="放大图片"
                 title="放大图片"
@@ -393,7 +454,7 @@ export function ReaderTextHoverLayer({
                 放大
               </HoverToolButton>
               <HoverToolButton
-                className={READER_TEXT_HOVER_COPY_CLASS}
+                className={`${READER_TEXT_HOVER_COPY_CLASS} is-labeled`}
                 state={state}
                 label="下载图片"
                 title="下载图片"
@@ -407,9 +468,10 @@ export function ReaderTextHoverLayer({
               className={READER_TEXT_HOVER_COPY_CLASS}
               state={state}
               label={pane === "translated" ? "复制这段译文" : "复制这段原文"}
+              title={state === "copied" ? "已复制" : state === "failed" ? "复制失败" : idleLabel}
               onClick={copyWith(text, setState)}
             >
-              {state === "copied" ? "已复制" : state === "failed" ? "复制失败" : idleLabel}
+              <CopyStateIcon state={state} />
             </HoverToolButton>
           ) : null}
         </div>

@@ -192,6 +192,16 @@ async fn batch_downloads_source_needs_no_translation_and_other_formats_report_mi
             b"%PDF cached comparison",
         )
         .unwrap();
+        fs::write(
+            directory.join("output.watermarked-v1.pdf"),
+            b"%PDF cached watermarked translation",
+        )
+        .unwrap();
+        fs::write(
+            directory.join("side-by-side.watermarked-v1.pdf"),
+            b"%PDF cached watermarked comparison",
+        )
+        .unwrap();
     }
     for format in ["source", "translated", "comparison"] {
         let (status, view) = call(

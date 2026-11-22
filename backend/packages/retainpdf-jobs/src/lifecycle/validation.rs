@@ -1,4 +1,4 @@
-use retainpdf_core::config::ProviderLimitsConfig;
+use retainpdf_core::config::{provider_config, ProviderLimitsConfig};
 use retainpdf_api_base::error::AppError;
 use axum::http::StatusCode;
 use retainpdf_data::credentials::{resolve_credential, CredentialResolveError};
@@ -8,7 +8,7 @@ use retainpdf_core::models::domain::{
     OcrProviderKind, UploadRecord, RENDER_ENGINES, SOURCE_CLEANUP_STRATEGIES, TRANSLATION_CONTEXT_MODES,
     TRANSLATION_GLOSSARY_MODES, TRANSLATION_MATH_MODES, TRANSLATION_MEMORY_MODES,
     TRANSLATION_PREPARATION_MODES, TRANSLATION_REFINE_MODES, TRANSLATION_API_PROTOCOLS,
-    TRANSLATION_THINKING_LEVELS, TRANSLATION_ENGINES,
+    TRANSLATION_THINKING_LEVELS, TRANSLATION_ENGINES, TRANSLATION_TABLE_MODES,
 };
 use retainpdf_core::models::request::{CreateJobInput, OcrInput};
 use retainpdf_data::ocr_provider::{
@@ -243,13 +243,11 @@ pub fn validate_translation_modes(input: &CreateJobInput) -> Result<(), AppError
         &input.translation.engine,
         TRANSLATION_ENGINES,
     )?;
-    // 翻译 agent 直接走 Anthropic Messages 接口
-    if input.translation.engine == "agent" && input.translation.api_protocol != "anthropic" {
-        return Err(AppError::bad_request(format!(
-            "translation.engine=agent requires translation.api_protocol=anthropic (got {:?})",
-            input.translation.api_protocol
-        )));
-    }
+    validate_allowed_value(
+        "translation.tables",
+        &input.translation.tables,
+        TRANSLATION_TABLE_MODES,
+    )?;
     // 审校的两项留空表示沿用翻译模型的设置。
     if !input.translation.reviewer_api_protocol.is_empty() {
         validate_allowed_value(
@@ -476,34 +474,45 @@ fn validate_paddle_transport(
     )))
 }
 
+/// `ocr_then_translation`：OCR 之后紧接着翻译的任务（整本翻译）。只有这种任务的 OCR 会一片片公布，
+/// 清单里 `streams_pages = chunked_upload` 的服务商才按片上传；纯 OCR 任务照旧整份提交。
 pub fn validate_mineru_upload_limits(
     input: &CreateJobInput,
     upload: &UploadRecord,
     limits: &ProviderLimitsConfig,
+    ocr_then_translation: bool,
 ) -> Result<(), AppError> {
-    match parse_provider_kind(&input.ocr.provider) {
-        OcrProviderKind::Mineru => {
-            validate_upload_limit(
-                upload,
-                "MinerU",
-                limits.mineru_max_bytes,
-                limits.mineru_max_pages,
-                false,
-            )?;
-        }
-        OcrProviderKind::Paddle => {
-            validate_upload_limit(
-                upload,
-                "PaddleOCR",
-                limits.paddle_max_bytes,
-                limits.paddle_max_pages,
-                true,
-            )?;
-        }
-        OcrProviderKind::Local => {}
-        OcrProviderKind::Unknown => {}
-    }
-    Ok(())
+    // 上限写在服务商清单的 `limits` 里（环境变量覆盖），没写的服务商不限。
+    let provider = input.ocr.provider.trim().to_ascii_lowercase();
+    let Some(provider_limits) = limits.for_provider(&provider) else {
+        return Ok(());
+    };
+    let provider_name = provider_config::ocr_provider_definition(&provider)
+        .and_then(|definition| {
+            definition
+                .get("display_name")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|name| !name.is_empty())
+                .map(ToString::to_string)
+        })
+        .unwrap_or_else(|| provider.clone());
+    // 按片上传时整份文件多大都行，每片自己有服务商的上限（Paddle「本地文件 ≤50MB」落在每一片上）。
+    let uploads_in_chunks = ocr_then_translation
+        && provider_config::configured_streams_pages(&provider) == provider_config::StreamsPages::ChunkedUpload
+        && input.ocr.chunk_eligible();
+    let max_file_bytes = if uploads_in_chunks && provider_limits.max_file_bytes_chunked_upload_exempt {
+        0
+    } else {
+        provider_limits.max_file_bytes
+    };
+    validate_upload_limit(
+        upload,
+        &provider_name,
+        max_file_bytes,
+        provider_limits.max_pages,
+        provider_limits.max_file_bytes_inclusive,
+    )
 }
 
 fn validate_upload_limit(
@@ -513,11 +522,13 @@ fn validate_upload_limit(
     max_pages: u32,
     bytes_inclusive: bool,
 ) -> Result<(), AppError> {
-    let too_large = if bytes_inclusive {
-        upload.bytes > max_bytes
-    } else {
-        upload.bytes >= max_bytes
-    };
+    // 0 = 不限
+    let too_large = max_bytes > 0
+        && if bytes_inclusive {
+            upload.bytes > max_bytes
+        } else {
+            upload.bytes >= max_bytes
+        };
     if too_large {
         let relation = if bytes_inclusive {
             "不超过"
@@ -530,7 +541,7 @@ fn validate_upload_limit(
             upload.bytes as f64 / 1024.0 / 1024.0
         )));
     }
-    if upload.page_count > max_pages {
+    if max_pages > 0 && upload.page_count > max_pages {
         return Err(AppError::bad_request(format!(
             "{provider_name} API 限制：PDF 页数必须不超过 {max_pages} 页；当前文件为 {} 页",
             upload.page_count

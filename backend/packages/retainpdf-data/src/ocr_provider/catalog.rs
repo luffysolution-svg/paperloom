@@ -8,6 +8,7 @@ use super::{
     mineru, paddle, OcrProviderArtifactLayout, OcrProviderCapabilities, OcrProviderCredentialSpec,
     OcrProviderDiagnostics, OcrProviderKind, OcrProviderOptionSpec, OcrProviderPublicDefinition,
 };
+use crate::models::domain::OcrProviderLimitsView;
 
 const MINERU_RESULT_FILE_NAME: &str = "mineru_result.json";
 const MINERU_BUNDLE_FILE_NAME: &str = "mineru_bundle.zip";
@@ -84,27 +85,21 @@ pub fn provider_definition(kind: &OcrProviderKind) -> Option<OcrProviderDefiniti
 }
 
 pub fn provider_public_definitions() -> Vec<OcrProviderPublicDefinition> {
-    let mut definitions: Vec<OcrProviderPublicDefinition> =
+    // 排序看清单里每个服务商的 `rank`（没写的排最后），同 rank 按 key。
+    let mut ranked: Vec<(u64, OcrProviderPublicDefinition)> =
         provider_config::ocr_provider_definitions()
             .into_iter()
-            .map(|(key, value)| provider_public_definition_from_config(key, value))
+            .map(|(key, value)| {
+                let rank = value.get("rank").and_then(Value::as_u64).unwrap_or(u64::MAX);
+                (rank, provider_public_definition_from_config(key, value))
+            })
             .collect();
-    definitions.sort_by(|left, right| {
-        provider_sort_rank(&left.key)
-            .cmp(&provider_sort_rank(&right.key))
+    ranked.sort_by(|(left_rank, left), (right_rank, right)| {
+        left_rank
+            .cmp(right_rank)
             .then_with(|| left.key.cmp(&right.key))
     });
-    definitions
-}
-
-fn provider_sort_rank(key: &str) -> u8 {
-    match key {
-        "mineru" => 0,
-        "paddle" => 1,
-        "glm_ocr" => 2,
-        "local" => 3,
-        _ => 4,
-    }
+    ranked.into_iter().map(|(_, definition)| definition).collect()
 }
 
 fn provider_public_definition_from_config(
@@ -126,6 +121,13 @@ fn provider_public_definition_from_config(
         .unwrap_or(key.as_str())
         .to_string();
     let known_kind = kind_for_public_key(&key, &provider_kind);
+    let limits = provider_config::upload_limits_from_definition(&value)
+        .map(|limits| OcrProviderLimitsView {
+            max_pages: limits.max_pages,
+            max_file_bytes: limits.max_file_bytes,
+            chunked_upload_exempt: limits.max_file_bytes_chunked_upload_exempt,
+        })
+        .unwrap_or_default();
     OcrProviderPublicDefinition {
         key: key.clone(),
         display_name,
@@ -134,6 +136,17 @@ fn provider_public_definition_from_config(
         options: parse_option_specs(value.get("options")),
         capabilities: provider_capabilities_for_public(&known_kind, &provider_kind),
         artifact_layout: provider_artifact_layout_for_public(&known_kind, &key, &provider_kind),
+        docs_url: value
+            .get("docs_url")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|url| !url.is_empty())
+            .map(ToString::to_string),
+        limits,
+        streams_pages: provider_config::streams_pages_from_definition(&value)
+            .as_str()
+            .to_string(),
+        shares_translation_key_host: provider_config::shared_translation_key_host_from_definition(&value),
     }
 }
 

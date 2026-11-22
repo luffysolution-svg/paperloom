@@ -1,24 +1,59 @@
 # Rust API 贡献指南
 
+## 包名
+
+2026-10-17 起 Rust 包统一叫 `retainpdf-*`，和 Python 的 `retainpdf-math`、`retainpdf-pipeline` 一个写法；
+`backend/packages/`、`database/` 下的目录名就是包名。应用目录（`backend/api`、`backend/jobs`、`backend/cli`）和可执行文件名没改：
+
+| 目录 | 包名（`cargo -p`） | crate 名（`use`） | 可执行文件 |
+|---|---|---|---|
+| `backend/api` | `retainpdf-api` | `retainpdf_api` | `rust_api` |
+| `backend/packages/retainpdf-api-base` | `retainpdf-api-base` | `retainpdf_api_base` | |
+| `backend/packages/retainpdf-accounts` | `retainpdf-accounts` | `retainpdf_accounts` | |
+| `backend/packages/retainpdf-files` | `retainpdf-files` | `retainpdf_files` | |
+| `backend/packages/retainpdf-glossaries` | `retainpdf-glossaries` | `retainpdf_glossaries` | |
+| `backend/packages/retainpdf-ingest` | `retainpdf-ingest` | `retainpdf_ingest` | |
+| `backend/packages/retainpdf-jobs` | `retainpdf-jobs` | `retainpdf_jobs` | |
+| `backend/packages/retainpdf-library` | `retainpdf-library` | `retainpdf_library` | |
+| `backend/packages/retainpdf-platform` | `retainpdf-platform` | `retainpdf_platform` | |
+| `backend/packages/retainpdf-providers` | `retainpdf-providers` | `retainpdf_providers` | |
+| `backend/packages/retainpdf-core` | `retainpdf-core` | `retainpdf_core` | |
+| `backend/packages/retainpdf-data` | `retainpdf-data` | `retainpdf_data` | |
+| `database/retainpdf-db` | `retainpdf-db` | `retainpdf_db` | |
+| `backend/packages/retainpdf-config` | `retainpdf-config` | `retainpdf_config` | |
+| `backend/packages/retainpdf-proc` | `retainpdf-proc` | `retainpdf_proc` | |
+| `backend/packages/retainpdf-runner` | `retainpdf-runner` | `retainpdf_runner` | |
+| `backend/jobs` | `retainpdf-runnerd` | | `retain-jobsd` |
+| `backend/cli` | `retainpdf-cli` | | `retainpdf` |
+
+Python 的翻译 agent 包 `retainpdf-translation-agent`（`backend/translation-agent`，2026-10-29 新建）：一次翻一整页、逐块校验、
+按重排 agent 的要求改稿，只用标准库；测试系统在 `backend/pipeline/devtools/agent_lab/`。以后的重排 agent 另建 `retainpdf-layout-agent`。
+任务选 `translation.engine=agent` 时由接线 `retainpdf_translation_agent_engine/agent_flow.py` 调（见 [翻译层说明](../python/translation.md)），运行时镜像也装它。接线 2026-11-20 从翻译包挪进这个包（以前翻译包依赖 agent 包，现在反过来：接线依赖翻译包，装 `retainpdf-translation-agent[engine]`；核心照旧只用标准库）。
+Python 的普通翻译引擎包 `retainpdf-translation-classic`（`backend/translation-classic`，2026-11-20 从翻译包拆出来）：批量逐块翻、修复兜底、
+译前准备、精修、编辑部、表格翻译，目录结构和翻译包一样；依赖翻译包，翻译包经引擎登记表 `workflow/engines.py` 延迟加载它，不 import 它。
+流水线的渲染前精修、表格翻译从 `retainpdf_translation_classic.public` 取。
+Rust 的底座包 `retainpdf-api-base` 和 Python 的底座包 `retainpdf-base`（`backend/base`，翻译拆包时新建）是两个东西。`retainpdf-api-base`（2026-10-16 新建）是 API 各领域包共用的底座：
+错误类型 `AppError` 和按编号读出任务 `job_loading`，在 `services` 下面一层。
+
 ## 分层方向
 
 默认依赖方向：
 
 ```text
-rust_api app/router -> routes -> services/facades
-services/facades -> retain-core + retain-data
-retain-jobs -> retain-core + retain-data + retain-proc
-retain-jobsd -> retain-jobs + retain-data
+rust_api app/router -> routes -> services（8 个领域包的门面）
+领域包（retainpdf-jobs 等） -> retainpdf-api-base + retainpdf-core + retainpdf-data（任务包另用 retainpdf-runner、retainpdf-proc）
+retainpdf-runner -> retainpdf-core + retainpdf-data + retainpdf-proc
+retain-jobsd -> retainpdf-runner + retainpdf-data
 ```
 
 基本规则：
 
 - `src/app/router/*` 只装配路由；`src/routes/*` 只做 HTTP adapter、提取器和响应包装。
-- `src/services/*` 放应用用例、facade 和安全 projection，不直接拥有 worker 生命周期。
-- `crates/retain-core` 只放跨 crate 的领域类型、配置和稳定 DTO，不反向依赖 HTTP、SQLite 或 runner。
-- `crates/retain-data` 拥有 SQLite、artifact/credential 读取以及 provider 数据边界。
-- `crates/retain-jobs` 拥有队列、stage 编排、进程拉起、取消、OCR dispatch 和恢复。
-- `crates/retain-proc` 只提供通用子进程安全原语；`retain-jobsd` 是独立任务监督入口。
+- 应用用例、facade 和安全 projection 放在 8 个领域包里（`backend/packages/retainpdf-<领域>`；`src/services/mod.rs` 只把它们接成 `crate::services::<领域>`），不直接拥有 worker 生命周期。
+- `backend/packages/retainpdf-core` 只放跨 crate 的领域类型、配置和稳定 DTO，不反向依赖 HTTP、SQLite 或 runner。
+- `database/retainpdf-db` 拥有 SQLite（`retainpdf-data` 重导出成 `db`）；`backend/packages/retainpdf-data` 拥有 artifact/credential 读取、worker 命令以及 provider 数据边界。
+- `backend/packages/retainpdf-runner` 拥有队列、stage 编排、进程拉起、取消、OCR dispatch 和恢复。
+- `backend/packages/retainpdf-proc` 只提供通用子进程安全原语；`retain-jobsd` 是独立任务监督入口。
 - 不要为了省事把 `AppState` 传进只需要 `Db`、`AppConfig`、`Path` 或 semaphore 的 helper。
 
 更细规则见 [Rust API 协同开发约定](../rust_api/09-协同开发约定.md)。

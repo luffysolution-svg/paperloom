@@ -229,13 +229,13 @@ async fn prepare_batch_item(
     match format {
         BatchExportFormat::Translated => {
             let download = downloads
-                .open(&job.job_id, JobFile::TranslatedPdf, Disposition::Attachment)
+                .open(&job.job_id, JobFile::TranslatedPdf { watermark: true }, Disposition::Attachment)
                 .await?;
             Ok(vec![file("translated.pdf", download.path)])
         }
         BatchExportFormat::Comparison => {
             let download = downloads
-                .open(&job.job_id, JobFile::SideBySidePdf, Disposition::Attachment)
+                .open(&job.job_id, JobFile::SideBySidePdf { watermark: true }, Disposition::Attachment)
                 .await?;
             Ok(vec![file("comparison.pdf", download.path)])
         }

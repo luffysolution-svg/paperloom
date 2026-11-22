@@ -1,6 +1,8 @@
 // 「术语」页签：这本书翻译时用的术语表（译前抽取 + 术语专员审过），冲突、风格规则、领域判断。
 // 数据来自通用取数接口的 terms / term_conflicts / style_rules / style_guide / domain_context。
 // 「剔除」的是通用词（术语专员判定不进术语表），默认不显示，免得 800 多条里一半是普通单词。
+// 翻译 agent 的书（engine=agent）跳过译前准备，没有 terms / term_conflicts，读 agent_terms / agent_term_tickets，
+// 用 agentTermRows / agentTicketRows 换成同样的行，页签照常显示。一个任务只会有其中一边。
 
 export type TermRow = {
   source: string;
@@ -11,6 +13,10 @@ export type TermRow = {
   level: string;
   frequency: number;
   conflictCount: number;
+  /** 翻译 agent 的条目才有：状态（AGENT_STATUS_LABELS）、说明、第一次出现的页（页面标签）。 */
+  status: string;
+  note: string;
+  page: string;
 };
 
 export type TreatmentFilter = "all" | "lock" | "keep_original" | "free" | "drop";
@@ -28,6 +34,17 @@ export const CATEGORY_LABELS: Record<string, string> = {
   organization: "机构",
   publication: "出版物",
   person: "人名",
+  // 翻译 agent 的类别
+  term: "术语",
+  abbr: "缩写",
+  name: "专名",
+  keep: "保留原文",
+};
+
+export const AGENT_STATUS_LABELS: Record<string, string> = {
+  candidate: "候选",
+  approved: "审定",
+  locked: "用户给的",
 };
 
 type Row = Record<string, unknown>;
@@ -46,7 +63,35 @@ export function termRows(rows: readonly Row[] | null | undefined): TermRow[] {
     level: text(row.level),
     frequency: Number(row.frequency) || 0,
     conflictCount: Array.isArray(row.conflict_candidates) ? row.conflict_candidates.length : 0,
+    status: "",
+    note: "",
+    page: "",
   })).filter((row) => row.source);
+}
+
+/**
+ * 翻译 agent 的术语（agent_terms）换成同样的行：keep 类 → 保留原文；审定、用户给的 → 锁定译法；候选 → 自由翻译
+ * （还没定，存成术语表时是「优先译法」，默认不勾）。没有出现次数；候选的 votes 是 {译法: 次数}，多于一种算有冲突。
+ */
+export function agentTermRows(rows: readonly Row[] | null | undefined): TermRow[] {
+  return (rows || []).map((row) => {
+    const category = text(row.category);
+    const status = text(row.status);
+    const votes = row.votes && typeof row.votes === "object" ? Object.keys(row.votes as Row).length : 0;
+    return {
+      source: text(row.source),
+      target: text(row.target),
+      category,
+      kind: "",
+      treatment: category === "keep" ? "keep_original" : status === "candidate" ? "free" : "lock",
+      level: "",
+      frequency: 0,
+      conflictCount: votes > 1 ? votes - 1 : 0,
+      status,
+      note: text(row.note),
+      page: text(row.first_seen_page),
+    };
+  }).filter((row) => row.source);
 }
 
 export function termCounts(rows: readonly TermRow[]) {
@@ -67,7 +112,7 @@ export function filterTerms(rows: readonly TermRow[], { treatment = "all", searc
     .sort((a, b) => b.frequency - a.frequency || a.source.localeCompare(b.source));
 }
 
-export type ConflictRow = { source: string; target: string; candidates: string };
+export type ConflictRow = { source: string; target: string; candidates: string; why?: string };
 
 export function conflictRows(rows: readonly Row[] | null | undefined): ConflictRow[] {
   return (rows || []).map((row) => ({
@@ -81,4 +126,90 @@ export function conflictRows(rows: readonly Row[] | null | undefined): ConflictR
       .filter(Boolean)
       .join(" · "),
   })).filter((row) => row.source);
+}
+
+/** 翻译 agent 的歧义单（agent_term_tickets）：表里的译法在左，报上来的另一种和页码在右，理由另起一行。 */
+export function agentTicketRows(rows: readonly Row[] | null | undefined): ConflictRow[] {
+  return (rows || []).map((row) => {
+    const page = text(row.page_label);
+    return {
+      source: text(row.source),
+      target: text(row.current) || "（表里还没有）",
+      candidates: text(row.proposed) ? `${text(row.proposed)}${page ? `（第 ${page} 页）` : ""}` : "",
+      why: text(row.why),
+    };
+  }).filter((row) => row.source);
+}
+
+// ---- 存为我的术语表 ----
+//
+// 书里的术语按处理方式对应到术语表的类型：锁定译法 → 固定译法，保留原文 → 保留原词（译文写原词），
+// 自由翻译 → 优先译法（默认不勾：模型本来就可以自己翻）。通用词（drop）不进表。
+// 后端的规矩（retainpdf-glossaries entries.rs）：原词、译文都要有，各不超过 200 字，一张表最多 1000 条。
+// 按出现次数从多到少取，超过的丢掉并告诉用户丢了几条；同一个原词只留出现最多的那条。
+
+export type SaveableTreatment = "lock" | "keep_original" | "free";
+
+export const SAVEABLE_TREATMENTS: readonly SaveableTreatment[] = ["lock", "keep_original", "free"];
+
+const LEVEL_BY_TREATMENT: Record<SaveableTreatment, string> = {
+  lock: "canonical",
+  keep_original: "preserve",
+  free: "preferred",
+};
+
+const MAX_GLOSSARY_ENTRIES = 1000;
+const MAX_TERM_LENGTH = 200;
+
+export type GlossaryEntryDraft = {
+  source: string;
+  target: string;
+  note: string;
+  level: string;
+  match_mode: string;
+  context: string;
+};
+
+export function glossaryEntriesFromTerms(
+  rows: readonly TermRow[],
+  include: readonly SaveableTreatment[],
+): { entries: GlossaryEntryDraft[]; skipped: number; truncated: number } {
+  const wanted = new Set<string>(include);
+  const seen = new Set<string>();
+  const entries: GlossaryEntryDraft[] = [];
+  let skipped = 0;
+  let truncated = 0;
+  const sorted = [...rows].sort((a, b) => b.frequency - a.frequency || a.source.localeCompare(b.source));
+  for (const row of sorted) {
+    if (!wanted.has(row.treatment)) continue;
+    const treatment = row.treatment as SaveableTreatment;
+    const source = row.source.trim();
+    const target = treatment === "keep_original" ? source : row.target.trim();
+    if (!source || !target || source.length > MAX_TERM_LENGTH || target.length > MAX_TERM_LENGTH) {
+      skipped += 1;
+      continue;
+    }
+    if (seen.has(source)) continue;
+    if (entries.length >= MAX_GLOSSARY_ENTRIES) {
+      truncated += 1;
+      continue;
+    }
+    seen.add(source);
+    entries.push({
+      source,
+      target,
+      note: row.note || CATEGORY_LABELS[row.category] || "",
+      level: LEVEL_BY_TREATMENT[treatment],
+      match_mode: "",
+      context: "",
+    });
+  }
+  return { entries, skipped, truncated };
+}
+
+/** 默认表名：「书名 · 术语」，书名太长截断（表名后端不限长，但列表里放不下）。 */
+export function defaultGlossaryName(title: string): string {
+  const clean = `${title || ""}`.replace(/\s+/g, " ").trim();
+  const short = [...clean].length > 40 ? `${[...clean].slice(0, 40).join("")}…` : clean;
+  return short ? `${short} · 术语` : "这本书的术语";
 }

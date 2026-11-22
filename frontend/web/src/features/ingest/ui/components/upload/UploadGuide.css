@@ -1,0 +1,92 @@
+/* 上传弹窗的骨架（2026-11-20 用户）：顶部只有 tab 切换（关闭按钮挂在右上角），中间一个大框（空的只有上传图标，
+ * 拖文件进来高亮），底部一排按钮（附魔按钮 + 选项 + 仅收藏 + 主按钮）。
+ *
+ * @owns upload
+ * @uses translation-workflow-head, translation-workflow-card */
+
+/* 顶部：标题只给读屏，关闭按钮挂到右上角，和 tab 在一行。 */
+.translation-workflow-head.is-upload-head {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 3;
+  min-height: 0;
+  padding: 0;
+}
+
+.translation-workflow-card .upload-workflow-mode-tabs {
+  display: flex;
+  justify-content: center;
+  margin: 2px 0 14px;
+}
+
+.translation-workflow-card .upload-workflow-mode-tabs-list {
+  width: auto;
+  min-width: 240px;
+}
+
+/* 中间的框：空着时只有一个上传图标；拖文件进来整框亮起。 */
+.translation-workflow-card .upload-tile {
+  min-height: 210px;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.translation-workflow-card .upload-tile[data-dragging] {
+  border-color: var(--accent);
+  border-style: solid;
+  background: color-mix(in srgb, var(--accent) 6%, var(--paper));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.translation-workflow-card .upload-tile.has-file {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--ink) 10%, var(--line));
+  background: color-mix(in srgb, var(--bg) 45%, var(--paper));
+}
+
+.upload-glyph-icon {
+  width: 30px;
+  height: 30px;
+  color: var(--ink);
+  stroke-width: 1.6;
+
+  .upload-tile[data-dragging] & {
+    color: var(--accent);
+    animation: upload-glyph-bob 900ms ease-in-out infinite;
+  }
+}
+
+@keyframes upload-glyph-bob {
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+/* 底部：附魔按钮单独一行在上，选项、仅收藏、主按钮一行在下。 */
+.translation-workflow-card .upload-action-group {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+.upload-enchant-controls {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  order: -1;
+}
+
+.translation-workflow-card #page-range-btn {
+  min-width: 36px;
+  padding: 0 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .upload-glyph-icon {
+    animation: none !important;
+  }
+}

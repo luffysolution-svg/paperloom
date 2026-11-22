@@ -1,4 +1,4 @@
-// 流水线各站 ↻ 点开后列出的事：OCR 站「重新 OCR」（带 OCR 指定页码）、翻译站「精修 / 重新翻译」、
+// 流水线各站 ↻ 点开后列出的事：OCR 站「重新 OCR」（带 OCR 指定页码）、翻译站「重新翻译」、
 // 版面站「重新渲染」，任务停下时文档准备站「从头翻译整本」。从 BookDetailProcessingTab 拆出（那个文件要控制在 380 行内）。
 //
 // 书已经翻译完（或任务停下）、此刻没有任务在跑时才给：「再来一次」的动作挂在流水线各站上，点哪站列哪站的。
@@ -19,10 +19,13 @@ export function stationActionsOf({
   ocr,
   translation,
   translationStopped,
+  currentModel = "",
 }: {
   ocr: BookDetailOcrPanelProps;
   translation: BookDetailTranslationPanelProps;
   translationStopped: boolean;
+  /** 这本书现在用的模型（进度页 HUD 上那个）；不知道是空串。 */
+  currentModel?: string;
 }): Partial<Record<StationKey, StationAction>> {
   // OCR 指定页码挨着「重新 OCR」。
   const ocrOptions = (
@@ -85,8 +88,13 @@ export function stationActionsOf({
       </div>
     </li>
   ) : null;
+  // 换了书或任务就重新挂一份：选过的翻译方式、模型不能带到下一本书（2026-11-19：选了 haiku 的书之后，
+  // 另一本书没动模型也用了 haiku，因为书详情弹窗一直开着，这个组件的状态留着）。
+  const item = translation?.item || {};
+  const sheetKey = `${item.document_id || item.id || ""}:${item.job_id || item.active_job_id || ""}`;
   const stageSheet = (stages: JobRetryStage[], extraRows: ReactNode = null) => (
     <TranslationStageActions
+      key={`${sheetKey}:${stages.join(",")}`}
       variant="sheet"
       stages={stages}
       actions={translation?.stageActions}
@@ -94,12 +102,14 @@ export function stationActionsOf({
       pendingStage={translation?.stageActionPending}
       error={translation?.stageActionError}
       onRetry={translation?.onRetryStage}
+      estimate={translation?.estimateRetranslate}
+      currentModel={currentModel}
       extraRows={extraRows}
     />
   );
   return {
     ocr: { label: "重新 OCR", content: stageSheet([], ocrRow) },
-    translate: { label: "重译 / 精修", content: stageSheet(["translation", "refine"]) },
+    translate: { label: "重新翻译", content: stageSheet(["translation"]) },
     render: { label: "重新渲染", content: stageSheet(["render"]) },
     ...(restartRow ? { prepare: { label: "从头翻译", content: stageSheet([], restartRow) } } : {}),
   };

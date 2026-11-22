@@ -12,6 +12,7 @@ import {
   hoverToolsOutside,
   projectReaderTextHoverTargets,
   ReaderTextHoverLayer,
+  readerShowsItemIds,
 } from "../../../../frontend/packages/reader/src/pdf/ReaderTextHoverLayer.tsx";
 import { normalizeReaderRegions, readerRegionCopyText } from "../../../../frontend/packages/reader/src/shared/data/reader-regions.ts";
 import { shouldEnableLiveTranslation } from "../../../../frontend/packages/reader/src/hooks/use-reader-react-controller.ts";
@@ -50,23 +51,39 @@ function target(pane) {
   return t;
 }
 
-test("悬停框带翻译编号和「复制」，左栏标原文、右栏标译文；没有可复制的文字就不给复制按钮", () => {
+test("悬停框带「复制」，左栏标原文、右栏标译文；没有可复制的文字就不给复制按钮；翻译编号默认不显示", () => {
   const left = renderToStaticMarkup(createElement(ReaderTextHoverLayer, { target: target("source"), pane: "source" }));
   assert.match(left, /reader-text-hover-frame/);
   assert.match(left, /aria-label="复制这段原文"/);
-  assert.match(left, /aria-label="复制翻译编号 p001-b0003"/);
-  assert.match(left, />p001-b0003</);
+  assert.doesNotMatch(left, /复制翻译编号|p001-b0003</, "编号是排查用的，读者默认看不到");
   const right = renderToStaticMarkup(createElement(ReaderTextHoverLayer, { target: target("translated"), pane: "translated" }));
   assert.match(right, /aria-label="复制这段译文"/);
   const empty = target("source");
   empty.highlight.region = { ...empty.highlight.region, source: { ...empty.highlight.region.source, text: "" }, markdown: "" };
-  // 编号照样给（排查时要用），只是没有「复制」内容按钮。
   assert.doesNotMatch(renderToStaticMarkup(createElement(ReaderTextHoverLayer, { target: empty, pane: "source" })), /reader-text-hover-copy/);
 });
 
-test("红色虚线框用 danger 语义色", () => {
+test("阅读页地址带 ?debug=1 时框上出翻译编号（点一下复制），排查翻译问题用", () => {
+  assert.equal(readerShowsItemIds("?job_id=x&debug=1"), true);
+  assert.equal(readerShowsItemIds("?debug=true"), true);
+  assert.equal(readerShowsItemIds("?job_id=x"), false);
+  assert.equal(readerShowsItemIds("?debug=0"), false);
+  const hadWindow = "window" in globalThis;
+  globalThis.window = { location: { search: "?job_id=x&debug=1" } };
+  try {
+    const html = renderToStaticMarkup(createElement(ReaderTextHoverLayer, { target: target("source"), pane: "source" }));
+    assert.match(html, /aria-label="复制翻译编号 p001-b0003"/);
+    assert.match(html, />p001-b0003</);
+  } finally {
+    if (!hadWindow) delete globalThis.window;
+  }
+});
+
+test("悬停框是淡的强调色实线框（2026-11-20 以前红色虚线像报错），走语义色不写死颜色", () => {
   const css = readFileSync(new URL("../../../../frontend/packages/reader/styles/react-pdf.css", import.meta.url), "utf8");
-  assert.match(css, /\.reader-text-hover-frame\s*\{[^}]*border:\s*2px dashed[^}]*var\(--danger\)/);
+  const frame = css.match(/\.reader-text-hover-frame\s*\{([^}]*)\}/)[1];
+  assert.match(frame, /border:\s*1\.5px solid[^;]*var\(--accent\)/);
+  assert.doesNotMatch(frame, /dashed|--danger|#[0-9a-f]{3,6}/i);
 });
 
 test("复制：剪贴板可用就写进去；空文本不假装成功", async () => {
@@ -186,8 +203,8 @@ test("工具条：一般的块放框内右上角，只有矮 / 窄的块（行�
 test("只在框外工具条自己那一小块里保持当前框；不再保持整条带（紧贴上方的短块要能悬停到）", () => {
   const slot = readFileSync(new URL("../../../../frontend/packages/reader/src/pdf/PdfPageSlot.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(slot, /HOVER_TOOLS_BAND/);
-  assert.match(slot, /hoverToolsOutside\(current\)/);
-  assert.match(slot, /x <= current\.left \+ HOVER_TOOLS_WIDTH/);
+  // 只在工具条放框外上方 / 下方时才保持（hover-presentation 的 inHoverToolsZone）；页边、段尾的工具条贴着框，不用保持。
+  assert.match(slot, /if \(inHoverToolsZone\(hoverPresentation, x, y\)\) return;/);
   const css = readFileSync(new URL("../../../../frontend/packages/reader/styles/react-pdf.css", import.meta.url), "utf8");
   assert.match(css, /\.reader-text-hover-tools\[data-placement="inside"\]\s*\{[^}]*top:\s*4px/);
   assert.match(css, /\.reader-text-hover-tools\[data-placement="outside"\]\s*\{[^}]*bottom:\s*100%/);
@@ -212,4 +229,76 @@ test("「已复制」的定时器随换块清掉（A 上复制后马上换 B 复
   const layer = readFileSync(new URL("../../../../frontend/packages/reader/src/pdf/ReaderTextHoverLayer.tsx", import.meta.url), "utf8");
   assert.match(layer, /timers\.forEach\(\(timer\) => window\.clearTimeout\(timer\)\)/);
   assert.match(layer, /\}, \[itemId\]\);/);
+});
+
+test("「改」「复制」放框外不挡字：候选位置按顺序，先找不碰字也不进别的块的，再找不碰字的，再试段尾，都没有挑压字最少的", async () => {
+  const { placeHoverTools, inHoverToolsZone } = await import("../../../packages/reader/src/pdf/hover-presentation.ts");
+  const place = (frame, others, glyphs = [], pageWidth = 600, pageHeight = 800) =>
+    placeHoverTools({ frame, others, pageWidth, pageHeight, glyphs });
+  const para = { left: 100, top: 200, width: 400, height: 120 };
+  assert.deepEqual(place(para, [para]), { placement: "side-right" }, "右边页边 100px");
+  const tight = { left: 300, top: 200, width: 300, height: 120 };
+  assert.deepEqual(place(tight, [tight, { left: 20, top: 500, width: 100, height: 20 }]), { placement: "side-left" }, "右边贴页边、左边空 300px");
+  // 论文页边窄（40px）：图标按钮竖排只要 28px，照样放页边，不进框里。
+  const narrow = { left: 40, top: 200, width: 520, height: 120 };
+  assert.deepEqual(place(narrow, [narrow]), { placement: "side-right" }, "页边 40px");
+  // 页边有字（页眉页脚、溢出块的译文）就不放那儿；竖排的页边印章不算字。
+  assert.deepEqual(place(narrow, [narrow], [{ left: 570, top: 0, width: 12, height: 800 }]), { placement: "side-right" }, "竖排印章不算字");
+  assert.deepEqual(place(narrow, [narrow], [{ left: 562, top: 210, width: 30, height: 12 }, { left: 2, top: 210, width: 30, height: 12 }]),
+    { placement: "outside" }, "两边页边都有字：放上方");
+
+  // 两边贴页边：看上下、段尾。框贴着字（两行字，200–250）。
+  const block = { left: 8, top: 200, width: 584, height: 50 };
+  const neighbours = [block, { left: 8, top: 100, width: 584, height: 99 }, { left: 8, top: 251, width: 584, height: 90 }];
+  const aboveText = { left: 10, top: 180, width: 580, height: 18 };
+  const belowText = { left: 10, top: 252, width: 580, height: 18 };
+  const line1 = { left: 10, top: 203, width: 580, height: 20 };
+  assert.deepEqual(place(block, neighbours, [line1, { left: 10, top: 226, width: 300, height: 20 }]), { placement: "outside" },
+    "上一块最后一行在 180 以上：上方那条落在上一块的空白里，不碰字，可以");
+  assert.deepEqual(place(block, neighbours, [aboveText, belowText, line1, { left: 10, top: 226, width: 520, height: 20 }]),
+    { placement: "tail", tailTop: 22 }, "上下都贴着字：最后一行只到 530，段尾空 62px 放得下");
+  // 缩小看：一行只有 9px 高，工具条（24px）放段尾会压到上一行 —— 整条查，压到就不放。
+  const small = { left: 8, top: 200, width: 584, height: 20 };
+  const smallLines = [{ left: 10, top: 201, width: 578, height: 9 }, { left: 10, top: 210, width: 200, height: 9 }];
+  const crowd = [{ left: 10, top: 182, width: 580, height: 16 }, { left: 70, top: 222, width: 520, height: 16 }];
+  assert.deepEqual(place(small, [small], [...smallLines, ...crowd]), { placement: "below" },
+    "段尾会压上一行、上方贴着字；下方那行从 70 开始（缩进）：放下方");
+  const nearEdge = { left: 8, top: 200, width: 568, height: 50 };
+  const fullLine = [line1, { left: 10, top: 226, width: 560, height: 20 }];
+  assert.deepEqual(place(nearEdge, [nearEdge], [...fullLine, aboveText, belowText]), { placement: "side-right" }, "右边页边 24px：伸出页边一点点");
+  // 哪都碰字：挑压字最少的（下方只压到一个 30px 宽的字块，比上方整行少）。
+  assert.deepEqual(place(block, [block], [aboveText, ...fullLine, { left: 10, top: 252, width: 30, height: 18 }]), { placement: "below" }, "压字最少");
+  const formula = { left: 10, top: 300, width: 580, height: 30 };
+  assert.deepEqual(place(formula, [formula]), { placement: "outside" }, "矮的行间公式两边都挤：框外上方");
+
+  // 保持区：只在框外上方 / 下方那一小条里。
+  const shown = { rect: block, placement: "below" };
+  assert.equal(inHoverToolsZone(shown, 20, 255), true, "框下方工具条那儿");
+  assert.equal(inHoverToolsZone(shown, 300, 255), false, "框下方别处不保持");
+  assert.equal(inHoverToolsZone({ ...shown, placement: "side-right" }, 20, 255), false, "页边的工具条贴着框，不用保持区");
+});
+
+test("「改」「复制」只画图标：名字在 aria-label / title，「改过几次」写在「改」的提示里；段尾的工具条对齐最后一行", () => {
+  const markup = renderToStaticMarkup(createElement(ReaderTextHoverLayer, {
+    target: target("translated"), pane: "translated", onEdit: () => {}, placement: "tail", tailTop: 27, revisedCount: 2,
+  }));
+  assert.match(markup, /data-placement="tail"/);
+  assert.match(markup, /style="top:27px"/);
+  assert.match(markup, /aria-label="改这段译文"[^>]*title="改这段译文（E；改过 2 次）"[^>]*><svg/);
+  assert.match(markup, /aria-label="复制这段译文"[^>]*title="复制"[^>]*><svg/);
+  assert.doesNotMatch(markup, />改</, "不写字");
+  assert.doesNotMatch(markup, /改过 2 次</, "「改过几次」不单独出字");
+});
+
+test("悬停框贴着字：取中心落在块里的字的并集，留 3px，不超出原块；没有字、字太少照原块", async () => {
+  const { tightenHoverRect } = await import("../../../packages/reader/src/pdf/hover-presentation.ts");
+  const block = { left: 100, top: 100, width: 400, height: 300 };
+  const lines = [
+    { left: 110, top: 110, width: 380, height: 18 },
+    { left: 104, top: 132, width: 200, height: 18 },
+    { left: 600, top: 120, width: 50, height: 18 },
+  ];
+  assert.deepEqual(tightenHoverRect(block, lines), { left: 101, top: 107, width: 392, height: 46 }, "译文比原文短：框只到第二行底下");
+  assert.deepEqual(tightenHoverRect(block, []), block);
+  assert.deepEqual(tightenHoverRect(block, [{ left: 120, top: 120, width: 10, height: 10 }]), block, "一两个字的碎块不收");
 });

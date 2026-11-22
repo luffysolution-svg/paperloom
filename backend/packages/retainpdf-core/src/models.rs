@@ -4,8 +4,6 @@ pub mod api;
 mod common;
 #[path = "models/defaults.rs"]
 pub mod defaults;
-#[path = "models/document_operation.rs"]
-mod document_operation;
 #[path = "models/domain.rs"]
 pub mod domain;
 #[path = "models/glossary.rs"]
@@ -30,14 +28,8 @@ mod sync;
 mod view;
 
 pub use common::{
-    build_job_id, now_iso, ocr_child_job_id, ApiResponse, JobStatusKind, UploadRecord, WorkflowKind,
+    build_job_id, now_iso, ocr_child_job_id, ocr_parent_job_id, ApiResponse, JobStatusKind, UploadRecord, WorkflowKind,
     LOG_TAIL_LIMIT,
-};
-pub use document_operation::{
-    validate_operation_id, DocumentOperationDispatchReceipt, DocumentOperationLimits,
-    DocumentOperationStatus, DocumentOperationWorkspaceManifest, DocumentOperationWorkspaceState,
-    DOCUMENT_OPERATION_MANIFEST_SCHEMA, DOCUMENT_OPERATION_SCHEMA_VERSION,
-    DOCUMENT_OPERATION_STATE_SCHEMA,
 };
 pub use glossary::{build_glossary_id, GlossaryRecord};
 pub use input::{
@@ -54,6 +46,7 @@ pub use input::{
     TRANSLATION_API_PROTOCOLS,
     TRANSLATION_THINKING_LEVELS,
     TRANSLATION_ENGINES,
+    TRANSLATION_TABLE_MODES,
     DEFAULT_TRANSLATION_REFINE_MAX_ITEMS,
     DEFAULT_TRANSLATION_REFINE_MAX_TOKENS,
 };
@@ -62,13 +55,14 @@ pub use job::{
     job_user_stage, normalize_event_substage, normalize_event_user_stage, normalize_job_stage,
     public_stage_for_raw_stage, public_stage_for_substage, JobAiDiagnostic, JobArtifactRecord,
     JobArtifacts, JobFailureInfo, JobRawDiagnostic, JobRecord, JobRuntimeInfo, JobRuntimeState,
-    JobSnapshot, JobStage, JobStageTiming, OcrCheckpointArtifacts, ProcessResult, RenderArtifacts,
+    JobSnapshot, JobStage, JobStageTiming, OcrCheckpointArtifacts, ProcessResult, RenderArtifacts, stored_output_tail, STORED_OUTPUT_TAIL_BYTES,
     TranslationArtifacts,
 };
 pub use ocr::{
     OcrArtifactSet, OcrErrorCategory, OcrProviderArtifactLayout, OcrProviderCapabilities,
     OcrProviderCredentialSpec, OcrProviderDiagnostics, OcrProviderErrorInfo, OcrProviderKind,
-    OcrProviderOptionSpec, OcrProviderPublicDefinition, OcrTaskHandle, OcrTaskState, OcrTaskStatus,
+    OcrProviderLimitsView, OcrProviderOptionSpec, OcrProviderPublicDefinition, OcrTaskHandle, OcrTaskState,
+    OcrTaskStatus,
 };
 pub use public_contract::{
     public_request_payload, PublicOcrInput, PublicResolvedJobSpec, PublicTranslationInput,

@@ -2,13 +2,16 @@
 //!
 //! 数据来源：
 //! - 任务台账 `<job>/artifacts/token-usage.v1.jsonl`：流水线每次模型返回追加一行（Python
-//!   `retainpdf_translation/llm/shared/usage_ledger.py`；路径由 jobsd 经 `RETAIN_USAGE_LEDGER` 给）。
+//!   `retainpdf_base/usage_ledger.py`；路径由 jobsd 经 `RETAIN_USAGE_LEDGER` 给）。
 //! - 助手台账 `<data_root>/usage/assistant.v1.jsonl`：AI 助手每次模型返回追加一行。
 //! - 有台账之前的旧任务：从 `translation_diagnostics.json` 和精修报告（含 `refine_history/`）
 //!   里的 `token_usage` 折算。旧报告丢了思考、精修还丢了缓存，所以这部分只算得出输入输出；
 //!   汇总里单独数出有几个任务是这么折算的。
 //!
 //! 删除的书连同任务目录一起删掉，不再计入总量。
+//!
+//! 花费（2026-11-19 起）：每一行按服务商包的价格表（`retainpdf_providers::PriceBook`，每天从
+//! models.dev 同步）估算美元，合进各个桶的 `estimated_cost_usd`；查不到价的请求数进 `unpriced_requests`。
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -18,6 +21,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use retainpdf_core::storage_paths::JobPaths;
+use retainpdf_providers::{PriceBasis, PriceBook, TokenCounts};
 
 pub const ASSISTANT_USAGE_LEDGER_RELATIVE_PATH: &str = "usage/assistant.v1.jsonl";
 
@@ -30,7 +34,7 @@ pub fn assistant_usage_ledger_path(data_root: &Path) -> PathBuf {
     data_root.join(ASSISTANT_USAGE_LEDGER_RELATIVE_PATH)
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct UsageBucket {
     pub requests: u64,
     /// 服务商没报用量的请求数（这些请求的 token 没算进来）。
@@ -46,10 +50,44 @@ pub struct UsageBucket {
     pub cache_write_tokens: u64,
     /// 思考（推理）token（包含在 output_tokens 里；服务商没报时是 0）。
     pub reasoning_tokens: u64,
+    /// 查得到价的那些请求估算的花费（美元，按 models.dev 的标价，不含折扣、包月）。
+    pub estimated_cost_usd: f64,
+    /// 查得到价的请求数（其中域名对不上、按官方标价估算的数在 `list_priced_requests`）。
+    pub priced_requests: u64,
+    pub list_priced_requests: u64,
+    /// 查不到价的请求数（价格表里没有这个模型），花费里没算它们。
+    pub unpriced_requests: u64,
 }
 
 impl UsageBucket {
-    fn add(&mut self, record: &UsageRecord) {
+    /// 把另一组的和并进来（按组汇总用；各项都是简单相加）。
+    fn merge(&mut self, other: &UsageBucket) {
+        self.requests += other.requests;
+        self.requests_without_usage += other.requests_without_usage;
+        self.input_tokens += other.input_tokens;
+        self.output_tokens += other.output_tokens;
+        self.total_tokens += other.total_tokens;
+        self.cache_hit_tokens += other.cache_hit_tokens;
+        self.cache_reported_input_tokens += other.cache_reported_input_tokens;
+        self.cache_write_tokens += other.cache_write_tokens;
+        self.reasoning_tokens += other.reasoning_tokens;
+        self.estimated_cost_usd += other.estimated_cost_usd;
+        self.priced_requests += other.priced_requests;
+        self.list_priced_requests += other.list_priced_requests;
+        self.unpriced_requests += other.unpriced_requests;
+    }
+
+    fn add(&mut self, record: &UsageRecord, cost: Option<&RecordCost>) {
+        match cost {
+            Some(cost) => {
+                self.estimated_cost_usd += cost.usd;
+                self.priced_requests += record.requests;
+                if cost.basis == PriceBasis::OfficialList {
+                    self.list_priced_requests += record.requests;
+                }
+            }
+            None => self.unpriced_requests += record.requests,
+        }
         self.requests += record.requests;
         self.requests_without_usage += record.requests_without_usage;
         self.input_tokens += record.input;
@@ -64,7 +102,38 @@ impl UsageBucket {
     }
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+/// 美元保留到百万分之一，免得浮点尾数出现在接口里。
+pub(crate) fn round_usd(value: f64) -> f64 {
+    (value * 1_000_000.0).round() / 1_000_000.0
+}
+
+impl UsageBucket {
+    fn finish(mut self) -> Self {
+        self.estimated_cost_usd = round_usd(self.estimated_cost_usd);
+        self
+    }
+}
+
+/// 一行用量估出来的花费。
+#[derive(Debug, Clone, PartialEq)]
+struct RecordCost {
+    usd: f64,
+    provider: String,
+    basis: PriceBasis,
+}
+
+fn record_cost(prices: &PriceBook, record: &UsageRecord) -> Option<RecordCost> {
+    let tokens = TokenCounts {
+        input: record.input,
+        output: record.output,
+        cache_hit: record.cache_hit.unwrap_or(0),
+        cache_write: record.cache_write,
+    };
+    let estimate = prices.estimate(&record.host, &record.model, &record.ts, tokens)?;
+    Some(RecordCost { usd: estimate.usd, provider: estimate.provider, basis: estimate.basis })
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct UsageStageView {
     pub stage: String,
     pub label: &'static str,
@@ -74,15 +143,19 @@ pub struct UsageStageView {
     pub usage: UsageBucket,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct UsageModelView {
     pub model: String,
     pub host: String,
+    /// 按哪家服务商的价算的（models.dev 的服务商编号）；查不到价是 null。
+    pub price_provider: Option<String>,
+    /// `host`：域名对上了这家；`official_list`：域名对不上，按模型的官方标价估算；查不到价是 null。
+    pub price_basis: Option<PriceBasis>,
     #[serde(flatten)]
     pub usage: UsageBucket,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct UsageMonthView {
     /// `YYYY-MM`（UTC）。
     pub month: String,
@@ -90,7 +163,34 @@ pub struct UsageMonthView {
     pub usage: UsageBucket,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+/// 估算花费用的价格表从哪来。
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct UsagePricingView {
+    /// 价格来源地址（models.dev）。
+    pub source: String,
+    /// 最后一次同步成功的时间；还没同步过、用的是内置快照时为 null。
+    pub synced_at: Option<String>,
+    /// 内置快照的日期（没同步过时用它）。
+    pub snapshot_date: Option<String>,
+    /// 一律美元。
+    pub currency: &'static str,
+    /// 1 美元换多少人民币（2026-11-19 起；写死 7.16，和 models.dev 换算国内站价格用的一致），界面显示「约 ¥x」用。
+    pub usd_cny: f64,
+}
+
+impl UsagePricingView {
+    pub(crate) fn of(prices: &PriceBook) -> Self {
+        Self {
+            source: prices.source.clone(),
+            synced_at: prices.synced_at.clone(),
+            snapshot_date: if prices.synced_at.is_some() { None } else { prices.snapshot_date.clone() },
+            currency: "USD",
+            usd_cny: retainpdf_providers::CNY_PER_USD,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct UsageSummaryView {
     /// job / document / all
     pub scope: &'static str,
@@ -106,6 +206,7 @@ pub struct UsageSummaryView {
     pub jobs_estimated_from_reports: u64,
     pub first_at: Option<String>,
     pub last_at: Option<String>,
+    pub pricing: UsagePricingView,
 }
 
 /// 一条用量：台账里的一行，或从旧报告折算出来的一段。
@@ -180,8 +281,9 @@ fn host_of(base_url: &str) -> String {
         .unwrap_or_default()
 }
 
+/// OCR（2026-11-19 起记账）在翻译之前，台账里有 OCR 的行不说明翻译已经逐条记了。
 fn is_translation_side(stage: &str) -> bool {
-    !stage.starts_with("refine") && stage != "failure_diagnosis"
+    !stage.starts_with("refine") && stage != "failure_diagnosis" && stage != "ocr"
 }
 
 /// 旧任务（或台账出现之前的那几次运行）：从翻译诊断和精修报告折算。
@@ -286,6 +388,8 @@ pub fn stage_label(stage: &str) -> (&'static str, &'static str) {
         // 翻译引擎 agent 的通读、审校（译者、改稿记在 translation 里）
         "agent_reader" => ("通读", "translation"),
         "agent_review" => ("审校", "translation"),
+        "table_translation" => ("表格翻译", "translation"),
+        "ocr" => ("OCR 识别", "preparation"),
         "term_prescan" => ("术语预扫", "preparation"),
         "term_review" => ("术语审定", "preparation"),
         "style_guide" => ("风格指南", "preparation"),
@@ -315,67 +419,125 @@ fn month_of(ts: &str) -> Option<&str> {
     shaped.then_some(month)
 }
 
-/// 汇总若干条用量。`job_counts` 是（有用量的任务数，其中折算的任务数）。
-pub fn summarize(scope: &'static str, records: &[UsageRecord], job_counts: (u64, u64)) -> UsageSummaryView {
+/// 汇总若干条用量。`job_counts` 是（有用量的任务数，其中折算的任务数）；`prices` 估算花费。
+/// 只给测试用：接口都按任务分组走 [`summarize_rollups`]。
+#[cfg(test)]
+pub fn summarize(
+    scope: &'static str,
+    records: &[UsageRecord],
+    job_counts: (u64, u64),
+    prices: &PriceBook,
+) -> UsageSummaryView {
+    summarize_rollups(scope, &[rollup::rollup_records(records, prices)], job_counts, prices)
+}
+
+/// 由几批组（一个任务一批，按任务顺序；助手的在最后）合成汇总。按模型汇总时「按哪家的价」取全部行里第一条
+/// 查得到价的：先比批的先后，再比组里记的序号。
+pub(crate) fn summarize_rollups(
+    scope: &'static str,
+    parts: &[Vec<UsageRollup>],
+    job_counts: (u64, u64),
+    prices: &PriceBook,
+) -> UsageSummaryView {
     let mut totals = UsageBucket::default();
     let mut by_stage: BTreeMap<String, UsageBucket> = BTreeMap::new();
-    let mut by_model: BTreeMap<(String, String), UsageBucket> = BTreeMap::new();
+    type Priced = Option<((usize, u64), String, PriceBasis)>;
+    let mut by_model: BTreeMap<(String, String), (UsageBucket, Priced)> = BTreeMap::new();
     let mut by_month: BTreeMap<String, UsageBucket> = BTreeMap::new();
-    for record in records {
-        totals.add(record);
-        by_stage.entry(record.stage.clone()).or_default().add(record);
-        by_model.entry((record.model.clone(), record.host.clone())).or_default().add(record);
-        if let Some(month) = month_of(&record.ts) {
-            by_month.entry(month.to_string()).or_default().add(record);
+    let (mut first_at, mut last_at): (Option<&str>, Option<&str>) = (None, None);
+    for (part, rollups) in parts.iter().enumerate() {
+        for rollup in rollups {
+            totals.merge(&rollup.usage);
+            by_stage.entry(rollup.stage.clone()).or_default().merge(&rollup.usage);
+            let model = by_model.entry((rollup.model.clone(), rollup.host.clone())).or_default();
+            model.0.merge(&rollup.usage);
+            if let Some((seq, provider, basis)) = &rollup.first_priced {
+                let order = (part, *seq);
+                if model.1.as_ref().is_none_or(|(known, _, _)| order < *known) {
+                    model.1 = Some((order, provider.clone(), *basis));
+                }
+            }
+            if let Some(month) = &rollup.month {
+                by_month.entry(month.clone()).or_default().merge(&rollup.usage);
+            }
+            if let Some(first) = rollup.first_at.as_deref() {
+                first_at = Some(first_at.map_or(first, |known| known.min(first)));
+            }
+            if let Some(last) = rollup.last_at.as_deref() {
+                last_at = Some(last_at.map_or(last, |known| known.max(last)));
+            }
         }
     }
     let mut by_stage: Vec<UsageStageView> = by_stage
         .into_iter()
         .map(|(stage, usage)| {
             let (label, group) = stage_label(&stage);
-            UsageStageView { stage, label, group, usage }
+            UsageStageView { stage, label, group, usage: usage.finish() }
         })
         .collect();
     by_stage.sort_by(|a, b| b.usage.total_tokens.cmp(&a.usage.total_tokens).then(a.stage.cmp(&b.stage)));
     let mut by_model: Vec<UsageModelView> = by_model
         .into_iter()
-        .map(|((model, host), usage)| UsageModelView { model, host, usage })
+        .map(|((model, host), (usage, priced))| {
+            let (price_provider, price_basis) =
+                priced.map_or((None, None), |(_, provider, basis)| (Some(provider), Some(basis)));
+            UsageModelView { model, host, price_provider, price_basis, usage: usage.finish() }
+        })
         .collect();
     by_model.sort_by(|a, b| b.usage.total_tokens.cmp(&a.usage.total_tokens).then(a.model.cmp(&b.model)));
-    let timestamps = records.iter().map(|record| record.ts.as_str()).filter(|ts| month_of(ts).is_some());
     UsageSummaryView {
         scope,
-        totals,
+        totals: totals.finish(),
         by_stage,
         by_model,
-        by_month: by_month.into_iter().map(|(month, usage)| UsageMonthView { month, usage }).collect(),
+        by_month: by_month.into_iter().map(|(month, usage)| UsageMonthView { month, usage: usage.finish() }).collect(),
         jobs_counted: job_counts.0,
         jobs_estimated_from_reports: job_counts.1,
-        first_at: timestamps.clone().min().map(str::to_string),
-        last_at: timestamps.max().map(str::to_string),
+        first_at: first_at.map(str::to_string),
+        last_at: last_at.map(str::to_string),
+        pricing: UsagePricingView::of(prices),
     }
 }
 
-/// 多个任务（加上可选的助手用量）合成一份汇总。
+/// 多个任务（加上可选的助手用量）合成一份汇总，直接读文件（不用库里存的汇总）。测试拿它和存库的结果对照。
+#[cfg(test)]
 pub fn summarize_jobs<'a>(
     scope: &'static str,
     output_root: &Path,
     job_ids: impl IntoIterator<Item = &'a str>,
-    mut extra: Vec<UsageRecord>,
+    extra: Vec<UsageRecord>,
+    prices: &PriceBook,
 ) -> UsageSummaryView {
-    let (mut counted, mut estimated) = (0, 0);
-    let mut records = Vec::new();
-    for job_id in job_ids {
-        let (job_records, from_reports) = job_usage_records(output_root, job_id);
-        if job_records.is_empty() {
-            continue;
-        }
-        counted += 1;
-        estimated += u64::from(from_reports);
-        records.extend(job_records);
-    }
-    records.append(&mut extra);
-    summarize(scope, &records, (counted, estimated))
+    let usages: Vec<cache::JobUsage> =
+        job_ids.into_iter().map(|job_id| cache::compute_job_usage(output_root, job_id, prices)).collect();
+    summarize_usages(scope, &usages, &extra, prices)
+}
+
+/// 同 [`summarize_jobs`]，但每个任务用库里存着的汇总（对不上才重算，见 `cache.rs`）。接口走这个。
+pub fn summarize_jobs_cached(
+    scope: &'static str,
+    db: &retainpdf_data::db::Db,
+    output_root: &Path,
+    job_ids: &[&str],
+    extra: Vec<UsageRecord>,
+    prices: &PriceBook,
+) -> UsageSummaryView {
+    let usages = cache::job_usages(db, output_root, job_ids, prices);
+    summarize_usages(scope, &usages, &extra, prices)
+}
+
+/// 几个任务的组（按任务顺序）加上助手的行，合成汇总。没有用量的任务不计数。
+fn summarize_usages(
+    scope: &'static str,
+    usages: &[cache::JobUsage],
+    extra: &[UsageRecord],
+    prices: &PriceBook,
+) -> UsageSummaryView {
+    let counted: Vec<&cache::JobUsage> = usages.iter().filter(|usage| usage.has_records).collect();
+    let estimated = counted.iter().filter(|usage| usage.estimated).count() as u64;
+    let mut parts: Vec<Vec<UsageRollup>> = counted.iter().map(|usage| usage.rollups.clone()).collect();
+    parts.push(rollup::rollup_records(extra, prices));
+    summarize_rollups(scope, &parts, (counted.len() as u64, estimated), prices)
 }
 
 /// 输出目录下的全部任务目录名（全局汇总用；不依赖数据库，删掉的任务自然不在了）。
@@ -394,6 +556,11 @@ pub fn all_job_ids(output_root: &Path) -> Vec<String> {
 }
 
 pub(crate) mod api;
+pub(crate) mod cache;
+pub(crate) mod estimate;
+pub(crate) mod rollup;
+
+pub(crate) use rollup::UsageRollup;
 
 #[cfg(test)]
 mod tests;

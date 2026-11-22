@@ -92,10 +92,9 @@ _EXPORTS = {
         "retainpdf_translation.workflow.revision",
         "revise_translation_item",
     ),
-    "run_refine_for_render": (
-        "retainpdf_translation.workflow.refine",
-        "run_refine_for_render",
-    ),
+    # 渲染前精修、表格翻译属于普通翻译引擎，2026-11-20 起从 retainpdf_translation_classic.public 取
+    "is_credential_rejection": ("retainpdf_translation.llm.shared.upstream_resilience", "is_credential_rejection"),
+    "credential_rejected_error": ("retainpdf_translation.llm.shared.upstream_resilience", "credential_rejected_error"),
 }
 
 __all__ = list(_EXPORTS)

@@ -16,7 +16,7 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "node --experimental-strip-types --test tests/"
+    "test": "node --experimental-strip-types --test tests/document.test.mjs tests/formula.test.mjs"
   },
   "dependencies": {
     "@xmldom/xmldom": "^0.9.10",

@@ -1,6 +1,7 @@
 use super::*;
 use crate::job_events::cas_persist_job_with_resources;
 use crate::models::request::CreateJobInput;
+use crate::job_runner::test_support::python_command;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
@@ -196,7 +197,7 @@ async fn repeated_launch_starts_only_one_real_local_worker() {
     let marker = fixture.root.join("worker-starts.txt");
     let mut job = fixture.job("real-worker", JobStatusKind::Queued);
     job.command = vec![
-        "python3".into(),
+        python_command(),
         "-c".into(),
         "import pathlib,sys; p=pathlib.Path(sys.argv[1]); p.open('a').write('started\\n')".into(),
         marker.to_string_lossy().into_owned(),
@@ -216,7 +217,8 @@ async fn repeated_launch_starts_only_one_real_local_worker() {
         );
     }
     handle.await.unwrap();
-    assert_eq!(std::fs::read_to_string(marker).unwrap(), "started\n");
+    let starts = std::fs::read_to_string(marker).unwrap().replace("\r\n", "\n");
+    assert_eq!(starts, "started\n");
     assert_eq!(
         fixture.deps.db.get_job(&job.job_id).unwrap().status,
         JobStatusKind::Succeeded
@@ -239,7 +241,7 @@ async fn force_deleting_a_running_job_stops_the_runner_and_revives_no_row() {
     let marker = fx.root.join("ghost-worker-ticks.txt");
     let mut job = fx.job("ghost", JobStatusKind::Running);
     job.command = vec![
-        "python3".into(),
+        python_command(),
         "-c".into(),
         concat!(
             "import pathlib,sys,time\n",
@@ -314,7 +316,7 @@ async fn a_failing_stdout_reader_stops_the_worker_right_away() {
     let marker = fx.root.join("orphaned-worker-ticks.txt");
     let mut job = fx.job("reader-fails", JobStatusKind::Running);
     job.command = vec![
-        "python3".into(),
+        python_command(),
         "-c".into(),
         concat!(
             "import pathlib,sys,time\n",
@@ -375,7 +377,7 @@ async fn last_lines_before_a_failing_exit_reach_log_tail() {
     let fx = Fixture::new(1);
     let mut job = fx.job("fails-fast", JobStatusKind::Queued);
     job.command = vec![
-        "python3".into(),
+        python_command(),
         "-c".into(),
         "import sys\nfor i in range(50): print('progress', i)\nprint('Traceback: the last line', flush=True)\nsys.exit(3)".into(),
     ];
@@ -405,7 +407,7 @@ async fn a_quiet_worker_still_gets_its_last_line_persisted() {
     let fx = Fixture::new(1);
     let mut job = fx.job("goes-quiet", JobStatusKind::Queued);
     job.command = vec![
-        "python3".into(),
+        python_command(),
         "-c".into(),
         "import time\nprint('waiting for upstream', flush=True)\ntime.sleep(3)".into(),
     ];
@@ -437,7 +439,7 @@ async fn non_utf8_stdout_does_not_fail_the_job() {
     let fx = Fixture::new(1);
     let mut job = fx.job("non-utf8", JobStatusKind::Queued);
     job.command = vec![
-        "python3".into(),
+        python_command(),
         "-c".into(),
         "import sys; sys.stdout.buffer.write(b'before\\n\\xff\\xfe bad bytes\\nafter\\n'); sys.stdout.flush()".into(),
     ];

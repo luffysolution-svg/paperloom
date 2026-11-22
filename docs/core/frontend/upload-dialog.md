@@ -1,0 +1,52 @@
+# 上传弹窗（添加 PDF）
+
+2026-11-20 用户定的样子：顶部只有 tab，中间一个能拖文件的框、只显示 PDF 名字，底部一排按钮选模型、普通 / Agent、页数；
+选了什么，中间的文件就像游戏里的装备被附魔一样叠上对应的效果，克制、可叠加。
+2026-11-21 加：模型多用图标（各家标志），还能挑这次用哪家 OCR，也画各家标志。
+
+## 从上到下
+
+1. **顶部**：「翻译 / 仅 OCR」tab，关闭按钮挂在右上角。标题「添加 PDF」只给读屏（`IngestDialog.tsx`、`WorkflowPanel.tsx`）。
+2. **中间的框**（`components/upload/UploadDropzone.tsx`）：
+   - 空着：只有一个上传图标；拖文件进来整框亮起、图标轻轻上下动。原来的提示（点击选择或拖到这里、最大 512MB、页数上限）
+     只在悬停提示和读屏里。
+   - 选好：换成一张只写文件名的卡片（`EnchantedFile.tsx`）。正在上传时卡片轻轻呼吸，进度条在框底。
+   - 上传状态（正在上传、校验失败……）只给读屏；出错另有框下面的错误框。预计费用挪到框外下面。
+3. **底部**（`ProcessingChoicePanel.tsx` + `UploadEnchantControls.tsx`）：
+   - 第一行四个附魔按钮（「仅 OCR」下只有 OCR 和页数）：
+     - **模型**：点开列出设置里存好的连接（每家服务商的默认模型和「其他模型」各一条），第一项是设置里的默认。
+       按钮和每一项前面画那家的标志（`brand-logos.ts`：先按模型名认家族，认不出按接口地址认厂商，都不认得用线条图标）。
+       只管这一次上传：存在 workflow 视图状态的 `uploadModel`，不记到本机；提交时把这条连接整套（地址、模型、key、协议、
+       思考深度）叠到翻译字段上，带了 key 就不带 `credential_ref`（`payload-assembly` 的 `withUploadModel`）。
+       书库里「翻译整本」走 `buildTranslateJobConfig`，不读它。
+     - **普通 / Agent**：和「选项」里「翻译质量」同一个设置（Agent = `refined`，普通 = `standard`；选过「统一术语」点普通不丢）。
+       点 Agent 时弹一条提示：质量会大幅提升，但速度很慢，消耗的 token 也多得多。主按钮跟着写「Agent 翻译」。
+     - **OCR**：PaddleOCR / MinerU / GLM-OCR，各画各家的标志；标出哪家是设置里的默认，本机没设好的那家灰掉
+       （「没设 Token」，判断见凭据的 `ocrReadyFor`：有自己的 Token；或是设置里那家、存的凭据库引用；或 GLM-OCR 借翻译的 key）。
+       存在 `uploadOcr`，选回默认那家等于没选。提交时 `collectRunPayload` 把它交给 `readSubmitValues`，换成那家和它的 Token
+       （凭据库引用只属于设置里那家，换了家不带）；一本能收多大、多少页也跟着它。书库的「翻译整本」「只做 OCR」不读它。
+     - **页数**：点开填起止页，或者「全部页」。上传完会自动填成「1 到最后一页」，这也算全部页（总页数记在
+       上传视图状态的 `uploadedPageCount`）。
+   - 第二行：更多选项（术语表、翻译质量三档、排版引擎、表格）、仅收藏、主按钮。
+     - **表格**（2026-11-22，试验）：保留原文（默认，不发字段）/ 翻译表格（发 `translation.tables = "translate"`）。
+       正文翻完后表格 agent 逐张翻，只翻有文字层的表；译文只在阅读页（Markdown 视图、悬停复制），译文 PDF 里表格还是原文；
+       多花的 token 在用量页记在「表格翻译」。和其他偏好一样记在本机（`workflow-preferences.ts` 的 `tableTranslation`），
+       映射在 `workflow/payload.ts` 的 `tableTranslationFields`。
+   - 小面板里按 Esc 只收小面板，不关弹窗。
+   - 这次选的模型、OCR 都只管这一次上传：新开一次上传（打开弹窗）回到设置里的（`upload-choices.ts` 的 `resetUploadChoices`）。
+
+## 附魔效果（`EnchantedFile.css`）
+
+每一项对应一层，叠得越多卡片外的金光越亮一点（`data-level` 0–4）：
+
+| 选了 | 卡片上 |
+|---|---|
+| 换了模型 | 右上角一枚印记：模型的标志 + 短名 |
+| 换了 OCR | 文件图标右上角嵌一枚那家 OCR 的徽章，图标上一道金色扫描线慢慢扫过 |
+| Agent | 卡片外一圈慢慢转的金色光环、几颗星点，右下一个机器人小徽记 |
+| 限定页数 | 卡片后面错开两张纸，左下挂一条书签写着页码 |
+
+每加一项一道光从左扫到右（只放一次），印记、徽记盖章似的落下。系统开了「减少动态效果」就都不动。
+颜色只用主题的 `--gold`、`--accent`，底部选中的按钮外圈也是同一种金色。
+
+样式：`UploadGuide.css`（骨架）、`UploadEnchantControls.css`（底部按钮、小面板）、`EnchantedFile.css`（卡片和效果）。

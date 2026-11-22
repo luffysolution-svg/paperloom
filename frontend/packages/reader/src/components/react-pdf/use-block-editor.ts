@@ -1,0 +1,143 @@
+// 框里正在改的那一块：读原文和当前译文（块号对到译文条目号）、草稿、保存、修订历史。
+// 草稿按块记在 memory 里（阅读器级别）：换到别的块再回来、编辑框随翻页重新挂载，草稿都还在；存过或取消就丢掉。
+import { useCallback, useEffect, useState } from "react";
+import type { BlockEditMemory } from "../../hooks/use-reader-block-edit.js";
+import type { ReaderTranslationEditPort } from "../../contracts/session.js";
+import {
+  editableTranslation,
+  revisionHistory,
+  revisionIssueTexts,
+  type RevisionEntry,
+} from "../../shared/data/block-edit.js";
+
+export type BlockEditorStatus = { tone: "pending" | "ok" | "error"; message: string } | null;
+
+type Loaded = { readerItemId: string; itemId: string; source: string; current: string };
+
+export function useBlockEditor({
+  port,
+  jobId,
+  readerItemId,
+  memory,
+  onSaved,
+}: {
+  port: ReaderTranslationEditPort | null;
+  /** 持有译文的任务；空串 = 还没问到，先不读。 */
+  jobId: string;
+  readerItemId: string;
+  memory: BlockEditMemory;
+  onSaved: (readerItemId: string, text: string) => void;
+}) {
+  const [loaded, setLoaded] = useState<Loaded | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [history, setHistory] = useState<RevisionEntry[]>([]);
+  const [draft, setDraftState] = useState("");
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<BlockEditorStatus>(null);
+  const [issues, setIssues] = useState<string[]>([]);
+  const drafts = memory.drafts;
+  const generation = memory.generation;
+
+  const loadHistory = useCallback(async (owner: string, blockId: string) => {
+    if (!port) return;
+    try {
+      setHistory(revisionHistory(await port.fetchRevisions(owner, blockId)));
+    } catch {
+      setHistory([]);
+    }
+  }, [port]);
+
+  useEffect(() => {
+    setLoaded(null);
+    setHistory([]);
+    setStatus(null);
+    setIssues([]);
+    setReason("");
+    if (!port || !jobId || !readerItemId) return undefined;
+    let disposed = false;
+    setLoading(true);
+    // 后端认阅读页的四位块号（三位、不补零的写法当成同一块），返回条目里实际存的写法。
+    port.loadItem(jobId, readerItemId)
+      .then((view) => {
+        if (disposed) return;
+        const item = view?.item;
+        if (!item) throw new Error("找不到这一段的译文。");
+        const itemId = `${view?.item_id || readerItemId}`;
+        const { source, translated } = editableTranslation(item);
+        setLoaded({ readerItemId, itemId, source, current: translated });
+        setDraftState(drafts.get(readerItemId) ?? translated);
+      })
+      .catch((cause: unknown) => {
+        if (!disposed) setStatus({ tone: "error", message: (cause as Error)?.message || "读取这段译文失败。" });
+      })
+      .finally(() => { if (!disposed) setLoading(false); });
+    void loadHistory(jobId, readerItemId);
+    return () => { disposed = true; };
+  }, [port, jobId, readerItemId, loadHistory]);
+
+  const setDraft = useCallback((value: string) => {
+    setDraftState(value);
+    if (readerItemId) drafts.set(readerItemId, value);
+  }, [readerItemId, drafts]);
+
+  /** 存一版：默认存草稿；「用这版」传历史里的那段文字。 */
+  const save = useCallback(async (text?: string, why?: string) => {
+    if (!port || !loaded || saving) return false;
+    const next = text ?? draft;
+    if (!next.trim()) return false;
+    setSaving(true);
+    setStatus(null);
+    setIssues([]);
+    try {
+      const result = await port.revise(jobId, loaded.itemId, {
+        translated_text: next,
+        source: "user",
+        reason: (why ?? reason).trim() || "在阅读页手动修改",
+        ...(generation.current != null ? { expected_generation: generation.current } : {}),
+      });
+      const nextGeneration = Number(result?.generation);
+      if (Number.isFinite(nextGeneration)) generation.current = nextGeneration;
+      drafts.delete(loaded.readerItemId);
+      setLoaded({ ...loaded, current: next });
+      setDraftState(next);
+      setReason("");
+      if (result?.changed === false) {
+        setStatus({ tone: "ok", message: "和原来一样，没有改动。" });
+      } else {
+        onSaved(loaded.readerItemId, next);
+        setStatus({ tone: "ok", message: "存好了。点「重新排版」以后，译文 PDF 才会换成新的。" });
+      }
+      void loadHistory(jobId, loaded.readerItemId);
+      return true;
+    } catch (cause) {
+      const error = cause as Error & { issues?: unknown; reason?: string };
+      if (error?.reason === "generation_mismatch") generation.current = null;
+      setStatus({ tone: "error", message: error?.message || "保存失败，请稍后再试。" });
+      setIssues(revisionIssueTexts(error?.issues));
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }, [port, loaded, saving, draft, reason, jobId, onSaved, loadHistory, drafts, generation]);
+
+  /** 丢掉这一块没存的草稿（取消）。 */
+  const discardDraft = useCallback(() => {
+    if (readerItemId) drafts.delete(readerItemId);
+  }, [readerItemId, drafts]);
+
+  return {
+    loading,
+    loaded: loaded?.readerItemId === readerItemId ? loaded : null,
+    history,
+    draft,
+    setDraft,
+    reason,
+    setReason,
+    saving,
+    status,
+    issues,
+    save,
+    discardDraft,
+  };
+}

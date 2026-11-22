@@ -5,7 +5,7 @@
 /**
  * Endpoint input, query, and output DTOs published by library-documents.v1.schema.json.
  */
-export type LibraryDocumentsSchema = AddCollectionDocumentsInput | ApplyDocumentMetadataSuggestionInput | CollectionDeleteResultView | CollectionDocumentRemoveResultView | CollectionListView | CollectionRecord | CreateCollectionInput | CreateDocumentMetadataSuggestionInput | CreateJobInput | DeleteDocumentQuery | DocumentDeleteResultView | DocumentFilesView | DocumentJobListView | DocumentListView | DocumentMetadataSuggestionApplyView | DocumentMetadataSuggestionListView | DocumentMetadataSuggestionView | DocumentReadingView | DocumentRecord | JobSubmissionView | ListDocumentJobsQuery | ListDocumentMetadataSuggestionsQuery | ListDocumentsQuery | PatchCollectionInput | PatchDocumentInput | SearchQuery | SearchResultView | TranslationCoverageView;
+export type LibraryDocumentsSchema = AddCollectionDocumentsInput | ApplyDocumentMetadataSuggestionInput | CollectionDeleteResultView | CollectionDocumentRemoveResultView | CollectionListView | CollectionRecord | CreateCollectionInput | CreateDocumentMetadataSuggestionInput | CreateJobInput | CreateTagInput | DeleteDocumentQuery | DocumentDeleteResultView | DocumentFilesView | DocumentJobListView | DocumentListView | DocumentMetadataSuggestionApplyView | DocumentMetadataSuggestionListView | DocumentMetadataSuggestionView | DocumentReadingQuery | DocumentReadingView | DocumentRecord | JobSubmissionView | ListDocumentJobsQuery | ListDocumentMetadataSuggestionsQuery | ListDocumentsQuery | PatchCollectionInput | PatchDocumentInput | PatchTagInput | PatchTranslationVersionInput | SearchQuery | SearchResultView | SetCurrentTranslationVersionInput | SetDocumentTagsInput | TagDeleteResultView | TagListView | TagRecord | TranslationCoverageView | TranslationVersionsQuery | TranslationVersionsView;
 /**
  * retainpdf-core models::domain::WorkflowKind。
  */
@@ -250,9 +250,13 @@ export interface TranslationInput {
      */
     reviewer_thinking?: "" | "auto" | "off" | "low" | "medium" | "high" | "max";
     /**
-     * TRANSLATION_ENGINES。翻译引擎。legacy：现有流程；agent：翻译 agent（先通读全文，再逐页翻译并审校），要求 api_protocol=anthropic，公式按 direct_typst 处理。
+     * TRANSLATION_ENGINES。翻译引擎。legacy：现有流程；agent：翻译 agent（先通读全文，再逐页翻译并审校），三种 api_protocol 都可以（2026-11-18 以前只收 anthropic），公式按 direct_typst 处理。
      */
     engine?: "legacy" | "agent";
+    /**
+     * TRANSLATION_TABLE_MODES。表格翻译。keep：表格保留原文（默认）；translate：正文翻完后由表格 agent 逐张翻（先只翻有文字层的表），结果写 translated/tables.v1.json。阅读页的区块接口 reader/regions 用上了（整表翻了的表格块，translated.text 是整表译文 HTML）；译文 PDF 还没用上。
+     */
+    tables?: "keep" | "translate";
     start_page?: number;
     end_page?: number;
     /**
@@ -337,6 +341,19 @@ export interface RuntimeInput {
      * 内部执行策略：文档级翻译接口在翻译后还要产出渲染候选。公共 translate 工作流通常翻完即止。
      */
     render_after_translation?: boolean;
+}
+/**
+ * views.rs :: CreateTagInput（deny_unknown_fields）。同名的标签已经有了就返回那个，不再建。
+ */
+export interface CreateTagInput {
+    /**
+     * 去掉首尾空白后 1–64 个字，否则 400。
+     */
+    name: string;
+    /**
+     * #RRGGBB；不给、null 或空字符串 = 不设颜色；别的写法 400。
+     */
+    color?: string | null;
 }
 /**
  * views.rs :: DeleteDocumentQuery（deny_unknown_fields）。拼错的 force 是 400，不会悄悄变成不强删。
@@ -639,6 +656,21 @@ export interface DocumentRecord {
      * 有没有成功的、带译文（非纯 OCR）的任务，即能不能对照阅读。读时由 SQL 现算，不保证输出 PDF 还在磁盘上。
      */
     has_translation: boolean;
+    /**
+     * 书上的标签，按名字排；没有是空数组（2026-11-21 起）。改用 PUT /api/v1/documents/:document_id/tags。
+     */
+    tags: DocumentTag[];
+}
+/**
+ * retainpdf-core models/library.rs :: DocumentTag —— DocumentRecord.tags 里的一项。
+ */
+export interface DocumentTag {
+    tag_id: string;
+    name: string;
+    /**
+     * 空字符串 = 不设颜色；有就是 #RRGGBB。
+     */
+    color: string;
 }
 /**
  * views.rs :: DocumentMetadataSuggestionApplyView —— 采用后的建议和书。
@@ -736,6 +768,15 @@ export interface DocumentMetadataSuggestionListView {
     has_more: boolean;
 }
 /**
+ * versions.rs :: DocumentReadingQuery（deny_unknown_fields）。
+ */
+export interface DocumentReadingQuery {
+    /**
+     * 译文版本编号；auto = 自动（逐页取最新）；不给 = 书的当前版本。
+     */
+    version?: string;
+}
+/**
  * merge/reading.rs :: DocumentReadingView。
  */
 export interface DocumentReadingView {
@@ -751,6 +792,10 @@ export interface DocumentReadingView {
      * 拼成这份译文的任务，按页序首次出现的顺序；不是合并时就是那一个任务，没有译文时是空数组。
      */
     contributing_job_ids: string[];
+    /**
+     * 读的是哪个译文版本；null = 自动（逐页取最新）。2026-11-18 加。
+     */
+    version_id: string | null;
 }
 /**
  * retainpdf-jobs views/common.rs :: JobSubmissionView —— 建任务的回包，status 刚建好是 queued。只有 sibling_job_ids 在没有时整个键不出现。
@@ -853,6 +898,10 @@ export interface ListDocumentsQuery {
      */
     collection_id?: string;
     /**
+     * 只列打了这个标签的书（GET /api/v1/tags 列出的 tag_id）。
+     */
+    tag_id?: string;
+    /**
      * 按任意 job_id（含历史任务、merged- 虚拟任务）找它所属的书。带它时其余参数不起作用（limit 照样校验）。
      */
     job_id?: string;
@@ -883,6 +932,32 @@ export interface PatchDocumentInput {
      * 别的值 400。
      */
     reading_status?: ("unread" | "reading" | "done") | null;
+}
+/**
+ * views.rs :: PatchTagInput（deny_unknown_fields）。
+ */
+export interface PatchTagInput {
+    /**
+     * 去掉首尾空白后 1–64 个字，否则 400；改成别的标签在用的名字 409。
+     */
+    name?: string | null;
+    /**
+     * #RRGGBB 或空字符串（去掉颜色）。
+     */
+    color?: string | null;
+}
+/**
+ * versions.rs :: PatchTranslationVersionInput（deny_unknown_fields）。两个字段都可选。
+ */
+export interface PatchTranslationVersionInput {
+    /**
+     * 新名字；空串清掉，回到按翻译设置生成的名字。
+     */
+    label?: string;
+    /**
+     * true 隐藏，false 恢复。
+     */
+    hidden?: boolean;
 }
 /**
  * views.rs :: SearchQuery（deny_unknown_fields）。没有 offset。
@@ -942,6 +1017,57 @@ export interface BlockSearchHit {
      * 译文片段，写法同上。
      */
     translated_snippet: string;
+}
+/**
+ * versions.rs :: SetCurrentTranslationVersionInput（deny_unknown_fields）。
+ */
+export interface SetCurrentTranslationVersionInput {
+    /**
+     * 要切到的版本；null 回到自动（逐页取最新）。
+     */
+    version_id: string | null;
+}
+/**
+ * views.rs :: SetDocumentTagsInput（deny_unknown_fields）。书的标签设成正好这几个，空数组 = 全去掉；重复的只算一次。
+ */
+export interface SetDocumentTagsInput {
+    tag_ids: string[];
+}
+/**
+ * views.rs :: TagDeleteResultView。
+ */
+export interface TagDeleteResultView {
+    tag_id: string;
+    /**
+     * 恒为 true；标签不存在是 404。
+     */
+    deleted: true;
+}
+/**
+ * views.rs :: TagListView。按名字排（不分大小写），不分页。
+ */
+export interface TagListView {
+    tags: TagRecord[];
+}
+/**
+ * retainpdf-core models/library.rs :: TagRecord —— 一个标签。同名（不分大小写、不看首尾空白）的标签只有一个；编号由名字算出来，两台设备各自建的同名标签同步后是同一个。
+ */
+export interface TagRecord {
+    /**
+     * tag-<16 位十六进制>。
+     */
+    tag_id: string;
+    name: string;
+    /**
+     * 空字符串 = 不设颜色；有就是 #RRGGBB。
+     */
+    color: string;
+    /**
+     * 打了这个标签的书有几本，每次读时现算。
+     */
+    document_count: number;
+    created_at: string;
+    updated_at: string;
 }
 /**
  * merge/coverage.rs :: TranslationCoverageView —— 书籍详情「进度」。
@@ -1035,4 +1161,103 @@ export interface CoverageJobView {
      * 原始错误的第一行（截到 160 字）。只有失败任务有，别的是 null。
      */
     error_head: string | null;
+}
+/**
+ * versions.rs :: TranslationVersionsQuery（deny_unknown_fields）。
+ */
+export interface TranslationVersionsQuery {
+    /**
+     * 带上隐藏的版本。
+     */
+    include_hidden?: boolean;
+}
+/**
+ * versions.rs :: TranslationVersionsView。
+ */
+export interface TranslationVersionsView {
+    /**
+     * 书。
+     */
+    document_id: string;
+    /**
+     * 用户选的版本；null = 自动（逐页取最新），新译文翻完自动跟着最新走。
+     */
+    current_version_id: string | null;
+    /**
+     * 选了某个版本、而且有比它新的（没隐藏的）版本：前端提示「有新版本」。
+     */
+    has_newer: boolean;
+    /**
+     * 从旧到新。
+     */
+    versions: TranslationVersionView[];
+}
+/**
+ * versions.rs :: TranslationVersionView。
+ */
+export interface TranslationVersionView {
+    /**
+     * 版本编号（tv-…）。
+     */
+    version_id: string;
+    /**
+     * 显示用的名字：用户起的；没起就按翻译设置生成，如「精翻 · qwen3.8-flash」「普通 · deepseek-flash（第 30–40 页）」。
+     */
+    name: string;
+    /**
+     * 用户起的名字；没起是空串。
+     */
+    label: string;
+    /**
+     * translate 整本翻译（书库翻译入口、新上传）/ retranslate 重新翻译（重试翻译阶段）/ backfill 升级时从已有任务回填。
+     */
+    origin: "translate" | "retranslate" | "backfill";
+    /**
+     * 只重翻一部分页时，其余页沿用的版本。
+     */
+    base_version_id: string | null;
+    /**
+     * 创建时间。
+     */
+    created_at: string;
+    /**
+     * 是否隐藏。
+     */
+    hidden: boolean;
+    /**
+     * running：还有任务在排队或在跑。
+     */
+    status: "running" | "succeeded" | "failed" | "canceled";
+    /**
+     * 这个版本的任务，按提交时间排。
+     */
+    job_ids: string[];
+    /**
+     * 这个版本自己翻了哪些页（1 起，闭区间，连续的并成一段）；不含沿用来源版本的页。任务还没完成时为空。
+     */
+    page_ranges: [number, number][];
+    /**
+     * 自己就覆盖了整本。
+     */
+    whole_book: boolean;
+    /**
+     * legacy / agent。
+     */
+    engine: string;
+    /**
+     * 翻译模型。
+     */
+    model: string;
+    /**
+     * 另配的审校 / 编辑模型；没配是空串。
+     */
+    reviewer_model: string;
+    /**
+     * 用户手改过几块（同一块改几次算一块）。
+     */
+    edited_blocks: number;
+    /**
+     * 是不是书的当前版本。
+     */
+    is_current: boolean;
 }

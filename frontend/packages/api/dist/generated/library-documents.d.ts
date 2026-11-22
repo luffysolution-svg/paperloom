@@ -1,4 +1,4 @@
-import type { AddCollectionDocumentsInput, ApplyDocumentMetadataSuggestionInput, CollectionDeleteResultView, CollectionDocumentRemoveResultView, CollectionListView, CollectionRecord, CreateCollectionInput, CreateDocumentMetadataSuggestionInput, CreateJobInput, DeleteDocumentQuery, DocumentDeleteResultView, DocumentFilesView, DocumentJobListView, DocumentListView, DocumentMetadataSuggestionApplyView, DocumentMetadataSuggestionListView, DocumentMetadataSuggestionView, DocumentReadingView, DocumentRecord, JobSubmissionView, ListDocumentJobsQuery, ListDocumentMetadataSuggestionsQuery, ListDocumentsQuery, PatchCollectionInput, PatchDocumentInput, SearchQuery, SearchResultView, TranslationCoverageView } from "@retainpdf/contracts/library-documents";
+import type { AddCollectionDocumentsInput, ApplyDocumentMetadataSuggestionInput, CollectionDeleteResultView, CollectionDocumentRemoveResultView, CollectionListView, CollectionRecord, CreateCollectionInput, CreateDocumentMetadataSuggestionInput, CreateJobInput, CreateTagInput, DeleteDocumentQuery, DocumentDeleteResultView, DocumentFilesView, DocumentJobListView, DocumentListView, DocumentMetadataSuggestionApplyView, DocumentMetadataSuggestionListView, DocumentMetadataSuggestionView, DocumentReadingQuery, DocumentReadingView, DocumentRecord, JobSubmissionView, ListDocumentJobsQuery, ListDocumentMetadataSuggestionsQuery, ListDocumentsQuery, PatchCollectionInput, PatchDocumentInput, PatchTagInput, PatchTranslationVersionInput, SearchQuery, SearchResultView, SetCurrentTranslationVersionInput, SetDocumentTagsInput, TagDeleteResultView, TagListView, TagRecord, TranslationCoverageView, TranslationVersionsQuery, TranslationVersionsView } from "@retainpdf/contracts/library-documents";
 import { type RequestOptions } from "../request.js";
 /** GET /api/v1/documents */
 export declare function listDocuments(apiPrefix: string | undefined, args?: {
@@ -21,6 +21,7 @@ export declare function deleteDocument(apiPrefix: string | undefined, args: {
 /** GET /api/v1/documents/:document_id/reading */
 export declare function getDocumentReading(apiPrefix: string | undefined, args: {
     document_id: string;
+    query?: DocumentReadingQuery;
 }, options?: RequestOptions): Promise<DocumentReadingView>;
 /** GET /api/v1/documents/:document_id/translation-coverage */
 export declare function getTranslationCoverage(apiPrefix: string | undefined, args: {
@@ -90,3 +91,39 @@ export declare function ocrDocument(apiPrefix: string | undefined, args: {
     document_id: string;
     body: CreateJobInput;
 }, options?: RequestOptions): Promise<JobSubmissionView>;
+/** GET /api/v1/documents/:document_id/translation-versions */
+export declare function listTranslationVersions(apiPrefix: string | undefined, args: {
+    document_id: string;
+    query?: TranslationVersionsQuery;
+}, options?: RequestOptions): Promise<TranslationVersionsView>;
+/** PUT /api/v1/documents/:document_id/translation-version */
+export declare function setCurrentTranslationVersion(apiPrefix: string | undefined, args: {
+    document_id: string;
+    body: SetCurrentTranslationVersionInput;
+}, options?: RequestOptions): Promise<TranslationVersionsView>;
+/** PATCH /api/v1/documents/:document_id/translation-versions/:version_id */
+export declare function patchTranslationVersion(apiPrefix: string | undefined, args: {
+    document_id: string;
+    version_id: string;
+    body: PatchTranslationVersionInput;
+}, options?: RequestOptions): Promise<TranslationVersionsView>;
+/** GET /api/v1/tags */
+export declare function listTags(apiPrefix: string | undefined, _args?: Record<string, never>, options?: RequestOptions): Promise<TagListView>;
+/** POST /api/v1/tags */
+export declare function createTag(apiPrefix: string | undefined, args: {
+    body: CreateTagInput;
+}, options?: RequestOptions): Promise<TagRecord>;
+/** PATCH /api/v1/tags/:tag_id */
+export declare function patchTag(apiPrefix: string | undefined, args: {
+    tag_id: string;
+    body: PatchTagInput;
+}, options?: RequestOptions): Promise<TagRecord>;
+/** DELETE /api/v1/tags/:tag_id */
+export declare function deleteTag(apiPrefix: string | undefined, args: {
+    tag_id: string;
+}, options?: RequestOptions): Promise<TagDeleteResultView>;
+/** PUT /api/v1/documents/:document_id/tags */
+export declare function setDocumentTags(apiPrefix: string | undefined, args: {
+    document_id: string;
+    body: SetDocumentTagsInput;
+}, options?: RequestOptions): Promise<DocumentRecord>;

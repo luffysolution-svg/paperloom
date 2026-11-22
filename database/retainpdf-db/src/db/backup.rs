@@ -264,8 +264,7 @@ impl Db {
     pub fn backup_blockers(&self) -> Result<u64> {
         let conn = self.connect()?;
         let count: i64 = conn.query_row(
-            "SELECT (SELECT COUNT(*) FROM jobs WHERE status_json IN ('\"queued\"','\"running\"'))
-             + (SELECT COUNT(*) FROM document_operations WHERE status IN ('queued','running','validating'))
+            "SELECT (SELECT COUNT(*) FROM jobs WHERE status IN ('queued','running'))
              + (SELECT COUNT(*) FROM model_operations WHERE status IN ('queued','running'))",
             [],
             |row| row.get(0),
@@ -487,14 +486,7 @@ pub fn inspect_backup_snapshot(path: &Path) -> Result<i64> {
         bail!("备份数据库完整性检查失败：{integrity}");
     }
     // A random SQLite database is not a PaperLoom migration package.
-    for table in [
-        "jobs",
-        "uploads",
-        "documents",
-        "favorites",
-        "ai_messages",
-        "glossaries",
-    ] {
+    for table in ["jobs", "uploads", "glossaries"] {
         let present: bool = conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1)",
             [table],
@@ -503,6 +495,14 @@ pub fn inspect_backup_snapshot(path: &Path) -> Result<i64> {
         if !present {
             bail!("备份缺少数据表：{table}");
         }
+    }
+    let has_library: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name IN ('documents', 'item_files'))",
+        [],
+        |row| row.get(0),
+    )?;
+    if !has_library {
+        bail!("备份缺少数据表：documents / item_files");
     }
     user_version(&conn)
 }
@@ -534,20 +534,11 @@ impl Drop for CheckedBackup {
 fn blockers_on(conn: &Connection) -> Result<Vec<String>> {
     let count = |sql: &str| -> Result<i64> { Ok(conn.query_row(sql, [], |row| row.get(0))?) };
     let mut out = Vec::new();
-    let jobs = count("SELECT COUNT(*) FROM jobs WHERE status_json IN ('\"queued\"', '\"running\"')")?;
+    let jobs = count("SELECT COUNT(*) FROM jobs WHERE status IN ('queued', 'running')")?;
     if jobs > 0 {
         out.push(format!("有 {jobs} 个任务在排队或运行"));
     }
-    let operations = count(
-        "SELECT COUNT(*) FROM document_operations WHERE status IN ('queued', 'running', 'validating')",
-    )?;
-    if operations > 0 {
-        out.push(format!("AI 正在改 {operations} 份文档"));
-    }
-    let calculations = count("SELECT COUNT(*) FROM agent_calculation_runs WHERE status = 'running'")?;
-    if calculations > 0 {
-        out.push(format!("AI 有 {calculations} 个计算没算完"));
-    }
+    // AI 改文档、AI 计算两张表 2026-11-20 删了（v31），不再看
     Ok(out)
 }
 
@@ -558,7 +549,7 @@ fn blockers_on(conn: &Connection) -> Result<Vec<String>> {
 fn clear_restored_job_pids(conn: &Connection) -> Result<usize> {
     Ok(conn.execute(
         "UPDATE jobs SET pid = NULL
-         WHERE pid IS NOT NULL AND status_json IN ('\"queued\"', '\"running\"')",
+         WHERE pid IS NOT NULL AND status IN ('queued', 'running')",
         [],
     )?)
 }
@@ -583,19 +574,18 @@ mod tests {
     fn title(db: &Db) -> Option<String> {
         db.connect()
             .unwrap()
-            .query_row("SELECT title FROM documents WHERE document_id = 'd1'", [], |row| row.get(0))
+            .query_row("SELECT title FROM item_references WHERE item_id = 'd1'", [], |row| row.get(0))
             .ok()
     }
 
     fn set_title(db: &Db, title: &str) {
         db.connect()
             .unwrap()
-            .execute(
-                "INSERT INTO documents(document_id, title, source_filename, added_at, updated_at)
-                 VALUES('d1', ?1, 'a.pdf', 't', 't')
-                 ON CONFLICT(document_id) DO UPDATE SET title = excluded.title",
-                [title],
-            )
+            .execute_batch(&format!(
+                "INSERT OR IGNORE INTO library_items(item_id, item_type, created_at, updated_at) VALUES('d1', 'reference', 't', 't');
+                 INSERT INTO item_references(item_id, title) VALUES('d1', '{title}')
+                 ON CONFLICT(item_id) DO UPDATE SET title = excluded.title;"
+            ))
             .unwrap();
     }
 
@@ -691,8 +681,8 @@ mod tests {
         db.connect()
             .unwrap()
             .execute(
-                "INSERT INTO jobs(job_id, workflow, status_json, created_at, updated_at, command_json, request_json, log_tail_json)
-                 VALUES('j1', '\"book\"', '\"running\"', 't', 't', '[]', '{}', '[]')",
+                "INSERT INTO jobs(job_id, workflow, status, created_at, updated_at, command_json, request_json, log_tail_json)
+                 VALUES('j1', 'book', 'running', 't', 't', '[]', '{}', '[]')",
                 [],
             )
             .unwrap();
@@ -708,15 +698,15 @@ mod tests {
         let conn = db.connect().unwrap();
         for (id, status) in [("run", "running"), ("wait", "queued"), ("done", "succeeded")] {
             conn.execute(
-                "INSERT INTO jobs(job_id, workflow, status_json, created_at, updated_at, pid, command_json, request_json, log_tail_json)
-                 VALUES(?1, '\"book\"', ?2, 't', 't', 4242, '[]', '{}', '[]')",
-                rusqlite::params![id, format!("\"{status}\"")],
+                "INSERT INTO jobs(job_id, workflow, status, created_at, updated_at, pid, command_json, request_json, log_tail_json)
+                 VALUES(?1, 'book', ?2, 't', 't', 4242, '[]', '{}', '[]')",
+                rusqlite::params![id, status],
             )
             .unwrap();
         }
         let backup = db.create_backup(KIND_MANUAL).unwrap();
         // 恢复前这些任务都结束了（否则 restore_blockers 不让恢复）。
-        conn.execute("UPDATE jobs SET status_json = '\"failed\"', pid = NULL", []).unwrap();
+        conn.execute("UPDATE jobs SET status = 'failed', pid = NULL", []).unwrap();
         drop(conn);
 
         assert_eq!(db.restore_backup(&backup.id).unwrap(), Ok(()));
@@ -773,8 +763,8 @@ mod tests {
         let conn = db.connect().unwrap();
         set_title(&db, "before");
         conn.execute(
-            "INSERT INTO jobs(job_id, workflow, status_json, created_at, updated_at, pid, command_json, request_json, log_tail_json)
-             VALUES('j1', '\"book\"', '\"running\"', 't', 't', 4242, '[]', '{}', '[]')",
+            "INSERT INTO jobs(job_id, workflow, status, created_at, updated_at, pid, command_json, request_json, log_tail_json)
+             VALUES('j1', 'book', 'running', 't', 't', 4242, '[]', '{}', '[]')",
             [],
         )
         .unwrap();
@@ -785,7 +775,7 @@ mod tests {
         .unwrap();
         let backup = db.create_backup(KIND_MANUAL).unwrap();
         conn.execute_batch(
-            "DROP TRIGGER boom; UPDATE jobs SET status_json = '\"failed\"', pid = NULL;",
+            "DROP TRIGGER boom; UPDATE jobs SET status = 'failed', pid = NULL;",
         )
         .unwrap();
         drop(conn);
@@ -807,8 +797,8 @@ mod tests {
         db.connect()
             .unwrap()
             .execute(
-                "INSERT INTO jobs(job_id, workflow, status_json, created_at, updated_at, command_json, request_json, log_tail_json)
-                 VALUES('j1', '\"book\"', '\"queued\"', 't', 't', '[]', '{}', '[]')",
+                "INSERT INTO jobs(job_id, workflow, status, created_at, updated_at, command_json, request_json, log_tail_json)
+                 VALUES('j1', 'book', 'queued', 't', 't', '[]', '{}', '[]')",
                 [],
             )
             .unwrap();

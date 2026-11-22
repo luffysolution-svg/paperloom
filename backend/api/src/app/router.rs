@@ -14,6 +14,7 @@ mod collections;
 mod credentials;
 mod documents;
 mod fonts;
+mod runtime_assets;
 mod glossaries;
 mod backups;
 mod sync;
@@ -23,6 +24,7 @@ mod jobs;
 mod model_requests;
 mod providers;
 mod public;
+mod tags;
 
 /// 登记表里的全部接口（`app/endpoints.rs`）：访问控制按它查谁能用，接口目录和接口清单快照也从这里汇总。
 pub(crate) fn registered_endpoints() -> Vec<crate::app::endpoints::Endpoint> {
@@ -37,8 +39,10 @@ pub(crate) fn registered_endpoints() -> Vec<crate::app::endpoints::Endpoint> {
     tables.extend([
         documents::ENDPOINTS,
         collections::ENDPOINTS,
+        tags::ENDPOINTS,
         glossaries::ENDPOINTS,
         fonts::ENDPOINTS,
+        runtime_assets::ENDPOINTS,
         sync::ENDPOINTS,
         backups::ENDPOINTS,
         integrations::ENDPOINTS,
@@ -122,9 +126,11 @@ fn authenticated_api_routes(state: &AppState) -> Router<AppState> {
         .merge(integrations::routes())
         .merge(documents::routes())
         .merge(collections::routes())
+        .merge(tags::routes())
         .merge(jobs::routes())
         .merge(providers::routes())
         .merge(fonts::routes())
+        .merge(runtime_assets::routes())
         .method_not_allowed_fallback(method_not_allowed)
         .route_layer(middleware::from_fn_with_state(
             state.clone(),

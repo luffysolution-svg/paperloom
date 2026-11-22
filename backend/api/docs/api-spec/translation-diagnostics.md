@@ -208,6 +208,8 @@ Contract: `contracts/translation-revisions.v1.schema.json` (`TranslationDebugIte
 
 Response: the item is wrapped; the saved translated item is under `data.item`. Sensitive fields and inline secrets are redacted. Unknown items return a plain 404; no manifest yet returns 404 + `reason: "not_ready"`.
 
+Item ids (since 2026-11-19): `{item_id}` on this endpoint, `PATCH`, `…/revisions` and `…/replay` also accepts the reader's four-digit block id. `p012-b0005`, `p012-b005` and `p012-b5` name the same block (the `reader_item_id` rule of reader regions and the data API); an exact match wins. `data.item_id` is always the id stored in the item (possibly three digits), and revision records use that id too.
+
 ```json
 {
   "code": 0,
@@ -240,6 +242,8 @@ Response: the item is wrapped; the saved translated item is under `data.item`. S
 `POST /api/v1/jobs/{job_id}/translations/{item_id}/replay`
 
 Contract: `contracts/translation-revisions.v1.schema.json` (`TranslationReplayView`; client name `replayTranslationItem`). No request body: the endpoint has no `input`, any body is ignored. `data.payload` is the devtools script output, not a stable schema.
+
+`data.candidate` (added 2026-11-12) is the stable field for clients: `{ translated_text, decision }` or `null`. `translated_text` is already in the form `PATCH` expects, so "replay → the user approves → `PATCH` it back with `source: "user"`" needs nothing from `payload`. `decision: "keep_origin"` means the model judged the block should stay in the source language; do not write it back. It is `null` when the model call failed (`payload.replay_error`), the item is not translated, or the model returned an empty translation.
 
 Behavior:
 

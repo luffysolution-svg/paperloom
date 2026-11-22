@@ -1,7 +1,7 @@
-// 外部文献库（Zotero）附件与文档的对应关系，见 schema v30。
+// 外部文献库（Zotero）附件与文档的对应关系，见 schema v38。
 
 use anyhow::Result;
-use rusqlite::{params, Row};
+use rusqlite::{params, OptionalExtension, Row};
 
 use crate::models::domain::now_iso;
 
@@ -44,7 +44,10 @@ impl Db {
         conn.execute(
             r#"
             INSERT INTO document_external_refs (owner_user_id, source, library_id, item_key, attachment_key, document_id, metadata_json, collection_path, created_at, updated_at)
-            VALUES ((SELECT owner_user_id FROM documents WHERE document_id = ?5), ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)
+            VALUES (
+                (SELECT i.owner_user_id FROM item_files f JOIN library_items i ON i.item_id = f.item_id WHERE f.file_id = ?5),
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8
+            )
             ON CONFLICT(owner_user_id, source, library_id, attachment_key) DO UPDATE SET
                 item_key = excluded.item_key,
                 document_id = excluded.document_id,
@@ -85,7 +88,7 @@ impl Db {
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
-    /// 用外部条目的书目信息补全文档；用户手动改过的标题（locked）不动。
+    /// 用外部条目的书目信息补全文档；用户手动改过的标题（title_locked）不动。
     pub fn apply_external_bibliography(
         &self,
         document_id: &str,
@@ -94,24 +97,45 @@ impl Db {
         year: Option<i64>,
         doi: &str,
     ) -> Result<()> {
-        let conn = self.connect()?;
+        let mut conn = self.connect()?;
+        let tx = conn.transaction()?;
+        let item_id: Option<String> = tx
+            .query_row("SELECT item_id FROM item_files WHERE file_id = ?1", params![document_id], |row| row.get(0))
+            .optional()?;
+        let Some(item_id) = item_id else {
+            return Ok(());
+        };
         let now = now_iso();
-        conn.execute(
+        tx.execute(
             r#"
-            UPDATE documents SET
+            INSERT INTO item_references (item_id, title, year, doi)
+            VALUES (?1, ?2, ?3, ?4)
+            ON CONFLICT(item_id) DO UPDATE SET
                 title = CASE
-                    WHEN ?2 = '' THEN title
-                    WHEN COALESCE((SELECT locked FROM document_title_state WHERE document_id = ?1), 0) = 1 THEN title
-                    ELSE ?2
+                    WHEN excluded.title = '' THEN item_references.title
+                    WHEN item_references.title_locked = 1 THEN item_references.title
+                    ELSE excluded.title
                 END,
-                authors_json = ?3,
-                year = ?4,
-                doi = ?5,
-                updated_at = ?6
-            WHERE document_id = ?1
+                year = excluded.year,
+                doi = excluded.doi
             "#,
-            params![document_id, title, serde_json::to_string(authors)?, year, doi, now],
+            params![item_id, title, year, doi],
         )?;
+        tx.execute(
+            "DELETE FROM item_creators WHERE item_id = ?1 AND role = 'author'",
+            params![item_id],
+        )?;
+        for (position, author) in authors.iter().enumerate() {
+            tx.execute(
+                "INSERT INTO item_creators (item_id, position, role, literal) VALUES (?1, ?2, 'author', ?3)",
+                params![item_id, position as i64, author],
+            )?;
+        }
+        tx.execute(
+            "UPDATE library_items SET updated_at = ?1 WHERE item_id = ?2",
+            params![now, item_id],
+        )?;
+        tx.commit()?;
         Ok(())
     }
 }

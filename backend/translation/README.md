@@ -122,7 +122,6 @@ Translation 阶段的正式输入和输出固定为：
 - 翻译产物协议固定为 `translation-manifest.json` + 每页 payload，渲染阶段不再兼容旧的逐页 JSON 直扫模式
 - 默认加载口径已经是 strict contract；缺少上述顶层字段的 payload 会直接报错
 - Rust 主工作流调用的 `translate-only` worker 现在要求 `--spec`
-- `translate_book.py`（script-mode，仅桌面兼容，无 console 等价物）现在也是 spec-only 包装入口
 - API 凭证不再要求写入 stage spec；spec 中使用 `credential_ref`，由运行时环境注入真实 key
 
 ## 调试闭环
@@ -306,8 +305,8 @@ policy 相关 mutation/check/default 已迁到 `services/policy/payload_rules/`�
 ## 主要流程
 
 1. `core/ocr/` 读取统一中间层 `document.v1.json` 并抽取页面块
-2. 如果入口给的是 provider 原始 JSON，则先由 `document_schema/adapters.py` 转成 `document.v1`
-3. `workflow/translation_workflow.py` 生成每页翻译模板并加载 payload
+2. 如果入口给的是 provider 原始 JSON，则先由流水线的 `retainpdf_pipeline/ocr/document_schema/adapters.py` 转成 `document.v1`（生产上 OCR 阶段的 `normalize-ocr` 已经做完）
+3. `workflow/pages.py` 生成每页翻译模板并加载 payload（逐页文件名约定在 `workflow/translation_workflow.py`）
 4. `core/orchestration` 补齐布局区和编排元数据
 5. `services/continuation` 先消费上游 `continuation_hint`，再用规则兜底，把连续段落合并成统一 translation unit
 6. `services/policy` 根据模式决定跳过哪些块
@@ -324,7 +323,7 @@ policy 相关 mutation/check/default 已迁到 `services/policy/payload_rules/`�
 - 抽取阶段会把 block 上的 `continuation_hint` 展开成 payload 里的 `ocr_continuation_*` 字段
 - continuation 当前采用 provider-first 策略：优先消费同页 `intra_page` provider hint；跨页 `cross_page` hint 只在“相邻页 + 顺序明确 + layout_zone 命中页尾/页首阅读边界 + 文本长度足够”时受控消费，其余情况继续保留但不直接驱动拼接
 - 如果只想排查 OCR 规范化是否有问题，优先看 `document.v1.report.json`
-- Python 侧读取 report 摘要时，优先走 `document_schema/reporting.py`
+- Python 侧读取 report 摘要时，优先走流水线的 `retainpdf_pipeline/ocr/document_schema/reporting.py`
 
 默认正文白名单现在固定为：
 
@@ -433,6 +432,12 @@ repair profile：
 - 可用 `RETAIN_TRANSLATION_TRANSPORT_RECOVERY_ATTEMPTS=N` 和 `RETAIN_TRANSLATION_TRANSPORT_RECOVERY_SECONDS=N` 调整；将 seconds 设为 `0` 可关闭这层断网恢复。
 - transport attempt 在真正发送前必须先 fsync 请求 journal；并发 dispatch 使用约 5ms 的 group commit 窗口合并 fsync，journal 持久化失败会阻止请求离开进程。
 - 尾部 transport retry 会在主队列之后执行，默认允许 2 次 HTTP attempt，并使用更长 timeout。
+- 400/401/402/403 不重试。401/403（Key 无效、没权限）和 402（账户余额不足）还会让整份翻译停下：第一次被拒就在
+  本次运行的诊断对象（`TranslationRunDiagnostics.record_credential_rejection`）上记下这组 base_url + Key，之后同一组
+  凭据的请求不再发出去；批量翻译开始前、结束后和收尾修复前各查一次，被拒过就抛「翻译 API Key 被上游拒绝」
+  （402 是「翻译 API 账户余额不足」），结构化失败分别归成 `auth_failed` 和 `upstream_quota_exhausted`，都不可重试。
+  在飞的请求照常收完，已译的块照常落盘。只管默认的 legacy 引擎（Python 直接发请求）；agent 引擎和 Rust 执行器
+  各自碰到 401/402/403 本来就停。
 
 ## 模式说明
 

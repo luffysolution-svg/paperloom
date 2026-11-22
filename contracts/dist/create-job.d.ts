@@ -147,9 +147,13 @@ export interface TranslationInput {
      */
     reviewer_thinking?: "" | "auto" | "off" | "low" | "medium" | "high" | "max";
     /**
-     * TRANSLATION_ENGINES。翻译引擎。legacy：现有流程；agent：翻译 agent（先通读全文，再逐页翻译并审校），要求 api_protocol=anthropic，公式按 direct_typst 处理。
+     * TRANSLATION_ENGINES。翻译引擎。legacy：现有流程；agent：翻译 agent（先通读全文，再逐页翻译并审校），三种 api_protocol 都可以（2026-11-18 以前只收 anthropic），公式按 direct_typst 处理。
      */
     engine?: "legacy" | "agent";
+    /**
+     * TRANSLATION_TABLE_MODES。表格翻译。keep：表格保留原文（默认）；translate：正文翻完后由表格 agent 逐张翻（先只翻有文字层的表），结果写 translated/tables.v1.json。阅读页的区块接口 reader/regions 用上了（整表翻了的表格块，translated.text 是整表译文 HTML）；译文 PDF 还没用上。
+     */
+    tables?: "keep" | "translate";
     start_page?: number;
     end_page?: number;
     /**

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "retainpdf/contracts/ocr-providers/v1",
   "title": "OCR 提供方清单（OCR Providers）",
-  "description": "GET /api/v1/providers/ocr 的返回：后端认的 OCR 提供方，和每个提供方建任务时能在 ocr.options 里带的选项。数据来自 backend/config/ocr_providers.json（没有这份文件时用 retainpdf-core config/provider_config.rs 里写死的一份），能力和产物布局按提供方种类补上。生产者：backend/packages/retainpdf-core/src/models/ocr.rs（OcrProviderPublicDefinition 等）、backend/packages/retainpdf-data/src/ocr_provider/catalog.rs（provider_client_definitions）；Rust 侧由 backend/api/src/api_tests/providers.rs 对真实接口的返回钉键集合。消费者：@retainpdf/contracts/ocr-providers 生成 DTO（前端现在用自己写死的 frontend/web/src/platform/config/providers.ts，要不要换由前端定）。成功响应包在 {code, message, data} 里，本契约描述 data 部分。不分页，提供方就几个。选项分两类（2026-10-22，审计 A2）：client_settable=true 的建任务时可以在 ocr.options 里带；client_settable=false 的只能服务器定（本地 / 命令型 OCR 要执行的 command、原始结果的转换器名 raw_provider、配置里带 env 的），请求带了 400 `ocr.options.<键> is server-owned`，这里也不给默认值（default 恒为 null，运维写的命令通常带本机路径）。改契约先改本文件，再重新生成 DTO 并让两端测试变绿。",
+  "description": "GET /api/v1/providers/ocr 的返回：后端认的 OCR 提供方，和每个提供方建任务时能在 ocr.options 里带的选项。数据来自 backend/config/ocr_providers.json（OCR 服务商的唯一来源，Rust 编译时嵌入同一份，运行时读不到文件就用嵌入的；顺序按清单里的 rank），能力和产物布局按提供方种类补上。生产者：backend/packages/retainpdf-core/src/models/ocr.rs（OcrProviderPublicDefinition 等）、backend/packages/retainpdf-data/src/ocr_provider/catalog.rs（provider_client_definitions）；Rust 侧由 backend/api/src/api_tests/providers.rs 对真实接口的返回钉键集合。消费者：@retainpdf/contracts/ocr-providers 生成 DTO（前端现在用自己写死的 frontend/web/src/platform/config/providers.ts，要不要换由前端定）。成功响应包在 {code, message, data} 里，本契约描述 data 部分。不分页，提供方就几个。选项分两类（2026-10-22，审计 A2）：client_settable=true 的建任务时可以在 ocr.options 里带；client_settable=false 的只能服务器定（本地 / 命令型 OCR 要执行的 command、原始结果的转换器名 raw_provider、配置里带 env 的），请求带了 400 `ocr.options.<键> is server-owned`，这里也不给默认值（default 恒为 null，运维写的命令通常带本机路径）。改契约先改本文件，再重新生成 DTO 并让两端测试变绿。",
   "base_path": "/api/v1",
   "endpoints": [
     {
@@ -19,6 +19,16 @@
       "type": "array",
       "items": { "$ref": "#/definitions/OcrProviderPublicDefinition" }
     },
+    "OcrProviderLimits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_pages", "max_file_bytes", "chunked_upload_exempt"],
+      "properties": {
+        "max_pages": { "type": "integer", "minimum": 0, "description": "一份 PDF 最多几页；0 = 不限。" },
+        "max_file_bytes": { "type": "integer", "minimum": 0, "description": "一个文件最多多少字节；0 = 不限（仍受上传接口自己的上限约束）。" },
+        "chunked_upload_exempt": { "type": "boolean", "description": "true：整本翻译任务（OCR 之后紧接着翻译）按片上传时不受 max_file_bytes 限制，每片各自有服务商的上限（PaddleOCR 官方 HTTP、上传的文件）。纯 OCR 任务、自建服务、官方命令行照旧受限。" }
+      }
+    },
     "OcrProviderPublicDefinition": {
       "type": "object",
       "additionalProperties": false,
@@ -29,9 +39,30 @@
         "credential",
         "options",
         "capabilities",
-        "artifact_layout"
+        "artifact_layout",
+        "docs_url",
+        "limits",
+        "streams_pages",
+        "shares_translation_key_host"
       ],
       "properties": {
+        "docs_url": {
+          "type": ["string", "null"],
+          "description": "（2026-11-12 起）服务商的文档或申请 key 的页面，来自清单 backend/config/ocr_providers.json 的 docs_url；没写为 null。"
+        },
+        "limits": {
+          "$ref": "#/definitions/OcrProviderLimits",
+          "description": "（2026-11-12 起）建任务时对上传文件的上限，已经算上环境变量覆盖（例如 RUST_API_MINERU_MAX_PAGES）。超了建任务返回 400。"
+        },
+        "streams_pages": {
+          "type": "string",
+          "enum": ["always", "never", "chunked_upload"],
+          "description": "（2026-11-12 起）会不会一片片公布已做完的页（整本任务的翻译可以跟着 OCR 并行）：always 总会；never 不会；chunked_upload 只有交上传的文件、走官方 HTTP 按片提交时才会（Paddle：填了 paddle_api_url、transport=official_cli、按网址提交时不会）。"
+        },
+        "shares_translation_key_host": {
+          "type": ["string", "null"],
+          "description": "（2026-11-12 起）这家 OCR 自己没有 key 时，可以借哪个翻译主机的 key：翻译接的 base_url 主机就是它才借（GLM-OCR 是 open.bigmodel.cn，和智谱翻译模型共用一个 key）。不能借为 null。"
+        },
         "key": { "type": "string", "description": "建任务时 ocr.provider 填它，例如 mineru、paddle、glm_ocr（智谱 GLM-OCR）、local。" },
         "display_name": { "type": "string" },
         "provider_kind": {

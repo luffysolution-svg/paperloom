@@ -3,6 +3,15 @@
 RetainPDF 的翻译 agent：像人一样，看一整页的块（类别、大概位置、原文、上下文）再逐块翻译；只管翻准，不管排版。
 排版由以后的重排 agent（`retainpdf-layout-agent`）负责，放不下的块用改稿要求交回这里。两边只靠 `contract.py` 的格式交接。
 
+包里有两个 Python 包：
+
+- `retainpdf_translation_agent`：核心（通读、按节翻、校验、审校、改稿），**只用标准库**，测试钉着；
+- `retainpdf_translation_agent_engine`：接线（2026-11-20 拆包第 3 步从翻译包的 `workflow/` 挪来）。`agent_flow` 把翻译包准备好的
+  逐页记录交给核心、结果写回，`agent_openai` 接 OpenAI 兼容服务，`identity` 给断点身份。它依赖翻译包（底座）和 requests，
+  装的时候带 extra：`retainpdf-translation-agent[engine]`（流水线就这么依赖）。翻译包经引擎登记表
+  `retainpdf_translation.workflow.engines` 按字符串加载它，翻译包不依赖这个包。接线的测试和翻译的测试在一起：
+  `backend/pipeline/devtools/tests/translation/test_agent_flow.py`、`test_agent_openai.py`（要那里的 conftest 把产物目录指到临时目录）。
+
 ```python
 from retainpdf_translation_agent import BlockInput, PageInput, RevisionRequest, TranslationAgent
 
@@ -28,6 +37,22 @@ outcome.status, outcome.results, outcome.glossary.tickets                  # don
   请求的系统提示带提示词缓存断点（各角色的系统提示一本书里逐字不变，连同前面的工具定义一起缓存）；`TranslationAgent(effort=…)`
   给初译、重翻、改稿发 `output_config.effort`（通读、审校强制用工具、本来就不思考，不发）。正式流程按任务的 thinking 换算
   （`agent_flow.agent_effort`，和 legacy 一样：off、auto 对 claude-haiku-5-5 都是 low）。
+- `tools.py`：初译能调的只读工具（2026-11-19）：`search_book` 全书搜原文（带已有译文，中文在译文里搜）、`lookup_term` 查术语表完整条目和歧义单；
+  `DocumentRun(tools=True)` 才开，一页最多 3 轮 8 次，交卷后的检查问题接在同一段对话里重交。只接 Anthropic 原生工具调用。
+- `section.py`：按节翻译（第二版，2026-11-19，`DocumentRun(structure="section")`）：几页接成一份带段号的稿子（跨页的段落接好，公式、代码换占位），
+  一节一次请求、模型只当译者（`SECTION_NARRATIVE_PROMPT`），按段号对回（同一编号写了几次以最后一次为准；抄回来的 § 行、没有汉字的英文说明去掉）、
+  还原占位、查标记，漏的重交一次，不行的段退回逐块翻；合过的段切回各块。章号块（CHAPTER TWO、PART ONE）由程序换成「第二章」「第一部分」，不交给模型。
+  原稿里引号括起来的 2–6 个词的说法由程序单列在请求里，让模型逐个判断是不是别的学科的固定术语（foot in the door 是「登门槛」，2026-11-20）。
+  回答写到上限或最后一段没写完（`cut_paragraph`）的段重交；取术语按这一节所在的章（2026-11-20）。
+  译者可以在译稿后附「@@ 新词」「@@ 梗概」：新词核实后记进术语表（缩写记中文全称），梗概按章传给后面的节；缩写也记「前文已出现」（`learn_section`，2026-11-20）。
+  审校时带可疑标记的段附上提示（`section_flags`：推测、否定、句子、数字个数对不上，偏短，译者附的「@@ 拿不准」）；`review_page(only=…)` 可只审这些段（2026-11-20）。
+  两次都没交好的段退回逐块翻时只带前后各两段作上下文，配上术语、人名、文风（`fallback_page`，2026-11-20）。
+  `review=True` 时整节对照原文审一次意思（只收意思类单子，不做文笔那一轮）。只管人文社科、通俗读物；正式流程 2026-11-19 起默认按节
+  （`agent_flow.agent_structure`，`RETAIN_AGENT_STRUCTURE=page` 退回逐页），`DocumentRun` 自己的默认仍是逐页。
+  见 `docs/ops/planning/translation-agent/20261119-按节翻译.md`、`20261119-按节翻译后的审校.md`。
+- `checks.py` 的 `normalize_translation`（按节、逐页都走）：价格的 `$` 转义成 `\$`、直引号换中文引号；只有引注的块（作者、年份、页码）原样交回不算没翻（2026-11-20）。
+- `rules.py`：人文社科、通俗读物的译者规则（意译重组、意思不增不减、习语、学科术语、名词腔、人名、不夹英文）和审校的两条，只写这一处，各角色的提示词从这里拼；例子用通用说法，不用在译书里的句子（2026-11-20）。
+- `typography.py`：原文排版造成的误读，调度开头修掉（2026-11-19）：正文段落开头的章首小型大写（OCR 成全大写，"CATCH," HE CALLED）还原成句首大写。
 - `checks.py`：逐块校验（漏交、空、`$` 成对（公式内容不和原文比）、引用和脚注标记、数字、没翻、截断）；术语校验（定好的译法、保留原文、缩写）；语气信号（表示保留的词、第一人称，只记 info 算指标）。
   判对判错的规则改了升 `CHECKS_VERSION`，
   正式流程据此不再沿用旧进度（请求缓存照用）。
@@ -39,7 +64,11 @@ outcome.status, outcome.results, outcome.glossary.tickets                  # don
 - `reader.py`：翻译前通读。程序挑候选（反复出现的词组、专名）加全部标题和样张，一次请求定体裁、人名规则（理工保留原文、人文"中文译名（原文）"）、
   文风说明、全文统一的术语和人名、标题和目录的译法；`DocumentRun(read_first=True)` 用它。
 - `review.py`：审校。每页正文类块交给审校只开问题单（错译、漏译添加、数字术语、不通顺、语气偏离），逐字引用原文译文，
-  程序核对后只替换被指出的那段，错误和警告只许减少；`DocumentRun(review=True)` 用它。
+  程序核对后只替换被指出的那段，错误和警告只许减少，括号里的原文（人名、书名第一次出现）不许删、不许添"其实""显然"这类词；
+  理工类书 `DocumentRun(review=True)` 用它。单子先写理由再填 `must_fix`，`false` 是审校自己撤回、不改（2026-11-20，以前被逼着交单，七成是空单）。
+- `rewrite.py`：编辑整块重写，程序裁判（长度、校验、术语、添词）。`polish=True` 时只改文笔（意思已经审过）。
+- 人文社科、通俗读物的第二遍分两轮（`runner.split_review`，2026-11-19）：先 `review_page(accuracy_only=True)` 只审意思，
+  再 `rewrite_page(polish=True)` 把译文当中文读、只改文笔。
 - `units.py`：接续组（分栏、分页拆开的同一段）当一块翻：`merge_groups` 把各块合成一块（原文接成一整段、id 用组号），校验、重翻、审校、
   退回原文都按整段算，`split_units` 交回前才切回各块，切开以后不再逐块查；一组要么整段是译文，要么整段退回原文。
 - `breaks.py`：接续组译文按原文各块的正文长度比例，在附近的中文标点处切回各块；不切开公式、脚注标记、行内代码。

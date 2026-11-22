@@ -1,34 +1,29 @@
 // BookDetailDialog —— 容器：组合 hooks + shell/tabs。
 // 业务状态见 use-book-detail-*.js；UI 见 shell / tabs / panels。
 
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { createBookDetailCaches } from "../domain/book-detail-caches.js";
-import {
-  useHomeBookDetail,
-  useHomeCollections,
-  useHomeJobRuntime,
-  useHomeStatusCard,
-} from "@/ui/context/home-services-context.js";
+import { HomeSettingsHubContext, useHomeBookDetail, useHomeCollections, useHomeJobRuntime, useHomeStatusCard } from "@/ui/context/home-services-context.js";
 import { useDialogState } from "@/ui/hooks/use-dialog-state.js";
 import { useDialogReturnFocus } from "@/ui/hooks/use-dialog-return-focus.js";
 import { useRecentJobCover, useLibraryServices } from "@/features/library/index.js";
-import type { LibraryCardItem } from "@/features/library/index.js";
-import { QualityPanel } from "./panels/overview/QualityPanel.jsx";
+import type { LibraryCardItem } from "@/platform/contracts/library-payloads.js";
 import { BookDetailShell } from "./shell/BookDetailShell.jsx";
 import { CoverActionsPanel } from "./panels/CoverActionsPanel.jsx";
 import { ArtifactQuickDownloads } from "./panels/ArtifactQuickDownloads.js";
 import { ProcessingResultActions } from "./panels/processing/ProcessingResultActions.jsx";
-import {
-  BookDetailRightTabs,
-  BookDetailOverviewTab,
-  BookDetailArtifactsTab,
-} from "./tabs/index.js";
+import { BookDetailRightTabs, BookDetailOverviewTab, BookDetailArtifactsTab } from "./tabs/index.js";
 import { ProcessingTabWithUsage } from "./ProcessingTabWithUsage.jsx";
+import { DocumentCostFact } from "@/features/usage/index.js";
 import { BookDetailHistoryTab } from "./tabs/BookDetailHistoryTab.jsx";
-import { BookDetailTermsTab } from "./tabs/BookDetailTermsTab.jsx";
+import { qualityBookDetailTab, termsBookDetailTab } from "./tabs/standalone-tabs.jsx";
+import { BookIcon, FileIcon, ProcessingIcon } from "./tabs/tab-icons.jsx";
+import { Clock3 } from "lucide-react";
+import type { BookDetailTab } from "@/ui/book-detail/book-detail-tab.js";
 import { ReadingStatusPanel } from "./panels/more/ReadingStatusPanel.jsx";
 import { CollectionsPanel } from "./panels/more/CollectionsPanel.jsx";
 import { DeleteFooterPanel } from "./panels/more/DeleteFooterPanel.jsx";
+import { TranslationVersionsCard } from "./panels/overview/TranslationVersionsPanel.jsx";
 import { useTranslationCoverage } from "./use-translation-coverage.js";
 import { useBookDetailLiveItem } from "./use-book-detail-live-item.js";
 import { useBookDetailDocument } from "./use-book-detail-document.js";
@@ -49,7 +44,12 @@ import { useBookDetailArtifactCenter } from "./use-book-detail-artifact-center.j
 import { useStoreSnapshot } from "@/ui/hooks/use-store.js";
 import { canUseIntegrations, useAuthSession } from "@/features/auth/index.js";
 
-export function BookDetailDialog() {
+export type BookDetailDialogProps = {
+  /** 别的功能登记的页签（装配层 app/home/shell/book-detail-tabs.ts 列表），和书籍详情自己的页签按 order 排在一起。 */
+  extraTabs?: readonly BookDetailTab[];
+};
+
+export function BookDetailDialog({ extraTabs = [] }: BookDetailDialogProps = {}) {
   const { dialogStore } = useHomeBookDetail();
   const library = useLibraryServices();
   const actions = library.actions;
@@ -59,6 +59,9 @@ export function BookDetailDialog() {
   const collectionsReload = collections?.reloadSignal;
   const { store: statusCardStore } = useHomeStatusCard();
   const { store: jobRuntimeStore } = useHomeJobRuntime();
+  // 页签要开设置（术语页「去改」）：设置窗口叠在详情上、停在那一栏。取不到（单独挂载）就不给。
+  const settingsHub = useContext(HomeSettingsHubContext);
+  const openSettings = settingsHub?.dialogStore ? (tab: string) => settingsHub.dialogStore.open({ tab }) : undefined;
   const dialogState = useDialogState<LibraryCardItem | null>(dialogStore);
   const open = Boolean(dialogState.open);
   const payloadItem: LibraryCardItem = dialogState.payload || {};
@@ -256,90 +259,113 @@ export function BookDetailDialog() {
           resetKey={documentId}
           defaultTab={defaultTab}
           onTabChange={(tab) => {
-            if (tab === "processing") setProcessingSeenFor(documentId);
+            // 阶段操作（重新渲染等）点开「进度」才读；「质量」页改完译文要重新排版，也要它。
+            if (tab === "processing" || tab === "quality") setProcessingSeenFor(documentId);
           }}
-          overviewTab={({ selectTab }) => (
-            <BookDetailOverviewTab
-              pageCount={docState.pageCount}
-              bytes={docState.doc?.bytes}
-              addedAt={docState.doc?.added_at}
-              editing={docState.editing}
-              titleText={docState.titleText}
-              busy={docState.busy}
-              error={docState.error}
-              ocrStatus={overviewOcrStatus}
-              translationStatus={translationStatus}
-              onOpenProcessing={() => selectTab("processing")}
-              onStartEdit={docState.startEdit}
-              onCancelEdit={() => docState.setEditing(false)}
-              onSave={docState.handleSaveEdit}
-              onTitleChange={docState.setTitleText}
-              readingSlot={(
-                <ReadingStatusPanel
-                  value={docState.readingStatus}
+          context={{
+            documentId, jobId, title: `${docState.doc?.title || docState.titleText || item.title || ""}`, openPinnedJob, openSettings,
+            translationJobId: stageActionState.ownerJobId, retryStage: (stage) => stageActionState.retry(stage),
+          }}
+          // 页签表：概览、进度、文件、历史要用这里的内部状态，就地拼；质量、术语只要「这是哪本书」，是独立的一项；
+          // extraTabs 是别的功能登记的。页签外壳按 order 排（见 ui/book-detail/book-detail-tab.ts）。
+          tabs={[
+            {
+              id: "overview", label: "概览", title: "文档概览", Icon: BookIcon, order: 10,
+              render: ({ selectTab }) => (
+                <BookDetailOverviewTab
+                  pageCount={docState.pageCount}
+                  bytes={docState.doc?.bytes}
+                  addedAt={docState.doc?.added_at}
+                  editing={docState.editing}
+                  titleText={docState.titleText}
                   busy={docState.busy}
-                  onChange={docState.handleReadingStatus}
+                  error={docState.error}
+                  ocrStatus={overviewOcrStatus}
+                  translationStatus={translationStatus}
+                  onOpenProcessing={() => selectTab("processing")}
+                  onStartEdit={docState.startEdit}
+                  onCancelEdit={() => docState.setEditing(false)}
+                  onSave={docState.handleSaveEdit}
+                  onTitleChange={docState.setTitleText}
+                  readingSlot={(
+                    <ReadingStatusPanel
+                      value={docState.readingStatus}
+                      busy={docState.busy}
+                      onChange={docState.handleReadingStatus}
+                    />
+                  )}
+                  collectionsSlot={(
+                    <CollectionsPanel
+                      collections={docState.collections}
+                      collectionsBusy={docState.collectionsBusy}
+                      onToggle={docState.toggleCollection}
+                    />
+                  )}
+                  versionsSlot={<TranslationVersionsCard open={open} documentId={documentId} jobs={documentJobs.jobs} ready={!documentJobs.loading} />}
+                  costSlot={<DocumentCostFact open={open && !documentJobs.loading} documentId={documentId} jobs={documentJobs.jobs} />}
+                  dangerSlot={(
+                    <DeleteFooterPanel
+                      busy={docState.busy}
+                      onDelete={docState.handleDelete}
+                      title={docState.doc?.title || docState.titleText || item.title}
+                    />
+                  )}
                 />
-              )}
-              collectionsSlot={(
-                <CollectionsPanel
-                  collections={docState.collections}
-                  collectionsBusy={docState.collectionsBusy}
-                  onToggle={docState.toggleCollection}
+              ),
+            },
+            {
+              id: "processing", label: "进度", title: "文档进度", Icon: ProcessingIcon, order: 20,
+              render: ({ activeTab }) => (
+                <ProcessingTabWithUsage
+                  documentId={documentId}
+                  visible={open && activeTab === "processing"}
+                  loading={documentJobs.loading}
+                  error={documentJobs.error}
+                  // 结果操作行读全局 statusCard store，注入点放在这里（对话框本身
+                  // 长在 HomeShellProviders 内），让「进度」Tab 组件保持纯展示。
+                  resultActionsSlot={<ProcessingResultActions documentJobIds={documentJobIds} />}
+                  coverage={coverage}
+                  {...buildProcessingTabProps({
+                    open,
+                    activeTab,
+                    item,
+                    pageCount: docState.pageCount,
+                    busy: docState.busy,
+                    error: docState.error,
+                    documentJobs,
+                    ocrState,
+                    translateState,
+                    stageActionState,
+                    resumeState,
+                    translationStatus,
+                    translationActive,
+                    translationSucceeded,
+                    canTranslate,
+                    readerAvailable,
+                    documentJobIds,
+                    onOpenLiveReader: openPinnedJob,
+                  })}
                 />
-              )}
-              dangerSlot={(
-                <DeleteFooterPanel
-                  busy={docState.busy}
-                  onDelete={docState.handleDelete}
-                  title={docState.doc?.title || docState.titleText || item.title}
+              ),
+            },
+            {
+              id: "artifacts", label: "文件", title: "文件与产物", Icon: FileIcon, order: 30,
+              render: () => (
+                <BookDetailArtifactsTab
+                  onOpenSource={openSource}
+                  artifactCenter={artifactCenter}
+                  onOpenJob={openPinnedJob}
                 />
-              )}
-            />
-          )}
-          processingTab={({ activeTab }) => (
-            <ProcessingTabWithUsage
-              documentId={documentId}
-              visible={open && activeTab === "processing"}
-              loading={documentJobs.loading}
-              error={documentJobs.error}
-              // 结果操作行读全局 statusCard store，注入点放在这里（对话框本身
-              // 长在 HomeShellProviders 内），让「进度」Tab 组件保持纯展示。
-              resultActionsSlot={<ProcessingResultActions documentJobIds={documentJobIds} />}
-              coverage={coverage}
-              editorialFlowCache={caches.settledFlows}
-              {...buildProcessingTabProps({
-                open,
-                activeTab,
-                item,
-                pageCount: docState.pageCount,
-                busy: docState.busy,
-                error: docState.error,
-                documentJobs,
-                ocrState,
-                translateState,
-                stageActionState,
-                resumeState,
-                translationStatus,
-                translationActive,
-                translationSucceeded,
-                canTranslate,
-                readerAvailable,
-                documentJobIds,
-                onOpenLiveReader: openPinnedJob,
-              })}
-            />
-          )}
-          artifactsTab={() => (
-            <BookDetailArtifactsTab
-              onOpenSource={openSource}
-              artifactCenter={artifactCenter}
-              onOpenJob={openPinnedJob}
-            />
-          )}
-          qualityTab={jobId ? <QualityPanel jobId={jobId} documentId={documentId} /> : null}
-          termsTab={jobId ? <BookDetailTermsTab jobId={jobId} /> : null}
-          historyTab={<BookDetailHistoryTab coverage={coverage} addedAt={docState.doc?.added_at} />}
+              ),
+            },
+            qualityBookDetailTab,
+            termsBookDetailTab,
+            {
+              id: "history", label: "历史", title: "任务记录", Icon: Clock3, order: 60, lazy: true,
+              render: () => <BookDetailHistoryTab coverage={coverage} addedAt={docState.doc?.added_at} />,
+            },
+            ...extraTabs,
+          ]}
         />
       )}
     />

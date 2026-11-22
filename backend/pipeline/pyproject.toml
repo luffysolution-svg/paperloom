@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "retainpdf-pipeline"
-version = "0.4.4"
+version = "0.4.5"
 description = "RetainPDF OCR, translation, and rendering pipeline"
 requires-python = ">=3.11,<3.12"
 dependencies = [
@@ -23,6 +23,10 @@ dependencies = [
   "retainpdf-base",
   "retainpdf-math",
   "retainpdf-translation",
+  # 普通翻译引擎（2026-11-20 从翻译包拆出来）：翻译 worker 按 translation.engine 经引擎登记表加载，精修、表格翻译直接用
+  "retainpdf-translation-classic",
+  # 翻译引擎 agent 的接线（2026-11-20 从翻译包挪进 agent 包，带 engine extra 才装它的依赖）
+  "retainpdf-translation-agent[engine]",
   "urllib3==2.5.0",
 ]
 
@@ -40,6 +44,8 @@ retainpdf-pipeline = "retainpdf_pipeline.entrypoints.console:main"
 retainpdf-base = { workspace = true }
 retainpdf-math = { workspace = true }
 retainpdf-translation = { workspace = true }
+retainpdf-translation-classic = { workspace = true }
+retainpdf-translation-agent = { workspace = true }
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -51,3 +57,5 @@ namespaces = true
 [tool.setuptools.package-data]
 "retainpdf_pipeline" = ["*.json", "*.md"]
 "retainpdf_pipeline.ocr.document_schema" = ["*.json"]
+# 导出水印（devtools/build_watermark_stamp.py 生成）：PDF 盖矢量那份，Word 放透明底位图
+"retainpdf_pipeline.render.output.watermark" = ["*.pdf", "*.png"]

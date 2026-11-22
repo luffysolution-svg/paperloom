@@ -317,7 +317,7 @@ async fn concurrent_mutations_block_snapshot_and_pending_restore_can_be_cancelle
     assert!(!state.backups.pending.load(Ordering::SeqCst));
     assert!(!state.config.data_root.join("backups/pending").exists());
     rusqlite::Connection::open(&state.config.jobs_db_path).unwrap().execute(
-        "INSERT INTO jobs(job_id,workflow,status_json,created_at,updated_at,command_json,request_json,log_tail_json) VALUES ('active','\"book\"','\"running\"','now','now','[]','{}','[]')", [],
+        "INSERT INTO jobs(job_id,workflow,status,created_at,updated_at,command_json,request_json,log_tail_json) VALUES ('active','book','running','now','now','[]','{}','[]')", [],
     ).unwrap();
     assert!(state
         .backups

@@ -158,13 +158,48 @@ pub(super) const MIGRATIONS: &[Migration] = &[
     },
     Migration {
         version: 30,
-        name: "external_refs",
-        sql: include_str!("v30_external_refs.sql"),
+        name: "translation_versions",
+        sql: include_str!("v30_translation_versions.sql"),
     },
     Migration {
         version: 31,
-        name: "external_ref_owners",
-        sql: include_str!("v31_external_ref_owners.sql"),
+        name: "drop_dead_tables",
+        sql: include_str!("v31_drop_dead_tables.sql"),
+    },
+    Migration {
+        version: 32,
+        name: "job_status_text",
+        sql: include_str!("v32_job_status_text.sql"),
+    },
+    Migration {
+        version: 33,
+        name: "job_stage_history",
+        sql: include_str!("v33_job_stage_history.sql"),
+    },
+    Migration {
+        version: 34,
+        name: "job_usage_cache",
+        sql: include_str!("v34_job_usage_cache.sql"),
+    },
+    Migration {
+        version: 35,
+        name: "event_feed_by_reference",
+        sql: include_str!("v35_event_feed_by_reference.sql"),
+    },
+    Migration {
+        version: 36,
+        name: "library_items",
+        sql: include_str!("v36_library_items.sql"),
+    },
+    Migration {
+        version: 37,
+        name: "library_tags",
+        sql: include_str!("v37_library_tags.sql"),
+    },
+    Migration {
+        version: 38,
+        name: "external_refs",
+        sql: include_str!("v38_external_refs.sql"),
     },
 ];
 
@@ -178,6 +213,103 @@ mod tests {
             assert_eq!(migration.version, index as i64 + 1, "{}", migration.name);
             assert!(!migration.sql.trim().is_empty(), "{}", migration.name);
         }
+    }
+
+    /// v32 的数据搬迁：带引号的状态、流程变成纯文本；`{父任务}-ocr` 指向在库里的父任务；之后不认识的取值写不进去；
+    /// 扣页数触发器跟着新列走。在一个只有相关列的 v31 样子的表上直接跑迁移语句。
+    #[test]
+    fn v32_unquotes_status_and_workflow_and_links_ocr_children() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            r#"
+            PRAGMA foreign_keys = ON;
+            CREATE TABLE jobs (job_id TEXT PRIMARY KEY, workflow TEXT NOT NULL, status_json TEXT NOT NULL, updated_at TEXT);
+            CREATE TABLE page_ledger (user_id TEXT, delta INTEGER, kind TEXT, job_id TEXT, note TEXT, created_at TEXT);
+            CREATE TABLE job_page_charges (job_id TEXT, user_id TEXT, pages INTEGER, status TEXT, updated_at TEXT);
+            CREATE TRIGGER jobs_page_charge_settle AFTER UPDATE OF status_json ON jobs BEGIN SELECT 1; END;
+            INSERT INTO jobs VALUES ('a', '"book"', '"succeeded"', 't'), ('a-ocr', '"ocr"', '"failed"', 't'),
+                                    ('lost-ocr', '"ocr"', 'canceled', 't'), ('r', 'render', '"running"', 't');
+            INSERT INTO job_page_charges VALUES ('r', 'u1', 7, 'reserved', '');
+            "#,
+        )
+        .unwrap();
+        let v32 = MIGRATIONS.iter().find(|m| m.version == 32).unwrap();
+        conn.execute_batch(v32.sql).unwrap();
+
+        let rows: Vec<(String, String, String, Option<String>)> = conn
+            .prepare("SELECT job_id, workflow, status, parent_job_id FROM jobs ORDER BY job_id")
+            .unwrap()
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        let expected = [
+            ("a", "book", "succeeded", None),
+            ("a-ocr", "ocr", "failed", Some("a")),
+            ("lost-ocr", "ocr", "canceled", None),
+            ("r", "render", "running", None),
+        ];
+        let got: Vec<_> = rows.iter().map(|(j, w, s, p)| (j.as_str(), w.as_str(), s.as_str(), p.as_deref())).collect();
+        assert_eq!(got, expected);
+
+        assert!(conn.execute("UPDATE jobs SET status = 'done' WHERE job_id = 'a'", []).is_err());
+        assert!(conn.execute("UPDATE jobs SET workflow = '\"book\"' WHERE job_id = 'a'", []).is_err());
+        conn.execute("UPDATE jobs SET status = 'failed' WHERE job_id = 'r'", []).unwrap();
+        let refunded: i64 = conn
+            .query_row("SELECT COUNT(*) FROM page_ledger WHERE job_id = 'r' AND kind = 'refund' AND note = 'failed'", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(refunded, 1, "扣页数触发器按新的 status 列退回");
+    }
+
+    /// v33：`runtime_json` 里的阶段历史搬进 `job_stage_history`，算不出来的几项搬成列，`runtime_json` 删掉。
+    #[test]
+    fn v33_moves_stage_history_and_keeps_only_what_cannot_be_derived() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            r#"
+            CREATE TABLE jobs (job_id TEXT PRIMARY KEY, runtime_json TEXT);
+            CREATE TABLE sync_dirty (kind TEXT, entity_key TEXT, changed_at TEXT, PRIMARY KEY (kind, entity_key));
+            CREATE TABLE sync_apply_guard (singleton INTEGER);
+            INSERT INTO jobs VALUES
+              ('a', '{"current_stage":"finished","stage_started_at":"t2","retry_count":1,"last_retry_at":"t1",
+                      "last_error_at":null,"stage_history":[
+                        {"stage":"queued","detail":"q","enter_at":"t0","exit_at":"t1","duration_ms":10,"terminal_status":null},
+                        {"stage":"translating","detail":null,"enter_at":"t1","exit_at":"t2","duration_ms":20,
+                         "terminal_status":"succeeded","progress_current":5,"progress_total":5}]}'),
+              ('old', NULL),
+              ('broken', 'not json');
+            "#,
+        )
+        .unwrap();
+        let v33 = MIGRATIONS.iter().find(|m| m.version == 33).unwrap();
+        conn.execute_batch(v33.sql).unwrap();
+
+        let history: Vec<(String, i64, String, Option<String>, Option<i64>)> = conn
+            .prepare("SELECT job_id, seq, stage, terminal_status, progress_current FROM job_stage_history ORDER BY job_id, seq")
+            .unwrap()
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(
+            history,
+            vec![
+                ("a".to_string(), 0, "queued".to_string(), None, None),
+                ("a".to_string(), 1, "translating".to_string(), Some("succeeded".to_string()), Some(5)),
+            ]
+        );
+        let a: (Option<String>, i64, Option<String>) = conn
+            .query_row("SELECT stage_entered_at, retry_count, last_retry_at FROM jobs WHERE job_id = 'a'", [], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })
+            .unwrap();
+        assert_eq!(a, (Some("t2".to_string()), 1, Some("t1".to_string())));
+        let old_retries: i64 = conn.query_row("SELECT retry_count FROM jobs WHERE job_id = 'old'", [], |row| row.get(0)).unwrap();
+        assert_eq!(old_retries, 0);
+        let has_runtime_json: i64 = conn
+            .query_row("SELECT COUNT(*) FROM pragma_table_info('jobs') WHERE name = 'runtime_json'", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(has_runtime_json, 0);
     }
 
     #[test]

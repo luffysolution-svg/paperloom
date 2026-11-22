@@ -8,20 +8,44 @@ export type ReaderTextHoverTarget = {
 export declare function projectReaderTextHoverTargets(regions: readonly ReaderRegionHighlight[], width: number, height: number): ReaderTextHoverTarget[];
 export declare function hitTestReaderTextHoverTarget(targets: readonly ReaderTextHoverTarget[], x: number, y: number): ReaderTextHoverTarget | null;
 export declare const READER_TEXT_HOVER_COPY_CLASS = "reader-text-hover-copy";
+export declare const READER_TEXT_HOVER_EDIT_CLASS = "reader-text-hover-edit";
 export declare const READER_TEXT_HOVER_ID_CLASS = "reader-text-hover-id";
+/**
+ * 框上要不要显示翻译编号（和翻译调试、日志里的 item_id 同一个）：读者用不上，默认不显示；排查翻译问题时在阅读页地址后
+ * 加 `?debug=1`（或 `&debug=1`）就出来，点一下复制。2026-11-12 以前每个读者都看得到。
+ */
+export declare function readerShowsItemIds(search?: string): boolean;
 export declare const READER_TEXT_HOVER_TOOLS_CLASS = "reader-text-hover-tools";
+/**
+ * 工具条放哪（hover-presentation 的 placeHoverTools 选）：框外右边 / 左边的页边（竖排）、框外上方（outside）、
+ * 框外下方（below）、框里最后一行的右边（tail，段尾空着的地方）；inside（框里右上角）只在没量位置时用。
+ */
+export type HoverToolsPlacement = "side-right" | "side-left" | "inside" | "outside" | "below" | "tail";
 /** 工具条（编号 + 复制）大约占的尺寸：放进框内放不下时才挪到框外上方。 */
 export declare const HOVER_TOOLS_HEIGHT = 26;
-export declare const HOVER_TOOLS_WIDTH = 250;
+export declare const HOVER_TOOLS_WIDTH = 220;
 /**
  * 工具条放哪：一般的块放在框内右上角 —— 它就在块的命中范围里，鼠标走过去不会换块，
  * 也不盖住上一块。框太矮或太窄（行间公式常常只有一行高）放不下时才挪到框外上方。
  */
 export declare function hoverToolsOutside(rect: ReaderRegionRect, toolsWidth?: number): boolean;
-export declare function ReaderTextHoverLayer({ target, pane, revisedCount, }: {
+/**
+ * 悬停内容块：淡色的框 + 「改」「复制」两个图标按钮（2026-11-20 起只画图标，名字在悬停提示和读屏里；
+ * 行间公式的复制是「复制 LaTeX」；表格和图片保留格式复制与放大/下载操作）。地址带 ?debug=1 时前面多一个翻译编号。
+ * 框和工具条位置由页面量好传进来（frameRect 贴着字、placement 放页边，见 hover-presentation）；不传就照原块、按旧规则放。
+ */
+export declare function ReaderTextHoverLayer({ target, pane, revisedCount, onEdit, frameRect, placement, tailTop, }: {
     target: ReaderTextHoverTarget | null;
+    /** 框画多大：贴着字的范围（不给就是原块）。 */
+    frameRect?: ReaderRegionRect | null;
+    /** 工具条放哪（不给按框的大小选框里 / 框外上方）。 */
+    placement?: HoverToolsPlacement;
+    /** placement 是 tail 时，工具条离框顶多高（对齐最后一行）。 */
+    tailTop?: number;
     pane?: "source" | "translated";
-    /** 这一块改过几次（精修、手改、助手改）；只在译文栏提示。 */
+    /** 这一块改过几次（精修、手改、助手改）；写在译文栏「改」的提示里。 */
     revisedCount?: number;
+    /** 译文栏的「改」：打开侧栏「改译文」改这一块。不给就不画。 */
+    onEdit?: (itemId: string) => void;
 }): import("react").JSX.Element;
 //# sourceMappingURL=ReaderTextHoverLayer.d.ts.map

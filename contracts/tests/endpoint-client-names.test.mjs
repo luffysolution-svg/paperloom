@@ -43,9 +43,10 @@ const PHASE_1A_CONTRACTS = new Set([
   "token-usage.v1.schema.json",
 ]);
 
-// 第 1a 期以后加进这几份契约的端点，名字由各自的 test 钉（编辑部事件：job-events-v2.test.mjs；
-// 一个阅读区块：reader-data-contract.test.mjs）。
-const LATER_NAMES = new Set(["listEditorialEvents", "getReaderRegion"]);
+// 第 1a 期以后加进这几份契约的端点，名字由各自的 test 钉（编辑部事件：job-events-v2.test.mjs）。
+// 2026-11-14 删掉的三个：getJobUsage（reports/usage，2026-11-20 加回）、listQualityItems（reports/quality/items）、
+// getReaderRegion（reader/regions/:item_id），下面的完整清单和 reader-data-contract.test.mjs 钉着后两个不再出现。
+const LATER_NAMES = new Set(["listEditorialEvents"]);
 
 test("phase-1a endpoints carry the client names from the frontend list over the json transport", () => {
   const named = [];
@@ -58,9 +59,13 @@ test("phase-1a endpoints carry the client names from the frontend list over the 
   assert.deepEqual(named, [
     ["create-job.v1.schema.json", "POST", "/api/v1/jobs", "createJob", "json"],
     ["library-books.v1.schema.json", "DELETE", "/api/v1/jobs/:job_id", "deleteJob", "json"],
+    // 估价（2026-11-19）
+    ["token-usage.v1.schema.json", "GET", "/api/v1/documents/:document_id/usage/estimate", "estimateDocumentUsage", "json"],
+    ["token-usage.v1.schema.json", "GET", "/api/v1/usage/estimate", "estimateLibraryUsage", "json"],
     ["token-usage.v1.schema.json", "GET", "/api/v1/documents/:document_id/usage", "getDocumentUsage", "json"],
     ["job-status.v1.schema.json", "GET", "/api/v1/jobs/:job_id", "getJob", "json"],
     ["job-data.v1.schema.json", "GET", "/api/v1/jobs/:job_id/data/:dataset", "getJobDataset", "json"],
+    // 2026-11-14 删掉、2026-11-20 加回：进度页看这一次花了多少
     ["token-usage.v1.schema.json", "GET", "/api/v1/jobs/:job_id/reports/usage", "getJobUsage", "json"],
     ["reader-data.v1.schema.json", "GET", "/api/v1/jobs/:job_id/progress/layout", "getLiveLayout", "json"],
     ["reader-data.v1.schema.json", "GET", "/api/v1/jobs/:job_id/progress/pages/:page", "getLivePage", "json"],
@@ -72,6 +77,7 @@ test("phase-1a endpoints carry the client names from the frontend list over the 
     ["job-events.v2.schema.json", "GET", "/api/v1/jobs/:job_id/progress/events", "listJobEvents", "json"],
     ["reader-data.v1.schema.json", "GET", "/api/v1/jobs/:job_id/files", "listJobFiles", "json"],
     ["job-status.v1.schema.json", "GET", "/api/v1/jobs", "listJobs", "json"],
+    ["token-usage.v1.schema.json", "POST", "/api/v1/usage/prices", "lookupModelPrices", "json"],
   ]);
   // GET /api/v1/jobs 只登记在 job-status.v1；library-books.v1 重复的那条 2026-10-23 删了。
   const duplicate = read("library-books.v1.schema.json").endpoints.find((endpoint) => endpoint.method === "GET" && endpoint.path === "/api/v1/jobs");
@@ -86,24 +92,25 @@ test("phase-1b translation items and document jobs endpoints carry the client na
   assert.deepEqual(named, [
     ["GET", "/api/v1/jobs/:job_id/translations", "listTranslationItems", "json", undefined],
     ["GET", "/api/v1/jobs/:job_id/translations/:item_id", "getTranslationItem", "json", undefined],
+    // 单条写回（2026-11-12 前端做「手动改一段译文」时要的）。
+    ["PATCH", "/api/v1/jobs/:job_id/translations/:item_id", "updateTranslationItem", "json", "ReviseTranslationItemRequest"],
     // 重放一条不带请求体。
     ["POST", "/api/v1/jobs/:job_id/translations/:item_id/replay", "replayTranslationItem", "json", undefined],
   ]);
-  // 同一份契约里的写回（PATCH）和修订历史前端清单没给名字，不起名。
+  // 修订历史没人调（前端改用 data/revisions），不起名。
   const unnamed = revisions.endpoints.filter((endpoint) => endpoint.client_name === undefined).map(({ method, path }) => [method, path]);
   assert.deepEqual(unnamed, [
-    ["PATCH", "/api/v1/jobs/:job_id/translations/:item_id"],
     ["GET", "/api/v1/jobs/:job_id/translations/:item_id/revisions"],
   ]);
 
   const documents = read("library-documents.v1.schema.json");
-  const added = documents.endpoints.slice(17).map(({ method, path, client_name, transport, query, input, output }) => [method, path, client_name, transport, query, input, output]);
+  const added = documents.endpoints.slice(17, 20).map(({ method, path, client_name, transport, query, input, output }) => [method, path, client_name, transport, query, input, output]);
   assert.deepEqual(added, [
     ["GET", "/api/v1/documents/:document_id/jobs", "listDocumentJobs", "json", "ListDocumentJobsQuery", undefined, "DocumentJobListView"],
     ["POST", "/api/v1/documents/:document_id/translate", "translateDocument", "json", undefined, "CreateJobInput", "JobSubmissionView"],
     ["POST", "/api/v1/documents/:document_id/ocr", "ocrDocument", "json", undefined, "CreateJobInput", "JobSubmissionView"],
   ]);
-  for (const endpoint of documents.endpoints.slice(18)) {
+  for (const endpoint of documents.endpoints.slice(18, 20)) {
     assert.match(endpoint.note, /402/, `${endpoint.path} note 要写 402 页数额度`);
     assert.match(endpoint.note, /PAGE_QUOTA_EXCEEDED/, `${endpoint.path} note 要写错误码`);
   }
@@ -134,7 +141,6 @@ test("phase-1b job actions and reports endpoints carry the client names from the
   assert.deepEqual(table("job-reports.v1.schema.json"), [
     ["GET", "/api/v1/jobs/:job_id/reports/failure", "getFailureReport", "json", undefined, undefined, "JobDiagnosticsView"],
     ["GET", "/api/v1/jobs/:job_id/reports/quality", "getQualityReport", "json", undefined, undefined, "QualitySummaryView"],
-    ["GET", "/api/v1/jobs/:job_id/reports/quality/items", "listQualityItems", "json", undefined, "QualityItemsQuery", "QualityItemsView"],
     ["GET", "/api/v1/jobs/:job_id/reports/translation", "getTranslationReport", "json", undefined, undefined, "TranslationDiagnosticsView"],
   ]);
 });
@@ -153,4 +159,32 @@ test("settings batch 2 glossaries endpoints carry the client names from the fron
     ["GET", "/api/v1/glossaries/:glossary_id/export.csv", "exportGlossaryCsv", "binary", undefined, undefined, undefined],
     ["POST", "/api/v1/glossaries/parse-csv", "parseGlossaryCsv", "json", "GlossaryCsvParseInput", undefined, "GlossaryCsvParseView"],
   ]);
+});
+
+// 译文版本（2026-11-18）：一本书的几份译文，前端能切换。追加在书的端点末尾。
+test("translation versions endpoints carry their client names", () => {
+  const documents = read("library-documents.v1.schema.json");
+  const table = documents.endpoints.slice(20, 23).map(({ method, path, client_name, transport, query, input, output }) => [method, path, client_name, transport, query, input, output]);
+  assert.deepEqual(table, [
+    ["GET", "/api/v1/documents/:document_id/translation-versions", "listTranslationVersions", "json", "TranslationVersionsQuery", undefined, "TranslationVersionsView"],
+    ["PUT", "/api/v1/documents/:document_id/translation-version", "setCurrentTranslationVersion", "json", undefined, "SetCurrentTranslationVersionInput", "TranslationVersionsView"],
+    ["PATCH", "/api/v1/documents/:document_id/translation-versions/:version_id", "patchTranslationVersion", "json", undefined, "PatchTranslationVersionInput", "TranslationVersionsView"],
+  ]);
+  const reading = documents.endpoints.find((endpoint) => endpoint.path === "/api/v1/documents/:document_id/reading");
+  assert.equal(reading.query, "DocumentReadingQuery");
+  assert.ok(documents.definitions.DocumentReadingView.required.includes("version_id"));
+});
+
+test("tag endpoints carry their client names", () => {
+  const documents = read("library-documents.v1.schema.json");
+  const table = documents.endpoints.slice(23).map(({ method, path, client_name, transport, query, input, output }) => [method, path, client_name, transport, query, input, output]);
+  assert.deepEqual(table, [
+    ["GET", "/api/v1/tags", "listTags", "json", undefined, undefined, "TagListView"],
+    ["POST", "/api/v1/tags", "createTag", "json", undefined, "CreateTagInput", "TagRecord"],
+    ["PATCH", "/api/v1/tags/:tag_id", "patchTag", "json", undefined, "PatchTagInput", "TagRecord"],
+    ["DELETE", "/api/v1/tags/:tag_id", "deleteTag", "json", undefined, undefined, "TagDeleteResultView"],
+    ["PUT", "/api/v1/documents/:document_id/tags", "setDocumentTags", "json", undefined, "SetDocumentTagsInput", "DocumentRecord"],
+  ]);
+  assert.ok(documents.definitions.DocumentRecord.required.includes("tags"));
+  assert.equal(documents.definitions.ListDocumentsQuery.properties.tag_id.type, "string");
 });

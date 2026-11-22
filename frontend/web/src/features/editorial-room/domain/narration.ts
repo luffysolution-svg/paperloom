@@ -26,6 +26,18 @@ export const NAME_POLICY_TEXT: Record<string, string> = {
   transliterate: "人名用中文译名（首次括注原文）",
 };
 
+// tool_call 的工具：后端以后可能加新的，不认识的照原样显示。
+const TOOL_TEXT: Record<string, string> = {
+  search_book: "查全书",
+  lookup_term: "查术语表",
+};
+
+const ROLE_TEXT: Record<string, string> = {
+  reviewer: "审校",
+  reviser: "修订",
+  reader: "通读员",
+};
+
 const GLOSSARY_ACTION_TEXT: Record<string, string> = {
   add: "上板",
   promote: "审定",
@@ -74,6 +86,17 @@ export const CHECK_CODE_TEXT: Record<string, string> = {
 /** 只算指标的代码（info），不进广播。 */
 const isInfoCode = (code: string) => code === "hedge_lost" || code === "person_lost" || code.startsWith("review_");
 
+/** 气泡里的短句（「查全书「attention」· 4 处」），查的词太长截断；没查成写「没查成」。 */
+export function toolBubbleText(event: { tool: string; query: string; found: number; error: string }): string {
+  const what = TOOL_TEXT[event.tool] || event.tool || "查资料";
+  const query = [...event.query].length > 16 ? `${[...event.query].slice(0, 15).join("")}…` : event.query;
+  if (event.error) return `${what}「${query}」没查成`;
+  return `${what}「${query}」· ${event.found ? `${event.found} ${event.tool === "lookup_term" ? "条" : "处"}` : "没有"}`;
+}
+
+/** 「，审校自己撤回 2 张」；没有撤回是空串。 */
+export const reviewWithdrawnText = (withdrawn: number | undefined) => (withdrawn ? `，审校自己撤回 ${withdrawn} 张` : "");
+
 export const stopReasonText = (reason: string) => STOP_REASON_TEXT[reason] || `停下了（${reason || "原因未知"}）`;
 export const genreText = (genre: string) => GENRE_TEXT[genre] || genre || "未定";
 export const namePolicyText = (policy: string) => NAME_POLICY_TEXT[policy] || policy || "未定";
@@ -107,6 +130,13 @@ export function narrate(event: EditorialEvent): Narration {
       return event.attempt > 1
         ? { text: `译者重翻第 ${event.page} 页的 ${event.blocks.length || "几"} 块（第 ${event.attempt} 次）`, tone: "warn" }
         : { text: `译者开始翻第 ${event.page} 页`, tone: "neutral" };
+    case "tool_call": {
+      const what = TOOL_TEXT[event.tool] || event.tool || "工具";
+      const unit = event.tool === "lookup_term" ? "条" : "处";
+      const who = event.role === "translator" ? "译者" : ROLE_TEXT[event.role] || "译者";
+      if (event.error) return { text: `${who}${what}「${event.query}」没查成：${event.error}`, tone: "warn" };
+      return { text: `${who}${what}：${event.query}（${event.found ? `${event.found} ${unit}` : "没有"}）`, tone: "neutral" };
+    }
     case "check_result": {
       const tone: NarrationTone = event.error > 0 ? "danger" : event.warn > 0 ? "warn" : "ok";
       return {
@@ -123,7 +153,8 @@ export function narrate(event: EditorialEvent): Narration {
     case "review_done":
       if (event.tickets === 0) return { text: `审校第 ${event.page} 页没挑出问题`, tone: "ok" };
       return {
-        text: `审校第 ${event.page} 页开了 ${event.tickets} 张单：修订改了 ${event.applied} 处，没收 ${event.rejected} 处`,
+        text: `审校第 ${event.page} 页开了 ${event.tickets} 张单：修订改了 ${event.applied} 处，没收 ${event.rejected} 处${reviewWithdrawnText(event.withdrawn)}`,
+        // 审校自己撤回的不算问题，只有没收的才提醒。
         tone: event.rejected > 0 ? "warn" : "ok",
       };
     case "glossary_changed":

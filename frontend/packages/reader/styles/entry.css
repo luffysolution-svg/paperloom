@@ -18,6 +18,8 @@
 @import "./tokens.css" layer(tokens);
 @import "./shadcn-theme.css" layer(tokens);
 @import "./base.css" layer(base);
+/* 出错兜底卡：阅读页没有引基础组件的样式，单独引这一份（见 packages/ui/styles/error-boundary.css）。 */
+@import "../../ui/styles/error-boundary.css" layer(pages);
 /* 阅读器也吃氛围底（PDF 区仍是自己的 --reader-page）— 仅 reader variant，无主页纸台 */
 @import "./core/ambient-surface-reader.css";
 
@@ -34,10 +36,14 @@
 @import "./content.css" layer(pages);
 @import "./react-pdf.css" layer(pages);
 @import "./live-translation.css" layer(pages);
-@import "./selection-pop.css" layer(pages);
 @import "./panel-shell.css" layer(pages);
 @import "./float-markdown.css" layer(pages);
+@import "./block-edit.css" layer(pages);
 @import "./hud.css" layer(pages);
+@import "./version-compare.css" layer(pages);
+@import "./issues.css" layer(pages);
+@import "./toolball.css" layer(pages);
+@import "./ink.css" layer(pages);
 /* Markdown 悬浮预览（含 MathJax） */
 @import "./markdown.css" layer(pages);
 @import "./markdown-blocks.css" layer(pages);

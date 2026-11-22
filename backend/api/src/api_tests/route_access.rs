@@ -50,13 +50,17 @@ const SIGNED_WITHOUT_OWNED_PARAM: &[(&str, &str)] = &[
     ("/api/v1/collections", "列表按 owner_filter 过滤；新建记 owner_id；parent_id 由中间件核归属"),
     ("/api/v1/documents", "列表按 owner_filter 过滤（library_data::list_documents）"),
     ("/api/v1/fonts", "字体是全站共用的，不含用户数据"),
+    ("/api/v1/runtime-assets", "字体、Typst 的下载状态是这台机器的，不含用户数据（2026-11-22）"),
     ("/api/v1/glossaries", "列表按 owner_filter 过滤；新建记 owner_id"),
     ("/api/v1/glossaries/parse-csv", "只解析请求里的 CSV，不读不写存储"),
     ("/api/v1/jobs", "列表按 owner_filter 过滤；新建时 upload_id 由中间件核归属，任务继承上传的归属"),
     ("/api/v1/providers/ocr", "只读 OCR 服务商清单，不含用户数据"),
     ("/api/v1/search", "按 owner_filter 过滤"),
+    ("/api/v1/tags", "列表按 owner_filter 过滤；新建记 owner_id，同名查重只在当前用户的标签里（2026-11-21）"),
     ("/api/v1/uploads", "上传记当前用户为 owner"),
     ("/api/v1/usage", "按 owner_filter 过滤"),
+    ("/api/v1/usage/estimate", "书库平均只算 owner_filter 的任务（2026-11-19）"),
+    ("/api/v1/usage/prices", "只查价格表，不含用户数据（2026-11-19）"),
 ];
 
 #[test]

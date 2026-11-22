@@ -278,8 +278,8 @@ fn streaming_search_and_exact_ids_have_no_ten_thousand_row_cutoff() {
     let conn = test.db.connect().unwrap();
     conn.execute(
         "WITH RECURSIVE n(value) AS (SELECT 1 UNION ALL SELECT value + 1 FROM n WHERE value < 10001) \
-         INSERT INTO jobs (job_id, workflow, status_json, created_at, updated_at, command_json, request_json, log_tail_json) \
-         SELECT printf('job-%05d', value), '\"book\"', '\"queued\"', '2026-01-01', '2026-01-01', '[]', ?1, '[]' FROM n",
+         INSERT INTO jobs (job_id, workflow, status, created_at, updated_at, command_json, request_json, log_tail_json) \
+         SELECT printf('job-%05d', value), 'book', 'queued', '2026-01-01', '2026-01-01', '[]', ?1, '[]' FROM n",
         [request],
     ).unwrap();
     let mut visited = 0;
@@ -415,7 +415,7 @@ fn title_contains_matches_the_document_title_or_the_callback() {
     test.db.save_upload(&upload).unwrap();
     test.db.upsert_document_from_upload(&upload).unwrap();
     let conn = test.db.connect().unwrap();
-    conn.execute("UPDATE documents SET title = 'Quantum Mechanics 2e' WHERE document_id = 'hash-a'", []).unwrap();
+    conn.execute("UPDATE item_references SET title = 'Quantum Mechanics 2e' WHERE item_id = 'hash-a'", []).unwrap();
     conn.execute("UPDATE jobs SET upload_id = 'upload-a' WHERE job_id = '3-renamed'", []).unwrap();
     let select = |needle: &str| {
         test.db
@@ -542,4 +542,89 @@ fn cas_save_never_inserts_a_missing_row() {
     canceled.status = JobStatusKind::Canceled;
     test.db.save_job(&canceled).unwrap();
     assert!(!test.db.cas_save_job(&next, &["queued", "running"]).unwrap());
+}
+
+/// v32：OCR 子任务（`{父任务}-ocr`）写进库时由数据库层填 `parent_job_id`；父任务还不在库里就留空（外键不挡写入），
+/// 之后再写一次就补上。状态、流程存的是纯文本。
+#[test]
+fn saving_an_ocr_child_links_it_to_its_parent_and_stores_plain_text_status() {
+    let test = TestDb::new();
+    let parent_of = |id: &str| -> Option<String> {
+        test.db
+            .connect()
+            .unwrap()
+            .query_row("SELECT parent_job_id FROM jobs WHERE job_id = ?1", [id], |row| row.get(0))
+            .unwrap()
+    };
+    test.seed("orphan-ocr", WorkflowKind::Ocr, JobStatusKind::Queued, OcrProviderKind::Mineru);
+    assert_eq!(parent_of("orphan-ocr"), None, "父任务不在：留空");
+
+    test.seed("book-1", WorkflowKind::Book, JobStatusKind::Running, OcrProviderKind::Mineru);
+    test.seed("book-1-ocr", WorkflowKind::Ocr, JobStatusKind::Succeeded, OcrProviderKind::Mineru);
+    assert_eq!(parent_of("book-1-ocr").as_deref(), Some("book-1"));
+    assert_eq!(parent_of("book-1"), None);
+
+    test.seed("orphan", WorkflowKind::Book, JobStatusKind::Queued, OcrProviderKind::Mineru);
+    test.seed("orphan-ocr", WorkflowKind::Ocr, JobStatusKind::Queued, OcrProviderKind::Mineru);
+    assert_eq!(parent_of("orphan-ocr").as_deref(), Some("orphan"), "父任务后来才有：再写一次就补上");
+
+    let (workflow, status): (String, String) = test
+        .db
+        .connect()
+        .unwrap()
+        .query_row("SELECT workflow, status FROM jobs WHERE job_id = 'book-1-ocr'", [], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })
+        .unwrap();
+    assert_eq!((workflow.as_str(), status.as_str()), ("ocr", "succeeded"));
+    assert!(
+        test.db.connect().unwrap().execute("UPDATE jobs SET status = '\"failed\"' WHERE job_id = 'book-1'", []).is_err(),
+        "CHECK 挡住不认识的取值（包括以前带引号的写法）"
+    );
+}
+
+/// v33：运行信息拆开存（几列 + `job_stage_history`），读出来的 `runtime` 必须和写之前在内存里算出来的一模一样——
+/// 接口返回的 `runtime` 就是它。走一遍：排队 → 翻译（进度变）→ 渲染 → 成功。
+#[test]
+fn runtime_reads_back_exactly_what_was_computed_before_writing() {
+    let test = TestDb::new();
+    let mut job = JobSnapshot::new("rt-1".into(), CreateJobInput::default(), vec![]);
+    job.started_at = Some("2026-01-01T00:00:00Z".into());
+    let steps: [(&str, &str, JobStatusKind, Option<(i64, i64)>); 5] = [
+        ("2026-01-01T00:00:00Z", "queued", JobStatusKind::Queued, None),
+        ("2026-01-01T00:00:05Z", "translating", JobStatusKind::Running, Some((1, 10))),
+        ("2026-01-01T00:01:00Z", "translating", JobStatusKind::Running, Some((10, 10))),
+        ("2026-01-01T00:01:30Z", "rendering", JobStatusKind::Running, Some((0, 4))),
+        ("2026-01-01T00:02:00Z", "finished", JobStatusKind::Succeeded, None),
+    ];
+    for (at, stage, status, progress) in steps {
+        job.updated_at = at.into();
+        job.stage = Some(stage.into());
+        job.stage_detail = Some(format!("{stage} detail"));
+        job.status = status.clone();
+        job.progress_current = progress.map(|p| p.0);
+        job.progress_total = progress.map(|p| p.1);
+        if status == JobStatusKind::Succeeded {
+            job.finished_at = Some(at.into());
+        }
+        test.db.save_job(&job).unwrap();
+        // 下一步从库里读回来接着改（和 runner 一样），读到的就是要比的。
+        let mut expected = job.clone();
+        expected.sync_runtime_state();
+        let stored = test.db.get_job("rt-1").unwrap();
+        assert_eq!(stored.runtime, expected.runtime, "at {at}");
+        job = stored;
+    }
+    let runtime = job.runtime.clone().unwrap();
+    assert_eq!(runtime.stage_history.len(), 4, "{:?}", runtime.stage_history);
+    assert_eq!(runtime.stage_history[1].progress_current, Some(10), "翻译那段带着离开时的进度");
+    assert_eq!(runtime.total_elapsed_ms, Some(120_000));
+    assert_eq!(runtime.terminal_reason.as_deref(), Some("succeeded"));
+    let rows: i64 = test
+        .db
+        .connect()
+        .unwrap()
+        .query_row("SELECT COUNT(*) FROM job_stage_history WHERE job_id = 'rt-1'", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(rows, 4);
 }

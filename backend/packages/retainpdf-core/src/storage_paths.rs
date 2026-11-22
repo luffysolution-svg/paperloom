@@ -25,7 +25,7 @@ pub use constants::{
     ARTIFACT_KEY_TRANSLATION_DIAGNOSTICS_JSON, ARTIFACT_KEY_TRANSLATION_MANIFEST_JSON,
     ARTIFACT_KEY_TRANSLATION_REQUEST_JOURNAL_JSONL, ARTIFACT_KEY_TYPST_PDF,
     ARTIFACT_KEY_TYPST_SOURCE, ARTIFACT_KIND_DIR, ARTIFACT_KIND_FILE,
-    LEGACY_JOB_UNSUPPORTED_MESSAGE, TRANSLATION_CHECKPOINT_FILE_NAME,
+    LEGACY_JOB_UNSUPPORTED_MESSAGE, TABLE_TRANSLATIONS_FILE_NAME, TRANSLATION_CHECKPOINT_FILE_NAME,
     TRANSLATION_MANIFEST_FILE_NAME, TRANSLATION_REQUEST_JOURNAL_FILE_NAME,
     AGENT_EDITORIAL_EVENTS_RELATIVE_PATH,
 };
@@ -47,7 +47,8 @@ pub use resolvers::{
     resolve_markdown_images_dir, resolve_markdown_path, resolve_normalization_report,
     resolve_normalized_document, resolve_ocr_markdown_images_dir, resolve_output_pdf,
     resolve_pipeline_summary, resolve_refine_report,
-    resolve_registered_artifact_path, resolve_source_pdf, resolve_translation_debug_index,
+    resolve_registered_artifact_path, resolve_source_pdf, resolve_table_translations,
+    resolve_translation_debug_index,
     resolve_translation_diagnostics, resolve_translation_manifest,
     resolve_translation_qa, resolve_translation_request_journal, resolve_typst_pdf,
     resolve_typst_source,
@@ -114,13 +115,13 @@ mod tests {
     #[test]
     fn to_relative_accepts_cwd_relative_paths_under_relative_data_root() {
         // Reproduces local boot with RUST_API_DATA_ROOT=../../data from rust_api/.
-        let temp = std::env::temp_dir().join(format!("retainpdf-rel-data-{}", fastrand::u64(..)));
+        let cwd = std::env::current_dir().expect("cwd");
+        let temp = cwd.join(format!(".tmp-retainpdf-rel-data-{}", fastrand::u64(..)));
         let data_root = temp.join("data");
         let upload = data_root.join("uploads").join("job-1").join("paper.pdf");
         fs::create_dir_all(upload.parent().expect("parent")).expect("mkdir");
         fs::write(&upload, b"%PDF-1.4").expect("write pdf");
 
-        let cwd = std::env::current_dir().expect("cwd");
         let rel_root = pathdiff_simple(&cwd, &data_root);
         let rel_upload = pathdiff_simple(&cwd, &upload);
         assert!(
@@ -174,17 +175,21 @@ mod tests {
 
     #[test]
     fn resolve_data_path_refuses_absolute_paths_outside_data_root() {
-        let data_root = Path::new("/tmp/data-root");
-        let inside = resolve_data_path(data_root, "/tmp/data-root/jobs/job-1/rendered/out.pdf")
+        let base = std::env::temp_dir();
+        let data_root = base.join("data-root");
+        let inside_path = data_root.join("jobs/job-1/rendered/out.pdf");
+        let inside = resolve_data_path(&data_root, &inside_path.to_string_lossy())
             .expect("old absolute rows under the data root still resolve");
         assert_eq!(inside, data_root.join("jobs/job-1/rendered/out.pdf"));
+        let outside_other = base.join("data-root-other/jobs/x.pdf");
+        let outside_parent = data_root.join("../secret.txt");
         for raw in [
-            "/etc/passwd",
-            "/tmp/data-root/../secret.txt",
-            "/tmp/data-root-other/jobs/x.pdf",
-            "jobs/../../etc/passwd",
+            "/etc/passwd".to_string(),
+            outside_parent.to_string_lossy().into_owned(),
+            outside_other.to_string_lossy().into_owned(),
+            "jobs/../../etc/passwd".to_string(),
         ] {
-            assert!(resolve_data_path(data_root, raw).is_err(), "{raw}");
+            assert!(resolve_data_path(&data_root, &raw).is_err(), "{raw}");
         }
     }
 

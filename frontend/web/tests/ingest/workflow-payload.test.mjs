@@ -198,8 +198,9 @@ test("翻译质量：普通档不加任何新字段（请求与以前逐字相�
   assert.equal(buildTranslationPayload({ ...base, preferences: { translationQuality: "terms" } }).preparation, "terms+style");
   assert.equal("refine" in buildTranslationPayload({ ...base, preferences: { translationQuality: "terms" } }), false);
   const refined = buildTranslationPayload({ ...base, preferences: { translationQuality: "refined" } });
-  assert.equal(refined.preparation, "editorial");
-  assert.equal(refined.refine, "editorial");
+  assert.equal(refined.engine, "agent", "精翻 = 翻译 agent");
+  assert.equal("preparation" in refined, false);
+  assert.equal("refine" in refined, false);
   // 不认识的档位（例如旧版本存下的值）按普通处理，不发出后端不认识的字段值
   assert.equal("preparation" in buildTranslationPayload({ ...base, preferences: { translationQuality: "bogus" } }), false);
 });
@@ -257,6 +258,37 @@ test("排版引擎选择记在本机，不认识的值退回默认", () => {
     assert.equal(view.preferences().renderEngine, "auto");
     view.setPreference("bogusKey", "x");
     assert.equal("bogusKey" in view.preferences(), false, "不认识的偏好键忽略");
+  } finally {
+    globalThis.localStorage = original;
+  }
+});
+
+test("表格翻译：默认不发 tables（后端缺省保留原文），选了「翻译表格」才发 tables=translate", () => {
+  const base = { developerConfig: developerConfig(), translationCredentialRef: "cred_translation", selectedGlossaryId: "", constants };
+  const legacy = buildTranslationPayload(base);
+  assert.equal("tables" in legacy, false);
+  assert.deepEqual(buildTranslationPayload({ ...base, preferences: { tableTranslation: "keep" } }), legacy);
+  assert.equal(buildTranslationPayload({ ...base, preferences: { tableTranslation: "translate" } }).tables, "translate");
+  assert.equal("tables" in buildTranslationPayload({ ...base, preferences: { tableTranslation: "bogus" } }), false);
+  const both = buildTranslationPayload({ ...base, preferences: { translationQuality: "refined", tableTranslation: "translate" } });
+  assert.equal(both.engine, "agent", "和翻译质量互不影响");
+  assert.equal(both.tables, "translate");
+});
+
+test("表格翻译选择记在本机，不认识的值退回保留原文", () => {
+  const store = new Map();
+  const original = globalThis.localStorage;
+  globalThis.localStorage = {
+    getItem: (key) => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => store.set(key, String(value)),
+  };
+  try {
+    const view = createWorkflowViewFeature();
+    assert.equal(view.preferences().tableTranslation, "keep");
+    view.setPreference("tableTranslation", "translate");
+    assert.equal(createWorkflowViewFeature().preferences().tableTranslation, "translate", "新开的视图沿用上次的选择");
+    view.setPreference("tableTranslation", "all");
+    assert.equal(view.preferences().tableTranslation, "keep");
   } finally {
     globalThis.localStorage = original;
   }

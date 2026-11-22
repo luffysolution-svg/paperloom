@@ -92,7 +92,7 @@ pub(super) mod tests {
     use super::*;
     use crate::db::Db;
     use crate::job_events::persist_runtime_job_with_resources;
-    use crate::job_runner::test_support::runtime_job;
+    use crate::job_runner::test_support::{python_command, runtime_job};
     use crate::models::domain::{now_iso, JobFailureInfo, JobSnapshot, JobStatusKind};
     use crate::models::request::CreateJobInput;
     use crate::ocr_provider::{provider_token_env_name, OcrProviderKind};
@@ -279,7 +279,7 @@ pub(super) mod tests {
             "job-timeout-output".to_string(),
             CreateJobInput::default(),
             vec![
-                "python3".to_string(),
+                python_command(),
                 "-c".to_string(),
                 "import sys, time; print('stdout-before-timeout', flush=True); print('stderr-before-timeout', file=sys.stderr, flush=True); time.sleep(5)".to_string(),
             ],
@@ -370,7 +370,7 @@ pub(super) mod tests {
         let mut job = JobSnapshot::new(
             job_id.to_string(),
             CreateJobInput::default(),
-            vec!["python3".to_string(), "-c".to_string(), script],
+            vec![python_command(), "-c".to_string(), script],
         )
         .into_runtime();
         job.request_payload.runtime.job_id = job.job_id.clone();
@@ -465,7 +465,7 @@ pub(super) mod tests {
             "job-no-output".to_string(),
             CreateJobInput::default(),
             vec![
-                "python3".to_string(),
+                python_command(),
                 "-c".to_string(),
                 "import sys, time; print('first-line', flush=True); time.sleep(600)".to_string(),
             ],
@@ -521,7 +521,7 @@ pub(super) mod tests {
             "job-silent-ok".to_string(),
             CreateJobInput::default(),
             vec![
-                "python3".to_string(),
+                python_command(),
                 "-c".to_string(),
                 "import time; time.sleep(3); print('late-line', flush=True)".to_string(),
             ],
@@ -581,7 +581,7 @@ pub(super) mod tests {
             "job-stdout-held".to_string(),
             CreateJobInput::default(),
             vec![
-                "python3".to_string(),
+                python_command(),
                 "-c".to_string(),
                 // 父进程立刻退出;孙进程脱组后抱着 stdout 睡 60 秒。
                 //
@@ -669,7 +669,12 @@ pub(super) mod tests {
         let mut state = test_state("ai-diagnosis");
         let bin_dir = state.config.data_root.join("bin");
         fs::create_dir_all(&bin_dir).expect("create stub bin dir");
-        let stub = bin_dir.join("retainpdf-pipeline");
+        let stub = if cfg!(windows) {
+            bin_dir.join("retainpdf-pipeline.cmd")
+        } else {
+            bin_dir.join("retainpdf-pipeline")
+        };
+        let script_path = bin_dir.join("retainpdf-pipeline.py");
         let script = r#"#!/usr/bin/env python3
 import argparse
 import json
@@ -691,7 +696,7 @@ assert payload["request_payload"]["ocr"]["mineru_token"] == ""
 assert payload["request_payload"]["ocr"]["mineru_token_configured"] is False
 assert os.environ.get("RETAIN_TRANSLATION_API_KEY") == "sk-test"
 assert os.environ.get("RETAIN_USAGE_JOB_ID") == "job-ai-diagnosis"
-assert os.environ.get("RETAIN_USAGE_LEDGER", "").endswith("job-ai-diagnosis/artifacts/token-usage.v1.jsonl")
+assert os.environ.get("RETAIN_USAGE_LEDGER", "").replace("\\", "/").endswith("job-ai-diagnosis/artifacts/token-usage.v1.jsonl")
 print(json.dumps({
     "status": "ok",
     "summary": "AI diagnosis summary",
@@ -701,12 +706,25 @@ print(json.dumps({
     "observed_signals": ["unknown-category", "runtime-test"]
 }))
 "#;
-        fs::write(&stub, script).expect("write stub pipeline command");
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&stub, fs::Permissions::from_mode(0o700))
-                .expect("make stub executable");
+        if cfg!(windows) {
+            fs::write(&script_path, script).expect("write stub pipeline script");
+            fs::write(
+                &stub,
+                format!(
+                    "@echo off\r\n\"{}\" \"{}\" %*\r\n",
+                    python_command(),
+                    script_path.display()
+                ),
+            )
+            .expect("write Windows stub pipeline command");
+        } else {
+            fs::write(&stub, script).expect("write stub pipeline command");
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(&stub, fs::Permissions::from_mode(0o700))
+                    .expect("make stub executable");
+            }
         }
         let mut config = (*state.config).clone();
         config.pipeline_command = stub.to_string_lossy().to_string();
@@ -866,7 +884,7 @@ print(json.dumps({
             "job-provider-envs".to_string(),
             CreateJobInput::default(),
             vec![
-                "python3".to_string(),
+                python_command(),
                 "-c".to_string(),
                 format!(
                     r#"import json, os
@@ -926,12 +944,17 @@ print(json.dumps({{
             .config
             .provider_runtime
             .ocr_provider_config_path
-            .to_string_lossy();
-        assert!(result.stdout.contains(provider_config_path.as_ref()));
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("ocr_providers.json");
+        assert!(
+            result.stdout.contains(provider_config_path),
+            "stdout={:?}, provider_config_path={provider_config_path}",
+            result.stdout
+        );
         // 用量台账指向这个任务自己的目录。
-        assert!(result
-            .stdout
-            .contains("job-provider-envs/artifacts/token-usage.v1.jsonl"));
+        assert!(result.stdout.contains("job-provider-envs"));
+        assert!(result.stdout.contains("token-usage.v1.jsonl"));
         assert!(result.stdout.contains("\"usage_job_id\": \"job-provider-envs\""));
     }
 }

@@ -4,8 +4,12 @@
 // ui/     共用展示、书籍卡、设置面板
 
 export { UsageCompact } from "./ui/UsageCompact.jsx";
-export { useDocumentUsage, useUsage } from "./ui/use-usage.js";
+export { DocumentCostFact } from "./ui/DocumentCostFact.jsx";
+export { useDocumentUsage, useJobUsage, useUsage } from "./ui/use-usage.js";
 export type { UsageState } from "./ui/use-usage.js";
 export { UsageSettingsPanel } from "./ui/UsageSettingsPanel.jsx";
 export { usageViewModel } from "./domain/usage-view-model.js";
 export type { UsageViewModel } from "./domain/usage-view-model.js";
+
+// 设置弹窗里这一栏的登记 / 图标（20261112-功能登记表）。
+export { usageSettingsSection } from "./ui/settings-section.jsx";

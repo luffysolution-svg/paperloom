@@ -6,13 +6,19 @@ import type {
 } from "@/platform/api/index.js";
 import { describeActionError, fetchJobPayload } from "@/platform/api/index.js";
 import { API_PREFIX } from "@/platform/config/api-constants.js";
-import type { DocumentJobSummary } from "@/features/library/domain.js";
-import { resolveTranslationOwnerId, type TranslationSourceView } from "../domain/translation-owner.js";
+import type { DocumentJobSummary } from "@/platform/contracts/library-payloads.js";
+import { resolveTranslationOwnerId, type TranslationSourceView } from "@/features/jobs/index.js";
+import { retranslateOverrides } from "../domain/retranslate-quality.js";
+import { connectionOverrides } from "../domain/retranslate-model.js";
+import type { TranslationConnection } from "@/platform/config/translation-connections.js";
 import type { LibraryController } from "@/features/library/index.js";
 import { isDocumentJobActive } from "./use-document-jobs.js";
 
 type RetryBody = Record<string, unknown> & {
-  overrides?: Record<string, unknown> & { render?: Record<string, unknown> };
+  overrides?: Record<string, unknown> & {
+    render?: Record<string, unknown>;
+    translation?: Record<string, unknown>;
+  };
 };
 
 // job_id -> stage-actions 视图。跨文档/跨弹窗复用，但必须有上限，避免长会话无限增长。
@@ -53,7 +59,7 @@ export function useBookDetailStageActions({
 }) {
   const baseJobId = jobIdOf(job);
   // 底是渲染任务时，先顺着 source_artifact_job_id 找到真正持有译文的任务，重新处理都发给它
-  // （见 domain/translation-owner.ts）。找到之前不读阶段动作，免得先闪出一句「不能精修」。
+  // （见 features/jobs/domain/translation-owner.ts）。找到之前不读阶段动作，免得先闪出一句「不能重新处理」。
   const needsOwner = Boolean(
     open && baseJobId && !isDocumentJobActive(job) && `${job?.workflow || ""}`.trim().toLowerCase() === "render",
   );
@@ -121,8 +127,9 @@ export function useBookDetailStageActions({
   }, [refresh, refreshKey]);
 
   const currentView = view?.job_id === jobId ? view : stageActionsCache.get(jobId) || null;
+  // 后端仍会列出 refine（老的编辑部精修），书详情不再提供：「精翻」已改用翻译 agent。
   const stageActions = useMemo(() => {
-    const supported = new Set(["translation", "render", "refine"]);
+    const supported = new Set(["translation", "render"]);
     return (currentView?.stages || []).filter(
       (action): action is JobStageRetryActionView => supported.has(`${action?.stage || ""}`),
     );
@@ -133,11 +140,13 @@ export function useBookDetailStageActions({
 
   const retry = useCallback(async (
     stage: JobRetryStage,
-    { acceptDuplicateRisk = false, renderEngine = "", refineStartPage }: {
+    { acceptDuplicateRisk = false, renderEngine = "", translationQuality = "", translationConnection = null }: {
       acceptDuplicateRisk?: boolean;
       renderEngine?: string;
-      /** 接着精修：从这一页开始（上次精修没审到的第一页）。 */
-      refineStartPage?: number;
+      /** 重新翻译换翻译方式（standard / terms / refined）；空 = 沿用原任务的。 */
+      translationQuality?: string;
+      /** 重新翻译换成设置里存的这条连接（地址、模型、key 整套换）；null = 沿用原任务的。 */
+      translationConnection?: TranslationConnection | null;
     } = {},
   ) => {
     const descriptor = stageActions.find((action) => action.stage === stage);
@@ -152,28 +161,23 @@ export function useBookDetailStageActions({
       const engineOverride = stage === "render" && (renderEngine === "rpr_fit" || renderEngine === "typst")
         ? renderEngine
         : "";
+      const quality = stage === "translation" ? retranslateOverrides(translationQuality) : null;
+      const connection = stage === "translation" ? connectionOverrides(translationConnection) : null;
+      const translationOverride = quality || connection ? { ...(quality || {}), ...(connection || {}) } : null;
       const body = (descriptor.action?.body || {}) as RetryBody;
       const result = await actions.retryJobStage(jobId, stage, {
         ...body,
-        // 不指定引擎时沿用任务原来的引擎（后端保留 render.engine）。
-        ...(engineOverride
+        // 不指定引擎、翻译方式时沿用任务原来的（后端把 overrides 按段合并进原任务的设置）。
+        ...(engineOverride || translationOverride
           ? {
             overrides: {
               ...(body.overrides || {}),
-              render: { ...(body.overrides?.render || {}), engine: engineOverride },
-            },
-          }
-          : {}),
-        // 精修在原任务上原地跑（不新建任务、不重翻），走编辑部模式：模型挑错后分派局部修改或整段
-        // 重写，最多两轮，改不好的保留原译并列进「留给你确认」。后端 stage-actions 给的默认 body
-        // 仍是 review_and_fix，所以这里显式带 mode；从第 N 页接着精修时 start_page 一并保留。
-        ...(stage === "refine"
-          ? {
-            create_new_job: false,
-            refine: {
-              ...((body.refine as Record<string, unknown>) || {}),
-              mode: "editorial",
-              ...(refineStartPage ? { start_page: refineStartPage } : {}),
+              ...(engineOverride
+                ? { render: { ...(body.overrides?.render || {}), engine: engineOverride } }
+                : {}),
+              ...(translationOverride
+                ? { translation: { ...(body.overrides?.translation || {}), ...translationOverride } }
+                : {}),
             },
           }
           : {}),
@@ -186,7 +190,7 @@ export function useBookDetailStageActions({
         onJobSubmitted?.({
           ...result,
           document_id: result.document_id || job?.document_id,
-          workflow: result.workflow || (stage === "render" || stage === "refine" ? "render" : "book"),
+          workflow: result.workflow || (stage === "render" ? "render" : "book"),
         });
       }
       return result;
@@ -199,6 +203,8 @@ export function useBookDetailStageActions({
   }, [actions, job, jobId, onJobSubmitted, pendingStage, stageActions]);
 
   return {
+    /** 真正持有译文的任务（底是重新渲染出来的任务时顺着来源找到的那个）；还在找时是空串。改译文要发给它。 */
+    ownerJobId: jobId,
     stageActions,
     loading: effectiveLoading,
     pendingStage,

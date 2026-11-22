@@ -151,3 +151,46 @@ test("广播只念不合格和警告的代码，info（只算指标）不念；�
   assert.match(text, /brand_new_code 1/);
   assert.doesNotMatch(text, /hedge_lost|review_fluency/);
 });
+
+test("译者调工具（tool_call）：查全书说几处、查术语表说几条，没查到说没有，出错念原因；不改页的状态", () => {
+  const events = parseEditorialEvents([
+    { v, ts: 1, type: "run_started", pages: 1, model: "m", doc_title: "书", resumed: 0 },
+    { v, ts: 2, type: "page_started", page: 1, label: "1", blocks: 3 },
+    { v, ts: 3, type: "translate_call", page: 1, attempt: 1, blocks: ["a"], role: "translator" },
+    { v, ts: 4, type: "tool_call", page: 1, role: "translator", tool: "search_book", query: "coroner", found: 3 },
+    { v, ts: 5, type: "tool_call", page: 1, role: "translator", tool: "lookup_term", query: "inquest", found: 0 },
+    { v, ts: 6, type: "tool_call", page: 1, tool: "search_book", query: "jury", found: 0, error: "这一页的工具次数（8）用完了" },
+    { v, ts: 7, type: "tool_call", page: 1, tool: "new_tool", query: "x", found: 1 },
+  ]);
+  const calls = events.filter((e) => e.type === "tool_call");
+  assert.equal(calls.length, 4);
+  assert.deepEqual(calls[2], { type: "tool_call", ts: 6, page: 1, role: "translator", tool: "search_book", query: "jury", found: 0, error: "这一页的工具次数（8）用完了" });
+  assert.deepEqual(calls.map((e) => narrate(e)), [
+    { text: "译者查全书：coroner（3 处）", tone: "neutral" },
+    { text: "译者查术语表：inquest（没有）", tone: "neutral" },
+    { text: "译者查全书「jury」没查成：这一页的工具次数（8）用完了", tone: "warn" },
+    { text: "译者new_tool：x（1 处）", tone: "neutral" },
+  ]);
+  const state = roomStateAt(events, events.length);
+  assert.equal(state.pages[0].stage, "translating");
+  assert.equal(state.last.type, "tool_call");
+});
+
+test("审校撤回（must_fix = false）和没收分开：后端 rejected 含撤回的，解析时拆开；只有没收才提醒；旧事件没 withdrawn 按 0", () => {
+  const [withdrawnOnly, mixed, legacy] = parseEditorialEvents([
+    { v, ts: 1, type: "review_done", page: 3, tickets: 2, applied: 0, rejected: 2, withdrawn: 2 },
+    { v, ts: 2, type: "review_done", page: 4, tickets: 4, applied: 1, rejected: 3, withdrawn: 1 },
+    { v, ts: 3, type: "review_done", page: 5, tickets: 2, applied: 1, rejected: 1 },
+  ]);
+  assert.deepEqual([withdrawnOnly.rejected, withdrawnOnly.withdrawn], [0, 2]);
+  assert.deepEqual([mixed.rejected, mixed.withdrawn], [2, 1]);
+  assert.deepEqual([legacy.rejected, legacy.withdrawn], [1, 0]);
+
+  assert.deepEqual(narrate(withdrawnOnly), { text: "审校第 3 页开了 2 张单：修订改了 0 处，没收 0 处，审校自己撤回 2 张", tone: "ok" });
+  assert.deepEqual(narrate(mixed), { text: "审校第 4 页开了 4 张单：修订改了 1 处，没收 2 处，审校自己撤回 1 张", tone: "warn" });
+  assert.equal(narrate(legacy).text, "审校第 5 页开了 2 张单：修订改了 1 处，没收 1 处");
+
+  const state = roomStateAt([withdrawnOnly, mixed], 2);
+  assert.deepEqual(state.pages.find((card) => card.page === 4).review, { tickets: 4, applied: 1, rejected: 2, withdrawn: 1 });
+  assert.deepEqual([roomTotals(state).rejected, roomTotals(state).withdrawn], [2, 3]);
+});

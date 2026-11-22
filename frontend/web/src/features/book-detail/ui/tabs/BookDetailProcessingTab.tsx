@@ -34,8 +34,6 @@ import { liveCountOf, liveStageKey, processingHeadOf, progressOf, unifiedPercent
 import type { BookDetailProcessingTabProps } from "./processing-tab-types.js";
 import { ProcessingHeadTools } from "../panels/processing/ProcessingHeadTools.jsx";
 import { stationActionsOf } from "./processing-station-actions.jsx";
-import { EditorialFlowPanel } from "../panels/processing/EditorialFlowPanel.jsx";
-import { useEditorialFlow } from "../use-editorial-flow.js";
 import { useJobTimeline } from "../use-job-timeline.js";
 import { useStreamProgress } from "../use-stream-progress.js";
 import { EditorialLivePanel, useEditorialLive } from "@/features/editorial-room/index.js";
@@ -51,7 +49,7 @@ function ocrStationState(tone: string): StationState {
   return "pending";
 }
 
-export function BookDetailProcessingTab({ ocr, translation, loading = false, error = "", resultActionsSlot = null, coverage = null, editorialFlowCache, usage = null }: BookDetailProcessingTabProps) {
+export function BookDetailProcessingTab({ ocr, translation, loading = false, error = "", resultActionsSlot = null, coverage = null, usage = null }: BookDetailProcessingTabProps) {
   const ocrJob = ocr?.job ?? null;
   const ocrActive = isDocumentJobActive(ocrJob);
   const ocrStatus = documentJobPresentation(ocrJob, "尚未执行");
@@ -85,15 +83,8 @@ export function BookDetailProcessingTab({ ocr, translation, loading = false, err
   const hasTranslationJob = Boolean(translationJobId) && !translationJobId.startsWith("doc:");
   const translationActive = Boolean(translation?.isActive);
   const tabVisible = translation?.tabActive !== false;
-  // 精修跑在渲染阶段里：任务在跑且进入渲染时轮询事件流；跑完 / 停下后读一次，照样画出最后一次精修。
-  // 只在「进度」页可见时才读事件：这一页和别的页签一起常驻挂载，不能一打开详情就去拉。
-  const editorialFlow = useEditorialFlow(translationJobId, {
-    enabled: hasTranslationJob && tabVisible,
-    poll: translationActive && liveStageKey(translationItem) === "render",
-    jobActive: translationActive,
-    cache: editorialFlowCache,
-  });
   // 翻译 agent 的编辑部画面：覆盖接口说这次是 agent 跑的才去读；任务在跑时轮询，跑完读一次。
+  // 只在「进度」页可见时才读事件：这一页和别的页签一起常驻挂载，不能一打开详情就去拉。
   const editorialLive = useEditorialLive(translationJobId, {
     enabled: hasTranslationJob && tabVisible && hasEditorialRoom(coverage, translationJobId),
     poll: translationActive,
@@ -140,7 +131,6 @@ export function BookDetailProcessingTab({ ocr, translation, loading = false, err
     && !ocrActive
     && !bootstrapping
     && !ocr?.pending;
-  const stationActions = stationMode ? stationActionsOf({ ocr, translation, translationStopped }) : {};
 
   // 状态行的主按钮：停下的翻译任务按续跑计划；只有 OCR 失败时是「重新 OCR」。
   const stopped = translationStopped
@@ -185,6 +175,10 @@ export function BookDetailProcessingTab({ ocr, translation, loading = false, err
     now: jobTimeline.now,
     usage: usage?.model || null,
   });
+  // 「重新处理」清单：重新翻译那一行要知道这本书现在用的是哪个模型（HUD 上那个），「沿用原来的」后面写出来。
+  const stationActions = stationMode
+    ? stationActionsOf({ ocr, translation, translationStopped, currentModel: hud.model?.name || "" })
+    : {};
 
   // 细节区：错误、编辑部、活动，按要紧程度排；只摆有内容的。错误按段标 data-processing-region（ocr / translation）。
   const failureBlocks = [
@@ -215,7 +209,7 @@ export function BookDetailProcessingTab({ ocr, translation, loading = false, err
       </div>
     ) : null,
   ].filter(Boolean);
-  const hasEditorial = Boolean(editorialLive?.events.length) || Boolean(editorialFlow);
+  const hasEditorial = Boolean(editorialLive?.events.length);
   const activityProps = { item: translationItem, timeline: jobTimeline.timeline, jobActive: translationActive, loading: bootstrapping };
   const sections: ProcessingDetailSection[] = [];
   if (failureBlocks.length) {
@@ -226,22 +220,17 @@ export function BookDetailProcessingTab({ ocr, translation, loading = false, err
       key: "editorial",
       label: "编辑部",
       icon: <PenLine aria-hidden="true" />,
-      content: (
-        <>
-          <EditorialLivePanel live={editorialLive} active={translationActive} />
-          <EditorialFlowPanel flow={editorialFlow} />
-        </>
-      ),
+      content: <EditorialLivePanel live={editorialLive} active={translationActive} />,
     });
   }
   if (activityLinesOf(activityProps).length) {
     sections.push({ key: "activity", label: "活动", icon: <Activity aria-hidden="true" />, content: <ProcessingActivity {...activityProps} /> });
   }
-  // 用量：以前是右栏单独一个页签。读到了、有记录（或读失败要给重试）才摆。
+  // 用量：这一次任务的（全书累计在「概览」的「花费」）。以前是右栏单独一个页签。读到了、有记录（或读失败要给重试）才摆。
   if (usage && (!usage.model.empty || usage.error)) {
     sections.push({
       key: "usage",
-      label: "用量",
+      label: "本次用量",
       icon: <Coins aria-hidden="true" />,
       content: <UsageCompact model={usage.model} loading={usage.loading} error={usage.error} onRetry={usage.reload} />,
     });

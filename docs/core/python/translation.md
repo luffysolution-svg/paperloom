@@ -4,11 +4,26 @@
 
 ## 位置与职责
 
-翻译层位于：
+翻译层是独立包 `retainpdf-translation`（`import retainpdf_translation`），和流水线、公式包、底座包并列：
 
 ```text
-backend/pipeline/retainpdf_pipeline/translate/
+backend/translation/retainpdf_translation/
 ```
+
+流水线里的 `backend/pipeline/retainpdf_pipeline/translate/` 只剩 worker 外壳（`__main__.py`、`entrypoints/`、
+`translation_stage.py`）：Rust 照旧用 `python -m retainpdf_pipeline.translate --spec ...` 启动，外壳读 spec、建任务目录，
+再调翻译包的 `retainpdf_translation.public`。翻译包只依赖 `retainpdf_base`、`retainpdf_math`，不 import 流水线。
+翻译的测试仍在 `backend/pipeline/devtools/tests/translation`。
+
+2026-11-20 起翻译拆成底座和引擎（[方案](../../ops/planning/translation-package/20261120-翻译包拆成底座和两个引擎.md)）：
+
+| 包 | 目录 | 管什么 |
+| --- | --- | --- |
+| `retainpdf-translation`（底座） | `backend/translation/retainpdf_translation/` | 读文档、接续段、页面策略、回填、断点、清单、质检、请求层、提示词、用量；执行入口和引擎登记表 `workflow/engines.py` |
+| `retainpdf-translation-classic`（普通翻译引擎，`translation.engine=legacy`） | `backend/translation-classic/retainpdf_translation_classic/` | 批量逐块翻、流式跟着 OCR 翻、乱码重构、修复兜底、译前准备、精修、编辑部、表格翻译、任务记忆、结果缓存 |
+| agent 引擎（`translation.engine=agent`） | `backend/translation-agent`：核心 `retainpdf_translation_agent`（只用标准库），接线 `retainpdf_translation_agent_engine`（依赖底座） | 通读、按节翻、审校 |
+
+普通翻译包目录结构和底座一样（下面「目录分层」说的目录在两个包里各有一部分），依赖底座，底座不 import 它。
 
 它只负责把标准化 OCR 文档变成可渲染的翻译产物：
 
@@ -33,10 +48,14 @@ document.v1.json
 
 - `python -m retainpdf_pipeline.translate --spec <job_root>/specs/translate.spec.json`
   `translate.stage.v1` worker，要求 `--spec <job_root>/specs/translate.spec.json`。
+- `python -m retainpdf_pipeline.translate.entrypoints.domain_prewarm --spec <job_root>/specs/domain-prewarm.spec.json`
+  OCR 期间先做识别领域的辅助进程（`domain_prewarm.stage.v1`，不是任务阶段）：提交 OCR 后由 Rust 拉起（只在学术模式、
+  走 Python 请求的任务），只读源 PDF 前两页的文本层，结果存进各任务共用的领域缓存，翻译阶段到时"shared cache hit"。
+  不改任务状态、不写事件流，失败或没等到都只是翻译阶段自己问；日志在 `logs/domain-prewarm.log`。
 - `retainpdf-pipeline translate-from-ocr --spec <job_root>/specs/book.spec.json`
   provider/normalize 后继续翻译和渲染的入口之一（顶层垫片已删除，只有包内入口 `backend/pipeline/retainpdf_pipeline/translate/entrypoints/from_ocr_pipeline.py` 和 console 子命令，仅桌面兼容注脚）。
-- `backend/pipeline/retainpdf_pipeline/translate/workflow`
-  翻译层内部 facade，`backend/pipeline/retainpdf_pipeline/translate/translation_stage.py` 通过这里进入翻译执行。
+- `backend/translation/retainpdf_translation/public`
+  翻译包对外的门面；worker 外壳 `backend/pipeline/retainpdf_pipeline/translate/translation_stage.py` 通过这里进入翻译执行。
 
 Rust 固定使用配置的 `PYTHON_BIN` 启动上述模块入口，不再回退到旧脚本。
 `retainpdf-pipeline translate-only` 仍可用于手动调用相同的翻译阶段。
@@ -99,13 +118,16 @@ policy.translate == true
 ```text
 translated/
   translation-manifest.json
-  page-0001.json
-  page-0002.json
+  page-001.json
+  page-002.json
   ...
 artifacts/
   translation_diagnostics.json
   translation_debug_index.json
 ```
+
+每页文件名不带模型名（`workflow/legacy/page_translation.py` 的 `default_page_translation_name`）。2026-10-30 以前叫 `page-001-deepseek.json`；
+旧任务的目录照旧能读（读的一侧只认 `translation-manifest.json` 里登记的路径），升级前开始、升级后续跑的任务，已有旧名字文件的那一页沿用旧名字（`page_translation_path`），不会出现同一页两份。
 
 逐页 payload 的正式字段优先放在顶层，例如：
 
@@ -148,6 +170,90 @@ load document.v1
 - `workflow/batch_runner.py` 执行串行或并行 batch。
 - `results/` 负责回填和刷盘。
 
+### 跟着 OCR 翻（`ocr_stream_dir`，2026-10-31）
+
+翻译阶段的 spec 带了 `inputs.ocr_stream_dir`（任务的 `ocr/`）时，不等 OCR 做完：OCR（GLM-OCR；Paddle 官方云服务按片并行提交，2026-11-01）每做完一片就把前面的页
+公布到 `ocr/stream/`（契约 `retainpdf_base/ocr_stream.py`），`workflow/streaming_flow.py` 按轮跟上。每轮：新页读进来 →
+**监控**在已知的所有页上重算跨栏、跨页拼接（模型复核过的对记在 `review_memo` 里不再送）→ 页面策略、上下文窗口 →
+翻这一轮能翻的块：只扣住最新一页最后一个能接到下一页的块（连同它的拼接组），等下一页到了、拼接定了再翻，所以不会先翻半句再重翻。
+OCR 做完的那一轮不扣、全部翻完，再走和整本一次翻一样的收尾（`book_flow.finish_book_translation`）。
+
+- 断点：归一化文档每轮在变，指纹按原文 PDF 的 sha256 认；新到的页不算"已完成的块又变回待翻"。
+- agent 引擎、开了译前准备的：要整本，等 OCR 做完再按整本翻（`execution._wait_for_whole_document_if_needed`）。
+- OCR 失败（清单 `failed=true`）时等的一方抛 `OcrStreamFailed`。阶段耗时在诊断里按轮累加。
+
+### 翻译引擎 agent（`translation.engine=agent`）
+
+2026-10-30 接进正式流程，任务可以选，默认仍是上面的流程（`legacy`）。分支在 `workflow/execution_runner.py`：
+`legacy` 走普通翻译包的 `book_flow.translate_book_with_global_continuations`，`agent` 走接线 `retainpdf_translation_agent_engine/agent_flow.py` 的 `translate_book_with_agent`（都经 `workflow/engines.py` 加载）。
+两者共用前半段 `book_flow.prepare_book_payloads`（到 "annotate context windows" 为止，提交 `policy_ready` 断点）和后面的清单、质检、断点收尾。
+
+`agent_flow.py` 做的事：
+
+- 每页模板记录换成翻译 agent 包（`backend/translation-agent`）的 `PageInput`：sub_type 换成 agent 的块分类，原文用 `$…$` 直写公式
+  （`math_mode` 强制 `direct_typst`），参考文献角标 `$ ^{40} $` 换成脚注标记 `{{fn:40}}`、写回时换回原写法；
+  `__cg__:` 接续组整组放进组头那一页，跨页的后半段也在那一页翻；agent 里接续组合成一块翻，校验、重翻、审校、退回原文都按整段算，交回前才按原文比例切回各块（`units.py`），一组要么整段是译文，要么整段退回原文。
+- `DocumentRun` 整篇按页顺序翻：先通读、每页审校（`read_first=True`、`review=True`）。状态和请求缓存在翻译目录的 `agent/` 下，
+  块 id、原文、模型、agent 版本有一样变了就清掉重来；断点指纹（`checkpoint/identity.py`）里也加了引擎和 agent 版本，`legacy` 的指纹不变。
+- 每页做完（`on_page` 回调）：单块用 `apply_revised_member_text` 写回，接续组再用 `apply_revised_unit_text` 重建整组字段（和改译文一样）；
+  落盘、`checkpoint.update("translating", …)`（实时译文照常）、`translation_batches` 进度（按块计），每次真发出去的请求记一行用量台账。
+- 通读员定标题和书名的译法（`reader.py`）：原文相同的标题只问一次，书名（`document.title`）另交译名 `book_title`；
+  书名做标题、原文和已定标题一样的短块（书名页上被认成正文的大写书名、副标题、页眉章名）都用同一个译文（2026-11-20）。
+- 交给 agent 之前先把不该翻的块标成保留原文（`final_status=kept_origin`，不算没翻成）：被 OCR 认成标题的页眉（`skip_running_header`）、
+  书后索引（`skip_back_matter_index`）、没有要翻的话的块（2026-11-20 用户定）——只有引注的（"35. Brown-Saracino 2014, 43."，
+  `skip_citation_only`），去掉公式、代码、角标、网址后一个英文词都没有的（纯数字、符号、网址、代码、整块公式，`skip_no_prose`；全大写的词四个字母以上才算词）。
+  标完当场存盘（整页都保留原文的页也存）。
+  规则在 agent 核心的 `checks.nothing_to_translate`；以前翻好的书用 `python -m retainpdf_translation_agent_engine.reclassify <任务目录> [--apply]`
+  把失败块按同一条规则改记，不用重翻。质检本来只查译好的块，失败、保留原文的块都不进 `qa_violations`。
+- agent 交回 `fallback_source` 的块：`mark_translation_failed_policy_state` + 死信诊断（`fallback_to=dead_letter_queue`，
+  `degradation_reason=agent_fallback_source`），不卡发布门槛。
+- 额度用完、密钥不对、一直限流（agent 的 `StopRun`）：抛 `AgentRunStopped`，阶段失败，进度留着，重试时从断点接着翻、已缓存的请求不再花钱。
+- 模型请求用 `make_http_transport(任务的密钥, url=base_url + "/messages")`，不读服务器的 `ANTHROPIC_API_KEY`。
+- `execute_translation_request` 对 agent 强制 `math_mode=direct_typst`、`preparation=off`；Rust 写渲染 spec 时，agent 任务翻译之后那次渲染的精修是 off（手动精修照旧）。
+- 初译、重翻、改稿交回纯文本（每块 `@@ 块号` 开头，2026-10-31 起，不再用 JSON 工具调用）：没按格式交的、被 max_tokens 截断的最后一块当没交、重翻。通读、审校照旧用工具调用，数组字段被写成一段 JSON 字符串的能解析就照用，解析不了当空。
+
+测试：`backend/pipeline/devtools/tests/translation/test_agent_flow.py`（假模型整条跑通、死信、停下后续跑、接续组写回）。
+
+### 一段话占好几个框：模型翻整段，程序切回各框
+
+跨栏、跨页的续接组（`cg-*`）和摘要组（`abstract:*`）都是一个翻译单元（`__cg__:…`）：
+
+1. **拼原文**：成员原文按阅读顺序拼成一段（`core/payload/parts/units.py::join_member_sources`）。
+   栏尾连字符直接接上；OCR 把前一块末尾的半个词补全、后一块开头仍留着后半截时（"calculations." + "tions in…"），删掉残片和多补的句号。
+   两块之间夹着独立公式块（教材里"…的 x 分量为 [公式] 其余分量类似…"）时，公式原文 `$$ … $$` 单独一行放在两块中间
+   （`core/payload/parts/formula_gaps.py`，只在 direct_typst 下；成员上记 `translation_unit_formula_before`）。
+   请求里原文有 `$$` 时多一句提示：原样留在原位，不改写、不挪动、不改成行内公式。
+2. **翻译**：模型只翻这一整段，不知道、也不负责框的分界。
+3. **切回各框**：`core/payload/parts/group_split.py::split_group_protected_translation` 先在夹着的公式处切开、公式删掉
+   （它在版面上是单独一块；按内容认，空白不算，内容改过但独立公式个数对得上也认；认不出就删掉独立公式按比例切），
+   公式后面那段开头的标点删掉。其余按各成员原文的长度比例找切点，
+   优先切在句末、分句标点之后，下一块不以标点开头；句末标点后面紧跟的引用角标（`。$^{55}$`）跟着前一句。
+   公式（`$…$`、`$$…$$`、`<f1-abc/>`、`[[FORMULA_n]]`）不可拆；原文各块没有 `$$`、译文却写成独立公式的改回行内 `$…$`；
+   direct_typst 下 `$` 不成对时整段放进第一个框，不切。agent 引擎一样（`translation-agent` 的 `units.py`、`breaks.py`）。
+
+不要让模型按原来的分界逐框返回译文：英文在句中断栏，中文语序对不上（目的状语前置、复合词被切开），
+模型会把跨分界的半句挪进前一块翻完，再把后一块原样交回英文，而整段检查看不出来。
+
+### 逐段请求的提示词排法
+
+逐段请求（整批失败后的逐段重试、续接组、长段）的 user 消息按固定顺序排
+（`llm/shared/prompt_protocols.py::direct_typst_single_user_prompt` / `plain_text_single_user_prompt`）：
+
+```text
+任务说明
+【前文开始（仅供理解，禁止翻译进输出）】…【前文结束】
+【后文开始（仅供理解，禁止翻译进输出）】…【后文结束】
+【当前原文开始】…【当前原文结束】
+针对这段原文的注意事项（公式定界符、术语、结构、风格、续接、半句照翻）
+现在直接输出【当前原文】的…译文。（最后一行）
+```
+
+作答要求必须是最后一行，原文后面不要再跟上下文。以前作答要求夹在中间、原文后面还跟着「后文上下文：……」，
+模型读完一串「某某：内容」的小节，会照着格式自己补一个「译文：」再写译文。
+不要靠事后删标签来补：模型输出出现标签，先回头看提示词哪里留了这个空。
+
+只改这两个函数不会让翻译缓存失效：缓存键里的 `prompt_hash` 只覆盖 `prompts/*.txt`。
+
 ## 凭证与页范围
 
 API key 不写入 stage spec。spec 只保存：
@@ -187,7 +293,8 @@ data/jobs/<job_id>/logs/pipeline_events.jsonl
 翻译层改动后至少跑：
 
 ```bash
-uv run --project backend python -m compileall -q backend/pipeline/retainpdf_pipeline/translate
+uv run --project backend python -m compileall -q backend/translation/retainpdf_translation backend/pipeline/retainpdf_pipeline/translate
+uv run --project backend python -m pytest backend/translation/tests -q
 PYTHONPATH=backend/pipeline uv run --project backend python -m pytest backend/pipeline/devtools/tests/translation -q
 PYTHONPATH=backend/pipeline uv run --project backend python backend/pipeline/devtools/check_pipeline_architecture.py
 ```

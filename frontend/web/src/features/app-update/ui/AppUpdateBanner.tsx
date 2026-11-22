@@ -155,7 +155,7 @@ export function AppUpdateBanner({ view, handlersRef }: AppUpdateBannerProps) {
                   </Button>
                 ) : null}
                 <a
-                  className={`app-update-link${panel.htmlUrl ? "" : " hidden"}`}
+                  className={panel.htmlUrl ? "app-update-link" : "app-update-link hidden"}
                   href={panel.htmlUrl || "#"}
                   target="_blank"
                   rel="noopener noreferrer"

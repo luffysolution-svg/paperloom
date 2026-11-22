@@ -22,7 +22,7 @@ import {
   loadBrowserStoredConfig,
   loadDeveloperStoredConfig,
 } from "@/platform/config/persisted-config.js";
-import { defaultOcrProvider } from "@/platform/config/runtime.js";
+import { defaultOcrProvider, defaultPaddleToken } from "@/platform/config/runtime.js";
 import {
   createDeveloperState,
   setDeveloperConfig,
@@ -67,6 +67,7 @@ import { safeLoad } from "./composition/safe-load.js";
 import { createBridge } from "./composition/create-bridge.js";
 import { createWorkflowAndUpload } from "./composition/create-workflow-upload.js";
 import { createCredentials } from "./composition/create-credentials.js";
+import { hasDesktopCredentials } from "@/features/credentials/domain.js";
 import { createGlossariesAndAppUpdate } from "./composition/create-glossaries-app-update.js";
 import { createStatusDomain } from "./composition/create-status-domain.js";
 import { createLibraryDomain } from "./composition/create-library-domain.js";
@@ -132,6 +133,9 @@ export function createHomeComposition({
   const uploadView = createUploadViewFeature();
   const workflowView = createWorkflowViewFeature({
     uploadTilePort: uploadView.uploadTilePort,
+    // 上传弹窗挑 OCR：没设好的那几家灰掉；默认那家照设置里的。
+    ocrReady: (providerId) => credentialsStatePort.isOcrReady?.({ providerId, defaultPaddleToken }) ?? true,
+    settingsOcrProvider: () => credentialsStatePort.getCredentials()?.ocrProvider || defaultOcrProvider(),
   });
   const statusArea = createStatusAreaFeature({ documentRef });
   const dialogStatePort = createTranslationWorkflowDialogStatePort({ homeStatePort });
@@ -146,6 +150,7 @@ export function createHomeComposition({
     processingChoicePort: {
       resetProcessingChoice: () => {
         workflowView.setOcrOnly(false);
+        workflowView.resetUploadChoices();
         uploadView.closeTranslationOptions();
       },
     },
@@ -234,6 +239,7 @@ export function createHomeComposition({
     statusCardPresenter: status.statusCardPresenter,
     libraryEventPort: library.libraryEventPort,
     settingsHubDialogStore: credentials.settingsHubDialogStore,
+    desktopCredentialsReady: () => hasDesktopCredentials(credentialsStatePort.getCredentials()),
   });
   features.appActionsFeature = appActionsFeature;
 

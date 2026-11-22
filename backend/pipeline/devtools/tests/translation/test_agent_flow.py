@@ -1,4 +1,4 @@
-"""翻译引擎 agent（translation.engine=agent，workflow/agent_flow.py）：用假模型整条跑通，不发网络请求。
+"""翻译引擎 agent（translation.engine=agent，retainpdf_translation_agent_engine/agent_flow.py）：用假模型整条跑通，不发网络请求。
 
 - 整个翻译阶段：通读、逐页翻、审校，译文写回每页记录，清单记上引擎，断点收尾；
 - 参考文献角标换成脚注标记交给 agent，写回时换回原写法；
@@ -17,10 +17,10 @@ from pathlib import Path
 import pytest
 
 from retainpdf_translation.artifacts import blocking_untranslated_items
-from retainpdf_translation.workflow import agent_flow
-from retainpdf_translation.workflow.agent_flow import apply_agent_results
-from retainpdf_translation.workflow.agent_flow import build_agent_pages
-from retainpdf_translation.workflow.agent_flow import messages_url
+from retainpdf_translation_agent_engine import agent_flow
+from retainpdf_translation_agent_engine.agent_flow import apply_agent_results
+from retainpdf_translation_agent_engine.agent_flow import build_agent_pages
+from retainpdf_translation_agent_engine.agent_flow import messages_url
 from retainpdf_translation.workflow.execution import TranslationExecutionRequest
 from retainpdf_translation.workflow.execution import execute_translation_request
 from retainpdf_translation_agent import BlockResult
@@ -87,8 +87,9 @@ def _fake_translation(text: str) -> str:
 class FakeModel:
     """通读什么都不定，审校没有问题，翻译把每块加个中文前缀交回（公式、标记原样留着）；`fail` 里的块每次都交坏的。"""
 
-    def __init__(self, *, fail: set[str] | None = None, stop_after: int | None = None) -> None:
+    def __init__(self, *, fail: set[str] | None = None, stop_after: int | None = None, genre: str = "science_paper") -> None:
         self.fail = fail or set()
+        self.genre = genre
         self.stop_after = stop_after
         self.bodies: list[dict] = []
 
@@ -99,9 +100,17 @@ class FakeModel:
         tool = body["tools"][0]["name"] if "tools" in body else "plain_text"
         usage = {"input_tokens": 100, "output_tokens": 20}
         if tool == "submit_reading":
-            data = {"genre": "science_paper", "name_policy": "keep", "style": "", "terms": [], "headings": []}
+            data = {"genre": self.genre, "name_policy": "keep", "style": "", "terms": [], "headings": []}
         elif tool == "submit_review":
             data = {"issues": []}
+        elif tool == "submit_rewrite":
+            data = {"blocks": []}
+        elif body["messages"][0]["content"].lstrip().startswith(("人名、术语的译法", "上一节", "下面是这一节的原稿")):
+            # 按节翻（第二版）：稿子每段照编号交回，占位、标记原样留着
+            manuscript = body["messages"][0]["content"]
+            paragraphs = re.findall(r"^¶(\d+)(?:（[^）]*）)? (.*)$", manuscript, re.M)
+            text = "\n\n".join(f"¶{n} {_fake_translation(source)}" for n, source in paragraphs)
+            return {"content": [{"type": "text", "text": text}], "usage": usage}
         else:
             payload = json.loads(body["messages"][0]["content"])
             wanted = [b for b in payload["blocks"] if b.get("translate")]
@@ -347,7 +356,7 @@ def test_messages_url_follows_the_job_base_url() -> None:
 def test_the_agent_gets_the_same_thinking_effort_as_legacy() -> None:
     """off、auto（claude-haiku-5-5）都是 low；明确的档位照用；别的模型 auto 不发字段（2026-10-31）。"""
     from retainpdf_translation.llm.shared import model_wire
-    from retainpdf_translation.workflow.agent_flow import agent_effort
+    from retainpdf_translation_agent_engine.agent_flow import agent_effort
 
     base = "https://api.anthropic.com/v1"
     try:
@@ -361,3 +370,211 @@ def test_the_agent_gets_the_same_thinking_effort_as_legacy() -> None:
             assert agent_effort(base_url=base, model=model) == expected, (thinking, model)
     finally:
         model_wire.clear_registered_connections()
+
+
+def test_job_data_registers_the_agent_glossary_where_and_how_the_agent_writes_it():
+    """术语页读的 agent_terms / agent_term_tickets（契约 job-data.v1）要和 agent 真写出来的 glossary.json 对得上：
+    文件在 translated/ 下的位置、每个登记字段的路径。"""
+    from retainpdf_translation_agent import Glossary
+
+    contract = json.loads(
+        (Path(__file__).resolve().parents[5] / "contracts" / "job-data.v1.schema.json").read_text(encoding="utf-8")
+    )
+    glossary = Glossary()
+    glossary.add("transformer", "Transformer", category="keep", reason="用户", page="3", quote="the transformer")
+    glossary.propose("attention", "注意力", category="term", block_id="p003-b001", page="3", chapter="1", quote="q")
+    glossary.propose("attention", "关注", category="term", block_id="p004-b002", page="4", chapter="1", quote="q2")
+    payload = glossary.to_dict()
+    assert payload["tickets"], "要有一张歧义单才测得到 tickets 的字段"
+
+    def at(row, path):
+        for part in path.split("."):
+            assert isinstance(row, dict) and part in row, path
+            row = row[part]
+        return row
+
+    for name in ("agent_terms", "agent_term_tickets"):
+        spec = contract["datasets"][name]
+        assert spec["source"]["root"] == "translated"
+        assert spec["source"]["file"] == f"{agent_flow.AGENT_STATE_DIR}/{agent_flow.RUN_DIR}/glossary.json"
+        rows = at(payload, spec["source"]["rows"].strip("/"))
+        for field_name, field in spec["fields"].items():
+            at(rows[0], field.get("path", field_name))
+        for path in spec["identity"].values():
+            assert re.fullmatch(r"p\d+-b\d+", at(rows[0], path)), "item_id 要是 pNNN-bNNN，页码才推得出来"
+
+
+def test_a_separate_reviewer_model_does_the_editing_on_its_own_connection(tmp_path: Path, monkeypatch) -> None:
+    """用户另配了审校模型：人文书的两轮（审意思、改文笔，2026-11-19 起）都走它的连接和 Key，通读、初译走翻译模型；用量台账按模型分开记。"""
+    monkeypatch.setenv("RETAIN_AGENT_STRUCTURE", "page")  # 第一版（逐页）的两轮；第二版见下一条
+    translator, editor = FakeModel(genre="humanities"), FakeModel(genre="humanities")
+    by_key = {"sk-job-key": translator, "sk-editor": editor}
+    monkeypatch.setattr(agent_flow, "make_http_transport", lambda api_key, *, url: by_key[api_key])
+    ledger = tmp_path / "usage.jsonl"
+    monkeypatch.setenv("RETAIN_USAGE_LEDGER", str(ledger))
+    execute_translation_request(_request(tmp_path, reviewer_model="claude-editor", reviewer_api_key="sk-editor"))
+
+    tools = lambda model: [b["tools"][0]["name"] if "tools" in b else "plain_text" for b in model.bodies]  # noqa: E731
+    assert tools(editor) == ["submit_review", "submit_rewrite"] * 2, "humanities books: review for meaning, then polish, on every page"
+    assert {b["model"] for b in editor.bodies} == {"claude-editor"}
+    assert "submit_rewrite" not in tools(translator) and tools(translator)[0] == "submit_reading"
+    assert {b["model"] for b in translator.bodies} == {"claude-haiku-5-5"}
+    rows = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
+    assert sorted({row["model"] for row in rows}) == ["claude-editor", "claude-haiku-5-5"]
+
+
+def test_humanities_books_are_translated_by_section_by_default(tmp_path: Path, monkeypatch) -> None:
+    """2026-11-19 起人文社科、通俗读物默认按节翻（第二版）：初译整节一次走翻译模型，整节审一次意思走另配的审校模型，不做文笔那一轮。"""
+    monkeypatch.delenv("RETAIN_AGENT_STRUCTURE", raising=False)
+    translator, editor = FakeModel(genre="humanities"), FakeModel(genre="humanities")
+    by_key = {"sk-job-key": translator, "sk-editor": editor}
+    monkeypatch.setattr(agent_flow, "make_http_transport", lambda api_key, *, url: by_key[api_key])
+    result = execute_translation_request(_request(tmp_path, reviewer_model="claude-editor", reviewer_api_key="sk-editor"))
+
+    tools = lambda model: [b["tools"][0]["name"] if "tools" in b else "plain_text" for b in model.bodies]  # noqa: E731
+    assert tools(translator) == ["submit_reading", "plain_text"], "通读一次，整节初译一次"
+    assert "下面是这一节的原稿" in translator.bodies[1]["messages"][0]["content"]
+    assert tools(editor) == ["submit_review"], "整节审一次意思，不做文笔那一轮"
+    assert result is not None
+
+
+def test_without_a_reviewer_model_science_books_keep_the_ticket_review(tmp_path: Path, fake_transport) -> None:
+    model = fake_transport(FakeModel(genre="science_paper"))
+    execute_translation_request(_request(tmp_path, reviewer_model="claude-haiku-5-5"))  # 和翻译模型同名：不另开连接
+    tools = [b["tools"][0]["name"] if "tools" in b else "plain_text" for b in model.bodies]
+    assert tools.count("submit_review") == 2 and "submit_rewrite" not in tools
+
+
+def test_agent_structure_is_section_unless_page_is_asked_for(monkeypatch) -> None:
+    """翻译 agent 第二版（按节翻）2026-11-19 起是默认；RETAIN_AGENT_STRUCTURE=page 退回逐页，别的值、没设都按节。"""
+    from retainpdf_translation_agent_engine.agent_flow import agent_structure
+
+    monkeypatch.delenv("RETAIN_AGENT_STRUCTURE", raising=False)
+    assert agent_structure() == "section"
+    for value, expected in (("section", "section"), (" PAGE ", "page"), ("page", "page"), ("chapter", "section"), ("", "section")):
+        monkeypatch.setenv("RETAIN_AGENT_STRUCTURE", value)
+        assert agent_structure() == expected, value
+
+
+def test_the_book_title_comes_from_the_pdf_metadata_before_the_first_ocr_title(tmp_path: Path) -> None:
+    """11-20《The Interloper》：封面是图，OCR 的第一个标题块是第一章的 Introduction，通读、初译、审校、兜底收到的书名都是它。
+    现在先看原 PDF 元数据，垃圾值（文件名、Microsoft Word 开头、纯数字）不要，再退回第一个标题块。"""
+    import fitz
+
+    def pdf(title: str) -> Path:
+        path = tmp_path / f"book-{abs(hash(title))}.pdf"
+        document = fitz.open()
+        document.new_page()
+        document.set_metadata({"title": title})
+        document.save(path)
+        document.close()
+        return path
+
+    payloads = {0: [{"normalized_sub_type": "body", "source_text": "Cover"}], 1: [{"normalized_sub_type": "title", "source_text": "Introduction"}]}
+    assert agent_flow._document_title(payloads, pdf("The Interloper")) == "The Interloper"
+    for junk in ("", "Microsoft Word - draft.docx", "interloper_final.pdf", "12345", "Untitled"):
+        assert agent_flow._document_title(payloads, pdf(junk)) == "Introduction", junk
+    assert agent_flow._document_title(payloads, None) == "Introduction"
+    assert agent_flow._document_title(payloads, tmp_path / "missing.pdf") == "Introduction"
+
+
+def test_prices_are_escaped_and_spaced_superscripts_become_footnote_marks() -> None:
+    """11-20《The Interloper》："$12.59 to $17" 被当成公式、to 没翻；OCR 写成 "$ ^{1 1} $" 的上标角标漏成原样。"""
+    text, marks = agent_flow._agent_text({"source_text": "Wages ran from $12.59 to $17 an hour.$ ^{1 1} $ See $x$."}, "paragraph")
+    assert text == "Wages ran from \\$12.59 to \\$17 an hour.{{fn:11}} See $x$."
+    assert marks == {"11": "$ ^{1 1} $"}
+
+
+def test_running_headers_and_the_back_index_keep_the_original(tmp_path: Path) -> None:
+    """页眉 "[170] NOTES" 被 OCR 认成标题、通读定成「[170] 注释」；书后的索引被逐条翻成中文（页码是英文版的、排序全乱）。"""
+    import fitz
+
+    pdf_path = tmp_path / "book.pdf"
+    document = fitz.open()
+    for _ in range(12):
+        document.new_page()
+    document.set_page_labels([{"startpage": 0, "prefix": "", "style": "r", "firstpagenum": 1}, {"startpage": 2, "prefix": "", "style": "D", "firstpagenum": 1}])
+    document.save(pdf_path)
+    document.close()
+
+    def item(sub_type: str, text: str) -> dict:
+        return {"normalized_sub_type": sub_type, "source_text": text, "should_translate": True}
+
+    payloads = {i: [item("body", f"Body text on page {i + 1}.")] for i in range(12)}
+    payloads[8] = [item("heading", "[7] NOTES"), item("body", "1. Keenan 2013, xxiv.")]  # PDF 第 9 页印着 7
+    payloads[4] = [item("heading", "2 METHODS"), item("body", "We met.")]  # 印着 3：数字对不上，是正经标题
+    payloads[10] = [item("body", "Last words."), item("heading", "Index"), item("body", "access, 49–50"), item("body", "Keenan, Marie, 92")]
+    payloads[11] = [item("body", "Lamont, Michèle, 163n3")]
+
+    counts = agent_flow.skip_back_matter(payloads, pdf_path)
+    assert counts == {"running_header": 1, "index": 3}
+    assert payloads[8][0]["should_translate"] is False and payloads[8][0]["skip_reason"] == "skip_running_header"
+    assert payloads[4][0]["should_translate"] is True
+    assert [i["should_translate"] for i in payloads[10]] == [True, True, False, False], "索引标题照翻，后面的条目保留原文"
+    assert payloads[11][0]["skip_reason"] == "skip_back_matter_index"
+
+    # 没有 PDF 页码标签：拿页脚页码算页码差；都没有就不认页眉
+    plain = {i: [item("page_number", str(i - 1)), item("body", "x")] for i in range(2, 8)}
+    plain[6].insert(0, item("heading", "CHAPTER NOTES 5"))
+    assert agent_flow.skip_back_matter(plain)["running_header"] == 1
+    assert agent_flow.skip_back_matter({0: [item("heading", "[7] NOTES")]})["running_header"] == 0
+    early = {i: [item("body", "x")] for i in range(10)}
+    early[2] = [item("heading", "Index"), item("body", "an early section called Index")]
+    assert agent_flow.skip_back_matter(early)["index"] == 0, "只在书的最后四分之一认索引"
+
+
+def test_blocks_with_nothing_to_translate_keep_the_original_before_the_agent(tmp_path: Path) -> None:
+    """《The Interloper》书末注释 "35. Brown-Saracino 2014, 43." 交给模型、原样交回判漏翻，进了死信，阅读页「待处理」当问题列出来。
+    现在交给 agent 之前就记成保留原文（和页眉、书后索引一样），写明原因；接续组的成员不管。"""
+    from retainpdf_translation.core.payload import load_translations
+    from retainpdf_translation.core.payload import save_translations
+    from retainpdf_translation_agent_engine.reclassify import reclassify_failed_blocks
+
+    def item(item_id: str, text: str, **extra) -> dict:
+        return {"item_id": item_id, "normalized_sub_type": "body", "source_text": text, "should_translate": True, **extra}
+
+    payloads = {0: [
+        item("p001-b000", "35. Brown-Saracino 2014, 43."),
+        item("p001-b001", "$$x^2$$"),
+        item("p001-b002", "The puppeteers voted to join the guild."),
+        item("p001-b003", "Ibid., 45.", translation_unit_member_ids=["p001-b002", "p001-b003"]),
+    ]}
+    assert agent_flow.skip_nothing_to_translate(payloads) == {"skip_citation_only": 1, "skip_no_prose": 1}
+    first, formula, prose, member = payloads[0]
+    assert (first["should_translate"], first["final_status"], first["skip_reason"]) == (False, "kept_origin", "skip_citation_only")
+    assert formula["skip_reason"] == "skip_no_prose"
+    assert prose["should_translate"] is True and member["should_translate"] is True
+
+    # 以前翻好的书：失败的块按同一条规则改记，不用重翻；真没翻成的正文照旧是失败
+    translated = tmp_path / "translated"
+    translated.mkdir()
+    page = translated / "page-001-deepseek.json"
+    save_translations(page, [
+        item("p001-b000", "35. Brown-Saracino 2014, 43.", final_status="failed"),
+        item("p001-b001", "The puppeteers voted to join the guild.", final_status="failed"),
+        item("p001-b002", "Ibid., 45.", final_status="translated"),
+    ])
+    assert [c["item_id"] for c in reclassify_failed_blocks(translated, apply=False)] == ["p001-b000"]
+    assert load_translations(page, strict_contract=False)[0]["final_status"] == "failed", "不加 --apply 不写盘"
+    reclassify_failed_blocks(translated, apply=True)
+    rows = load_translations(page, strict_contract=False)
+    assert [(r["final_status"], r.get("skip_reason", "")) for r in rows] == [
+        ("kept_origin", "skip_citation_only"), ("failed", ""), ("translated", "")
+    ]
+
+
+def test_a_page_kept_whole_in_the_original_is_saved_as_kept(tmp_path: Path, fake_transport) -> None:
+    """整页都在交给 agent 之前标成保留原文（书后的注释页、索引页）：以前那一页不重新存盘，记录里还是「要翻、没状态」
+    （11-20《The Interloper》书后索引 95 块、书名页都这样）。"""
+    from dataclasses import replace as dc_replace
+
+    fake_transport(FakeModel())
+    request = _request(tmp_path)
+    document = json.loads(request.source_json_path.read_text(encoding="utf-8"))
+    document["pages"].append({"page_index": 2, "width": 600.0, "height": 800.0, "unit": "pt",
+                              "blocks": [_block(2, 0, "body", "35. Keenan 2013, xxiv.", [50, 100, 550, 130])]})
+    document["page_count"] = 3
+    request.source_json_path.write_text(json.dumps(document, ensure_ascii=False), encoding="utf-8")
+    execute_translation_request(dc_replace(request, end_page=-1))
+    note = _pages(tmp_path / "translated")["p003-b000"]
+    assert (note["should_translate"], note["final_status"], note["skip_reason"]) == (False, "kept_origin", "skip_citation_only")

@@ -36,9 +36,9 @@ test("HUD 上的时间写成 m:ss / h:mm:ss；按模型名认出服务商标志"
   assert.equal(clockText(171_000), "2:51");
   assert.equal(clockText(16_000), "0:16");
   assert.equal(clockText(3_723_000), "1:02:03");
-  assert.match(modelLogo("claude-haiku-5-5"), /anthropic/);
-  assert.match(modelLogo("glm-5.3-flash"), /zai/);
-  assert.equal(modelLogo("my-own-model"), "");
+  assert.match(modelLogo("claude-haiku-5-5").src, /models\/claude\.svg$/);
+  assert.match(modelLogo("glm-5.3-flash").src, /models\/glm\.svg$/);
+  assert.equal(modelLogo("my-own-model"), null);
 });
 
 test("完成：环写翻了几页，总耗时、模型、token 都在", () => {
@@ -47,12 +47,12 @@ test("完成：环写翻了几页，总耗时、模型、token 都在", () => {
   assert.equal(hud.time.text, "2:51");
   assert.equal(hud.time.title, "共用时 2 分 51 秒");
   assert.equal(hud.model.name, "claude-haiku-5-5");
-  assert.match(hud.model.logo, /anthropic/);
+  assert.match(hud.model.logo.src, /models\/claude\.svg$/);
   assert.equal(hud.tokens.text, "128.7 万");
   // 各站小标签：OCR 站页数，翻译站模型标志（这里没有按环节的用量，就没有 token）。
   assert.deepEqual(hud.stationChips.ocr.map((chip) => [chip.kind, chip.text]), [["pages", "134"]]);
   assert.deepEqual(hud.stationChips.translate.map((chip) => chip.kind), ["model"]);
-  assert.match(hud.stationChips.translate[0].logo, /anthropic/);
+  assert.match(hud.stationChips.translate[0].logo.src, /models\/claude\.svg$/);
 });
 
 test("在跑：环跟进度、写第几批；token 还在涨不摆", () => {
@@ -77,9 +77,9 @@ test("算不出来的块不出：没有计时、没有模型、没有用量", ()
   assert.equal(hud.gauge.text, "134 页");
 });
 
-test("各站 token：翻译和译前准备加在一起挂翻译站，精修挂版面站，助手不挂；在跑时都不挂", () => {
+test("各站 token：翻译和译前准备加在一起挂翻译站；精修没有自己的站不挂（以前错挂在版面站），助手不挂；在跑时都不挂", () => {
   const usage = usageViewModel({
-    schema: "token-usage.v1", scope: "document", totals: bucket(980_000, 307_000),
+    schema: "token-usage.v1", scope: "job", totals: bucket(980_000, 307_000),
     by_stage: [
       { stage: "translate", group: "translation", label: "翻译", ...bucket(600_000, 27_000) },
       { stage: "glossary", group: "preparation", label: "术语", ...bucket(70_000, 10_000) },
@@ -90,8 +90,10 @@ test("各站 token：翻译和译前准备加在一起挂翻译站，精修挂�
   });
   const hud = processingHudModel({ ...base, usage });
   assert.equal(hud.stationChips.translate.find((chip) => chip.kind === "tokens").text, "70.7 万");
-  assert.equal(hud.stationChips.render.find((chip) => chip.kind === "tokens").text, "14.1 万");
-  assert.equal(Object.values(hud.stationChips).flat().filter((chip) => chip.kind === "tokens").length, 2, "助手的用量不挂在哪一站");
+  assert.equal(hud.stationChips.render, undefined, "精修不挂版面站");
+  assert.equal(Object.values(hud.stationChips).flat().filter((chip) => chip.kind === "tokens").length, 1, "精修、助手的用量不挂在哪一站");
+  assert.match(hud.tokens.title, /^这次任务的模型用量 /);
+  assert.equal(usage.summaryLine, "只算这一次任务，不含这本书的其它任务");
   const running = processingHudModel({ ...base, usage, tone: "active", jobActive: true, runningPercent: 10 });
   assert.equal(Object.values(running.stationChips).flat().some((chip) => chip.kind === "tokens"), false);
 });

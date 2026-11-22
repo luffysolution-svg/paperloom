@@ -34,7 +34,7 @@ SUPPORTED_PROTOCOL_VERSIONS = (
     "2025-03-26",
     "2024-11-05",
 )
-SERVER_VERSION = "0.4.4"
+SERVER_VERSION = "0.4.5"
 
 
 def _envelope(data: Any = None, *, warnings: list[str] | None = None, references: list[dict[str, Any]] | None = None) -> dict[str, Any]:
@@ -270,7 +270,7 @@ def _batch_workflow(args: dict[str, Any], api: PaperLoomApi) -> dict[str, Any]:
         "created_at": now,
         "updated_at": now,
         "command": "run_batch_workflow",
-        "paperloom_version": "0.4.4",
+        "paperloom_version": "0.4.5",
         "inputs": plan,
         "options": {
             "action": action,

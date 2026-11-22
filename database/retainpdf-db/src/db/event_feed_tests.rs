@@ -49,7 +49,9 @@ fn item(key: &str, ts: &str) -> NewFeedItem {
         source_key: key.to_owned(),
         event_id: format!("event-{key}"),
         ts: ts.to_owned(),
-        payload: json!({"message": key}),
+        source_seq: None,
+        source_event_uid: None,
+        payload: Some(json!({"message": key})),
     }
 }
 
@@ -103,15 +105,60 @@ fn event_uid_is_backfilled_for_legacy_schema_and_migrations_are_idempotent() {
          -- 这里回退到 v13，所以 v14 之后的每一条迁移都会重跑一遍。SQLite 没有
          -- ADD COLUMN IF NOT EXISTS，凡是被重跑的加列迁移，都要在这里先撤掉，
          -- 否则第二次执行会以「列已存在」失败。新增迁移时记得跟上这一段。
-         ALTER TABLE ai_messages DROP COLUMN finish_reason;
+         -- v31（2026-11-20）删了 AI 留下的表和收藏；回到 v13 时它们还在，重跑的 v16（给 ai_messages 加列）、
+         -- v17 / v19（在它们身上挂同步触发器）要用到：按触发器用到的列补个骨架，v31 再删掉。
+         CREATE TABLE favorites(favorite_id TEXT PRIMARY KEY, document_id TEXT, job_id TEXT);
+         CREATE TABLE assets(asset_id TEXT PRIMARY KEY);
+         CREATE TABLE ai_conversations(conversation_id TEXT PRIMARY KEY, document_id TEXT);
+         CREATE TABLE ai_messages(message_id TEXT PRIMARY KEY, conversation_id TEXT);
+         CREATE TABLE agent_calculation_runs(calculation_id TEXT PRIMARY KEY);
+         CREATE TABLE agent_calculation_artifacts(artifact_id TEXT PRIMARY KEY, calculation_id TEXT);
+         CREATE TABLE document_operations(operation_id TEXT PRIMARY KEY, document_id TEXT);
+         CREATE TABLE document_operation_attempts(operation_id TEXT, attempt INTEGER);
+         CREATE TABLE document_operation_events(operation_id TEXT, seq INTEGER);
+         CREATE TABLE document_versions(version_id TEXT PRIMARY KEY, operation_id TEXT);
+         -- v36（2026-11-21）把 documents 拆成条目表：回到 v13 时还是 documents（这时还没有 v22 的归属列）、
+         -- document_title_state、document_metadata_suggestions。夹具里没有书，删掉新表、按那时的样子补回空表，重跑的 v36 再拆。
+         -- v30 的译文版本表指向书，一起撤掉，重跑的 v30 按 documents 再建。
+         -- v37 的标签、条目关联、文件夹成员（成员是条目）也撤掉；回到 v13 时成员表是 collection_documents。
+         DROP TABLE item_relations;
+         DROP TABLE item_tags;
+         DROP TABLE tags;
+         DROP TABLE collection_items;
+         DROP VIEW library_documents;
+         DROP TABLE translation_version_jobs;
+         DROP TABLE translation_versions;
+         DROP TABLE item_title_suggestions;
+         DROP TABLE item_creators;
+         DROP TABLE item_references;
+         DROP TABLE item_files;
+         DROP TABLE library_items;
+         CREATE TABLE documents(
+             document_id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', authors_json TEXT NOT NULL DEFAULT '[]',
+             year INTEGER, doi TEXT NOT NULL DEFAULT '', source_filename TEXT NOT NULL,
+             page_count INTEGER NOT NULL DEFAULT 0, bytes INTEGER NOT NULL DEFAULT 0, active_job_id TEXT,
+             reading_status TEXT NOT NULL DEFAULT 'unread', added_at TEXT NOT NULL, last_opened_at TEXT,
+             updated_at TEXT NOT NULL, active_version_id TEXT);
+         CREATE TABLE collection_documents(
+             collection_id TEXT NOT NULL REFERENCES collections(collection_id) ON DELETE CASCADE,
+             document_id TEXT NOT NULL REFERENCES documents(document_id) ON DELETE CASCADE,
+             added_at TEXT NOT NULL, PRIMARY KEY (collection_id, document_id));
+         CREATE TABLE document_title_state(
+             document_id TEXT PRIMARY KEY REFERENCES documents(document_id) ON DELETE CASCADE,
+             source TEXT NOT NULL DEFAULT 'filename', locked INTEGER NOT NULL DEFAULT 0, suggestion_id TEXT,
+             updated_at TEXT NOT NULL);
+         CREATE TABLE document_metadata_suggestions(
+             suggestion_id TEXT PRIMARY KEY, document_id TEXT NOT NULL REFERENCES documents(document_id) ON DELETE CASCADE,
+             source_job_id TEXT, artifact_sha256 TEXT NOT NULL, fields_json TEXT NOT NULL DEFAULT '[\"title\"]',
+             candidates_json TEXT NOT NULL, selected_title TEXT NOT NULL,
+             generation_method TEXT NOT NULL DEFAULT 'deterministic', needs_ai_review INTEGER NOT NULL DEFAULT 0,
+             status TEXT NOT NULL DEFAULT 'completed', applied_at TEXT, created_at TEXT NOT NULL,
+             updated_at TEXT NOT NULL);
          DROP TRIGGER jobs_inherit_owner;
-         DROP TRIGGER documents_inherit_owner;
          DROP INDEX idx_uploads_owner;
          DROP INDEX idx_jobs_owner;
-         DROP INDEX idx_documents_owner;
          ALTER TABLE uploads DROP COLUMN owner_user_id;
          ALTER TABLE jobs DROP COLUMN owner_user_id;
-         ALTER TABLE documents DROP COLUMN owner_user_id;
          ALTER TABLE glossaries DROP COLUMN owner_user_id;
          ALTER TABLE collections DROP COLUMN owner_user_id;
          ALTER TABLE users DROP COLUMN deleted_at;
@@ -119,6 +166,9 @@ fn event_uid_is_backfilled_for_legacy_schema_and_migrations_are_idempotent() {
          ALTER TABLE users DROP COLUMN invite_id;
          ALTER TABLE pipeline_attempts DROP COLUMN auto_resume_count;
          ALTER TABLE pipeline_attempts DROP COLUMN auto_resume_progress;
+         -- v32（2026-11-21）把 jobs.status_json 换成 status：重跑的 v15 要读 status_json，补一列；v32 自己见
+         -- status 已经在就跳过（APPLIED_CHECKS），这一列就留着不用。
+         ALTER TABLE jobs ADD COLUMN status_json TEXT;
          PRAGMA user_version = 13;",
     )
     .unwrap();
@@ -572,9 +622,9 @@ fn bootstrap_source_order_breaks_timestamp_ties_and_tail_respects_captured_upper
     fs.job("owner", JobStatusKind::Running);
     let ts = now_iso();
     let mut first = item("z-first", &ts);
-    first.payload["raw"] = json!({"source_seq": 1});
+    first.source_seq = Some(1);
     let mut second = item("a-second", &ts);
-    second.payload["raw"] = json!({"source_seq": 2});
+    second.source_seq = Some(2);
     assert!(fs
         .db
         .commit_event_feed(
@@ -769,11 +819,11 @@ fn initial_order_visitor_matches_publication_and_requires_unpublished_epoch() {
     fs.job("owner", JobStatusKind::Running);
     let ts = now_iso();
     let mut first = item("z-first", &ts);
-    first.payload["raw"] = json!({"source_seq": 1});
+    first.source_seq = Some(1);
     let mut second = item("a-second", &ts);
-    second.payload["raw"] = json!({"source_seq": 2});
+    second.source_seq = Some(2);
     let mut third = item("b-third", &ts);
-    third.payload["raw"] = json!({"source_seq": 2});
+    third.source_seq = Some(2);
     let older = item("older", "2000-01-01T00:00:00Z");
     assert!(fs
         .db
@@ -855,4 +905,52 @@ fn initial_order_visitor_matches_publication_and_requires_unpublished_epoch() {
             "published feed must not invoke visitor"
         ))
         .is_err());
+}
+
+/// v35：来自 events 的条目只记它是哪条原始事件，不存内容；读出来带着那条原始事件（内容由任务包现算）。
+/// 原始事件读的同时被删掉了（保留期）：按「事件流变了」报，调用方当游标过期处理。
+#[test]
+fn referenced_items_carry_their_source_event_and_a_missing_source_reads_as_a_changed_feed() {
+    let fs = Fixture::new();
+    fs.job("owner", JobStatusKind::Running);
+    let conn = fs.db.connect().unwrap();
+    conn.execute(
+        "INSERT INTO events(job_id, seq, ts, level, stage, event, message, event_uid, progress_current, progress_total,
+                            retry_count, elapsed_ms, payload_json)
+         VALUES('owner', 1, '2026-11-21T00:00:00Z', 'info', 'translate', 'stage_progress', '翻到第 3 页', 'uid-1', 3, 9,
+                2, 1500, '{\"k\":1}')",
+        [],
+    )
+    .unwrap();
+    let mut referenced = item("db:owner:uid-1", "2026-11-21T00:00:00Z");
+    referenced.payload = None;
+    referenced.source_event_uid = Some("uid-1".into());
+    let stored = item("jsonl:owner:x:0", "2026-11-21T00:00:01Z");
+    assert!(fs
+        .db
+        .commit_event_feed("owner", None, "epoch", "ctx", &json!({}), &[referenced, stored], false, &[])
+        .unwrap());
+
+    let page = fs.db.read_event_feed_page("owner", "epoch", 0, 10, 10).unwrap();
+    assert_eq!(page.len(), 2);
+    assert!(page[0].payload.is_none());
+    let source = page[0].source.as_ref().expect("带着原始事件");
+    assert_eq!((source.seq, source.message.as_str(), source.stage.as_deref()), (1, "翻到第 3 页", Some("translate")));
+    // 原始事件接在条目的列后面读（列号要整体挪），每一列都要对上（以前漏挪过 retry_count）。
+    let direct = fs.db.list_job_events("owner", 10, 0).unwrap().remove(0);
+    assert_eq!(serde_json::to_value(source).unwrap(), serde_json::to_value(&direct).unwrap());
+    assert_eq!((source.progress_current, source.progress_total, source.retry_count, source.elapsed_ms), (Some(3), Some(9), Some(2), Some(1500)));
+    assert_eq!(page[1].payload, Some(json!({"message": "jsonl:owner:x:0"})));
+    assert!(page[1].source.is_none());
+    let tail = fs.db.read_event_feed_tail("owner", "epoch", 10, 1).unwrap();
+    assert_eq!(tail[0].seq, 2);
+
+    conn.execute("DELETE FROM events WHERE event_uid = 'uid-1'", []).unwrap();
+    let error = fs.db.read_event_feed_page("owner", "epoch", 0, 10, 10).unwrap_err();
+    assert!(error.to_string().contains("event feed epoch changed"), "{error}");
+
+    // 既没内容也没指向原始事件的条目写不进去。
+    let mut empty = item("db:owner:none", "2026-11-21T00:00:02Z");
+    empty.payload = None;
+    assert!(fs.db.commit_event_feed("owner", Some(1), "epoch", "ctx", &json!({}), &[empty], false, &[]).is_err());
 }

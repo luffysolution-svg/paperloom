@@ -6,10 +6,10 @@ ROOT = Path(__file__).resolve().parents[3]
 ENTRY = '$RETAIN_PDF_SERVICES_ROOT/pipeline/devtools/run_translation_tests.py'
 
 
-def test_daily_gate_uses_full_offline_entry_and_keeps_stage_tests():
+def test_daily_gate_runs_only_benchmarks_after_the_full_devtools_suite():
     workflow = (ROOT / ".github/workflows/tests.yml").read_text()
-    assert f'python "{ENTRY}"' in workflow
-    assert ENTRY + '" --reverse' not in workflow
+    assert f'python "{ENTRY}" --suite benchmarks' in workflow
+    assert f'python "{ENTRY}"\n' not in workflow
     assert "pipeline/devtools/tests/translation/test_" not in workflow
     assert 'python -m pytest "$RETAIN_PDF_SERVICES_ROOT/pipeline/devtools/tests" -q' in workflow
     assert "uses: ./.github/actions/setup-test-typst" in workflow
@@ -37,10 +37,14 @@ def test_formula_runtime_matches_repository_version():
     assert "TYPST_BIN=" in action
 
 
-def test_rust_architecture_filters_cover_shared_workspace_dependencies():
+def test_rust_architecture_is_only_invoked_through_tests():
     workflow = (ROOT / ".github/workflows/rust-api-architecture.yml").read_text()
-    for path in ("backend/api/**", "backend/packages/**", "backend/jobs/**", "database/**", "contracts/**", "Cargo.toml", "Cargo.lock"):
-        assert workflow.count(f'- "{path}"') == 2
+    tests = (ROOT / ".github/workflows/tests.yml").read_text()
+    assert "workflow_call: {}" in workflow
+    assert "pull_request:" not in workflow
+    assert "push:" not in workflow
+    assert "pull_request:" in tests and "push:" in tests
+    assert "uses: ./.github/workflows/rust-api-architecture.yml" in tests
 
 
 def test_backend_cargo_commands_use_aggregate_source_root():

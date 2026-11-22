@@ -31,6 +31,7 @@ REQUIRED_FILES = (
     "backend/math/pyproject.toml",
     "backend/pipeline/pyproject.toml", "backend/translation/pyproject.toml",
     "backend/translation-agent/pyproject.toml",
+    "backend/translation-classic/pyproject.toml",
     "backend/config/ocr_providers.json",
     "ops/deployment/docker/backend/Dockerfile.app",
     "ops/release/download_github_asset.py",

@@ -1,27 +1,40 @@
-import { useState, type ReactNode } from "react";
-import { Coins, Languages, LoaderCircle, RefreshCw, Sparkles } from "lucide-react";
+import { useLayoutEffect, useState, type ReactNode } from "react";
+import { Coins, Languages, LoaderCircle, RefreshCw } from "lucide-react";
 import { Button, ConfirmDialog, Select } from "@retainpdf/ui";
 import type {
   JobRetryStage,
   JobStageRetryActionView,
 } from "@/platform/api/index.js";
 import { stageDisabledReasonText } from "../../../domain/stage-disabled-reason.js";
-import { describeLastRefine, refineContinuePage, refineEscalations } from "../../../domain/last-refine.js";
+import {
+  RETRANSLATE_AGENT_NOTE,
+  RETRANSLATE_QUALITY_OPTIONS,
+  type RetranslateQuality,
+} from "../../../domain/retranslate-quality.js";
+import { KEEP_MODEL, retranslateModelOptions } from "../../../domain/retranslate-model.js";
+import {
+  savedDefaultTranslationModel,
+  savedTranslationConnections,
+  type TranslationConnection,
+} from "@/platform/config/translation-connections.js";
+import { CREDENTIALS_CHANGED_EVENT } from "@/platform/contracts/credentials-contract.js";
+import { RetranslateModelSelect } from "./RetranslateModelSelect.jsx";
+import { RetranslateModelList } from "./RetranslateModelList.jsx";
+import { useRetranslateEstimates } from "../../use-retranslate-estimates.js";
+import type { UsageEstimateView } from "@/platform/api/index.js";
 
 function labelOf(action: JobStageRetryActionView) {
   if (action.stage === "translation") return "重新翻译";
   if (action.stage === "render") return "重新渲染";
-  if (action.stage === "refine") return "精修译文";
   return action.label;
 }
 
 // 清单形态（sheet）里每一项的说明：做什么、花不花钱。画面上只摆一个费用小标签，整句在悬停里。顺序按代价从小到大。
 const SHEET_HINTS: Record<string, string> = {
   render: "用现有译文重新排版，不调用模型、不产生费用。",
-  refine: "模型挑错后分派局部修改或整段重写，最多两轮，改不好的保留原译并列出来给你确认；改完自动重新排版。会产生费用。",
-  translation: "复用已有 OCR 重新翻译整本，再排版。会产生翻译费用。",
+  translation: "复用已有 OCR 重新翻译整本，再排版；翻译方式可以沿用原来的，也可以换成普通、统一术语或精翻（翻译 agent）；模型可以换成设置里存的其他连接。会产生翻译费用。",
 };
-const SHEET_ORDER: Record<string, number> = { render: 0, refine: 1, translation: 2 };
+const SHEET_ORDER: Record<string, number> = { render: 0, translation: 1 };
 
 /** 清单一行的费用小标签：不产生费用 / 产生费用。流水线 OCR 站、文档准备站的行也用它。 */
 export function ReprocessCost({ free, label }: { free: boolean; label?: string }) {
@@ -33,32 +46,27 @@ export function ReprocessCost({ free, label }: { free: boolean; label?: string }
   );
 }
 
-// 需要先确认再执行的动作：重新翻译（后端标 danger）和精修（会调模型、产生费用）。
+// 需要先确认再执行的动作：重新翻译（后端标 danger）。
 function needsConfirm(action: JobStageRetryActionView) {
-  return Boolean(action.danger) || action.stage === "refine";
+  return Boolean(action.danger);
 }
 
-const CONFIRM_COPY: Record<string, { title: string; description: string; confirmLabel: string }> = {
-  translation: {
-    title: "确认重新翻译",
-    description: "复用现有 OCR，重新翻译整本再排版，会重新调用翻译接口并产生费用。只想接着上次没做完的部分，请用失败卡片上的「从断点继续」。",
-    confirmLabel: "接受风险并重新翻译",
-  },
-  refineContinue: {
-    title: "接着精修",
-    description: "从上次没审到的那一页接着挑错和修改，前面已经精修过的部分不再重复。改完自动重新渲染一次；会调用模型、产生少量费用。",
-    confirmLabel: "接着精修",
-  },
-  refine: {
-    title: "精修译文",
-    description: "在现有译文上走编辑部流程：模型先挑错（漏译、错译、数字和术语），再按问题分派局部修改或整段重写，最多两轮；改不好的保留原译，列进「留给你确认」。改完自动重新渲染一次，不会重新翻译整本；每处修改都会留下记录，之后也能退回。会调用模型、产生费用，耗时视页数而定。",
-    confirmLabel: "开始精修",
-  },
+const CONFIRM_COPY = {
+  title: "确认重新翻译",
+  description: "复用现有 OCR，重新翻译整本再排版，会重新调用翻译接口并产生费用。只想接着上次没做完的部分，请用失败卡片上的「从断点继续」。",
+  confirmLabel: "接受风险并重新翻译",
+};
+
+type RetryOptions = {
+  acceptDuplicateRisk?: boolean;
+  renderEngine?: string;
+  translationQuality?: string;
+  /** 重新翻译换成设置里存的这条连接（整套：地址、模型、key……）。 */
+  translationConnection?: TranslationConnection | null;
 };
 
 function StageIcon({ stage }: { stage: JobRetryStage }) {
   if (stage === "translation") return <Languages className="size-4" aria-hidden="true" />;
-  if (stage === "refine") return <Sparkles className="size-4" aria-hidden="true" />;
   return <RefreshCw className="size-4" aria-hidden="true" />;
 }
 
@@ -86,6 +94,8 @@ export function TranslationStageActions({
   extraRows = null,
   stages,
   onRetry,
+  estimate,
+  currentModel = "",
 }: {
   actions?: JobStageRetryActionView[];
   /** inline：一排按钮（失败态和翻译按钮同排）；sheet：「重新处理」展开后的清单，每项一行。 */
@@ -99,14 +109,43 @@ export function TranslationStageActions({
   error?: string;
   onRetry: (
     stage: JobRetryStage,
-    options?: { acceptDuplicateRisk?: boolean; renderEngine?: string; refineStartPage?: number },
+    options?: RetryOptions,
   ) => Promise<unknown>;
+  /** 这本书上次翻译用的模型；列表里同名那一行标「原来用的」。 */
+  currentModel?: string;
+  /** 换成某个模型重新翻译大概要花多少；不给就不显示估价。 */
+  estimate?: (baseUrl: string, model: string) => Promise<UsageEstimateView | null>;
 }) {
   const [confirmAction, setConfirmAction] = useState<JobStageRetryActionView | null>(null);
-  // 「接着精修」：从这一页开始（null = 整本精修）。
-  const [continuePage, setContinuePage] = useState<number | null>(null);
   // 重新渲染用哪个排版引擎；空串 = 沿用任务原来的。
   const [renderEngine, setRenderEngine] = useState("");
+  // 重新翻译用哪种翻译方式；空串 = 沿用任务原来的。
+  const [translationQuality, setTranslationQuality] = useState<RetranslateQuality>("");
+  // 重新翻译用哪条连接（设置里存的）；空串 = 沿用任务原来的。
+  // 设置里存好的连接；设置一保存（retainpdf:credentials-changed）就重读，不用关掉书详情。
+  const [modelOptions, setModelOptions] = useState(() => retranslateModelOptions(savedTranslationConnections()));
+  // 什么都不选时用的是设置里的默认模型（重新翻译以设置为底），第一行写出来。
+  const [settingsModel, setSettingsModel] = useState(savedDefaultTranslationModel);
+  // useLayoutEffect：和换书那次提交同步挂上（2026-11-22）。useEffect 会晚一拍，机器忙时
+  // 设置刚好在这一拍里保存，事件就落到上一本书已卸载的组件上，列表不更新。
+  useLayoutEffect(() => {
+    const reload = () => {
+      setModelOptions(retranslateModelOptions(savedTranslationConnections()));
+      setSettingsModel(savedDefaultTranslationModel());
+    };
+    document.addEventListener(CREDENTIALS_CHANGED_EVENT, reload);
+    return () => document.removeEventListener(CREDENTIALS_CHANGED_EVENT, reload);
+  }, []);
+  const [translationModel, setTranslationModel] = useState(KEEP_MODEL);
+  const translationConnection = modelOptions.find((option) => option.value === translationModel)?.connection || null;
+  // 清单里列着重新翻译、能用时才去问估价。
+  const translationListed = actions.some((action) => action.stage === "translation" && action.can_retry)
+    && (!stages || stages.includes("translation"));
+  const priceOf = useRetranslateEstimates(modelOptions, estimate, translationListed && modelOptions.length > 1);
+  const translationChoice = {
+    ...(translationQuality ? { translationQuality } : {}),
+    ...(translationConnection ? { translationConnection } : {}),
+  };
   // 父级 hook 已把错误写入 error prop；本地兜底覆盖 onRetry 直接抛错
   // 但父级未落 error 的场景（如 mock/装配差异），保证错误仍落到 UI。
   const [localError, setLocalError] = useState("");
@@ -114,9 +153,6 @@ export function TranslationStageActions({
   const visibleActions = (checking ? LOADING_ACTIONS : actions)
     .filter((action) => !stages || stages.includes(action.stage));
   const shownError = error || localError;
-  const confirmCopy = confirmAction?.stage === "refine"
-    ? CONFIRM_COPY[continuePage ? "refineContinue" : "refine"]
-    : CONFIRM_COPY.translation;
   if (!visibleActions.length && !extraRows && !shownError) return null;
 
   function describeRetryError(cause: unknown): string {
@@ -124,10 +160,7 @@ export function TranslationStageActions({
     return message || "重新处理失败，请稍后重试。";
   }
 
-  async function runRetry(
-    stage: JobRetryStage,
-    options?: { acceptDuplicateRisk?: boolean; renderEngine?: string },
-  ) {
+  async function runRetry(stage: JobRetryStage, options?: RetryOptions) {
     setLocalError("");
     try {
       await onRetry(stage, options);
@@ -141,16 +174,12 @@ export function TranslationStageActions({
   async function confirmRisk() {
     if (!confirmAction) return;
     try {
-      // 精修的确认只是「知道要花钱」，不是接受重复请求风险。
-      await onRetry(
-        confirmAction.stage,
-        confirmAction.stage === "refine"
-          ? (continuePage ? { refineStartPage: continuePage } : undefined)
-          : { acceptDuplicateRisk: true },
-      );
+      await onRetry(confirmAction.stage, {
+        acceptDuplicateRisk: true,
+        ...(confirmAction.stage === "translation" ? translationChoice : {}),
+      });
       setLocalError("");
       setConfirmAction(null);
-      setContinuePage(null);
     } catch (cause) {
       // 失败给文案且不吞错：确认框保持打开，允许用户取消或重试。
       setLocalError(describeRetryError(cause));
@@ -170,9 +199,9 @@ export function TranslationStageActions({
         disabled={disabled}
         title={!action.can_retry && rawReason ? (reason === rawReason ? reason : `${reason}（${rawReason}）`) : undefined}
         onClick={() => {
-          setContinuePage(null);
           if (needsConfirm(action)) setConfirmAction(action);
           else if (action.stage === "render" && renderEngine) void runRetry("render", { renderEngine });
+          else if (action.stage === "translation" && (translationQuality || translationConnection)) void runRetry("translation", translationChoice);
           else void runRetry(action.stage);
         }}
       >
@@ -201,6 +230,41 @@ export function TranslationStageActions({
     </Select>
   );
 
+  const qualitySelect = (bare = false) => (
+    <Select
+      id="book-detail-translation-quality"
+      size={variant === "sheet" ? "md" : "sm"}
+      aria-label="重新翻译用的翻译方式"
+      title="重新翻译用的翻译方式"
+      className="book-detail-translation-quality"
+      value={translationQuality}
+      disabled={Boolean(pendingStage)}
+      onChange={(event) => setTranslationQuality(event.target.value as RetranslateQuality)}
+    >
+      {RETRANSLATE_QUALITY_OPTIONS.map((option) => (
+        // 上下排时前面已经有「翻译方式」几个字，选项里不再重复「翻译：」。
+        <option key={option.value} value={option.value}>{bare ? option.label.replace(/^翻译：/, "") : option.label}</option>
+      ))}
+    </Select>
+  );
+  const modelSelect = (
+    <RetranslateModelSelect
+      options={modelOptions}
+      value={translationModel}
+      onChange={setTranslationModel}
+      disabled={Boolean(pendingStage)}
+      size={variant === "sheet" ? "md" : "sm"}
+      priceOf={priceOf}
+    />
+  );
+  const confirmDescription = [
+    CONFIRM_COPY.description,
+    translationQuality === "refined" ? RETRANSLATE_AGENT_NOTE : "",
+    translationConnection
+      ? `这次用 ${translationConnection.label} 的 ${translationConnection.model}${priceOf(translationModel) ? `，${priceOf(translationModel)}` : ""}。`
+      : "",
+  ].join("");
+
   const sheet = variant === "sheet";
   const sheetActions = [...visibleActions].sort(
     (a, b) => (SHEET_ORDER[a.stage] ?? 9) - (SHEET_ORDER[b.stage] ?? 9),
@@ -216,10 +280,34 @@ export function TranslationStageActions({
         <ul className="book-detail-reprocess-list">
           {sheetActions.map((action) => {
             const reason = stageDisabledReasonText(action.disabled_reason || action.reason);
-            const lastRefine = action.stage === "refine" ? describeLastRefine(action.last_refine) : "";
-            const resumeAt = action.stage === "refine" ? refineContinuePage(action.last_refine) : null;
-            const escalated = action.stage === "refine" ? refineEscalations(action.last_refine) : [];
-            const escalatedCount = Number(action.last_refine?.escalated_count) || escalated.length;
+            // 重新翻译能挑模型时整行改成上下排：上面标题和费用，下面翻译方式、模型列表，「开始」在最后。
+            if (action.stage === "translation" && !checking && modelOptions.length > 1) {
+              return (
+                <li key={action.stage} className="book-detail-reprocess-row is-stacked" data-reprocess-stage={action.stage}>
+                  <div className="book-detail-reprocess-copy" title={SHEET_HINTS[action.stage] || undefined}>
+                    <strong><StageIcon stage={action.stage} />{labelOf(action)}</strong>
+                    {!action.can_retry && reason ? <span>{reason}</span> : <ReprocessCost free={false} />}
+                  </div>
+                  <div className="book-detail-reprocess-field">
+                    <span className="book-detail-reprocess-field-label">翻译方式</span>
+                    {qualitySelect(true)}
+                  </div>
+                  <div className="book-detail-reprocess-field">
+                    <span className="book-detail-reprocess-field-label">模型</span>
+                    <RetranslateModelList
+                      options={modelOptions}
+                      value={translationModel}
+                      onChange={setTranslationModel}
+                      disabled={Boolean(pendingStage)}
+                      priceOf={priceOf}
+                      currentModel={currentModel}
+                      settingsModel={settingsModel}
+                    />
+                  </div>
+                  <div className="book-detail-reprocess-controls">{actionButton(action, true)}</div>
+                </li>
+              );
+            }
             return (
               <li key={action.stage} className="book-detail-reprocess-row" data-reprocess-stage={action.stage}>
                 <div className="book-detail-reprocess-copy" title={SHEET_HINTS[action.stage] || undefined}>
@@ -227,39 +315,11 @@ export function TranslationStageActions({
                   {!action.can_retry && reason && !checking
                     ? <span>{reason}</span>
                     : <ReprocessCost free={action.stage === "render"} />}
-                  {lastRefine ? <span data-last-refine="true">{lastRefine}</span> : null}
-                  {escalated.length ? (
-                    <details className="book-detail-refine-escalated" data-refine-escalated={escalatedCount}>
-                      <summary>{`查看留给你确认的 ${escalatedCount} 处`}</summary>
-                      <ol>
-                        {escalated.map((row) => (
-                          <li key={row.item_id} data-escalated-item={row.item_id}>
-                            <span className="book-detail-refine-escalated-page">{`第 ${row.page_number} 页`}</span>
-                            <span>{row.reason}</span>
-                          </li>
-                        ))}
-                      </ol>
-                      {escalatedCount > escalated.length ? (
-                        <p>{`只列出前 ${escalated.length} 处；全部见精修报告。`}</p>
-                      ) : null}
-                    </details>
-                  ) : null}
                 </div>
                 <div className="book-detail-reprocess-controls">
                   {action.stage === "render" && !checking ? engineSelect : null}
-                  {resumeAt && action.can_retry ? (
-                    <Button
-                      variant="secondary"
-                      disabled={checking || Boolean(pendingStage)}
-                      data-refine-continue={resumeAt}
-                      onClick={() => {
-                        setContinuePage(resumeAt);
-                        setConfirmAction(action);
-                      }}
-                    >
-                      {`从第 ${resumeAt} 页继续`}
-                    </Button>
-                  ) : null}
+                  {action.stage === "translation" && !checking ? qualitySelect() : null}
+                  {action.stage === "translation" && !checking ? modelSelect : null}
                   {actionButton(action, true)}
                 </div>
               </li>
@@ -270,6 +330,8 @@ export function TranslationStageActions({
       ) : (
         <div className="book-detail-stage-actions-buttons">
           {visibleActions.map((action) => actionButton(action))}
+          {!checking && visibleActions.some((action) => action.stage === "translation") ? qualitySelect() : null}
+          {!checking && visibleActions.some((action) => action.stage === "translation") ? modelSelect : null}
           {!checking && visibleActions.some((action) => action.stage === "render") ? engineSelect : null}
         </div>
       )}
@@ -278,14 +340,11 @@ export function TranslationStageActions({
         id="book-detail-translation-risk-confirm"
         open={Boolean(confirmAction)}
         onOpenChange={(next) => {
-          if (!next) {
-            setConfirmAction(null);
-            setContinuePage(null);
-          }
+          if (!next) setConfirmAction(null);
         }}
-        title={confirmCopy.title}
-        description={confirmCopy.description}
-        confirmLabel={confirmCopy.confirmLabel}
+        title={CONFIRM_COPY.title}
+        description={confirmDescription}
+        confirmLabel={CONFIRM_COPY.confirmLabel}
         tone="default"
         pending={Boolean(confirmAction) && pendingStage === confirmAction?.stage}
         onConfirm={confirmRisk}

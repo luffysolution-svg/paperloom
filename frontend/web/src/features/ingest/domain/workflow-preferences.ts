@@ -12,8 +12,8 @@
  * translationQualityFields）：
  * - standard：直接翻译，和以前完全一样；
  * - terms：先通读全书生成术语表和风格指南，再带着它们翻译（preparation=terms+style）；
- * - refined：编辑部——术语表经术语专员审定；翻译完由审校挑错、主编分派局部改或整块重写，
- *   最多两轮，改不好的保留原译并列出来（preparation=editorial、refine=editorial）。
+ * - refined：精翻 = 翻译 agent（engine=agent）：先通读全文，再逐页翻译并审校，自带统一术语。
+ *   2026-11-18 以前精翻是现有流程上的编辑部（preparation=editorial、refine=editorial），已不再从这里发。
  */
 export type TranslationQuality = "standard" | "terms" | "refined";
 
@@ -33,20 +33,19 @@ export function normalizeRenderEngine(value: unknown): RenderEngine {
 }
 
 /**
- * 翻译引擎（translation.engine）。legacy 不发字段，和以前逐字相同；agent = 翻译 agent
- * （先通读全文，再逐页翻译并审校），后端要求接口协议是 anthropic，协议不对时 payload 里也不发，
- * 见 workflow/payload.ts 的 translationEngineFields。
+ * 表格翻译（translation.tables，2026-11-22 接入，试验）。keep 一个字段都不发，后端缺省保留原文；
+ * translate = 正文翻完后由表格 agent 逐张翻（只翻有文字层的表），译文只在阅读页，译文 PDF 里表格还是原文。
  */
-export type TranslationEngine = "legacy" | "agent";
+export type TableTranslation = "keep" | "translate";
 
-export function normalizeTranslationEngine(value: unknown): TranslationEngine {
-  return value === "agent" ? "agent" : "legacy";
+export function normalizeTableTranslation(value: unknown): TableTranslation {
+  return value === "translate" ? "translate" : "keep";
 }
 
 const WORKFLOW_PREFERENCE_SPECS = {
   translationQuality: { storageKey: "retainpdf.translationQuality", normalize: normalizeTranslationQuality },
   renderEngine: { storageKey: "retainpdf.renderEngine", normalize: normalizeRenderEngine },
-  translationEngine: { storageKey: "retainpdf.translationEngine", normalize: normalizeTranslationEngine },
+  tableTranslation: { storageKey: "retainpdf.tableTranslation", normalize: normalizeTableTranslation },
 } as const satisfies Record<string, { storageKey: string; normalize: (value: unknown) => string }>;
 
 type Specs = typeof WORKFLOW_PREFERENCE_SPECS;
@@ -80,4 +79,15 @@ export function saveWorkflowPreference(key: WorkflowPreferenceKey, value: string
   try {
     if (typeof localStorage !== "undefined") localStorage.setItem(WORKFLOW_PREFERENCE_SPECS[key].storageKey, value);
   } catch {}
+}
+
+/** 上传弹窗的「普通 / Agent」：Agent = refined（翻译 agent）。 */
+export function isAgentTranslation(quality: TranslationQuality): boolean {
+  return quality === "refined";
+}
+
+/** 点了普通还是 Agent → 翻译质量。点普通时原来是「统一术语」就留着。 */
+export function qualityForEngine(engine: string, current: TranslationQuality): TranslationQuality {
+  if (engine === "agent") return "refined";
+  return current === "refined" ? "standard" : current;
 }

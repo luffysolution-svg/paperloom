@@ -65,20 +65,14 @@ impl JobRecord {
     /// 自建的 Paddle 服务（填了 `paddle_api_url`）不算：同时跑几个任务、排队怎样都只在官方服务上量过，照旧由 Rust 整份提交
     /// （那条路还有派发意向记录，进程死在提交途中重启后不会重复提交）。
     pub fn ocr_streams_pages(&self) -> bool {
+        use crate::config::provider_config::{configured_streams_pages, StreamsPages};
         let ocr = &self.request_payload.ocr;
-        let provider = ocr.provider.trim();
-        if provider.eq_ignore_ascii_case("glm_ocr") {
-            return true;
+        // 会不会一片片公布写在服务商清单的 `streams_pages` 里，不再按服务商名字判断。
+        match configured_streams_pages(&ocr.provider) {
+            StreamsPages::Always => true,
+            StreamsPages::Never => false,
+            StreamsPages::ChunkedUpload => ocr.chunk_eligible() && self.source_url().trim().is_empty(),
         }
-        let official_cli = ocr
-            .options
-            .get("transport")
-            .and_then(serde_json::Value::as_str)
-            .is_some_and(|transport| transport.trim().eq_ignore_ascii_case("official_cli"));
-        provider.eq_ignore_ascii_case("paddle")
-            && !official_cli
-            && ocr.paddle_api_url.trim().is_empty()
-            && self.source_url().trim().is_empty()
     }
 
     // --- 翻译 ---
@@ -91,6 +85,16 @@ impl JobRecord {
     /// 翻译引擎：`legacy`（现有流程）或 `agent`（翻译 agent）。有这个字段以前的老任务读出来是 `legacy`。
     pub fn translation_engine(&self) -> &str {
         non_empty(&self.request_payload.translation.engine).unwrap_or("legacy")
+    }
+
+    /// 另配的审校 / 编辑模型；没配是空串（译文版本列表显示用）。
+    pub fn translation_reviewer_model(&self) -> &str {
+        self.request_payload.translation.reviewer_model.trim()
+    }
+
+    /// 译前准备档位（off / terms / terms+style / editorial…）。
+    pub fn translation_preparation(&self) -> &str {
+        self.request_payload.translation.preparation.trim()
     }
 
     /// 翻译的本地页码窗口 `(start_page, end_page)`，`end_page` 为 -1 表示到最后。

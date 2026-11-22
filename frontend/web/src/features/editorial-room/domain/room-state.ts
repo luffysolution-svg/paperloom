@@ -8,7 +8,7 @@
  * 工位手上是哪一页不单独记，由每页的 stage 推出来（stationPages），免得两处对不上。
  */
 
-import type { EditorialEvent, GlossaryAction } from "./events.js";
+import type { EditorialEvent, EditorialEventType, GlossaryAction } from "./events.js";
 
 export type PageStage =
   | "waiting" // 还没派
@@ -33,7 +33,8 @@ export type PageCard = {
   codes: Record<string, number>;
   /** 显示原文、进了「待人看」筐的块数。 */
   fallback: number;
-  review: { tickets: number; applied: number; rejected: number } | null;
+  /** rejected 是修订没收的，withdrawn 是审校自己撤回的（两者不重叠）。 */
+  review: { tickets: number; applied: number; rejected: number; withdrawn: number } | null;
   /** 最后一次变动的序号：同一工位有几页时，显示最近动过的那页。 */
   touched: number;
 };
@@ -43,6 +44,23 @@ export type AmbiguityTicket = { term: string; current: string; proposed: string;
 export type BasketItem = { page: number; block: string; reason: string };
 
 export type RunStatus = "idle" | "reading" | "running" | "stopped" | "done";
+
+/**
+ * 画面上一闪而过的事（查资料的气泡、审校单飞过去、质检扫一下、定稿盖章……）：留最近几条事件和它的序号，
+ * 画面按序号挂一次性动画（同一条只播一次）。只留会画成动作的那几种。
+ */
+export type Moment = { seq: number; event: EditorialEvent };
+const MOMENT_TYPES: readonly EditorialEventType[] = [
+  "tool_call",
+  "check_result",
+  "retry",
+  "fallback",
+  "review_done",
+  "glossary_changed",
+  "ticket_opened",
+  "page_done",
+];
+const MOMENTS_KEPT = 12;
 
 export type RoomState = {
   /** 已叠上去的事件数。 */
@@ -60,6 +78,8 @@ export type RoomState = {
   basket: BasketItem[];
   retries: number;
   last: EditorialEvent | null;
+  /** 最近几条会画成动作的事件，旧的在前。 */
+  moments: Moment[];
 };
 
 const GLOSSARY_RECENT = 5;
@@ -80,6 +100,7 @@ export function initialRoomState(): RoomState {
     basket: [],
     retries: 0,
     last: null,
+    moments: [],
   };
 }
 
@@ -108,7 +129,9 @@ function withPage(state: RoomState, page: number, patch: (card: PageCard) => Par
 
 export function reduceEditorialEvent(state: RoomState, event: EditorialEvent): RoomState {
   const next = applyEvent(state, event);
-  return { ...next, seq: state.seq + 1, last: event };
+  const seq = state.seq + 1;
+  const moments = MOMENT_TYPES.includes(event.type) ? [...next.moments, { seq, event }].slice(-MOMENTS_KEPT) : next.moments;
+  return { ...next, seq, last: event, moments };
 }
 
 function applyEvent(state: RoomState, event: EditorialEvent): RoomState {
@@ -177,7 +200,7 @@ function applyEvent(state: RoomState, event: EditorialEvent): RoomState {
         ...state,
         pages: withPage(state, event.page, () => ({
           stage: "revising",
-          review: { tickets: event.tickets, applied: event.applied, rejected: event.rejected },
+          review: { tickets: event.tickets, applied: event.applied, rejected: event.rejected, withdrawn: event.withdrawn || 0 },
         })),
       };
     case "page_done": {
@@ -279,6 +302,7 @@ export type RoomTotals = CheckCounts & {
   fallback: number;
   applied: number;
   rejected: number;
+  withdrawn: number;
   reviewTickets: number;
   donePages: number;
   glossaryVersion: number;
@@ -295,6 +319,7 @@ export function roomTotals(state: RoomState): RoomTotals {
     fallback: state.basket.length,
     applied: 0,
     rejected: 0,
+    withdrawn: 0,
     reviewTickets: 0,
     donePages: 0,
     glossaryVersion: state.glossary.version,
@@ -311,6 +336,7 @@ export function roomTotals(state: RoomState): RoomTotals {
     if (card.review) {
       totals.applied += card.review.applied;
       totals.rejected += card.review.rejected;
+      totals.withdrawn += card.review.withdrawn || 0;
       totals.reviewTickets += card.review.tickets;
     }
     finalFallback += card.fallback;

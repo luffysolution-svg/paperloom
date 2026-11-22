@@ -174,6 +174,7 @@ export function IngestDialog({
             onClickCapture={handleShellClickCapture}
           >
             <DialogHeader className="translation-workflow-head is-upload-head">
+              {/* 2026-11-20 用户：顶部只留 tab 切换，标题、说明只给读屏。 */}
               <DialogTitle asChild>
                 <h2 id={TRANSLATION_WORKFLOW_DIALOG.ids.title} className="sr-only">
                   {TRANSLATION_WORKFLOW_DIALOG.copy.uploadTitle}

@@ -71,11 +71,42 @@ export const READER_SHORTCUT_HELP: readonly ReaderShortcutHelpGroup[] = [
     ],
   },
   {
+    title: "搜索",
+    items: [
+      { actions: [], keys: "⌘F / Ctrl+F", desc: "在书里搜索（光标已在搜索框时再按，用浏览器自己的查找）" },
+      { actions: [], keys: "Enter / Shift+Enter", desc: "下一处 / 上一处" },
+      { actions: [], keys: "Esc", desc: "收起搜索" },
+    ],
+  },
+  {
+    title: "画笔",
+    items: [
+      { actions: [], keys: "P", desc: "进入 / 退出画笔（书页上右键也能选笔和颜色）" },
+      { actions: [], keys: "Esc", desc: "退出画笔" },
+      { actions: [], keys: "⌘Z / Ctrl+Z", desc: "画笔模式下撤销" },
+      { actions: [], keys: "Shift+右键", desc: "浏览器自己的右键菜单" },
+    ],
+  },
+  {
+    title: "待处理",
+    items: [
+      { actions: [], keys: "N / Shift+N", desc: "跳到下一处 / 上一处要看一眼的段落（底栏「待处理」）" },
+    ],
+  },
+  {
     title: "模式",
     items: [
       { actions: ["mode-source"], keys: "1", desc: "原文" },
       { actions: ["mode-compare"], keys: "2", desc: "对照" },
       { actions: ["mode-translated"], keys: "3", desc: "译文" },
+    ],
+  },
+  {
+    title: "改译文",
+    items: [
+      { actions: [], keys: "E", desc: "改鼠标停着的那一段" },
+      { actions: [], keys: "Alt+↑ / Alt+↓", desc: "改上一段 / 下一段" },
+      { actions: [], keys: "⌘Enter / Ctrl+Enter", desc: "保存" },
     ],
   },
 ];

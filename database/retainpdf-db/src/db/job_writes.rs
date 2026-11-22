@@ -1,7 +1,7 @@
 use anyhow::Result;
 use rusqlite::{params, OptionalExtension, TransactionBehavior};
 
-use crate::models::domain::{JobArtifactRecord, JobSnapshot, JobStatusKind};
+use crate::models::domain::{ocr_parent_job_id, JobArtifactRecord, JobSnapshot, JobStatusKind};
 use crate::storage_paths::{
     collect_job_artifact_entries, normalize_job_paths_for_storage, restore_previous_output_pdf,
 };
@@ -26,7 +26,6 @@ pub(super) struct PreparedJobWrite {
     stored_job: JobSnapshot,
     artifacts_json: Option<String>,
     artifact_entries: Vec<JobArtifactRecord>,
-    runtime_json: Option<String>,
     failure_json: Option<String>,
 }
 
@@ -43,11 +42,6 @@ pub(super) fn prepare_job_write(db: &Db, job: &JobSnapshot) -> Result<PreparedJo
         .map(serde_json::to_string)
         .transpose()?;
     let artifact_entries = collect_job_artifact_entries(&stored_job, &db.data_root)?;
-    let runtime_json = stored_job
-        .runtime
-        .as_ref()
-        .map(serde_json::to_string)
-        .transpose()?;
     let failure_json = stored_job
         .failure
         .as_ref()
@@ -57,7 +51,6 @@ pub(super) fn prepare_job_write(db: &Db, job: &JobSnapshot) -> Result<PreparedJo
         stored_job,
         artifacts_json,
         artifact_entries,
-        runtime_json,
         failure_json,
     })
 }
@@ -70,19 +63,26 @@ pub(super) fn persist_prepared_job(
         stored_job,
         artifacts_json,
         artifact_entries,
-        runtime_json,
         failure_json,
     } = prepared;
+    // 运行信息只存算不出来的几样（v33）：其余的读出来时按 `fill_derived_runtime` 算。
+    let runtime = stored_job.runtime.clone().unwrap_or_default();
     tx.execute(
         r#"
         INSERT INTO jobs (
-            job_id, workflow, status_json, created_at, updated_at, started_at, finished_at,
+            job_id, workflow, status, created_at, updated_at, started_at, finished_at,
             upload_id, pid, command_json, request_json, error, stage, stage_detail,
-            progress_current, progress_total, log_tail_json, result_json, runtime_json, failure_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            progress_current, progress_total, log_tail_json, result_json,
+            stage_entered_at, last_error_at, retry_count, last_retry_at, failure_json,
+            parent_job_id
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18,
+            ?19, ?20, ?21, ?22, ?23,
+            -- OCR 子任务指向父任务（编号 `{父任务}-ocr`）；父任务不在库里时留空，免得外键挡住写入。
+            (SELECT job_id FROM jobs WHERE job_id = ?24))
         ON CONFLICT(job_id) DO UPDATE SET
             workflow=excluded.workflow,
-            status_json=excluded.status_json,
+            status=excluded.status,
+            parent_job_id=excluded.parent_job_id,
             created_at=excluded.created_at,
             updated_at=excluded.updated_at,
             started_at=excluded.started_at,
@@ -98,13 +98,16 @@ pub(super) fn persist_prepared_job(
             progress_total=excluded.progress_total,
             log_tail_json=excluded.log_tail_json,
             result_json=excluded.result_json,
-            runtime_json=excluded.runtime_json,
+            stage_entered_at=excluded.stage_entered_at,
+            last_error_at=excluded.last_error_at,
+            retry_count=excluded.retry_count,
+            last_retry_at=excluded.last_retry_at,
             failure_json=excluded.failure_json
         "#,
         params![
             stored_job.job_id,
-            serde_json::to_string(&stored_job.workflow)?,
-            serde_json::to_string(&stored_job.status)?,
+            stored_job.workflow.as_str(),
+            stored_job.status.as_str(),
             stored_job.created_at,
             stored_job.updated_at,
             stored_job.started_at,
@@ -120,11 +123,59 @@ pub(super) fn persist_prepared_job(
             stored_job.progress_total,
             serde_json::to_string(&stored_job.log_tail)?,
             serde_json::to_string(&stored_job.result)?,
-            runtime_json,
+            runtime.stage_started_at,
+            runtime.last_error_at,
+            runtime.retry_count,
+            runtime.last_retry_at,
             failure_json,
+            ocr_parent_job_id(&stored_job.job_id),
         ],
     )?;
+    persist_stage_history(tx, &stored_job.job_id, &runtime.stage_history)?;
     persist_job_artifacts(tx, &stored_job.job_id, artifacts_json, &artifact_entries)
+}
+
+/// 阶段历史写进 `job_stage_history`（v33）：只追加的表，写的时候只动有变化的行——平常只有最后一段在变
+/// （说明、进度、离开时间），前面的段原样不碰，免得每次进度更新都重写整段历史、每行都触发同步记账。
+fn persist_stage_history(
+    tx: &rusqlite::Transaction<'_>,
+    job_id: &str,
+    history: &[crate::models::domain::JobStageTiming],
+) -> Result<()> {
+    tx.execute(
+        "DELETE FROM job_stage_history WHERE job_id = ?1 AND seq >= ?2",
+        params![job_id, history.len() as i64],
+    )?;
+    let mut upsert = tx.prepare_cached(
+        r#"
+        INSERT INTO job_stage_history (
+            job_id, seq, stage, detail, enter_at, exit_at, duration_ms, terminal_status, progress_current, progress_total
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+        ON CONFLICT(job_id, seq) DO UPDATE SET
+            stage = excluded.stage, detail = excluded.detail, enter_at = excluded.enter_at,
+            exit_at = excluded.exit_at, duration_ms = excluded.duration_ms,
+            terminal_status = excluded.terminal_status,
+            progress_current = excluded.progress_current, progress_total = excluded.progress_total
+        WHERE (stage, detail, enter_at, exit_at, duration_ms, terminal_status, progress_current, progress_total)
+            IS NOT (excluded.stage, excluded.detail, excluded.enter_at, excluded.exit_at, excluded.duration_ms,
+                    excluded.terminal_status, excluded.progress_current, excluded.progress_total)
+        "#,
+    )?;
+    for (seq, entry) in history.iter().enumerate() {
+        upsert.execute(params![
+            job_id,
+            seq as i64,
+            entry.stage,
+            entry.detail,
+            entry.enter_at,
+            entry.exit_at,
+            entry.duration_ms,
+            entry.terminal_status.as_ref().map(JobStatusKind::as_str),
+            entry.progress_current,
+            entry.progress_total,
+        ])?;
+    }
+    Ok(())
 }
 
 impl Db {
@@ -178,18 +229,15 @@ impl Db {
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let current: Option<(String, i64)> = tx
             .query_row(
-                "SELECT status_json, run_generation FROM jobs WHERE job_id = ?1",
+                "SELECT status, run_generation FROM jobs WHERE job_id = ?1",
                 params![job.job_id],
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()?;
-        let Some((status_json, generation)) = current else {
+        let Some((status, generation)) = current else {
             return Ok(NewRunWrite::Missing);
         };
-        // 同 cas_save_job：存的是 JSON 字符串（`"queued"`），老数据可能没带引号。
-        let current_status = serde_json::from_str::<JobStatusKind>(&status_json)
-            .or_else(|_| serde_json::from_value(serde_json::Value::String(status_json.clone())))
-            .ok();
+        let current_status = super::rows::parse_status_text(&status);
         let current_generation = generation.max(0) as u64;
         if current_status.as_ref() != Some(expected_status) || current_generation != expected_generation {
             return Ok(NewRunWrite::Changed {
@@ -239,7 +287,7 @@ impl Db {
         // Check current status
         let current_row: Option<(String, i64)> = tx
             .query_row(
-                "SELECT status_json, run_generation FROM jobs WHERE job_id = ?1",
+                "SELECT status, run_generation FROM jobs WHERE job_id = ?1",
                 params![prepared.stored_job.job_id],
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
@@ -247,10 +295,7 @@ impl Db {
         let Some((current, current_generation)) = current_row else {
             return Ok(false);
         };
-        let is_expected = expected_statuses.iter().any(|s| {
-            let quoted = format!("\"{}\"", s);
-            current == quoted || current == *s
-        });
+        let is_expected = expected_statuses.iter().any(|s| current == *s);
         if !is_expected {
             return Ok(false);
         }

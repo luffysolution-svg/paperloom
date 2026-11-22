@@ -1,7 +1,7 @@
 //! 书（文档）：一本 PDF 是一本书，同一本书的多个任务挂在它下面；书本身的文件；全文检索。
 
 use crate::app::AppState;
-use crate::routes::library_data;
+use crate::routes::{library_data, tags};
 
 crate::endpoints! {
     state: AppState;
@@ -11,12 +11,20 @@ crate::endpoints! {
     GET "/api/v1/documents/:document_id" => library_data::get_document_route, signed;
     /// 改书的信息（书名、阅读状态）
     PATCH "/api/v1/documents/:document_id" => library_data::patch_document_route, signed;
+    /// 设书的标签（设成正好这几个）
+    PUT "/api/v1/documents/:document_id/tags" => tags::set_document_tags_route, signed;
     /// 删除一本书和它的任务
     DELETE "/api/v1/documents/:document_id" => library_data::delete_document_route, signed;
     /// 哪些页已经有译文
     GET "/api/v1/documents/:document_id/translation-coverage" => library_data::get_document_translation_coverage_route, signed;
-    /// 阅读这本书该打开哪个任务（含合并阅读）
+    /// 阅读这本书该打开哪个任务（含合并阅读）；`version` 选译文版本
     GET "/api/v1/documents/:document_id/reading" => library_data::get_document_reading_route, signed;
+    /// 这本书的译文版本和当前版本
+    GET "/api/v1/documents/:document_id/translation-versions" => library_data::list_document_translation_versions_route, signed;
+    /// 切换当前译文版本（null 回到自动：逐页取最新）
+    PUT "/api/v1/documents/:document_id/translation-version" => library_data::set_document_translation_version_route, signed;
+    /// 给译文版本改名、隐藏或恢复
+    PATCH "/api/v1/documents/:document_id/translation-versions/:version_id" => library_data::patch_document_translation_version_route, signed;
     /// 书本身的文件清单：原文、封面、缩略图、原文页预览
     GET "/api/v1/documents/:document_id/files" => library_data::list_document_files_route, signed;
     /// 取书的一个文件：source.pdf、cover.jpg、thumbnail.jpg

@@ -16,8 +16,10 @@ mod metadata_suggestions;
 mod ocr;
 mod reading;
 mod search;
+mod tags;
 mod translate;
 mod translate_plan;
+mod versions;
 mod views;
 
 // 门面：领域外只能用这里导出的东西，子模块都是私有的（见 BOUNDARIES.md「Domain Facades」）。
@@ -29,8 +31,12 @@ pub use api::{
     ocr_document_view, patch_collection_view, patch_document, remove_collection_document_view,
     search_blocks_view, translate_document_view, Disposition, DocumentReadingView,
     TranslationCoverageView,
+    document_translation_versions, patch_document_translation_version, set_document_translation_version,
+    DocumentReadingQuery, PatchTranslationVersionInput, SetCurrentTranslationVersionInput,
+    TranslationVersionView, TranslationVersionsQuery, TranslationVersionsView,
 };
 pub use media::{open_document_file, DocumentFile};
+pub use tags::{create_tag_view, delete_tag_view, list_tags_view, patch_tag_view, set_document_tags_view};
 pub use views::{
     AddCollectionDocumentsInput, ApplyDocumentMetadataSuggestionInput, CollectionListView,
     CollectionMutationResult, CreateCollectionInput, CreateDocumentMetadataSuggestionInput,
@@ -39,6 +45,7 @@ pub use views::{
     DocumentMetadataSuggestionListView, DocumentMetadataSuggestionView, DocumentTitleCandidateView,
     ListDocumentMetadataSuggestionsQuery, ListDocumentsQuery, PatchCollectionInput,
     PatchDocumentInput, SearchQuery, SearchResultView,
+    CreateTagInput, PatchTagInput, SetDocumentTagsInput, TagDeleteResultView, TagListView,
 };
 
 use std::path::Path;

@@ -18,6 +18,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from retainpdf_translation_agent.rules import NAMES
+from retainpdf_translation_agent.rules import TRANSLATOR_RULES
+from retainpdf_translation_agent.rules import bullets
 from retainpdf_translation_agent.checks import check_block
 from retainpdf_translation_agent.checks import check_terms
 from retainpdf_translation_agent.checks import restore_formulas
@@ -34,6 +37,14 @@ from retainpdf_translation_agent.contract import BlockResult
 from retainpdf_translation_agent.contract import PageInput
 from retainpdf_translation_agent.contract import RevisionRequest
 from retainpdf_translation_agent.memory import find_terms
+from retainpdf_translation_agent.tools import MAX_TOOL_CALLS
+from retainpdf_translation_agent.tools import MAX_TOOL_ROUNDS
+from retainpdf_translation_agent.tools import TOOL_DEFINITIONS
+from retainpdf_translation_agent.tools import TOOLS_PROMPT
+from retainpdf_translation_agent.tools import TOOLS_VERSION
+from retainpdf_translation_agent.tools import BookTools
+from retainpdf_translation_agent.tools import summarize_call
+from retainpdf_translation_agent.tools import tool_result_text
 from retainpdf_translation_agent.units import merge_groups
 from retainpdf_translation_agent.units import split_units
 
@@ -43,7 +54,8 @@ API_URL = "https://api.anthropic.com/v1/messages"
 BREAK = "[[BREAK]]"
 BREAK_RE = re.compile(r"\s*\[\[BREAK\]\]\s*")
 DEFAULT_MODEL = "claude-haiku-5-5"
-PROMPT_VERSION = "translation-agent-16"
+# 23：2026-11-20 通读员交书名译名（book_title），原文相同的标题只问一次
+PROMPT_VERSION = "translation-agent-23"
 # 角色：现在有译者（初译、重翻）和修订（按改稿要求改写）；没在 `models` 里指定的角色用默认模型
 ROLE_TRANSLATOR = "translator"
 ROLE_REVISER = "reviser"
@@ -84,6 +96,9 @@ SYSTEM_PROMPT = """你是学术文档的翻译 agent，把英文 PDF 翻成简�
 10. 请求里的 context 是这一页的上下文包，只用来帮你翻准，里面的东西都不要交回：
    - terms：术语表。status 是 approved 或 locked 的**必须照用**；candidate 是前面几页或别的章的译法，
      意思相同就沿用，意思不同（同一个词在这里是另一个意思）就按这里的意思译；有 scope 的只管那几章。
+     术语管的是这个概念：原文就是这个词（作名词、作概念讨论）时照用；词形变了（形容词、动词、分词，如术语 replication
+     遇到 replicated、replicable）按中文习惯说成动作或状态，意思对上就行，不要把术语名词硬塞进去
+     （不写"进行了复现""具有可复现性"，写"复现了""能复现"）。
    - keep：要原样保留的专名（人名、机构、期刊、软件）。
    - abbreviations：缩写和全称。first_use=true 表示全书第一次用到，译成"中文全称（缩写）"；之后直接写缩写。
    - names：人名等专名的中文译名，必须照用；first_use=true 时写"中文译名（原文）"，之后只写中文译名。
@@ -119,6 +134,17 @@ SYSTEM_PROMPT = """你是学术文档的翻译 agent，把英文 PDF 翻成简�
 @@ 备注
 <拿不准的地方>
 """
+
+# 人文社科、通俗读物（通读判的体裁在 `rewrite.REWRITE_GENRES` 里）初译时接在系统提示后面（2026-11-19）。
+# 11-19 实验（同一本民族志开头 3 页四组）：只换流程 qwen 好了一点（习语、个别句子），Haiku 加这一段最接近人工译本的节奏，
+# 也没犯人工译本的错（把"觉得该放行了"写成"获准了"、删句、添"天时地利人和"）。见
+# docs/ops/planning/translation-agent/20261119-人文书初译写法.md
+NARRATIVE_PROMPT = (
+    "\n\n本书是人文社科或通俗读物（叙事、论述为主，不是论文）。上面的规则里和这一段冲突的，以这一段为准：\n"
+    # 人名那条不带：逐页翻的人名、缩写靠上下文包里的 first_use 管（第 7、10 条），和按节翻的"前文已出现"不是一套
+    + bullets(tuple(rule for rule in TRANSLATOR_RULES if rule is not NAMES))
+    + "\n- 第 8 条的\"长度和原文相当\"不适用；术语的词形见第 10 条。\n- 公式、标记、编号、交卷格式的规则照旧。"
+)
 
 # 交卷格式（2026-10-31 起不用 JSON 工具调用：用户定。公式里的反斜杠在 JSON 里要写两个，交回纯文本照抄原文就行）
 ANSWER_HEADER_RE = re.compile(r"^@@[ \t]*(.+?)[ \t@]*$", re.M)
@@ -234,8 +260,10 @@ def _post(body: dict, *, key: str, url: str, sleep: Callable[[float], None]) -> 
                 raise RuntimeError(f"model API HTTP {error.code}: {text}") from None
             retry_after = error.headers.get("retry-after") if error.headers else None
             last_error = f"HTTP {error.code}"
-        except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.HTTPException) as error:
-            # 网络层的错（对方没回应就断开、连接被重置……）也退避重试：真实文档实测碰到过 RemoteDisconnected
+        except (OSError, http.client.HTTPException) as error:
+            # 网络层的错（对方没回应就断开、连接被重置……）也退避重试：真实文档实测碰到过 RemoteDisconnected；
+            # 2026-11-18 读回答时碰到 ssl.SSLError（record layer failure），它不是 ConnectionError，以前直接把整个阶段弄崩了。
+            # OSError 包括 URLError、超时、连接错误和 SSL 错误
             last_error = f"{type(error).__name__}: {error}"
         sleep(retry_wait(attempt, retry_after))
     raise RateLimited(f"model API still failing after {MAX_ATTEMPTS} attempts: {last_error}")
@@ -267,6 +295,13 @@ class TranslationAgent:
         self._restored: dict[str, list[dict]] = {}  # 这一轮被换回原文写法的公式（块 id → 警告）
         # 这一页合成的接续组（组号 → 原来的各块 id）：编辑部事件里照旧报各块的 id，前端不用知道合过
         self._members: dict[str, list[str]] = {}
+        # 初译用的只读工具（`tools.py`）：调度接上才有；没接就和以前一样一页一次请求、重翻另起请求
+        self.tools: BookTools | None = None
+        # 开了工具时这一页初译的对话（发出去的消息加模型的回答）：交卷后的检查问题接在后面回给模型
+        self._conversation: list[dict] | None = None
+        self._tool_calls = 0
+        # 人文社科、通俗读物：初译、重翻接上 `NARRATIVE_PROMPT`（调度按通读判的体裁设）
+        self.narrative = False
 
     def model_for(self, role: str) -> str:
         return self.models.get(role) or self.model
@@ -296,20 +331,41 @@ class TranslationAgent:
         self._emit("check_result", attempt=attempt, ok=counts[STATUS_OK], warn=counts[STATUS_WARN], error=counts[STATUS_ERROR], codes=codes)
 
     # ---- 请求 ----
-    def _body(self, payload: dict, role: str = ROLE_TRANSLATOR, *, system: str = SYSTEM_PROMPT, tool: dict | None = None) -> dict:
+    def _body(
+        self,
+        payload: dict | None,
+        role: str = ROLE_TRANSLATOR,
+        *,
+        system: str = SYSTEM_PROMPT,
+        tool: dict | None = None,
+        messages: list[dict] | None = None,
+        tools_allowed: bool | None = None,
+    ) -> dict:
         """不给 `tool`（初译、重翻、改稿）：模型按交卷格式交回纯文本；给了（通读、审校）：强制用这个工具交回。
 
         不强制用工具时 Haiku 5.5 默认会思考（medium），强制用工具时不会。2026-10-31 论文 16 页各两遍实测，公式原样保住
         纯文本 + 思考 97.1%、纯文本关掉思考 88.1%、JSON 工具 90.4%——帮上忙的是思考，不要传 `{"type": "disabled"}` 关掉。
-        同一天再测 medium 对 low（`self.effort`）：公式外露、`$` 不成对、漏交都是 0，low 输出少 32%、每页快 30%。"""
+        同一天再测 medium 对 low（`self.effort`）：公式外露、`$` 不成对、漏交都是 0，low 输出少 32%、每页快 30%。
+
+        `messages`（多轮对话，开了工具的初译）代替 `payload`；`tools_allowed` 不是 None 时带上只读工具的定义，
+        False 是这一页的次数用完了（定义照带，提示词缓存的前缀不变；`tool_choice: none` 不许再调）。"""
         # 系统提示打提示词缓存断点：各角色的系统提示（连同前面的工具定义）一本书里逐字不变，缓存读按一折计费、不计入
         # 每分钟输入限额（2026-10-31）。太短的（不到 512 token）服务端不缓存也不报错。
+        if self.narrative and role == ROLE_TRANSLATOR and tool is None and system == SYSTEM_PROMPT:
+            system = SYSTEM_PROMPT + NARRATIVE_PROMPT
         body = {"model": self.model_for(role), "max_tokens": 16000, "system": [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]}
         if tool is not None:
             body.update(tools=[strict_tool(tool)], tool_choice={"type": "tool", "name": tool["name"]})
         elif self.effort:
             body.update(thinking={"type": "adaptive"}, output_config={"effort": self.effort})
-        body["messages"] = [{"role": "user", "content": json.dumps(payload, ensure_ascii=False, indent=1)}]
+        if tools_allowed is not None:
+            body["system"][0]["text"] = system + TOOLS_PROMPT
+            body.update(tools=[strict_tool(t) for t in TOOL_DEFINITIONS], tool_choice={"type": "auto" if tools_allowed else "none"})
+        if messages is None:
+            messages = [{"role": "user", "content": json.dumps(payload, ensure_ascii=False, indent=1)}]
+        else:
+            messages = _mark_last_for_cache(messages)
+        body["messages"] = messages
         return body
 
     def call_tool(self, payload: dict, *, system: str, tool: dict, role: str, label: str, blocks: list[str] | None = None) -> dict:
@@ -343,6 +399,32 @@ class TranslationAgent:
             path.write_text(json.dumps({"request": body, "response": response, "latency_ms": latency}, ensure_ascii=False, indent=1), encoding="utf-8")
         return response
 
+    def _converse(self, *, label: str, event: dict) -> dict:
+        """开了工具的初译：发 `self._conversation`，模型调工具就执行、把结果回给它，直到它交卷（或次数用完后被要求交卷）。
+        模型的每轮回答（含思考块）原样接进对话；返回最后那次回答。"""
+        conversation = self._conversation
+        assert conversation is not None and self.tools is not None
+        rounds = 0
+        while True:
+            allowed = rounds < MAX_TOOL_ROUNDS and self._tool_calls < MAX_TOOL_CALLS
+            response = self._call(self._body(None, messages=conversation, tools_allowed=allowed), label=label if not rounds else f"{label} +tools{rounds}", event=event if not rounds else None)
+            content = response.get("content") or []
+            conversation.append({"role": "assistant", "content": content})
+            calls = [part for part in content if part.get("type") == "tool_use"]
+            if response.get("stop_reason") != "tool_use" or not calls:
+                return response
+            rounds += 1
+            answers = []
+            for part in calls:
+                self._tool_calls += 1
+                if self._tool_calls > MAX_TOOL_CALLS:
+                    result = {"error": f"这一页的工具次数（{MAX_TOOL_CALLS}）用完了，请直接交卷"}
+                else:
+                    result = self.tools.run(str(part.get("name") or ""), part.get("input") or {})
+                self._emit("tool_call", role=ROLE_TRANSLATOR, **summarize_call(str(part.get("name") or ""), part.get("input") or {}, result))
+                answers.append({"type": "tool_result", "tool_use_id": part.get("id"), "content": tool_result_text(result), **({"is_error": True} if "error" in result else {})})
+            conversation.append({"role": "user", "content": answers})
+
     @staticmethod
     def _parse(response: dict) -> dict:
         """按交卷格式取出译文、报上的术语、声明的例外；同一个 id 交了多次的记下来。
@@ -374,7 +456,7 @@ class TranslationAgent:
             "glossary_version": version,
             "used_terms": used,
             "context_hash": page.context.get("hash") if page.context else None,
-        }
+        } | ({"tools_version": TOOLS_VERSION} if self._conversation is not None and role == ROLE_TRANSLATOR else {})
 
     def _check(self, page: PageInput, block, text: str | None, exceptions: dict[str, set[str]]) -> list[dict]:
         issues = check_block(block.text, text) + self._restored.pop(block.id, [])
@@ -415,13 +497,19 @@ class TranslationAgent:
     def translate_units(self, page: PageInput) -> tuple[dict[str, BlockResult], dict]:
         """翻一页合好接续组的块（`merge_groups` 的结果）：合成的那块就是普通的一块，按整段校验、重翻、退回原文。"""
         self._members = {b.id: b.members for b in page.blocks if b.members}
+        self._conversation, self._tool_calls = None, 0
         wanted = {b.id for b in page.to_translate()}
         if not wanted:
             # 这一页没有要翻的（都不翻，或者都是已定好的译文）：不发请求
             return self._fixed_results(page, {}), {"notes": "", "extra_ids": [], "duplicates": [], "terms": [], "term_exceptions": []}
         records = request_records(page.blocks, wanted)
         payload = self._payload(page, records, required_ids=[r["id"] for r in records if r["translate"]])
-        response = self._call(self._body(payload), label=f"page {page.page_label}", event={"attempt": 1, "blocks": [b.id for b in page.to_translate()]})
+        label, event = f"page {page.page_label}", {"attempt": 1, "blocks": [b.id for b in page.to_translate()]}
+        if self.tools is not None:
+            self._conversation = [{"role": "user", "content": json.dumps(payload, ensure_ascii=False, indent=1)}]
+            response = self._converse(label=label, event=event)
+        else:
+            response = self._call(self._body(payload), label=label, event=event)
         parsed = self._parse(response)
         raw, duplicates = parsed["translations"], parsed["duplicates"]
         exceptions = _exceptions_by_block(parsed["term_exceptions"])
@@ -563,12 +651,16 @@ class TranslationAgent:
             }
             for b in unit
         ]
-        payload = self._payload(page, records, retry=retry, required_ids=[r["id"] for r in retry])
-        response = self._call(
-            self._body(payload),
-            label="retry " + ",".join(r["id"] for r in retry),
-            event={"attempt": max(results[b.id].attempts for b in unit) + 1, "blocks": [b.id for b in unit]},
-        )
+        label = "retry " + ",".join(r["id"] for r in retry)
+        event = {"attempt": max(results[b.id].attempts for b in unit) + 1, "blocks": [b.id for b in unit]}
+        if self._conversation is not None:
+            # 开了工具：接着这一页的对话把问题回给模型（它记得整页和自己交的稿，前面的对话走提示词缓存）
+            feedback = {"check": [{"id": r["id"], "problems": r["problems"]} for r in retry], "required_ids": [r["id"] for r in retry]}
+            self._conversation.append({"role": "user", "content": CHECK_FEEDBACK + json.dumps(feedback, ensure_ascii=False, indent=1)})
+            response = self._converse(label=label, event=event)
+        else:
+            payload = self._payload(page, records, retry=retry, required_ids=[r["id"] for r in retry])
+            response = self._call(self._body(payload), label=label, event=event)
         try:
             parsed = self._parse(response)
         except ValueError:
@@ -584,6 +676,26 @@ class TranslationAgent:
             meta = self._meta(page, block, role=ROLE_TRANSLATOR, attempt=first.attempts + 1)
             fixed[block.id] = BlockResult(block.id, per_block.get(block.id), issues, first.attempts + 1, status_of(issues), history, meta)
         return fixed, parsed
+
+
+CHECK_FEEDBACK = (
+    "程序逐块检查了你交的稿，下面这些块有问题。只重交 required_ids 里的块（交卷格式同上，每块完整写出改好的译文），"
+    "别的块不要再交；有新定的术语、例外照常写在后面。\n"
+)
+
+
+def _mark_last_for_cache(messages: list[dict]) -> list[dict]:
+    """多轮对话：只在最后一条消息的最后一块打提示词缓存断点（服务端往前找得到上一次缓存的前缀；断点最多 4 个，不能每条都打）。
+    不改调用方的列表。"""
+    out = [dict(m) for m in messages]
+    last = out[-1]
+    content = last["content"]
+    if isinstance(content, str):
+        content = [{"type": "text", "text": content}]
+    content = [dict(part) for part in content]
+    content[-1]["cache_control"] = {"type": "ephemeral"}
+    last["content"] = content
+    return out
 
 
 def strict_tool(tool: dict) -> dict:

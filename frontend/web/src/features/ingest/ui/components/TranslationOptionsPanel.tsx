@@ -3,17 +3,16 @@
 // DOM id "page-range-dialog" / "page-range-title" 为历史契约（测试与样式锚点），保留不改。
 
 import type { FormEvent } from "react";
-import { BookOpen, Bot, FileText, LayoutTemplate, Sparkles, SlidersHorizontal, X } from "lucide-react";
+import { BookOpen, FileText, LayoutTemplate, Sparkles, SlidersHorizontal, Table, X } from "lucide-react";
 
-import { LegacyButton } from "@retainpdf/ui";
+import { LegacyButton, Select } from "@retainpdf/ui";
 import { useStoreSnapshot } from "@/ui/hooks/use-store.js";
-import { agentEngineAvailable } from "../../domain/workflow/payload.js";
 import { useIngestServices, useIngestWorkflowView } from "../workflow-view-context.js";
 
 const QUALITY_HINTS: Record<string, string> = {
   standard: "直接翻译，速度最快、费用最低。",
   terms: "先通读全书定好术语和文风再翻译，译法更一致；模型费用多约 0.4 倍。",
-  refined: "统一术语之外，术语表先经审定；翻完由模型挑错，再分派局部修改或整段重写，最多两轮，改不好就保留原译并列出来给你看；模型费用约为普通的 2.5 倍，耗时更长。",
+  refined: "用翻译 agent：先通读全文定好术语，再逐页翻译并审校，费用和耗时都比普通高。开头通读要一会儿，进度会先停在 0。",
 };
 
 const ENGINE_HINTS: Record<string, string> = {
@@ -22,10 +21,9 @@ const ENGINE_HINTS: Record<string, string> = {
   typst: "原来的 Typst 排版，公式要先转换一遍，个别公式可能出错。",
 };
 
-const TRANSLATION_ENGINE_HINTS: Record<string, string> = {
-  legacy: "现有流程：按批翻译，可配合上面的翻译质量。",
-  agent: "翻译 agent：先通读全文，再逐页翻译并审校，自带统一术语和审校，所以翻译质量不再单独选。开头通读要一会儿，进度会先停在 0。",
-  unavailable: "翻译 agent 只支持 Anthropic 格式的接口；在翻译设置里把接口协议换成 Anthropic 格式后可选。",
+const TABLE_HINTS: Record<string, string> = {
+  keep: "表格保留原文。",
+  translate: "试验：正文翻完后逐张翻表格，只翻有文字层的表；阅读页能看到，译文 PDF 里表格还是原文。会多花一些 token，用量页记在「表格翻译」。",
 };
 
 /** hidePageRange：一次上传多本时每本整本处理，不给页码范围。 */
@@ -40,10 +38,6 @@ export function TranslationOptionsPanel({ hidePageRange = false }: { hidePageRan
   const selectedId = `${workflow.selectedGlossaryId || ""}`.trim();
   const hasSelected = !selectedId
     || workflow.glossaries.some((glossary) => glossary.glossaryId === selectedId);
-  // 协议在凭据设置里改，改完再打开这个面板时会重新读到；不可用时即使偏好存的是 agent，
-  // 提交时也不发（payload.ts 的 translationEngineFields），这里同样按现有流程显示。
-  const agentAvailable = agentEngineAvailable(features.workflowFeature?.developerConfigWithDefaults().apiProtocol);
-  const translationEngine = agentAvailable ? workflow.preferences.translationEngine : "legacy";
   const maxAttr = upload.pageRangeMax > 0 ? { max: `${upload.pageRangeMax}` } : {};
 
   function handlePageInput(source: "start" | "end", event: FormEvent<HTMLInputElement>) {
@@ -68,7 +62,7 @@ export function TranslationOptionsPanel({ hidePageRange = false }: { hidePageRan
           </h3>
           <p id="page-range-limit-text">
             {hidePageRange
-              ? "这一批每本都整本处理；术语表、翻译质量、翻译引擎和排版引擎对每本都一样。"
+              ? "这一批每本都整本处理；术语表、翻译质量、排版引擎和表格对每本都一样。"
               : "按需设置页码范围、术语表和翻译质量；页码留空表示处理整份 PDF。"}
           </p>
         </div>
@@ -85,7 +79,8 @@ export function TranslationOptionsPanel({ hidePageRange = false }: { hidePageRan
       </div>
 
       <div className="translation-options-grid">
-        <fieldset className={`translation-options-range${hidePageRange ? " hidden" : ""}`}>
+        {/* 类名要单独写全：写成 `translation-options-range${…}` Tailwind 扫不出来，这条工具类就不生成（2026-11-22 修）。 */}
+        <fieldset className={hidePageRange ? "translation-options-range hidden" : "translation-options-range"}>
           <legend>
             <FileText className="h-4 w-4" aria-hidden="true" />
             页码范围
@@ -128,7 +123,7 @@ export function TranslationOptionsPanel({ hidePageRange = false }: { hidePageRan
             <BookOpen className="h-4 w-4" aria-hidden="true" />
             术语表
           </span>
-          <select
+          <Select
             id="job-glossary-id"
             value={selectedId}
             onChange={(event) => workflowView.setSelectedGlossaryId(event.target.value)}
@@ -143,7 +138,7 @@ export function TranslationOptionsPanel({ hidePageRange = false }: { hidePageRan
             {!hasSelected ? (
               <option value={selectedId}>{`已删除或不可用: ${selectedId}`}</option>
             ) : null}
-          </select>
+          </Select>
         </label>
 
         <label className="translation-options-glossary" htmlFor="job-translation-quality">
@@ -151,38 +146,17 @@ export function TranslationOptionsPanel({ hidePageRange = false }: { hidePageRan
             <Sparkles className="h-4 w-4" aria-hidden="true" />
             翻译质量
           </span>
-          <select
+          <Select
             id="job-translation-quality"
             value={workflow.preferences.translationQuality}
-            disabled={translationEngine === "agent"}
             onChange={(event) => workflowView.setPreference("translationQuality", event.target.value)}
           >
             <option value="standard">普通</option>
             <option value="terms">统一术语</option>
-            <option value="refined">精翻</option>
-          </select>
+            <option value="refined">精翻（翻译 agent）</option>
+          </Select>
           <small id="job-translation-quality-hint">
-            {translationEngine === "agent"
-              ? "翻译 agent 自带通读和审校，不用另选。"
-              : QUALITY_HINTS[workflow.preferences.translationQuality] || QUALITY_HINTS.standard}
-          </small>
-        </label>
-
-        <label className="translation-options-glossary" htmlFor="job-translation-engine">
-          <span>
-            <Bot className="h-4 w-4" aria-hidden="true" />
-            翻译引擎
-          </span>
-          <select
-            id="job-translation-engine"
-            value={translationEngine}
-            onChange={(event) => workflowView.setPreference("translationEngine", event.target.value)}
-          >
-            <option value="legacy">现有流程</option>
-            <option value="agent" disabled={!agentAvailable}>翻译 agent</option>
-          </select>
-          <small id="job-translation-engine-hint">
-            {agentAvailable ? TRANSLATION_ENGINE_HINTS[translationEngine] : TRANSLATION_ENGINE_HINTS.unavailable}
+            {QUALITY_HINTS[workflow.preferences.translationQuality] || QUALITY_HINTS.standard}
           </small>
         </label>
 
@@ -191,7 +165,7 @@ export function TranslationOptionsPanel({ hidePageRange = false }: { hidePageRan
             <LayoutTemplate className="h-4 w-4" aria-hidden="true" />
             排版引擎
           </span>
-          <select
+          <Select
             id="job-render-engine"
             value={workflow.preferences.renderEngine}
             onChange={(event) => workflowView.setPreference("renderEngine", event.target.value)}
@@ -199,9 +173,27 @@ export function TranslationOptionsPanel({ hidePageRange = false }: { hidePageRan
             <option value="auto">默认（新引擎）</option>
             <option value="rpr_fit">新引擎</option>
             <option value="typst">Typst（旧）</option>
-          </select>
+          </Select>
           <small id="job-render-engine-hint">
             {ENGINE_HINTS[workflow.preferences.renderEngine] || ENGINE_HINTS.auto}
+          </small>
+        </label>
+
+        <label className="translation-options-glossary" htmlFor="job-table-translation">
+          <span>
+            <Table className="h-4 w-4" aria-hidden="true" />
+            表格
+          </span>
+          <Select
+            id="job-table-translation"
+            value={workflow.preferences.tableTranslation}
+            onChange={(event) => workflowView.setPreference("tableTranslation", event.target.value)}
+          >
+            <option value="keep">保留原文</option>
+            <option value="translate">翻译表格（试验）</option>
+          </Select>
+          <small id="job-table-translation-hint">
+            {TABLE_HINTS[workflow.preferences.tableTranslation] || TABLE_HINTS.keep}
           </small>
         </label>
       </div>

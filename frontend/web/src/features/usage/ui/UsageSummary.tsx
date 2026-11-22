@@ -1,5 +1,6 @@
 // 用量的共用展示：主要数字一排，下面按需显示按阶段 / 按模型 / 按月的条形列表和说明。
 // 设置里的「总用量」用它；书籍详情「进度」页的用量是紧凑版 UsageCompact。
+import { BrandLogo } from "@/ui/icons/BrandLogo.jsx";
 import type { UsageGroup, UsageRow, UsageViewModel } from "../domain/usage-view-model.js";
 
 function Bars({ rows, label }: { rows: UsageRow[]; label: string }) {
@@ -9,7 +10,9 @@ function Bars({ rows, label }: { rows: UsageRow[]; label: string }) {
       {rows.map((row) => (
         <li key={row.key} className="usage-bar-row">
           <span className="usage-bar-label">
-            {row.label}
+            {row.logo ? (
+              <span className="usage-bar-name"><BrandLogo className="usage-bar-logo" logo={row.logo} />{row.label}</span>
+            ) : row.label}
             {row.hint ? <small>{row.hint}</small> : null}
           </span>
           <span className="usage-bar-track" aria-hidden="true">
@@ -31,7 +34,7 @@ function StageGroups({ groups }: { groups: UsageGroup[] }) {
         <div key={group.key} className="usage-group" data-usage-group={group.key}>
           <div className="usage-group-head">
             <strong>{group.label}</strong>
-            <span title={`${group.exact} token`}>{group.value}</span>
+            <span title={`${group.exact} token`}>{group.value}{group.cost ? ` · ${group.cost}` : ""}</span>
           </div>
           {group.rows.length > 1 ? <Bars rows={group.rows} label={`${group.label}各环节`} /> : null}
         </div>
@@ -53,7 +56,7 @@ export function UsageSummary({
         {model.metrics.map((metric) => (
           <div key={metric.key} className={`usage-metric${metric.emphasis ? " is-emphasis" : ""}`} data-usage-metric={metric.key}>
             <dt>{metric.label}</dt>
-            <dd title={metric.exact ? `${metric.exact} token` : undefined}>{metric.value}</dd>
+            <dd title={metric.title || (metric.exact ? `${metric.exact} token` : undefined)}>{metric.value}</dd>
             {metric.note ? <span className="usage-metric-note">{metric.note}</span> : null}
           </div>
         ))}

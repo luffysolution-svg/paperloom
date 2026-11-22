@@ -145,7 +145,6 @@
       "button": 2
     },
     "src/features/ingest/ui/components/TranslationOptionsPanel.tsx": {
-      "select": 4,
       "input": 2,
       "legacyButton": 7
     },
@@ -268,16 +267,12 @@
       "fontSize": 2
     },
     "../packages/reader/styles/react-pdf.css": {
-      "fontSize": 13,
-      "borderRadius": 16
+      "fontSize": 7,
+      "borderRadius": 11
     },
     "../packages/reader/styles/reader.utilities.css": {
       "fontSize": 15,
       "borderRadius": 12
-    },
-    "../packages/reader/styles/selection-pop.css": {
-      "fontSize": 5,
-      "borderRadius": 4
     },
     "src/app/home/shell/AppBottomBar.css": {
       "fontSize": 4,
@@ -409,7 +404,7 @@
     },
     "src/features/ingest/ui/components/upload/UploadDropzone.css": {
       "fontSize": 5,
-      "borderRadius": 7
+      "borderRadius": 5
     },
     "src/features/ingest/ui/components/upload/UploadWorkflowNotices.css": {
       "fontSize": 2,
@@ -526,9 +521,6 @@
       "fontSize": 5,
       "borderRadius": 6
     },
-    "src/styles/pages/home/book-detail-processing/editorial-flow.css": {
-      "borderRadius": 1
-    },
     "src/styles/pages/home/book-detail-processing/job-history.css": {
       "borderRadius": 2
     },
@@ -604,7 +596,6 @@
     "collection_delete_btn",
     "collection_manage_close_btn",
     "collection_save_btn",
-    "credentials_btn",
     "detail_close_events_btn",
     "detail_close_stage_history_btn",
     "detail_markdown_json_btn",
@@ -637,7 +628,6 @@
     "reader_react_hud_btn",
     "reader_react_hud_page_btn",
     "reader_react_shortcuts_btn",
-    "reader_sel_pop_btn",
     "status_action_btn",
     "status_button",
     "status_footer_btn",

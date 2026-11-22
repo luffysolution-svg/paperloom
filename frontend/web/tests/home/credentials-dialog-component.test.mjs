@@ -146,7 +146,7 @@ test("CredentialsDialog：保存(浏览器模式)——写隐藏 input、同步 
   );
   assert.match(
     byId(dom, "browser-translation-provider").querySelector("img")?.getAttribute("src") || "",
-    /providers\/qwen\.svg$/,
+    /models\/qwen\.svg$/,
     "Qwen 选项使用本地品牌图标",
   );
 
@@ -323,6 +323,38 @@ test("CredentialsDialog：保存(桌面模式)——走 saveDesktopConfig 分支
   root.unmount();
   services.dispose();
   host.remove();
+});
+
+// 2026-11-22 用户（Windows 桌面版）：设置里保存了，提交时还是弹「请先完成首次配置」、要再存一遍。
+// 提交前的「已配置」以前只看 legacyState.desktopConfigured，它只在首配门里保存时才置 true；
+// 现在凭据齐全（hasDesktopCredentials）就算已配置。
+test("桌面：凭据齐了提交不再被拦成「请先完成首次配置」，凭据不齐照旧拦", async () => {
+  const services = createServices({ initialDesktopMode: true });
+  const { host, root } = await bootHomeApp(dom, { services });
+  const previous = defaultCredentialsStatePort.getCredentials();
+  try {
+    services.workflowDialog.openUpload();
+    await waitFor(() => byId(dom, "error-box-inline"), "上传弹窗打开");
+    const errorText = () => byId(dom, "error-box-inline")?.textContent || "";
+
+    defaultCredentialsStatePort.setCredentials({ ...previous, ocrProvider: "paddle", paddleToken: "", ocrCredentialRef: "", modelApiKey: "", translationCredentialRef: "" });
+    await services.features.appActionsFeature.submitForm({ preventDefault() {} });
+    await waitFor(() => byId(dom, "app-settings-dialog") !== null && /先配好接口再开始/.test(byId(dom, "browser-credentials-subtitle")?.textContent || ""), "凭据不齐：拦下并打开首配设置");
+    services.settingsHub.dialogStore.close();
+    await waitFor(() => byId(dom, "app-settings-dialog") === null, "关闭首配设置");
+
+    services.bridge.setText("error-box", "-");
+    defaultCredentialsStatePort.setCredentials({ ...previous, ocrProvider: "paddle", paddleToken: "paddle-desktop", modelApiKey: "key-desktop" });
+    await services.features.appActionsFeature.submitForm({ preventDefault() {} });
+    await wait(50);
+    assert.equal(byId(dom, "app-settings-dialog"), null, "凭据齐了（不是在首配门里存的）不应被拦去首配设置");
+    assert.doesNotMatch(errorText(), /请先完成首次配置/, "凭据齐了（不是在首配门里存的）也能往下走");
+  } finally {
+    defaultCredentialsStatePort.setCredentials(previous);
+    root.unmount();
+    services.dispose();
+    host.remove();
+  }
 });
 
 // 服务端 vault 里的明文，一个字节都不能流进浏览器。

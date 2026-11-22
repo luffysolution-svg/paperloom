@@ -1,13 +1,13 @@
 // 「进度」页的参数类型。拼装见 ../processing-tab-props.ts，展示见 BookDetailProcessingTab。
-import type { BookDetailCaches } from "../../domain/book-detail-caches.js";
 
 import type { ReactNode } from "react";
-import type { DocumentJobSummary } from "@/features/library/domain.js";
+import type { DocumentJobSummary, LibraryCardItem } from "@/platform/contracts/library-payloads.js";
 import type { TranslationCoverageView } from "@/platform/api/index.js";
-import type { LibraryCardItem } from "@/features/library/domain.js";
 import type { JobRetryStage, JobStageRetryActionView } from "@/platform/api/index.js";
 import type { BookDetailResumeState } from "../use-book-detail-resume.js";
 import type { UsageViewModel } from "@/features/usage/index.js";
+import type { UsageEstimateView } from "@/platform/api/index.js";
+import type { TranslationConnection } from "@/platform/config/translation-connections.js";
 
 /** 读进度时只看这几个字段；任务摘要和实时快照都长这样。 */
 export type ProgressSource = {
@@ -64,8 +64,15 @@ export type BookDetailTranslationWorkflowProps = {
   documentJobIds?: string[];
   onRetryStage: (
     stage: JobRetryStage,
-    options?: { acceptDuplicateRisk?: boolean; renderEngine?: string; refineStartPage?: number },
+    options?: {
+      acceptDuplicateRisk?: boolean;
+      renderEngine?: string;
+      translationQuality?: string;
+      translationConnection?: TranslationConnection | null;
+    },
   ) => Promise<unknown>;
+  /** 重新翻译换成这个模型大概要花多少（GET /documents/:id/usage/estimate）；不给就不显示估价。 */
+  estimateRetranslate?: (baseUrl: string, model: string) => Promise<UsageEstimateView | null>;
 };
 
 export type BookDetailTranslationPanelProps = BookDetailTranslationWorkflowProps & {
@@ -80,8 +87,6 @@ export type BookDetailProcessingTabProps = {
   error?: string;
   resultActionsSlot?: ReactNode;
   coverage?: TranslationCoverageView | null;
-  /** 编辑部流程图的会话缓存（BookDetailDialog 创建），跑完的任务读一次就记住。 */
-  editorialFlowCache?: BookDetailCaches["settledFlows"];
   /** 这本书的模型用量（ProcessingTabWithUsage 读好给）；没有就不出「用量」。 */
   usage?: { model: UsageViewModel; loading: boolean; error: string; reload: () => void } | null;
 };

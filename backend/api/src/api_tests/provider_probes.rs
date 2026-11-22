@@ -99,3 +99,64 @@ async fn multi_mode_probe_still_blocks_local_targets() {
     let payload = read_json(response).await;
     assert!(payload["message"].as_str().unwrap_or_default().contains("not allowed"), "{payload}");
 }
+
+/// 拉取翻译接口的模型列表（2026-11-19）经真实路由：单机能连本机的服务（Ollama、vLLM），带单价；多余字段 400。
+#[tokio::test]
+async fn translation_model_list_route_proxies_the_provider_models() {
+    let router = axum::Router::new().route(
+        "/v1/models",
+        axum::routing::get(|| async {
+            axum::Json(json!({"data": [{"id": "qwen3.8-flash", "owned_by": "local"}, {"id": "text-embedding-v4"}]}))
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+    });
+    let state = no_private_escape(test_state("provider-model-list"));
+
+    let (status, payload) = post_single(
+        state.clone(),
+        "/api/v1/providers/translation/models",
+        json!({"base_url": format!("http://{addr}/v1"), "api_key": "sk-local-not-real", "api_protocol": "openai"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{payload}");
+    let data = &payload["data"];
+    assert_eq!((data["ok"].as_bool(), data["status"].as_str(), data["chat_models"].as_u64()), (Some(true), Some("ok"), Some(1)));
+    assert_eq!(data["models"][0]["id"], "qwen3.8-flash");
+    assert_eq!(data["models"][0]["price_basis"], "official_list", "本机地址按官方标价");
+    assert_eq!(data["models"][1]["kind"], "other");
+    assert!(!payload.to_string().contains("sk-local-not-real"));
+
+    // 契约 translation-providers.v1（2026-11-19）：真实返回的键和契约的 required 一一对上。
+    let contract: Value = serde_json::from_str(
+        &std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../contracts/translation-providers.v1.schema.json"))
+            .expect("read contract"),
+    )
+    .unwrap();
+    let keys = |value: &Value| {
+        let mut keys: Vec<String> = value.as_object().unwrap().keys().cloned().collect();
+        keys.sort();
+        keys
+    };
+    let required = |name: &str| {
+        let mut keys: Vec<String> = contract["definitions"][name]["required"].as_array().unwrap().iter().map(|k| k.as_str().unwrap().to_string()).collect();
+        keys.sort();
+        keys
+    };
+    assert_eq!(keys(data), required("TranslationModelListView"));
+    assert_eq!(keys(&data["models"][0]), required("TranslationModelView"));
+    assert_eq!(keys(&data["models"][0]["price"]), required("PriceView"));
+    let statuses = contract["definitions"]["TranslationModelListStatus"]["enum"].as_array().unwrap();
+    assert!(statuses.contains(&data["status"]));
+
+    let (status, _) = post_single(
+        state,
+        "/api/v1/providers/translation/models",
+        json!({"base_url": format!("http://{addr}/v1"), "api_key": "sk", "model": "x"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "多余字段");
+}

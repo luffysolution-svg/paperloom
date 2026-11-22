@@ -43,12 +43,14 @@ pub fn classify_param(name: &str) -> ParamClass {
         "document_id" => ParamClass::Owned(OwnedKind::Document),
         "glossary_id" => ParamClass::Owned(OwnedKind::Glossary),
         "collection_id" => ParamClass::Owned(OwnedKind::Collection),
-        "item_id" | "page_idx" | "page" | "name" | "dataset" | "artifact_key" | "suggestion_id" | "path" => {
+        "tag_id" => ParamClass::Owned(OwnedKind::Tag),
+        // version_id：书下面的译文版本，处理函数核对它属于这本书
+        "item_id" | "page_idx" | "page" | "name" | "dataset" | "artifact_key" | "suggestion_id" | "path" | "version_id" => {
             ParamClass::Nested
         }
         // 只在管理员路由或已关闭路由里出现。
-        "user_id" | "invite_id" | "backup_id" | "credential_ref" | "operation_id" | "conversation_id"
-        | "calculation_id" | "artifact_id" => ParamClass::Nested,
+        // operation_id：内部的模型请求（/internal/model/jobs/:job_id/requests/:operation_id）
+        "user_id" | "invite_id" | "backup_id" | "credential_ref" | "operation_id" | "artifact_id" => ParamClass::Nested,
         _ => ParamClass::Unknown,
     }
 }
@@ -62,6 +64,7 @@ pub fn key_kind(template: &str, key: &str) -> Option<OwnedKind> {
         "document_id" | "document_ids" => Some(OwnedKind::Document),
         "glossary_id" | "glossary_ids" => Some(OwnedKind::Glossary),
         "collection_id" | "collection_ids" => Some(OwnedKind::Collection),
+        "tag_id" | "tag_ids" => Some(OwnedKind::Tag),
         "parent_id" if template.starts_with("/api/v1/collections") => Some(OwnedKind::Collection),
         _ => None,
     }

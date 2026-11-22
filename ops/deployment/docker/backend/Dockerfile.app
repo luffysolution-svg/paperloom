@@ -65,6 +65,9 @@ COPY backend/packages/retainpdf-providers ./backend/packages/retainpdf-providers
 COPY backend/packages/retainpdf-proc ./backend/packages/retainpdf-proc
 # 编译期 include_str! 读入的契约文件（job_data 的数据集登记表），不在任何工作区成员目录里。
 COPY backend/contracts/job-data.v1.schema.json ./backend/contracts/job-data.v1.schema.json
+# OCR 服务商清单：retainpdf-core 和 retainpdf-config 编译时嵌入（清单是服务商的唯一来源）。
+COPY backend/config/ocr_providers.json ./backend/config/ocr_providers.json
+COPY backend/config/runtime_assets.json ./backend/config/runtime_assets.json
 # COPY 保留构建上下文里的 mtime，可能比 cook 产物还旧；touch 一遍保证工作区
 # crate 一定按真实源码重编，而不是沿用 cook 阶段的空壳。
 RUN find database backend -name '*.rs' -exec touch {} + \
@@ -82,8 +85,10 @@ COPY backend/math/pyproject.toml math/pyproject.toml
 COPY backend/pipeline/pyproject.toml pipeline/pyproject.toml
 COPY backend/translation/pyproject.toml translation/pyproject.toml
 # 翻译 agent 包（retainpdf-translation-agent）：工作区成员，uv export 要它的 pyproject；
-# 运行时镜像也装（翻译引擎 translation.engine=agent 用它，只依赖标准库）。
+# 运行时镜像也装（翻译引擎 translation.engine=agent 用它；核心只依赖标准库，接线 engine extra 依赖翻译包）。
 COPY backend/translation-agent/pyproject.toml translation-agent/pyproject.toml
+# 普通翻译引擎（retainpdf-translation-classic，2026-11-20 从翻译包拆出来）：工作区成员
+COPY backend/translation-classic/pyproject.toml translation-classic/pyproject.toml
 
 RUN uv export \
     --locked \
@@ -252,9 +257,11 @@ COPY backend/base /app/services/base
 COPY backend/math /app/services/math
 # 翻译包（retainpdf-translation）：pipeline 的翻译 worker 外壳调它；提示词随包数据装进去。
 COPY backend/translation /app/services/translation
-# 翻译 agent 包：翻译包的 agent 引擎（workflow/agent_flow.py）调它，只用标准库。
+# 翻译 agent 包：核心只用标准库；接线 retainpdf_translation_agent_engine（translation.engine=agent）依赖翻译包。
 COPY backend/translation-agent /app/services/translation-agent
-RUN pip install --no-cache-dir --no-deps /app/services/base /app/services/math /app/services/translation-agent /app/services/translation /app/services/pipeline
+# 普通翻译引擎：翻译包的引擎登记表按 translation.engine=legacy 加载它（依赖翻译包）。
+COPY backend/translation-classic /app/services/translation-classic
+RUN pip install --no-cache-dir --no-deps /app/services/base /app/services/math /app/services/translation-agent /app/services/translation /app/services/translation-classic /app/services/pipeline
 COPY backend/api/auth.local.example.json /app/services/api/auth.local.example.json
 COPY ops/deployment/docker/backend/entrypoint-app.sh /entrypoint.sh
 COPY ops/deployment/docker/backend/api-key.sh /usr/local/lib/retainpdf/api-key.sh

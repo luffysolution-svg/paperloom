@@ -44,49 +44,36 @@ pub struct DocumentRecord {
     /// 不保证输出 PDF 仍在磁盘上，那由阅读入口 `/documents/:id/reading` 兜底。
     #[serde(default)]
     pub has_translation: bool,
+    /// 书上的标签，按名字排（v37 起；没有是空数组）。
+    #[serde(default)]
+    pub tags: Vec<DocumentTag>,
+}
+
+/// 书上的一个标签（`DocumentRecord.tags` 里的一项）。
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct DocumentTag {
+    pub tag_id: String,
+    pub name: String,
+    /// 空 = 不设颜色；有就是 `#RRGGBB`。
+    pub color: String,
+}
+
+/// 一个标签（v37）。任何条目都能打，现在接口里只有书。
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct TagRecord {
+    pub tag_id: String,
+    pub name: String,
+    pub color: String,
+    /// 打了这个标签的书有几本；每次读时现算。
+    pub document_count: i64,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 fn default_document_title_source() -> String {
     "filename".to_string()
 }
 
-/// AI 问答会话。document_id 为空 = 全库问答。
-/// head_id: 当前可见分支的叶消息 id(空 = 用 max(seq) 推断)。
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ConversationRecord {
-    pub conversation_id: String,
-    pub title: String,
-    pub document_id: Option<String>,
-    pub created_at: String,
-    pub updated_at: String,
-    #[serde(default)]
-    pub message_count: i64,
-    /// 当前可见叶;空字符串表示未显式设置。
-    #[serde(default)]
-    pub head_id: String,
-}
-
-/// 会话消息。citations_json 是软锚点快照:job 删除后跳转失效但内容不丢。
-/// parent_id: 树边;空 = 根。同 parent 的多条为分支兄弟(重试/编辑)。
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct MessageRecord {
-    pub message_id: String,
-    pub conversation_id: String,
-    pub seq: i64,
-    pub role: String,
-    pub content: String,
-    pub citations_json: String,
-    pub tool_trace_json: String,
-    pub model: String,
-    pub created_at: String,
-    /// 父消息 id;空字符串 = 根节点。
-    #[serde(default)]
-    pub parent_id: String,
-    /// 这条消息是怎么结束的。空 = 正常答完;"cancelled" = 用户中途停止;
-    /// "rounds_exhausted" = 工具轮次用尽、被强制收尾。旧行读出来是空串。
-    #[serde(default)]
-    pub finish_reason: String,
-}
 
 /// 分类文件夹(合集)。v1 只用扁平结构展示,parent_id 为未来嵌套子分类预留
 /// (建表时就规划好,当前恒为 None,不是本次要拆的技术债)。
@@ -121,7 +108,5 @@ pub struct BlockSearchHit {
     pub source_snippet: String,
     pub translated_snippet: String,
 }
-
-// --- conversations ---
 
 // --- collections ---

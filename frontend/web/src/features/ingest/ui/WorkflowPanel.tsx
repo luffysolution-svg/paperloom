@@ -103,6 +103,7 @@ export function WorkflowPanel({ hiddenInputsSlot = null }: { hiddenInputsSlot?: 
         </TabsPrimitive.List>
       </TabsPrimitive.Root>
 
+
       <form
         id="job-form"
         className="form"

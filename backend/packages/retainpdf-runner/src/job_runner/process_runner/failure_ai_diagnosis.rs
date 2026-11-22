@@ -202,6 +202,11 @@ pub(super) async fn maybe_attach_ai_failure_diagnosis(
 fn failure_ai_diagnosis_command(
     config: &crate::config::FailureAiDiagnosisRuntimeConfig<'_>,
 ) -> Command {
+    if cfg!(windows) && config.pipeline_command.to_ascii_lowercase().ends_with(".cmd") {
+        let mut command = Command::new("cmd.exe");
+        command.args(["/C", config.pipeline_command, "diagnose-failure"]);
+        return command;
+    }
     let mut command = Command::new(config.pipeline_command);
     command.arg("diagnose-failure");
     command

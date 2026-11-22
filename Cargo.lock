@@ -1734,7 +1734,7 @@ dependencies = [
 
 [[package]]
 name = "retainpdf-cli"
-version = "0.4.4"
+version = "0.4.5"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1779,6 +1779,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "fastrand",
+ "flate2",
  "once_cell",
  "regex",
  "reqwest",

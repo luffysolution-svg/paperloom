@@ -156,13 +156,13 @@ jobs:
           # 注意：捆绑 python.exe 自身没有 pip（No module named pip），必须用
           # 系统 python 的 pip --target 装进 bundle，不能调 bundle python -m pip。
           # 底座包、公式包、翻译包与 agent 包先装：pipeline 依赖它们，--no-deps 不会替我们拉。
-          foreach ($pkg in @("base", "math", "translation-agent", "translation", "pipeline")) {
+          foreach ($pkg in @("base", "math", "translation", "translation-classic", "translation-agent", "pipeline")) {
             $pkgSrc = Join-Path $env:RETAIN_PDF_SERVICES_ROOT $pkg
             python -m pip install --target $sitePackages --no-deps --no-build-isolation $pkgSrc
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
           $env:PYTHONPATH = $sitePackages
-          & $pythonBundleExe -c "import requests, fitz, pikepdf, PIL, urllib3, retainpdf_base, retainpdf_math, retainpdf_translation, retainpdf_translation_agent; print('python_bundle_import_check=ok')"
+          & $pythonBundleExe -c "import requests, fitz, pikepdf, PIL, urllib3, retainpdf_base, retainpdf_math, retainpdf_translation, retainpdf_translation_classic, retainpdf_translation_agent; print('python_bundle_import_check=ok')"
           # console 入口探针（过渡期 warn-only，不阻断打包）
           try {
             & $pythonBundleExe -m retainpdf_pipeline.entrypoints.console --help
@@ -387,11 +387,11 @@ jobs:
           "$bundle_root/bin/python3" -m pip install --target "$site_packages" -r frontend/desktop/requirements-desktop-posix.txt
           # 打包 retainpdf-pipeline console 入口：--no-deps 避免重复拉原生轮子触发 ldd 门禁
           # 底座包、公式包、翻译包与 agent 包先装：pipeline 依赖它们，--no-deps 不会替我们拉。
-          for pkg in base math translation-agent translation pipeline; do
+          for pkg in base math translation translation-classic translation-agent pipeline; do
             "$bundle_root/bin/python3" -m pip install --target "$site_packages" --no-deps --no-build-isolation "$RETAIN_PDF_SERVICES_ROOT/$pkg"
           done
           "$bundle_root/bin/python3" - <<'PY'
-          import requests, fitz, pikepdf, PIL, urllib3, retainpdf_base, retainpdf_math, retainpdf_translation, retainpdf_translation_agent
+          import requests, fitz, pikepdf, PIL, urllib3, retainpdf_base, retainpdf_math, retainpdf_translation, retainpdf_translation_classic, retainpdf_translation_agent
           print("python_bundle_import_check=ok")
           PY
           # 兜底：pip 生成脚本首行多为 runner 绝对路径，重写为可搬运 shebang
@@ -855,7 +855,7 @@ jobs:
           # 打包 retainpdf-pipeline console 入口：--no-deps 避免重复拉原生轮子触发门禁
           # 先装 wheel：venv 精简后缺 bdist_wheel，否则 metadata 生成失败
           "$bundle_python3" -m pip install wheel
-          for pkg in base math translation-agent translation pipeline; do
+          for pkg in base math translation translation-classic translation-agent pipeline; do
             "$bundle_python3" -m pip install --no-deps --no-build-isolation "$RETAIN_PDF_SERVICES_ROOT/$pkg"
           done
           # 兜底：pip 生成脚本首行多为 runner 绝对路径，重写为可搬运 shebang（纯文本替换，不跑 install_name_tool）
@@ -905,7 +905,7 @@ jobs:
               print("python_sys_path=" + "|".join(sys.path))
               raise SystemExit("missing _socket extension on sys.path")
           print(f"python_socket_ext={socket_spec.origin}")
-          for module_name in ["_socket", "socket", "ssl", "requests", "fitz", "pikepdf", "PIL", "urllib3", "retainpdf_base", "retainpdf_math", "retainpdf_translation", "retainpdf_translation_agent"]:
+          for module_name in ["_socket", "socket", "ssl", "requests", "fitz", "pikepdf", "PIL", "urllib3", "retainpdf_base", "retainpdf_math", "retainpdf_translation", "retainpdf_translation_classic", "retainpdf_translation_agent"]:
               importlib.import_module(module_name)
           print("python_bundle_import_check=ok")
           PY
@@ -1102,7 +1102,7 @@ jobs:
           if socket_spec is None:
               raise SystemExit("missing _socket extension on sys.path")
           print(f"packaged_python_socket_ext={socket_spec.origin}")
-          for module_name in ["_socket", "socket", "ssl", "requests", "fitz", "pikepdf", "PIL", "urllib3", "retainpdf_base", "retainpdf_math", "retainpdf_translation", "retainpdf_translation_agent"]:
+          for module_name in ["_socket", "socket", "ssl", "requests", "fitz", "pikepdf", "PIL", "urllib3", "retainpdf_base", "retainpdf_math", "retainpdf_translation", "retainpdf_translation_classic", "retainpdf_translation_agent"]:
               importlib.import_module(module_name)
           print("packaged_python_import_check=ok")
           PY

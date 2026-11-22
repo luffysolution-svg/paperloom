@@ -29,7 +29,12 @@ export interface CreateWorkflowPayloadAssemblyOptions {
     defaultOcrProvider?: string;
     defaultPaddleToken?: string;
     defaultModelApiKey?: string;
+    ocrProvider?: string;
   }) => WorkflowSubmitValues;
+  /** 上传弹窗这次选的模型（整套地址、模型、key……），只叠到上传提交的翻译字段上。 */
+  uploadTranslationOverride?: () => Record<string, string> | null;
+  /** 上传弹窗这次选的 OCR（空 = 照设置里的），也只用在上传提交。 */
+  uploadOcrProvider?: () => string;
 }
 
 export function createWorkflowPayloadAssembly({
@@ -45,15 +50,19 @@ export function createWorkflowPayloadAssembly({
   defaultPaddleToken,
   defaultModelApiKey,
   readSubmitValues,
+  uploadTranslationOverride,
+  uploadOcrProvider,
 }: CreateWorkflowPayloadAssemblyOptions) {
   const { WORKFLOW_BOOK, WORKFLOW_TRANSLATE } = constants;
   const WORKFLOW_OCR = (constants as { WORKFLOW_OCR?: string }).WORKFLOW_OCR || "ocr";
 
-  function currentWorkflowSubmitValues(): WorkflowSubmitValues {
+  // ocrProvider 只有上传提交（collectRunPayload）给：书库的「翻译整本」「只做 OCR」照设置里的。
+  function currentWorkflowSubmitValues(ocrProvider = ""): WorkflowSubmitValues {
     return readSubmitValues?.({
       defaultOcrProvider: defaultOcrProvider(),
       defaultPaddleToken: defaultPaddleToken(),
       defaultModelApiKey: defaultModelApiKey(),
+      ...(ocrProvider ? { ocrProvider } : {}),
     }) || {};
   }
 
@@ -140,6 +149,14 @@ export function createWorkflowPayloadAssembly({
     };
   }
 
+  // 上传弹窗选了模型：整套换掉（地址、模型、key、协议、思考深度），和重新翻译换模型一样；带了 key 就不再带 credential_ref。
+  function withUploadModel<T extends object>(translation: T): T {
+    const override = uploadTranslationOverride?.();
+    if (!override) return translation;
+    const { credential_ref: _ignored, ...rest } = translation as T & { credential_ref?: unknown };
+    return { ...rest, ...override } as T;
+  }
+
   // overrides 给一次上传多本用：每本用自己的 upload_id、整本处理（页码范围只对单本有意义）。
   // 不给就和以前一样读当前上传和页码输入框。
   function collectRunPayload(overrides: { uploadId?: string; pageRanges?: string } = {}): WorkflowRunPayload {
@@ -148,7 +165,7 @@ export function createWorkflowPayloadAssembly({
     const ocrOnly = isOcrOnlyMode();
     const workflow = ocrOnly ? WORKFLOW_OCR : developerConfig.workflow;
     const uploadState = overrides.uploadId ? { uploadId: overrides.uploadId } : getUploadState();
-    const submitValues = currentWorkflowSubmitValues();
+    const submitValues = currentWorkflowSubmitValues(uploadOcrProvider?.() || "");
     const effectiveNeedsUpload = ocrOnly ? () => true : workflowNeedsUpload;
     const payload: WorkflowRunPayload = {
       workflow,
@@ -170,7 +187,7 @@ export function createWorkflowPayloadAssembly({
     }
     if (workflow === WORKFLOW_BOOK || workflow === WORKFLOW_TRANSLATE) {
       payload.ocr = buildOcrPayload(pageRanges, submitValues);
-      payload.translation = buildTranslationPayload(developerConfig, submitValues);
+      payload.translation = withUploadModel(buildTranslationPayload(developerConfig, submitValues));
     }
     if (workflowUsesRenderStage(workflow)) {
       payload.render = buildRenderPayload(developerConfig, submitValues);

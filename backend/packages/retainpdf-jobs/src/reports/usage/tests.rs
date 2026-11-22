@@ -40,7 +40,7 @@ fn ledger_rows_add_up_by_stage_model_and_month() {
     raw.push_str("{\"ts\": \"2026-10-01T00:0");
     fs::write(&path, raw).unwrap();
 
-    let view = summarize_jobs("job", &root, ["job-a"], Vec::new());
+    let view = summarize_jobs("document", &root, ["job-a"], Vec::new(), &PriceBook::bundled());
 
     assert_eq!(view.totals.requests, 4);
     assert_eq!(view.totals.requests_without_usage, 1);
@@ -78,7 +78,7 @@ fn old_jobs_are_estimated_from_their_reports() {
     fs::write(artifacts.join("refine_report.v1.json"), report("2026-10-09T01:56:00+00:00", 114884)).unwrap();
     fs::write(artifacts.join("refine_history/refine_report-1.v1.json"), report("2026-10-08T10:00:00+00:00", 1000)).unwrap();
 
-    let view = summarize_jobs("job", &root, ["job-old"], Vec::new());
+    let view = summarize_jobs("document", &root, ["job-old"], Vec::new(), &PriceBook::bundled());
 
     assert_eq!((view.jobs_counted, view.jobs_estimated_from_reports), (1, 1));
     let stage = |name: &str| view.by_stage.iter().find(|s| s.stage == name).unwrap().usage.clone();
@@ -109,7 +109,7 @@ fn reports_already_covered_by_the_ledger_are_not_counted_twice() {
     }).to_string()).unwrap();
     write_ledger(&root, "job-mixed", &[row("2026-10-10T00:01:00Z", "refine_review", 800, 8, None)]);
 
-    let view = summarize_jobs("job", &root, ["job-mixed"], Vec::new());
+    let view = summarize_jobs("document", &root, ["job-mixed"], Vec::new(), &PriceBook::bundled());
 
     let stage = |name: &str| view.by_stage.iter().find(|s| s.stage == name).unwrap().usage.clone();
     assert_eq!(stage("translation").input_tokens, 5000, "台账里没有翻译侧的行：翻译仍按旧诊断折算");
@@ -127,7 +127,7 @@ fn a_translated_job_with_a_ledger_ignores_its_diagnostics() {
     }).to_string()).unwrap();
     write_ledger(&root, "job-new", &[row("2026-10-10T00:01:00Z", "term_prescan", 1000, 100, Some(0))]);
 
-    let view = summarize_jobs("job", &root, ["job-new"], Vec::new());
+    let view = summarize_jobs("document", &root, ["job-new"], Vec::new(), &PriceBook::bundled());
 
     assert_eq!(view.totals.input_tokens, 1000);
     assert_eq!(view.jobs_estimated_from_reports, 0);
@@ -146,7 +146,7 @@ fn assistant_rows_and_job_directories_feed_the_global_summary() {
         "stage": "assistant_ask", "model": "deepseek-flash", "input": 50, "output": 5, "document_id": "doc-1"}))).unwrap();
 
     let ids = all_job_ids(&output_root);
-    let view = summarize_jobs("all", &output_root, ids.iter().map(String::as_str), read_ledger(&assistant));
+    let view = summarize_jobs("all", &output_root, ids.iter().map(String::as_str), read_ledger(&assistant), &PriceBook::bundled());
 
     assert_eq!(ids, ["job-1", "job-empty"]);
     assert_eq!(view.jobs_counted, 1, "没用量的任务不算");
@@ -170,7 +170,7 @@ fn odd_timestamps_are_left_out_of_the_monthly_breakdown() {
         row("2026-1月1日", "translation", 500, 50, None),
     ]);
 
-    let view = summarize_jobs("job", &root, ["job-odd"], Vec::new());
+    let view = summarize_jobs("document", &root, ["job-odd"], Vec::new(), &PriceBook::bundled());
 
     assert_eq!(view.totals.requests, 5);
     assert_eq!(view.totals.input_tokens, 1500);
@@ -198,7 +198,7 @@ fn view_fields_match_the_token_usage_contract() {
         cache_hit: Some(4),
         ..UsageRecord::default()
     };
-    let view = serde_json::to_value(summarize("job", &[record], (1, 0))).unwrap();
+    let view = serde_json::to_value(summarize("document", &[record], (1, 0), &PriceBook::bundled())).unwrap();
     let keys = |value: &serde_json::Value| {
         let mut keys: Vec<String> = value.as_object().unwrap().keys().cloned().collect();
         keys.sort();
@@ -219,6 +219,7 @@ fn view_fields_match_the_token_usage_contract() {
     assert_eq!(keys(&view["by_stage"][0]), required("UsageStageView"));
     assert_eq!(keys(&view["by_model"][0]), required("UsageModelView"));
     assert_eq!(keys(&view["by_month"][0]), required("UsageMonthView"));
+    assert_eq!(keys(&view["pricing"]), required("UsagePricingView"));
     let groups: Vec<&str> = schema["definitions"]["UsageStageGroup"]["enum"]
         .as_array()
         .unwrap()
@@ -227,5 +228,270 @@ fn view_fields_match_the_token_usage_contract() {
         .collect();
     for stage in ["translation", "term_review", "refine_chief", "assistant_ask", "failure_diagnosis", "new_stage"] {
         assert!(groups.contains(&stage_label(stage).1), "{stage}");
+    }
+}
+
+/// 花费（2026-11-19）：按内置快照的价估算；缓存命中按缓存价，DeepSeek 忙时乘 2，查不到价的单数。
+#[test]
+fn ledger_rows_are_priced_and_unknown_models_are_counted_as_unpriced() {
+    let root = temp_root("cost");
+    let haiku = |ts: &str, host: &str| json!({"v": 1, "ts": ts, "stage": "translation", "model": "claude-haiku-5-5",
+        "host": host, "input": 1_000_000, "output": 100_000, "cache_hit": 400_000, "cache_write": 0, "usage_reported": true});
+    write_ledger(&root, "job-cost", &[
+        haiku("2026-11-19T12:00:00Z", "api.anthropic.com"),
+        haiku("2026-11-19T12:00:00Z", "proxy.example.com"),
+        row("2026-11-21T02:00:00Z", "translation", 1_000_000, 0, Some(0)),
+        row("2026-11-19T02:00:00Z", "translation", 1_000_000, 0, Some(0)),
+        json!({"ts": "2026-11-19T12:00:00Z", "stage": "translation", "model": "home-made-model", "host": "llm.local",
+               "input": 5000, "output": 500, "usage_reported": true}),
+    ]);
+    let prices = PriceBook::bundled();
+    let view = summarize_jobs("document", &root, ["job-cost"], Vec::new(), &prices);
+
+    let (_, _, haiku_price) = prices.quote("api.anthropic.com", "claude-haiku-5-5", "2026-11-19T12:00:00Z").unwrap();
+    // 100 万输入超过 10 万门槛，整次按加价档；40 万命中缓存。
+    let tier = haiku_price.tiers.last().unwrap();
+    let one_haiku = (600_000.0 * tier.input + 400_000.0 * tier.cache_read.unwrap() + 100_000.0 * tier.output) / 1e6;
+    let (_, _, flash) = prices.quote("api.deepseek.com", "deepseek-flash", "2026-11-19T02:00:00Z").unwrap();
+    let expected = 2.0 * one_haiku + flash.input + 2.0 * flash.input;
+    assert!((view.totals.estimated_cost_usd - expected).abs() < 1e-5, "{} vs {expected}", view.totals.estimated_cost_usd);
+    assert_eq!((view.totals.priced_requests, view.totals.list_priced_requests, view.totals.unpriced_requests), (4, 1, 1));
+
+    let model = |model: &str, host: &str| view.by_model.iter().find(|m| m.model == model && m.host == host).unwrap();
+    assert_eq!(model("claude-haiku-5-5", "api.anthropic.com").price_basis, Some(PriceBasis::Host));
+    assert_eq!(model("claude-haiku-5-5", "proxy.example.com").price_basis, Some(PriceBasis::OfficialList));
+    assert_eq!(model("claude-haiku-5-5", "proxy.example.com").price_provider.as_deref(), Some("anthropic"));
+    let unknown = model("home-made-model", "llm.local");
+    assert_eq!((unknown.price_basis, unknown.usage.unpriced_requests, unknown.usage.estimated_cost_usd), (None, 1, 0.0));
+    assert_eq!(view.pricing.currency, "USD");
+    assert!(view.pricing.synced_at.is_none() && view.pricing.snapshot_date.is_some());
+    let _ = fs::remove_dir_all(root);
+}
+
+/// GLM-OCR（2026-11-19 起记账）：阶段 ocr 显示「OCR 识别」、归译前准备，按智谱价估算；
+/// 台账里只有 OCR 的行不算「翻译已经逐条记了」，旧诊断照样折算。
+#[test]
+fn ocr_rows_are_priced_and_do_not_hide_legacy_translation_reports() {
+    let root = temp_root("ocr");
+    let artifacts = JobPaths::for_job(&root, "job-ocr").artifacts_dir;
+    fs::create_dir_all(&artifacts).unwrap();
+    fs::write(artifacts.join("translation_diagnostics.json"), json!({
+        "model": "m", "token_usage": {"requests_with_usage": 2, "prompt_tokens": 3000, "completion_tokens": 300}
+    }).to_string()).unwrap();
+    write_ledger(&root, "job-ocr", &[json!({"v": 1, "ts": "2026-11-19T12:00:00Z", "stage": "ocr", "model": "glm-ocr",
+        "host": "open.bigmodel.cn", "protocol": "glm_ocr", "input": 700_000, "output": 100_000, "cache_hit": null,
+        "cache_write": null, "reasoning": null, "usage_reported": true})]);
+
+    let view = summarize_jobs("document", &root, ["job-ocr"], Vec::new(), &PriceBook::bundled());
+
+    let ocr = view.by_stage.iter().find(|s| s.stage == "ocr").unwrap();
+    assert_eq!((ocr.label, ocr.group), ("OCR 识别", "preparation"));
+    assert_eq!(ocr.usage.priced_requests, 1);
+    assert!((ocr.usage.estimated_cost_usd * 7.16 - 0.16).abs() < 1e-5, "{}", ocr.usage.estimated_cost_usd);
+    let translation = view.by_stage.iter().find(|s| s.stage == "translation").unwrap();
+    assert_eq!(translation.usage.input_tokens, 3000, "旧诊断照样折算");
+    let _ = fs::remove_dir_all(root);
+}
+
+// ---- 估价（2026-11-19）----
+
+use super::estimate::{
+    estimate_from_history, estimate_from_library, library_sample, lookup_prices, PriceLookupInput, PriceLookupItem, RunCandidate,
+};
+
+fn run(job_id: &str, pages: u64) -> RunCandidate {
+    RunCandidate { job_id: job_id.to_string(), pages }
+}
+
+fn contract_required(name: &str) -> Vec<String> {
+    let schema: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../contracts/token-usage.v1.schema.json")).unwrap(),
+    )
+    .unwrap();
+    let mut keys: Vec<String> = schema["definitions"][name]["required"].as_array().unwrap().iter().map(|k| k.as_str().unwrap().to_string()).collect();
+    keys.sort();
+    keys
+}
+
+fn sorted_keys(value: &serde_json::Value) -> Vec<String> {
+    let mut keys: Vec<String> = value.as_object().unwrap().keys().cloned().collect();
+    keys.sort();
+    keys
+}
+
+fn haiku_row(ts: &str, stage: &str, input: u64, output: u64, cache_hit: u64) -> serde_json::Value {
+    json!({"v": 1, "ts": ts, "stage": stage, "model": "claude-haiku-5-5", "host": "api.anthropic.com",
+           "input": input, "output": output, "cache_hit": cache_hit, "cache_write": 0, "usage_reported": true})
+}
+
+#[test]
+fn price_lookup_quotes_each_connection_with_the_usage_rules() {
+    let prices = PriceBook::bundled();
+    let item = |base_url: &str, model: &str| PriceLookupItem { base_url: base_url.to_string(), model: model.to_string() };
+    let view = lookup_prices(&prices, &PriceLookupInput { items: vec![
+        item("https://api.deepseek.com/v1", "deepseek-flash"),
+        item("https://proxy.example.com/v1", "claude-haiku-5-5"),
+        item("http://1.2.3.4:8000/v1", "home-made"),
+    ] });
+    let value = serde_json::to_value(&view).unwrap();
+    assert_eq!(sorted_keys(&value), contract_required("PriceLookupView"));
+    assert_eq!(sorted_keys(&value["items"][0]), contract_required("PriceQuoteView"));
+    assert_eq!(sorted_keys(&value["items"][0]["price"]), contract_required("PriceView"));
+    assert_eq!(sorted_keys(&value["items"][1]["price"]["tiers"][0]), contract_required("PriceTierView"));
+    assert_eq!(value["items"][0]["price_provider"], "deepseek");
+    assert_eq!(value["items"][0]["price"]["peak_multiplier"], 2.0, "DeepSeek 忙时 2 倍");
+    assert_eq!((value["items"][1]["price_basis"].clone(), value["items"][1]["price"]["peak_multiplier"].clone()), (json!("official_list"), json!(1.0)));
+    assert_eq!((value["items"][2]["price"].clone(), value["items"][2]["price_basis"].clone()), (serde_json::Value::Null, serde_json::Value::Null));
+    assert_eq!(value["pricing"]["usd_cny"], 7.16);
+}
+
+/// 按这本书最近一次翻译重算：OCR 不算（复用），翻译、精修分开；下限按上次的缓存，上限当缓存全没命中。
+#[test]
+fn a_book_is_estimated_from_its_latest_translation_run() {
+    let root = temp_root("estimate-history");
+    write_ledger(&root, "job-old", &[haiku_row("2026-11-01T00:00:00Z", "translation", 999_999, 1, 0)]);
+    write_ledger(&root, "job-new", &[
+        json!({"v": 1, "ts": "2026-11-18T00:00:00Z", "stage": "ocr", "model": "glm-ocr", "host": "open.bigmodel.cn", "input": 700000, "output": 100000, "usage_reported": true}),
+        haiku_row("2026-11-18T01:00:00Z", "translation", 10_000, 2_000, 4_000),
+        haiku_row("2026-11-18T01:01:00Z", "term_prescan", 5_000, 500, 0),
+        haiku_row("2026-11-18T02:00:00Z", "refine_review", 3_000, 300, 0),
+    ]);
+    let prices = PriceBook::bundled();
+    let view = estimate_from_history(&prices, &root, &[run("job-old", 12), run("job-new", 12)], "https://api.deepseek.com", "deepseek-flash", Some(12)).unwrap();
+    let value = serde_json::to_value(&view).unwrap();
+    assert_eq!(sorted_keys(&value), contract_required("UsageEstimateView"));
+    assert_eq!(sorted_keys(&value["translation"]), contract_required("UsageEstimatePart"));
+    assert_eq!((view.basis, view.source_job_id.as_deref(), view.pages), ("book_history", Some("job-new"), Some(12)));
+
+    let translation = view.translation.as_ref().unwrap();
+    assert_eq!((translation.requests, translation.input_tokens, translation.cache_hit_tokens), (2, 15_000, 4_000), "OCR 不算");
+    let (_, _, flash) = prices.quote("api.deepseek.com", "deepseek-flash", "2026-11-19T00:00:00Z").unwrap();
+    let low = (11_000.0 * flash.input + 4_000.0 * flash.cache_read.unwrap() + 2_500.0 * flash.output) / 1e6;
+    let high = (15_000.0 * flash.input + 2_500.0 * flash.output) / 1e6 * 2.0;
+    assert!((translation.low_usd.unwrap() - low).abs() < 1e-6, "{translation:?}");
+    assert!((translation.high_usd.unwrap() - high).abs() < 1e-6, "{translation:?}");
+    assert!((translation.low_cny.unwrap() - low * 7.16).abs() < 1e-3);
+    assert_eq!(view.refine.as_ref().unwrap().input_tokens, 3_000);
+
+    let unpriced = estimate_from_history(&prices, &root, &[run("job-new", 12)], "http://1.2.3.4/v1", "home-made", None).unwrap();
+    assert_eq!((unpriced.price_basis, unpriced.translation.as_ref().unwrap().low_usd), (None, None), "查不到价照样给 token");
+    assert!(estimate_from_history(&prices, &root, &[run("job-none", 12)], "https://api.deepseek.com", "deepseek-flash", None).is_none());
+
+    // 那次只翻了 6 页、整本 12 页：按页数比例放大一倍
+    let half = estimate_from_history(&prices, &root, &[run("job-new", 6)], "https://api.deepseek.com", "deepseek-flash", Some(12)).unwrap();
+    let doubled = half.translation.unwrap();
+    assert_eq!((doubled.requests, doubled.input_tokens), (4, 30_000));
+    assert!((doubled.low_usd.unwrap() - 2.0 * low).abs() < 1e-6);
+    let _ = fs::remove_dir_all(root);
+}
+
+/// 没翻译过的书：书库各本书最近一次翻译合起来按页平均，再乘页数。
+#[test]
+fn an_untranslated_book_is_estimated_from_the_library_average_per_page() {
+    let root = temp_root("estimate-library");
+    write_ledger(&root, "job-a", &vec![haiku_row("2026-11-18T00:00:00Z", "translation", 20_000, 4_000, 0); 2]);
+    write_ledger(&root, "job-b", &vec![haiku_row("2026-11-18T00:00:00Z", "translation", 20_000, 4_000, 0); 2]);
+    let books = vec![vec![run("job-a", 10)], vec![run("job-b", 30)], vec![run("job-a", 0)], vec![run("job-none", 5)]];
+    let sample = library_sample(&root, books);
+    assert_eq!(sample.documents, 2, "没页数、没翻译记录的书不算");
+    let prices = PriceBook::bundled();
+    let view = estimate_from_library(&prices, &sample, "https://api.anthropic.com", "claude-haiku-5-5", 20);
+    assert_eq!((view.basis, view.sample_documents, view.sample_pages, view.pages), ("library_average", 2, 40, Some(20)));
+    let translation = view.translation.unwrap();
+    assert_eq!((translation.requests, translation.input_tokens, translation.output_tokens), (2, 40_000, 8_000), "40 页 4 次请求，20 页 2 次");
+    let (_, _, haiku) = prices.quote("api.anthropic.com", "claude-haiku-5-5", "2026-11-19T00:00:00Z").unwrap();
+    let expected = 2.0 * (20_000.0 * haiku.input + 4_000.0 * haiku.output) / 1e6;
+    assert!((translation.low_usd.unwrap() - expected).abs() < 1e-6);
+    assert!(view.refine.is_none());
+
+    let empty = estimate_from_library(&prices, &library_sample(&root, Vec::new()), "https://api.anthropic.com", "claude-haiku-5-5", 20);
+    assert_eq!((empty.basis, empty.translation.is_none()), ("none", true));
+    let _ = fs::remove_dir_all(root);
+}
+
+/// 存库的汇总（2026-11-21，数据库重做第 2a 步）：和直接读文件算的一模一样；第二次读库；台账变了、价格表变了就重算。
+#[test]
+fn cached_summaries_match_the_files_and_follow_file_and_price_changes() {
+    let root = temp_root("cached");
+    let output = root.join("jobs");
+    let haiku = |ts: &str, host: &str| json!({"v": 1, "ts": ts, "stage": "translation", "model": "claude-haiku-5-5",
+        "host": host, "input": 300_000, "output": 2_000, "cache_hit": 1_000, "cache_write": 0, "usage_reported": true});
+    write_ledger(&output, "job-a", &[
+        haiku("2026-11-19T12:00:00Z", "proxy.example.com"),
+        haiku("2026-11-19T13:00:00Z", "api.anthropic.com"),
+        row("2026-10-01T00:01:00Z", "translation", 500, 100, None),
+        row("weird", "translation", 10, 1, Some(0)),
+        json!({"ts": "2026-11-19T12:00:00Z", "stage": "ocr", "model": "home-made", "host": "llm.local", "input": 50, "output": 5}),
+    ]);
+    write_ledger(&output, "job-b", &[row("2026-09-30T23:59:00Z", "refine_review", 1000, 200, Some(600))]);
+    let artifacts = JobPaths::for_job(&output, "job-old").artifacts_dir;
+    fs::create_dir_all(&artifacts).unwrap();
+    fs::write(artifacts.join("translation_diagnostics.json"), json!({
+        "model": "deepseek-flash", "base_url": "https://api.deepseek.com/v1",
+        "token_usage": {"requests_with_usage": 3, "prompt_tokens": 9000, "completion_tokens": 900}
+    }).to_string()).unwrap();
+    fs::create_dir_all(JobPaths::for_job(&output, "job-empty").root).unwrap();
+    let db = retainpdf_data::db::Db::new(root.join("db.sqlite"), root.join("data"));
+    db.init().unwrap();
+    let ids = ["job-a", "job-b", "job-old", "job-empty", "job-gone"];
+    let assistant = vec![UsageRecord { ts: "2026-11-01T00:00:00Z".into(), stage: "assistant_ask".into(), requests: 1, input: 7, ..UsageRecord::default() }];
+    let prices = PriceBook::bundled();
+    let same = |a: &UsageSummaryView, b: &UsageSummaryView| assert_eq!(serde_json::to_value(a).unwrap(), serde_json::to_value(b).unwrap());
+
+    let direct = summarize_jobs("all", &output, ids, assistant.clone(), &prices);
+    same(&summarize_jobs_cached("all", &db, &output, &ids, assistant.clone(), &prices), &direct);
+    assert_eq!((direct.jobs_counted, direct.jobs_estimated_from_reports), (3, 1));
+    let stored = db.usage_cache_entries(&ids).unwrap();
+    assert_eq!(stored.len(), 4, "目录在的都存了（没有用量的也存，免得每次再读）；目录不在的不存");
+
+    // 第二次读库：把库里 job-b 那份改掉，读出来的就是改过的。
+    let mut tampered = stored["job-b"].clone();
+    tampered.rows[0].requests = 99;
+    db.store_usage_cache("job-b", &tampered).unwrap();
+    let from_db = summarize_jobs_cached("job", &db, &output, &["job-b"], Vec::new(), &prices);
+    assert_eq!(from_db.totals.requests, 99);
+
+    // 台账变了（还在跑的任务一直在追加）：重算这一个。
+    let ledger = job_usage_ledger_path(&output, "job-b");
+    let mut raw = fs::read_to_string(&ledger).unwrap();
+    raw.push_str(&format!("{}\n", row("2026-10-02T00:00:00Z", "refine_fix", 10, 1, None)));
+    fs::write(&ledger, raw).unwrap();
+    let refreshed = summarize_jobs_cached("job", &db, &output, &["job-b"], Vec::new(), &prices);
+    same(&refreshed, &summarize_jobs("job", &output, ["job-b"], Vec::new(), &prices));
+    assert_eq!(refreshed.totals.requests, 2);
+
+    // 价格表变了：花费重算。
+    let mut no_prices = prices.clone();
+    no_prices.providers.clear();
+    let repriced = summarize_jobs_cached("all", &db, &output, &ids, assistant.clone(), &no_prices);
+    same(&repriced, &summarize_jobs("all", &output, ids, assistant, &no_prices));
+    assert_eq!(repriced.totals.estimated_cost_usd, 0.0);
+
+    assert_eq!(db.prune_usage_cache(&["job-a"]).unwrap(), 3);
+    let _ = fs::remove_dir_all(root);
+}
+
+/// 手动跑：在真实数据上比「总用量」——第一次（算完存库）、第二次（读库）各要多久，结果写成 JSON 供和旧程序的输出对照。
+/// 只读任务目录；库要给一份**副本**（会建表、写汇总）。
+/// `RETAINPDF_USAGE_DATA=<数据目录> RETAINPDF_USAGE_DB=<库的副本> RETAINPDF_USAGE_OUT=<输出文件>
+///  cargo test -p retainpdf-jobs real_usage -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn real_usage_timing() {
+    let (Ok(data), Ok(db_copy), Ok(out)) =
+        (std::env::var("RETAINPDF_USAGE_DATA"), std::env::var("RETAINPDF_USAGE_DB"), std::env::var("RETAINPDF_USAGE_OUT"))
+    else {
+        return;
+    };
+    let data = PathBuf::from(data);
+    let db_copy = PathBuf::from(db_copy);
+    let db = retainpdf_data::db::Db::new(db_copy.clone(), db_copy.parent().unwrap().join("usage-scratch"));
+    db.init().unwrap();
+    let deps = api::UsageApiDeps::new(std::sync::Arc::new(db), data.join("jobs"), data.clone());
+    for round in ["first", "second"] {
+        let started = std::time::Instant::now();
+        let view = api::all_usage_view(&deps, None).unwrap();
+        println!("{round}: {:?}", started.elapsed());
+        fs::write(format!("{out}.{round}.json"), serde_json::to_vec_pretty(&view).unwrap()).unwrap();
     }
 }

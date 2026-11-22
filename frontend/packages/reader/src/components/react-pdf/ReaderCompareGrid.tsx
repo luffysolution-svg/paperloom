@@ -17,6 +17,7 @@ import {
 import type { LiveTranslationState } from "../../shared/data/live-translation-state.js";
 import type { ReaderPaneComposition } from "../../ReaderAppReactPdf.js";
 import { useReaderContext } from "./reader-context.js";
+import { VersionWatermarks } from "./ReaderVersionCompare.js";
 
 
 const noopSubscribe = () => () => {};
@@ -172,9 +173,11 @@ export function ReaderCompareGrid(props: ReaderCompareGridProps): ReactElement {
   const mountTranslated = props.mountTranslated ?? ctx?.mountTranslated ?? false;
   // 源文件缺失文案要的是「无可并排的最终译文」，显式取 sourceViewOnly。
   const sourceViewOnly = props.sourceViewOnly ?? ctx?.sourceViewOnly ?? false;
-  const sourceUrl = props.sourceUrl ?? ctx?.sourceUrl ?? "";
+  // 「对比版本」开着：左栏换成另一份译文（hooks/use-reader-version-compare）。
+  const compareVersion = ctx?.compareVersion ?? null;
+  const sourceUrl = compareVersion?.url ?? props.sourceUrl ?? ctx?.sourceUrl ?? "";
   const translatedUrl = props.translatedUrl ?? ctx?.translatedUrl ?? "";
-  const sourceFile = props.sourceFile ?? ctx?.sourceFile ?? null;
+  const sourceFile = compareVersion ? null : props.sourceFile ?? ctx?.sourceFile ?? null;
   const translatedFile = props.translatedFile ?? ctx?.translatedFile ?? null;
   const onMetrics = props.onMetrics ?? ctx?.onMetrics;
   const onNumPagesChange = props.onNumPagesChange ?? ctx?.onNumPagesChange;
@@ -239,6 +242,7 @@ export function ReaderCompareGrid(props: ReaderCompareGridProps): ReactElement {
             pane="source"
             url={sourceUrl}
             preloadedFile={sourceFile}
+            key={compareVersion ? `compare:${compareVersion.url}` : "source"}
             userZoom={userZoom}
             visible={presentation.showSource}
             scrollRoot={shellEl}
@@ -252,7 +256,7 @@ export function ReaderCompareGrid(props: ReaderCompareGridProps): ReactElement {
             }
             onNumPagesChange={onNumPagesChange}
             activeRegion={activeRegion}
-            regions={regions}
+            regions={compareVersion?.regions ?? regions}
             readerMetadata={readerMetadata}
             hoveredRegionId={hoveredRegionId}
             onHoverRegion={handleHoverRegion}
@@ -302,6 +306,7 @@ export function ReaderCompareGrid(props: ReaderCompareGridProps): ReactElement {
           />
         ) : null}
       </main>
+      {compareVersion ? <VersionWatermarks shellEl={shellEl} left={compareVersion.left} right={compareVersion.right} /> : null}
     </div>
   );
 }

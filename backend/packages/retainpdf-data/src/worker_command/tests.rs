@@ -391,7 +391,7 @@ fn normalize_command_writes_stage_spec_and_uses_spec_flag() {
     assert!(contains(&cmd, "--spec"));
     assert!(!contains(&cmd, "--provider"));
     let spec_path = arg_value(&cmd, "--spec").expect("spec path");
-    assert!(spec_path.ends_with("/specs/normalize.spec.json"));
+    assert!(std::path::Path::new(spec_path).ends_with("specs/normalize.spec.json"));
     let spec_json =
         std::fs::read_to_string(spec_path).expect("normalize stage spec should be written");
     let payload: serde_json::Value = serde_json::from_str(&spec_json).expect("valid json");

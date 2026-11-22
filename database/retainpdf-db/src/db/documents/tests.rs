@@ -66,14 +66,14 @@ fn insert_succeeded_job(
     conn.execute(
         r#"
         INSERT INTO jobs (
-            job_id, workflow, status_json, created_at, updated_at, finished_at,
+            job_id, workflow, status, created_at, updated_at, finished_at,
             command_json, request_json, log_tail_json, document_id
         ) VALUES (?1, ?2, ?3, ?4, ?4, ?4, '[]', '{}', '[]', ?5)
         "#,
         params![
             job_id,
-            serde_json::to_string(&workflow).expect("workflow json"),
-            serde_json::to_string(&JobStatusKind::Succeeded).expect("status json"),
+            workflow.as_str(),
+            JobStatusKind::Succeeded.as_str(),
             finished_at,
             document_id,
         ],
@@ -205,14 +205,14 @@ fn backfill_links_artifact_reuse_job_and_refreshes_active_job() {
     conn.execute(
         r#"
         INSERT INTO jobs (
-            job_id, workflow, status_json, created_at, updated_at, finished_at,
+            job_id, workflow, status, created_at, updated_at, finished_at,
             command_json, request_json, log_tail_json
         ) VALUES (?1, ?2, ?3, ?4, ?4, ?4, '[]', ?5, '[]')
         "#,
         params![
             "job-translation-reuse",
-            serde_json::to_string(&WorkflowKind::Translate).expect("workflow json"),
-            serde_json::to_string(&JobStatusKind::Succeeded).expect("status json"),
+            WorkflowKind::Translate.as_str(),
+            JobStatusKind::Succeeded.as_str(),
             "2026-02-01T00:00:00Z",
             serde_json::json!({
                 "source": {"artifact_job_id": "job-ocr-source"}
@@ -741,9 +741,9 @@ fn release_active_job_prefers_a_job_still_in_progress() {
         db.connect()
             .unwrap()
             .execute(
-                "INSERT INTO jobs (job_id, workflow, status_json, created_at, updated_at, command_json, request_json, \
+                "INSERT INTO jobs (job_id, workflow, status, created_at, updated_at, command_json, request_json, \
                  log_tail_json, document_id) VALUES (?1, ?2, ?3, ?4, ?4, '[]', '{}', '[]', ?5)",
-                params![job_id, format!("\"{workflow}\""), format!("\"{status}\""), created_at, document_id],
+                params![job_id, workflow, status, created_at, document_id],
             )
             .unwrap();
     };
@@ -774,9 +774,9 @@ fn insert_job_with_status(
     db.connect()
         .unwrap()
         .execute(
-            "INSERT INTO jobs (job_id, workflow, status_json, created_at, updated_at, command_json, request_json, \
+            "INSERT INTO jobs (job_id, workflow, status, created_at, updated_at, command_json, request_json, \
              log_tail_json, document_id) VALUES (?1, ?2, ?3, ?4, ?4, '[]', '{}', '[]', ?5)",
-            params![job_id, format!("\"{workflow}\""), format!("\"{status}\""), created_at, document_id],
+            params![job_id, workflow, status, created_at, document_id],
         )
         .unwrap();
 }
@@ -880,4 +880,67 @@ fn fts_backfill_skips_books_without_any_success() {
     db.set_document_active_job(&document_id, "job-failed", None).unwrap();
 
     assert!(backfill::fts_backfill_targets(&db).unwrap().is_empty());
+}
+
+/// v36：v35 的书（documents + 书名状态 + 选哪份译文 + 书名建议）升上来，读出来和以前一样；删书连带删掉挂在下面的。
+#[test]
+fn a_v35_book_reads_the_same_after_the_library_items_migration() {
+    let fs = TestDbFs::new("v36-upgrade");
+    {
+        let conn = rusqlite::Connection::open(&fs.db_path).unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        crate::db::schema::create_at_version(&conn, 35).unwrap();
+        conn.execute_batch(
+            "INSERT INTO uploads (upload_id, filename, stored_path, bytes, page_count, uploaded_at, developer_mode, content_hash, owner_user_id)
+                 VALUES ('up-1', 'paper.pdf', 'uploads/up-1/paper.pdf', 9, 3, '2026-11-01T00:00:00Z', 0, 'doc-1', 'user-7');
+             INSERT INTO documents (document_id, title, authors_json, year, doi, source_filename, page_count, bytes,
+                     reading_status, added_at, last_opened_at, updated_at, owner_user_id)
+                 VALUES ('doc-1', 'Molecular Orbitals', '[\"Ada Lovelace\", \"Alan Turing\"]', 1999, '10.1/x', 'paper.pdf', 3, 9,
+                     'reading', '2026-11-01T00:00:00Z', '2026-11-02T00:00:00Z', '2026-11-03T00:00:00Z', 'user-7');
+             INSERT INTO document_title_state (document_id, source, locked, suggestion_id, updated_at)
+                 VALUES ('doc-1', 'user', 1, NULL, '2026-11-03T00:00:00Z');
+             INSERT INTO translation_versions (version_id, document_id, origin, created_at)
+                 VALUES ('tv-1', 'doc-1', 'translate', '2026-11-01T00:00:00Z');
+             INSERT INTO translation_version_choices (document_id, version_id, chosen_at) VALUES ('doc-1', 'tv-1', 't');
+             INSERT INTO document_metadata_suggestions (suggestion_id, document_id, artifact_sha256, candidates_json,
+                     selected_title, created_at, updated_at)
+                 VALUES ('sug-1', 'doc-1', 'abc', '[]', 'Orbitals', 't', 't');
+             INSERT INTO collections (collection_id, name, created_at) VALUES ('col-1', 'Reading', 't');
+             INSERT INTO collection_documents (collection_id, document_id, added_at) VALUES ('col-1', 'doc-1', 't');",
+        )
+        .unwrap();
+    }
+    let db = fs.db();
+    db.init().unwrap();
+
+    let record = db.get_document("doc-1").unwrap();
+    assert_eq!(record.title, "Molecular Orbitals");
+    assert_eq!((record.title_source.as_str(), record.title_locked), ("user", true));
+    assert_eq!(record.authors_json, r#"["Ada Lovelace","Alan Turing"]"#);
+    assert_eq!((record.year, record.doi.as_str()), (Some(1999), "10.1/x"));
+    assert_eq!((record.source_filename.as_str(), record.page_count, record.bytes), ("paper.pdf", 3, 9));
+    assert_eq!((record.reading_status.as_str(), record.last_opened_at.as_deref()), ("reading", Some("2026-11-02T00:00:00Z")));
+    assert_eq!((record.added_at.as_str(), record.updated_at.as_str()), ("2026-11-01T00:00:00Z", "2026-11-03T00:00:00Z"));
+    assert_eq!(record.active_version_id, None);
+    assert_eq!(db.document_current_translation_version("doc-1").unwrap().as_deref(), Some("tv-1"));
+    let suggestions = db.list_document_metadata_suggestions("doc-1", 10).unwrap();
+    assert_eq!((suggestions.len(), suggestions[0].document_id.as_str()), (1, "doc-1"));
+    let (in_collection, _) = db.list_documents_with_total(10, 0, &crate::db::DocumentListFilter { collection_id: Some("col-1"), ..Default::default() }).unwrap();
+    assert_eq!(in_collection.len(), 1);
+    assert_eq!(
+        db.resource_owner(crate::db::OwnedKind::Document, "doc-1").unwrap().as_deref(),
+        Some("user-7")
+    );
+
+    // 改书名动条目、改阅读状态动文件，updated_at 取两边较新的。
+    let renamed = db.update_document_fields("doc-1", Some("Orbitals, 2nd ed."), Some("finished")).unwrap();
+    assert_eq!((renamed.title.as_str(), renamed.reading_status.as_str()), ("Orbitals, 2nd ed.", "finished"));
+    assert!(renamed.updated_at.as_str() > "2026-11-03T00:00:00Z");
+
+    assert!(db.delete_document("doc-1").unwrap());
+    let conn = db.connect().unwrap();
+    for table in ["library_items", "item_references", "item_creators", "item_files", "item_title_suggestions", "translation_versions", "collection_items", "item_tags"] {
+        let left: i64 = conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| row.get(0)).unwrap();
+        assert_eq!(left, 0, "{table}");
+    }
 }

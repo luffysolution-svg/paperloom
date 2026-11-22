@@ -9,12 +9,12 @@ function isNotReady(payload) {
     return payload?.error?.details?.reason === "not_ready";
 }
 const TRANSLATION_NOT_READY_MESSAGE = "这个任务的翻译结果还没生成，翻译跑完后再看。";
-/** 404 分「还没产出」和「找不到」两种说法，别的状态码用 otherwise。 */
+/** 404 分「还没产出」和「找不到」两种说法，别的状态码用 otherwise。Error 带 status、reason（后端的 details.reason），调用方好分辨。 */
 function translationError(notFound, otherwise) {
     return (status, payload) => {
-        if (status === 404)
-            return new Error(isNotReady(payload) ? TRANSLATION_NOT_READY_MESSAGE : notFound);
-        return new Error(otherwise(status, payload));
+        const reason = `${payload?.error?.details?.reason || ""}`;
+        const message = status === 404 ? (isNotReady(payload) ? TRANSLATION_NOT_READY_MESSAGE : notFound) : otherwise(status, payload);
+        return Object.assign(new Error(message), { status, reason });
     };
 }
 function trimmedOrUndefined(value) {
@@ -51,5 +51,28 @@ export async function replayTranslationItem(jobId, itemId, apiPrefix) {
         onError: translationError("未找到该翻译 item，无法重放。", (status, payload) => (payload
             ? `重放翻译 item 失败: ${payload.message || JSON.stringify(payload)}`
             : `重放翻译 item 失败: ${status}`)),
+    });
+}
+const REVISION_REASON_MESSAGES = {
+    validation_failed: "新译文没通过检查，没有保存。",
+    job_running: "这本书正在处理（翻译或排版），等它跑完再改。",
+    generation_mismatch: "这段译文刚被别处改过（精修或另一个窗口），重新打开再改。",
+    checkpoint_locked: "译文文件正被占用（任务刚启动？），稍等再试。",
+    read_only_job: "合并出来的阅读结果是只读的，要改得到原来那本书里改。",
+};
+/**
+ * 改单条译文（PATCH /jobs/:id/translations/:item_id）。失败时抛的 Error 带 status、reason（后端的 details.reason）
+ * 和 issues（校验没过时的每一条问题），界面按它们说人话。
+ */
+export async function reviseTranslationItem(jobId, itemId, body, apiPrefix) {
+    return translations.updateTranslationItem(apiPrefix, { job_id: jobId, item_id: itemId, body }, {
+        onError: (status, payload) => {
+            const details = payload?.error?.details || {};
+            const reason = `${details.reason || ""}`;
+            const issues = Array.isArray(details.validation?.issues) ? details.validation.issues : [];
+            const message = REVISION_REASON_MESSAGES[reason]
+                || (status === 404 ? "找不到这段译文（任务的译文可能还没生成）。" : `保存译文失败：${payload?.error?.message || payload?.message || status}`);
+            return Object.assign(new Error(message), { status, reason, issues });
+        },
     });
 }

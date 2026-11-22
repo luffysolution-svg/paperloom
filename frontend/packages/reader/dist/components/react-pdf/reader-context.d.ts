@@ -6,6 +6,8 @@ import type { RegionHoverStore } from "../../shared/state/region-hover-store.js"
 import type { ProtectedPdfFile } from "../../pdf/useProtectedPdfFile.js";
 import type { PageRowHeights } from "../../pdf/usePageRowSync.js";
 import type { ReaderAssistantPanel } from "./reader-assistant-types.js";
+import type { ReaderBlockEdit } from "../../hooks/use-reader-block-edit.js";
+import type { ReaderInk } from "../../hooks/use-reader-ink.js";
 export type ReaderContextValue = {
     bindShell: (node: HTMLDivElement | null) => void;
     shellEl: HTMLElement | null;
@@ -30,6 +32,30 @@ export type ReaderContextValue = {
     jumpToBlock?: (itemId: string) => void;
     /** 改过的块（阅读页块编号 → 改过几次）：译文栏画小标记，悬停写「改过 N 次」。 */
     revisedBlocks?: ReadonlyMap<string, number>;
+    /** 译文栏悬停框的「改」：这一段变成编辑框。不能改时不给。 */
+    editBlock?: (itemId: string) => void;
+    /** 改译文的状态：正在改哪一段（译文栏在那里画编辑框）、写回了还没排进 PDF 的译文（先盖在 PDF 上）。 */
+    blockEdit?: ReaderBlockEdit;
+    /** 编辑框里要不要带一行原文：只看译文时要，对照时左边就是原文。 */
+    editShowsSource?: boolean;
+    /** 左栏搜索的词（防抖后）：书页文字层把命中标出来（PdfPageSlot）。空串不标。 */
+    findTerm?: string;
+    /** 画笔：笔迹和当前工具（hooks/use-reader-ink.ts）；每页的 InkLayer 画出来、画笔模式下接住拖动。 */
+    ink?: ReaderInk;
+    /** 「对比版本」：左栏换成这一份译文（地址、块；块的 source 已换成那一份的译文）。null = 左栏照常是原文。 */
+    compareVersion?: {
+        url: string;
+        regions: ReaderRegion[];
+        /** 两栏书页上的水印：左边对比的那份、右边正在读的那份。 */
+        left: {
+            name: string;
+            createdAt: string;
+        };
+        right: {
+            name: string;
+            createdAt: string;
+        };
+    } | null;
     /**
      * 真源语义 =「无 job」：判断 Markdown / AI / 收藏等需要任务的能力。
      * 仅 FAB 工具禁用等「无 job」场景取用；不要用它判断能否并排。

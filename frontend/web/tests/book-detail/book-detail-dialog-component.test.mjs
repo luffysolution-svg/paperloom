@@ -133,7 +133,7 @@ test("已翻译卡打开书籍详情:有对照阅读,无翻译按钮", async () 
   // 各站的动作（stage-actions）第一次打开「进度」页才请求。
   click(dom, byId("book-detail-tab-processing"));
   await waitFor(() => byId("book-detail-tab-processing").getAttribute("data-state") === "active", "切到进度");
-  const translateStation = await waitFor(() => byId("book-detail-station-translate-btn"), "翻译站「重译 / 精修」");
+  const translateStation = await waitFor(() => byId("book-detail-station-translate-btn"), "翻译站「重新翻译」");
   assert.ok(dlg.querySelector('[data-translation-process="true"]'), "完成态照样画流水线");
   assert.equal(byId("book-detail-retry-render-btn"), null, "各站的动作默认收起");
   click(dom, translateStation);
@@ -301,9 +301,12 @@ test("详情右栏:defaultTab 变化会切到对应 Tab", async () => {
       open: true,
       resetKey: "doc-1",
       defaultTab,
-      overviewTab: React.createElement("div", { id: "tab-overview-content" }),
-      processingTab: React.createElement("div", { id: "tab-processing-content" }),
-      artifactsTab: React.createElement("div", { id: "tab-artifacts-content" }),
+      context: { documentId: "doc-1", jobId: "", title: "", openPinnedJob: () => {} },
+      tabs: [
+        { id: "overview", label: "概览", title: "概览", Icon: () => null, order: 10, render: () => React.createElement("div", { id: "tab-overview-content" }) },
+        { id: "processing", label: "进度", title: "进度", Icon: () => null, order: 20, render: () => React.createElement("div", { id: "tab-processing-content" }) },
+        { id: "artifacts", label: "文件", title: "文件", Icon: () => null, order: 30, render: () => React.createElement("div", { id: "tab-artifacts-content" }) },
+      ],
     }),
   );
 

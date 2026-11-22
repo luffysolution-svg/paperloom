@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 
 use serde_json::Value;
@@ -13,7 +13,7 @@ mod metadata;
 mod value_extract;
 
 use artifacts::{
-    has_translation_manifest, load_source_region_map, SourceRegion,
+    has_translation_manifest, load_source_region_map, load_table_translations, SourceRegion,
 };
 pub use artifacts::load_translation_manifest_pages as load_translation_pages;
 pub(crate) use metadata::load_reader_metadata_view;
@@ -62,6 +62,7 @@ fn build_reader_regions_view(
         sort_in_reading_order(&mut items);
         return Ok(ReaderRegionsView { items });
     }
+    let table_translations = load_table_translations(data_root, job);
     let mut items = Vec::new();
     let mut translated_source_block_ids = HashSet::new();
     for (fallback_page_idx, page_items) in load_translation_pages(data_root, job)? {
@@ -163,27 +164,25 @@ fn build_reader_regions_view(
         source_regions,
         &translated_source_block_ids,
     ));
+    apply_table_translations(&mut items, &table_translations);
     sort_in_reading_order(&mut items);
     Ok(ReaderRegionsView { items })
 }
 
-/// One block of the reader regions (`reader/regions/:item_id`), for quoting a paragraph
-/// without fetching the whole book. Same data and id spelling as the list: `p8-b9` and
-/// `p008-b0009` name the same block. No regions at all yet → not ready.
-pub(crate) fn load_reader_region_item(
-    data_root: &Path,
-    job: &JobSnapshot,
-    item_id: &str,
-) -> Result<ReaderRegionItemView, AppError> {
-    let view = load_reader_regions_view(data_root, job)?;
-    if view.items.is_empty() {
-        return Err(AppError::not_ready("reader regions"));
+/// 表格翻译（`translation.tables = translate`）整表翻了的表：译文框里放整表译文 HTML，状态记成已翻译。
+/// 表格块不进正文翻译，平常是「只有原文」；位置照旧用原文的。
+fn apply_table_translations(items: &mut [ReaderRegionItemView], tables: &HashMap<String, String>) {
+    if tables.is_empty() {
+        return;
     }
-    let wanted = canonical_item_id(item_id);
-    view.items
-        .into_iter()
-        .find(|item| item.item_id == wanted || item.item_id == item_id)
-        .ok_or_else(|| AppError::not_found(format!("reader region not found: {item_id}")))
+    for item in items.iter_mut() {
+        let Some(html) = tables.get(&canonical_item_id(&item.item_id)) else {
+            continue;
+        };
+        item.translated.text = Some(html.clone());
+        item.markdown = Some(html.clone());
+        item.status = "translated".to_string();
+    }
 }
 
 /// Interleaves translated and source-only blocks in document order. The sort

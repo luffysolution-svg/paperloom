@@ -5,6 +5,7 @@ from pathlib import Path
 from devtools.architecture_checks.common import PACKAGE_ROOT
 from devtools.architecture_checks.common import SCRIPTS_ROOT
 from devtools.architecture_checks.common import TRANSLATION_PACKAGE_ROOT
+from devtools.architecture_checks.common import translation_relative
 
 PIPELINE_ROOT = PACKAGE_ROOT / "runtime" / "pipeline"
 DOCUMENT_SCHEMA_ROOT = PACKAGE_ROOT / "ocr" / "document_schema"
@@ -32,6 +33,8 @@ TRANSLATION_ALLOWED_ROOT_DIRS = {
 TRANSLATION_ALLOWED_ROOT_FILES = {
     "__init__.py",
     "prompt_loader.py",
+    # 普通翻译包（retainpdf_translation_classic）给流水线的门面：渲染前精修、表格翻译
+    "public.py",
 }
 TRANSLATION_SHELL_ALLOWED_DIRS = {
     "entrypoints",
@@ -41,6 +44,8 @@ TRANSLATION_SHELL_ALLOWED_FILES = {
     "__main__.py",
     "README.md",
     "translation_stage.py",
+    # 表格翻译（T3）：正文翻完后翻表格。要同时用流水线的表格模型和翻译包的表格 agent，只能放在外壳这一层
+    "tables_stage.py",
 }
 TRANSLATION_WORKFLOW_ALLOWED_DIRS = {
     "__pycache__",
@@ -53,11 +58,14 @@ TRANSLATION_WORKFLOW_ALLOWED_DIRS = {
 TRANSLATION_WORKFLOW_ALLOWED_FILES = {
     "__init__.py",
     "README.md",
-    # 翻译引擎 agent 的整书流程（translation.engine=agent），和 book_flow.py 同一层
-    "agent_flow.py",
-    "batch_plan.py",
     "batch_runner.py",
     "book_flow.py",
+    # 两个引擎共用的前半段（读模板、接续段、页面策略），2026-11-20 拆包从 book_flow.py 挪出
+    "prepare.py",
+    # 翻译引擎登记表：按名字延迟加载引擎，底座不 import 引擎（2026-11-20 拆包）
+    "engines.py",
+    # 普通翻译引擎的译前准备（术语预扫、审定、风格指南），执行计划经 engines.py 调（2026-11-20 拆包）
+    "preparation_step.py",
     "editorial.py",
     # 跟着 OCR 流式翻译的整书流程（OCR 和翻译并行，2026-10-31），和 book_flow.py 同一层
     "streaming_flow.py",
@@ -72,7 +80,6 @@ TRANSLATION_WORKFLOW_ALLOWED_FILES = {
     "revision.py",
     "stages.py",
     "translation_workflow.py",
-    "workers.py",
 }
 TRANSLATION_WORKFLOW_SUBPACKAGE_RULES: dict[str, tuple[str, ...]] = {
     "checkpoint": (
@@ -80,6 +87,8 @@ TRANSLATION_WORKFLOW_SUBPACKAGE_RULES: dict[str, tuple[str, ...]] = {
         "retainpdf_translation.workflow.execution",
         "retainpdf_translation.workflow.execution_plan",
         "retainpdf_translation.core.engine_identity",
+        # 断点身份里引擎自己的版本号经引擎登记表取（2026-11-20 拆包第 3 步，以前直接 import agent 包）
+        "retainpdf_translation.workflow.engines",
         "retainpdf_translation.core.payload.parts.fingerprints",
         "retainpdf_translation.core.payload.parts.units",
         # 「这个块算不算跑完、跑完了阻不阻断导出」的唯一真相源。提交门禁必须和
@@ -98,6 +107,8 @@ TRANSLATION_WORKFLOW_SUBPACKAGE_RULES: dict[str, tuple[str, ...]] = {
         "retainpdf_translation.core.provider_identity",
         "retainpdf_translation.llm.shared.control_context",
         "retainpdf_translation.llm.shared.provider_runtime",
+        # 上游错误分类的唯一真相源（不分服务商）：批量翻译阶段据它在 Key 被 401/403 拒绝后整份停下。
+        "retainpdf_translation.llm.shared.upstream_resilience",
         "retainpdf_translation.services.agents",
         "retainpdf_translation.services.finalization",
         "retainpdf_translation.services.policy",
@@ -130,20 +141,10 @@ TRANSLATION_WORKFLOW_PRIVATE_IMPORT_EXCEPTIONS: dict[Path, tuple[str, ...]] = {
     Path("workflow/stages.py"): (
         "retainpdf_translation.workflow.phases.repair._agent_repair_limit_from_env",
     ),
-    Path("workflow/workers.py"): (
-        "retainpdf_translation.workflow.scheduling.allocation._",
-    ),
-    Path("workflow/batch_plan.py"): (
-        "retainpdf_translation.workflow.scheduling.allocation._",
-    ),
     Path("workflow/batch_runner.py"): (
         "retainpdf_translation.workflow.batching.executor._translate_batch_or_keep_origin",
         "retainpdf_translation.workflow.scheduling.failures._failed_results_for_unhandled_batch_exception",
         "retainpdf_translation.workflow.scheduling.tail_retry._",
-    ),
-    Path("workflow/batch_plan.py"): (
-        "retainpdf_translation.workflow.batching.plan._",
-        "retainpdf_translation.workflow.scheduling.allocation._",
     ),
     Path("workflow/execution_plan.py"): (
         "retainpdf_translation.workflow.scheduling.allocation._adaptive_floor_limit",
@@ -265,7 +266,6 @@ TRANSLATION_LAYER_IMPORT_RULES: dict[str, tuple[str, ...]] = {
         "retainpdf_translation.services.context",
         "retainpdf_translation.core.context",
         "retainpdf_translation.llm.shared.control_context",
-        "retainpdf_translation.llm.style_hints",
         "retainpdf_translation.services.policy",
         "retainpdf_translation.services.terms",
     ),
@@ -410,7 +410,7 @@ def translation_layer_for(path: Path) -> str | None:
     if shell_parts:
         return "entrypoints" if shell_parts[0] == "entrypoints" else None
     try:
-        parts = path.relative_to(TRANSLATION_ROOT).parts
+        parts = translation_relative(path).parts
     except ValueError:
         return None
     if not parts:

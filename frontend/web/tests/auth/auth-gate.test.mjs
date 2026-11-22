@@ -26,9 +26,9 @@ test("登录检查：多用户没登录 → 登录；初始密码 → 强制改�
   setApiUnauthorizedHandler(null);
 });
 
-test("设置分栏：单机不藏；多用户普通用户藏接口设置、同步、备份、更新；管理员只藏更新", () => {
+test("设置分栏：单机不藏；多用户普通用户藏接口设置、同步、备份、整库迁移、更新与 MCP；管理员只藏更新", () => {
   assert.deepEqual(hiddenSettingsTabs({ mode: "single", authenticated: true, user: null }), []);
-  assert.deepEqual([...hiddenSettingsTabs(multiUser({ role: "user" }))], ["api", "sync", "backup", "update"]);
+  assert.deepEqual([...hiddenSettingsTabs(multiUser({ role: "user" }))], ["api", "sync", "backup", "migration", "update", "agents"]);
   assert.deepEqual([...hiddenSettingsTabs(multiUser({ role: "admin" }))], ["update"]);
   assert.equal(isAdmin({ mode: "single" }), true, "单机的本机用户就是管理员");
   assert.equal(canUseIntegrations({ mode: "single" }), true);

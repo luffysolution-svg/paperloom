@@ -57,9 +57,21 @@ export async function fetchDocument(apiPrefix, documentId) {
 export async function patchDocument(apiPrefix, documentId, payload = {}) {
     return generated.patchDocument(apiPrefix, { document_id: requireId(documentId, "document_id"), body: payload }, { onError: failWithServerMessage("更新文档失败，请稍后重试。") });
 }
-/** GET /documents/:id/reading —— 阅读器该打开哪个任务。 */
-export async function fetchDocumentReading(apiPrefix, documentId) {
-    return generated.getDocumentReading(apiPrefix, { document_id: requireId(documentId, "document_id") }, { onError: failWith("读取阅读入口失败。") });
+/** GET /documents/:id/reading —— 阅读器该打开哪个任务。给了 version 就是那个译文版本的（阅读页「对比版本」用）。 */
+export async function fetchDocumentReading(apiPrefix, documentId, { version = "" } = {}) {
+    return generated.getDocumentReading(apiPrefix, { document_id: requireId(documentId, "document_id"), query: version ? { version } : {} }, { onError: failWith("读取阅读入口失败。") });
+}
+/** GET /documents/:id/translation-versions —— 一本书的几份译文和当前选的哪份（null = 自动，逐页取最新）。 */
+export async function fetchTranslationVersions(apiPrefix, documentId, { includeHidden = false } = {}) {
+    return generated.listTranslationVersions(apiPrefix, { document_id: requireId(documentId, "document_id"), query: includeHidden ? { include_hidden: true } : {} }, { onError: failWith("读取译文版本失败。") });
+}
+/** PUT /documents/:id/translation-version —— 换当前版本；null 回到自动。隐藏的版本 409，带后端的原因。 */
+export async function setCurrentTranslationVersion(apiPrefix, documentId, versionId) {
+    return generated.setCurrentTranslationVersion(apiPrefix, { document_id: requireId(documentId, "document_id"), body: { version_id: versionId } }, { onError: failWithServerMessage("切换译文版本失败，请稍后重试。") });
+}
+/** PATCH /documents/:id/translation-versions/:version_id —— 改名（空串清掉）、隐藏或恢复。 */
+export async function patchTranslationVersion(apiPrefix, documentId, versionId, payload) {
+    return generated.patchTranslationVersion(apiPrefix, { document_id: requireId(documentId, "document_id"), version_id: requireId(versionId, "version_id"), body: payload }, { onError: failWithServerMessage("修改译文版本失败，请稍后重试。") });
 }
 /** GET /documents/:id/translation-coverage —— 一本书翻了哪些页、每次任务提供了几页。 */
 export async function fetchDocumentTranslationCoverage(apiPrefix, documentId) {

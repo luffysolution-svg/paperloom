@@ -1,45 +1,64 @@
 # Translation Debug API
 
+> 地址已按 8 类整理（新地址如 `/jobs/{job_id}/translations`）。对应的旧地址已于 2026-10-18 删除（返回 404）。新旧对照见 [任务接口分类](../01-任务/04-任务接口分类.md)。
+
 这些接口用于排查翻译缺失、错误输出、模型异常和 replay。
 
 ## Diagnostics
 
 ```http
-GET /api/v1/jobs/{job_id}/translation/diagnostics
+GET /api/v1/jobs/{job_id}/reports/translation
 ```
 
 读取 `artifacts/translation_diagnostics.json`，返回翻译运行统计、provider 统计、重试统计等信息。
 
+任务不存在是普通 `404`；任务在、报告还没生成是 `404` + `error.details.reason = "not_ready"`，提示 `translation report not ready`
+（见 [错误约定](../00-约定/02-认证与错误.md#还没产出404)）。
+
 ## Item 列表
 
 ```http
-GET /api/v1/jobs/{job_id}/translation/items
+GET /api/v1/jobs/{job_id}/translations
 ```
 
-常用查询参数：
+查询参数（别的参数返回 400）：
 
 - `page`
 - `final_status`
 - `error_type`
 - `route`
 - `q`
-- `limit`
+- `limit`：默认 20，1..=500，越界返回 400
 - `offset`
 
-优先读取 `translation_debug_index.json`；缺失时可从 translation manifest 回退构造索引。
+回包带 `items`、`total`、`limit`、`offset`、`has_more`，规矩见 [分页](../00-约定/03-分页.md)。
+
+还没翻译完（没有 translation manifest，也没有老的索引文件）时返回 `200` 和空列表（`items: []`、`total: 0`）；
+2026-10-19 以前这里是 `404 translation manifest not found`。任务不存在仍是 `404`。
+
+每次按 translation manifest 指向的页文件现算，所以手改、精修（`PATCH`）之后 `translated_preview`、`final_status` 和 `q` 搜索都是最新的；只有找不到 manifest 的老产物才退回读 `translation_debug_index.json`（它只在翻译结束时写一次，不随修订更新）。
 
 ## 单 item
 
 ```http
-GET /api/v1/jobs/{job_id}/translation/items/{item_id}
+GET /api/v1/jobs/{job_id}/translations/{item_id}
 ```
 
 从 translation manifest 指向的 page payload 里查原始 item。
 
+- 任务不存在：普通 `404`。
+- 还没翻译完（没有 manifest）：`404` + `reason: "not_ready"`，提示 `translation manifest not ready`。修改历史
+  （`…/revisions`）、改写（`PATCH`）、重翻（`replay`）同样。
+- manifest 在、条目不存在：普通 `404`（`translation item not found: …`），不带 `reason`。
+- `{item_id}` 也认阅读页的四位块号（2026-11-19 起）：`p012-b0005`、`p012-b005`、`p012-b5` 是同一块，
+  和 reader_regions、data API 的 `reader_item_id` 同一规则；一字不差的条目优先。取一条、修改历史、改写（`PATCH`）、
+  重翻（`replay`）四个接口都这样。返回的 `item_id` 是条目里实际存的写法（可能是三位），修订日志也记这个写法；
+  拿阅读页块号来改译文，不用再挨个试几种写法。
+
 ## Replay
 
 ```http
-POST /api/v1/jobs/{job_id}/translation/items/{item_id}/replay
+POST /api/v1/jobs/{job_id}/translations/{item_id}/replay
 ```
 
 Replay 是一次即时调试调用：
@@ -49,6 +68,9 @@ Replay 是一次即时调试调用：
 - 不修改原任务状态。
 - 后端同步调用 `backend/pipeline/devtools/replay_translation_item.py`。
 - 可使用当前 job 的翻译 API key。
+- 只重算、不写回；要写回用 `PATCH /jobs/{job_id}/translations/{item_id}`。
+- 条目编号不合法返回 400；条目不存在返回 404；合并阅读的虚拟任务（`merged-…`）返回 409 `read_only_job`。
+- 超过 300 秒返回 500，Python 进程随请求一起被杀。
 
 ## 脱敏规则
 

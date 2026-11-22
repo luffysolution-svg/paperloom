@@ -8,7 +8,7 @@
 import type { SVGProps } from "react";
 import { Download, Gem } from "lucide-react";
 import { Button, Menu } from "@retainpdf/ui";
-import type { CollectionRecord } from "@/features/collections/index.js";
+import type { CollectionRecord } from "@retainpdf/contracts/library-documents";
 
 type LibraryBatchToolbarProps = {
   count: number;

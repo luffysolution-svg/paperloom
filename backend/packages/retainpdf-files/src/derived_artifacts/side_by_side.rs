@@ -243,11 +243,12 @@ fn with_diagnostics(reason: String, diagnostics_path: &Path) -> String {
     if skipped > 0 && std::io::Seek::seek(&mut file, std::io::SeekFrom::Start(skipped)).is_err() {
         return reason;
     }
-    let mut tail = String::new();
-    if std::io::Read::read_to_string(&mut file, &mut tail).is_err() {
+    let mut bytes = Vec::new();
+    if std::io::Read::read_to_end(&mut file, &mut bytes).is_err() {
         // 非 UTF-8 的输出直接放弃，不要为此丢掉 reason。
         return reason;
     }
+    let tail = String::from_utf8_lossy(&bytes);
     let tail = tail.trim();
     if tail.is_empty() {
         return reason;

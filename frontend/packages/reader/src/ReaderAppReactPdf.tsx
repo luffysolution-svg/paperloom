@@ -5,7 +5,6 @@ import { useReaderKeyboard } from "./hooks/use-reader-keyboard.js";
 import {
   ReaderAssistantSplitResizeHandle,
   ReaderAssistantDock,
-  ReaderPanelToggles,
   ReaderCloseHome,
   ReaderWorkspaceTabs,
   ReaderReactBoot,
@@ -36,8 +35,16 @@ import { useReaderPanelSlot } from "./components/react-pdf/use-reader-panel-slot
 
 /** 稳定的空数组：每次渲染新建一个会让每页的标记层白白重算。 */
 import { resolveLiveTranslationToggles } from "./shared/data/live-translation-state.js";
+import { isEditableReaderBlock } from "./shared/data/block-edit.js";
 import { createRegionHoverStore } from "./shared/state/region-hover-store.js";
-import { ReaderFinder, ReaderFinderToggles, type ReaderFinderTab } from "./components/react-pdf/ReaderFinder.js";
+import { ReaderFinder, ReaderFinderToggles, ReaderSearchToggle, type ReaderFinderTab } from "./components/react-pdf/ReaderFinder.js";
+import { ReaderToolBall } from "./components/react-pdf/ReaderToolBall.js";
+import { ReaderInkDock, ReaderInkMenu, inkMenuFromContextMenu, useInkShortcuts, type InkMenuState } from "./components/react-pdf/ReaderInkPalette.js";
+import { useReaderInk } from "./hooks/use-reader-ink.js";
+import { useReaderVersionCompare } from "./hooks/use-reader-version-compare.js";
+import { useFindShortcut } from "./hooks/use-find-shortcut.js";
+import { useReaderBlockEdit, useEditBlockShortcut } from "./hooks/use-reader-block-edit.js";
+import { ReaderPendingEditsPill } from "./components/react-pdf/ReaderPendingEditsPill.js";
 
 /** 阅读视图可见台面的判别联合。 */
 export type ReaderPaneComposition = {
@@ -82,7 +89,6 @@ export function resolveReaderPaneComposition(input: {
   overlayContentAvailable: boolean;
   liveTranslationVisible: boolean;
   assistantOpen: boolean;
-  assistantPdfPane?: "source" | "translated" | null;
 }): ReaderPaneComposition {
   const sourceViewOnly = input.sourceOnly || !input.translatedUrl;
   // 单一真值：仅「有可叠加译文内容且用户主动开启且无助手接管」时，
@@ -92,9 +98,8 @@ export function resolveReaderPaneComposition(input: {
     && input.liveTranslationVisible
     && !input.assistantOpen,
   );
-  // AI 从某栏选区发起时锁定该栏；否则助手分栏把对照降级为单栏原文。
-  const pdfMode = input.assistantPdfPane
-    || (input.assistantOpen && input.mode === "compare" ? "source" : input.mode);
+  // 开着面板时把对照降级为单栏原文（以前 AI 还能从某栏选区发起、锁定那一栏，2026-11-03 随 AI 删了）。
+  const pdfMode = input.assistantOpen && input.mode === "compare" ? "source" : input.mode;
   const visibleMode = pdfMode;
   // 对照态叠加不再「消栏」：overlay 只在源栏叠加流式画布，右栏（最终译文）
   // 照常保留。compareMode / showTranslated 不再被 overlay 强制关闭。
@@ -153,7 +158,6 @@ export function ReaderAppReactPdf() {
   const assistant = useReaderAssistantPanel(c.viewStateKey);
   const assistantPanel = assistant.panel;
   const setAssistantPanel = assistant.setPanel;
-  const [assistantPdfPane, setAssistantPdfPane] = useState<"source" | "translated" | null>(null);
   const [liveTranslationVisible, setLiveTranslationVisible] = useState(false);
   const modeScopeRef = useRef<string | null>(null);
   const autoModeRef = useRef<ReaderMode | null>(null);
@@ -171,7 +175,6 @@ export function ReaderAppReactPdf() {
     overlayContentAvailable: hasOverlayContent,
     liveTranslationVisible,
     assistantOpen,
-    assistantPdfPane,
   });
   // 叠层的两个开关分别摆在哪 —— 判断在 live-translation-state.ts 里，因为
   // 「收掉顶栏 pill 之后叠层还够得着吗」这个不变式要能单测（见那里的注释）。
@@ -201,11 +204,6 @@ export function ReaderAppReactPdf() {
   useEffect(() => {
     if (c.session.jobTerminal) setLiveTranslationVisible(false);
   }, [c.session.jobTerminal]);
-
-  // 栏锁（从某栏的选区问 AI）也是按 scope 作废的：换了书那一栏就不是那一栏了。
-  useEffect(() => {
-    setAssistantPdfPane(null);
-  }, [assistant.scope]);
 
   // 阅读模式恢复/持久化：与 anchor/zoom 对齐。sourceViewOnly 时只允许 source。
   // 窄屏没有存档时自动进译文（resolveReaderInitialMode）；停在这个自动默认上时
@@ -250,10 +248,8 @@ export function ReaderAppReactPdf() {
   });
   const closeAssistant = useCallback(() => {
     setAssistantPanel(null);
-    setAssistantPdfPane(null);
   }, []);
   const changeWorkspace = useCallback((next: ReaderWorkspaceMode) => {
-    setAssistantPdfPane(null);
     // A running translation can provide the compare workspace before the
     // immutable translated PDF exists. Keep the visible workspace and the
     // top-bar selection in sync instead of asking the session mode (which is
@@ -288,7 +284,6 @@ export function ReaderAppReactPdf() {
     // 清它的路原来覆盖了「关面板」「切顶栏页签」「换文档」，**唯独漏了换面板**
     // —— 而换面板是 dock 上最常用的动作。漏掉的表现：在译文栏问过 AI 之后点
     // Markdown，面板换了，PDF 那半边却还只剩译文栏，顶栏还挂着「对照被面板挤掉」。
-    setAssistantPdfPane(null);
   }, []);
 
   // 外壳 Context：只装频繁下钻、且此前纯透传的值；currentPage/numPages 走 HUD
@@ -297,12 +292,82 @@ export function ReaderAppReactPdf() {
   // 左栏的目录 / 搜索：开着哪一页签，null 收着。
   const [finder, setFinder] = useState<ReaderFinderTab | null>(null);
   const toggleFinder = useCallback((tab: ReaderFinderTab) => setFinder((open) => (open === tab ? null : tab)), []);
+  // 搜索词：输入框里的字和防抖后的词。防抖后的词才去扫全书、标书页——每敲一下就扫，几百页的书会卡。
+  // 收起左栏不清词，再打开还在；收起时书页上不标。
+  const [findQuery, setFindQuery] = useState("");
+  const [findTerm, setFindTerm] = useState("");
+  useEffect(() => {
+    const next = findQuery.replace(/\s+/gu, " ").trim();
+    const timer = window.setTimeout(() => setFindTerm(next), next ? 150 : 0);
+    return () => window.clearTimeout(timer);
+  }, [findQuery]);
+  const [findFocus, setFindFocus] = useState(0);
+  // Cmd/Ctrl+F 打开书内搜索（再按一次交还浏览器，见 use-find-shortcut）。
+  const openFind = useCallback(() => {
+    setFinder("search");
+    setFindFocus((count) => count + 1);
+  }, []);
+  useFindShortcut(openFind);
   const jumpFromFinder = useCallback((itemId: string) => {
     c.jumpToAnchor({ block_id: itemId });
-    // 窄屏上左栏盖着书：跳过去就收起来。
-    if (readerViewportWidth() < 900) setFinder(null);
-  }, [c.jumpToAnchor]);
+    // 卡浮在书上：在目录里点一条就收起；搜索时留着（接着按回车走下一处），窄屏上搜索也收起（卡盖着书）。
+    if (finder === "outline" || readerViewportWidth() < 900) setFinder(null);
+  }, [c.jumpToAnchor, finder]);
   const jumpToBlock = useCallback((itemId: string) => c.jumpToAnchor({ block_id: itemId }), [c.jumpToAnchor]);
+  // 改译文：悬停框里的「改」、按 E 都是把这一段变成编辑框（在译文栏里）。只开着原文栏时先切到对照。
+  const blockEdit = useReaderBlockEdit({
+    jobId: session.jobId,
+    jobStatus: session.jobStatus,
+    jobPayload: session.download.jobPayload,
+    hasTranslation: !c.sourceOnly && Boolean(sessionFiles.translatedUrl),
+    refreshJobStatus: session.refreshJobStatus,
+  });
+  const selectBlock = blockEdit.select;
+  const setModeKeepingPage = c.setModeKeepingPage;
+  const regions = session.regions;
+  const editBlock = useCallback((itemId: string) => {
+    if (!isEditableReaderBlock(regions, itemId)) return; // 表格译文还不能改（block-edit 的 EDITABLE_KINDS）
+    if (visiblePdfMode === "source") setModeKeepingPage("compare");
+    selectBlock(itemId);
+  }, [regions, selectBlock, visiblePdfMode, setModeKeepingPage]);
+  useEditBlockShortcut(blockEdit.available ? editBlock : null, regionHover);
+  // 画笔：笔迹按书存在本机（hooks/use-reader-ink），右键书页出小菜单，P 进出画笔模式。
+  const ink = useReaderInk(c.viewStateKey);
+  useInkShortcuts(ink);
+  const [inkMenu, setInkMenu] = useState<InkMenuState>(null);
+  const closeInkMenu = useCallback(() => setInkMenu(null), []);
+  // 「对比版本」：选了一份就切到对照（左栏放那一份）；切走对照（只看原文 / 译文）就不对比了。
+  const versionCompare = useReaderVersionCompare({ documentId: session.documentId, jobId: session.jobId });
+  const comparedUrl = versionCompare.compared?.url || "";
+  useEffect(() => {
+    if (comparedUrl && visiblePdfMode !== "compare") changeWorkspace("compare");
+    // 只在选中另一份时切一次；之后用户自己切走由下面那个 effect 收掉对比。
+  }, [comparedUrl]);
+  useEffect(() => {
+    if (visiblePdfMode !== "compare") versionCompare.clear();
+  }, [visiblePdfMode]);
+  const compareVersion = useMemo(
+    () => {
+      const { compared, versions, readingVersionId } = versionCompare;
+      if (!compared) return null;
+      // 两栏书页上的水印：左边是对比的那份，右边是正在读的那份（名字、时间）。
+      const left = versions.find((version) => version.versionId === compared.versionId);
+      const right = versions.find((version) => version.versionId === readingVersionId);
+      return {
+        url: compared.url,
+        regions: compared.regions,
+        left: { name: compared.name, createdAt: left?.createdAt || "" },
+        right: { name: right?.name || "当前译文", createdAt: right?.createdAt || "" },
+      };
+    },
+    [versionCompare.compared, versionCompare.versions, versionCompare.readingVersionId],
+  );
+  const revisedBlocks = useMemo(() => {
+    if (!blockEdit.savedCounts.size) return c.revisedBlocks;
+    const merged = new Map(c.revisedBlocks);
+    for (const [itemId, count] of blockEdit.savedCounts) merged.set(itemId, (merged.get(itemId) || 0) + count);
+    return merged;
+  }, [c.revisedBlocks, blockEdit.savedCounts]);
   const readerContext = useMemo<ReaderContextValue>(() => ({
     bindShell: c.shell.bindShell,
     shellEl: c.shell.shellEl,
@@ -323,7 +388,13 @@ export function ReaderAppReactPdf() {
     activeRegion: c.activeRegion,
     regionHover,
     jumpToBlock,
-    revisedBlocks: c.revisedBlocks,
+    revisedBlocks,
+    editBlock: blockEdit.available ? editBlock : undefined,
+    blockEdit,
+    editShowsSource: visiblePdfMode !== "compare",
+    findTerm: finder === "search" ? findTerm : "",
+    compareVersion,
+    ink,
     sourceOnly: c.sourceOnly,
     sourceViewOnly,
     download: c.download,
@@ -341,7 +412,14 @@ export function ReaderAppReactPdf() {
     c.activeRegion,
     regionHover,
     jumpToBlock,
-    c.revisedBlocks,
+    revisedBlocks,
+    blockEdit,
+    editBlock,
+    visiblePdfMode,
+    finder,
+    findTerm,
+    compareVersion,
+    ink,
     c.sourceOnly,
     sourceViewOnly,
     c.download,
@@ -365,8 +443,19 @@ export function ReaderAppReactPdf() {
 
   return (
     <ReaderProvider value={readerContext} hud={readerHud}>
-      <div className={rootClasses} data-reader-engine="react-pdf" data-reader-workspace={workspaceView}>
-        <ReaderReactBoot loading={boot.loading} failed={boot.failed} text={boot.text} percent={boot.percent} regionsError={Boolean(session.readerErrors.regions)} metadataError={Boolean(session.readerErrors.metadata)} />
+      <div
+        className={rootClasses}
+        data-reader-engine="react-pdf"
+        data-reader-workspace={workspaceView}
+        data-ink-mode={ink.tool || undefined}
+        onContextMenu={(event) => {
+          const menu = inkMenuFromContextMenu(event);
+          if (!menu) return;
+          event.preventDefault();
+          setInkMenu(menu);
+        }}
+      >
+        <ReaderReactBoot loading={boot.loading} failed={boot.failed} text={boot.text} percent={boot.percent} regionsError={Boolean(session.readerErrors.regions)} metadataError={Boolean(session.readerErrors.metadata)} onRetry={session.refreshJobArtifacts} />
         {/* 三路下载和「关闭回主页」同一组：顶栏常驻，任何面板开着都够得到。
             原来它们在可拖动圆钮的菜单里，而圆钮一开 dock 就被 CSS 整个吃掉。 */}
         <ReaderFinderToggles open={finder} onToggle={toggleFinder} />
@@ -376,10 +465,13 @@ export function ReaderAppReactPdf() {
             onTab={setFinder}
             onClose={() => setFinder(null)}
             onJump={jumpFromFinder}
+            query={findQuery}
+            onQuery={setFindQuery}
+            term={findTerm}
+            focusSignal={findFocus}
           />
         ) : null}
         <div className="reader-chrome-tray">
-          <ReaderPanelToggles active={assistantPanel} />
           <ReaderDownloadActions />
           <ReaderCloseHome onBeforeClose={session.prepareClose} />
         </div>
@@ -402,11 +494,17 @@ export function ReaderAppReactPdf() {
             mode={visiblePdfMode}
             modeControls={null}
             bookmarkScope={c.viewStateKey}
+            issuesJobId={c.sourceOnly ? "" : session.jobId}
+            searchSlot={<ReaderSearchToggle open={finder} onToggle={toggleFinder} />}
           />
         ) : null}
         <Suspense fallback={null}>
           {markdownSlot.mounted ? <ReaderMarkdownPanel open={markdownSlot.open} jobId={session.jobId} sourceOnly={c.sourceOnly} side="right" onClose={closeAssistant} /> : null}
         </Suspense>
+        <ReaderToolBall active={assistantPanel} compare={versionCompare} ink={ink} />
+        <ReaderInkMenu ink={ink} menu={inkMenu} onClose={closeInkMenu} />
+        <ReaderInkDock ink={ink} />
+        <ReaderPendingEditsPill edit={blockEdit} />
         <DownloadToastHost />
       </div>
     </ReaderProvider>

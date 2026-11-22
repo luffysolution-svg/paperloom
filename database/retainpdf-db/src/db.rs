@@ -17,20 +17,14 @@ mod ownership;
 mod page_quota;
 #[path = "db/platform_settings.rs"]
 mod platform_settings;
-#[path = "db/agent_calculations.rs"]
-mod agent_calculations;
 #[path = "db/artifacts.rs"]
 mod artifacts;
 #[path = "db/backup.rs"]
 pub mod backup;
 #[path = "db/collections.rs"]
 mod collections;
-#[path = "db/conversations.rs"]
-mod conversations;
 #[path = "db/document_metadata_suggestions.rs"]
 mod document_metadata_suggestions;
-#[path = "db/document_operations.rs"]
-mod document_operations;
 #[path = "db/documents.rs"]
 pub mod documents;
 #[path = "db/event_feed.rs"]
@@ -47,6 +41,8 @@ mod glossaries;
 mod job_writes;
 #[path = "db/jobs.rs"]
 mod jobs;
+#[path = "db/maintenance.rs"]
+mod maintenance;
 #[path = "db/model_requests.rs"]
 mod model_requests;
 #[path = "db/ocr_recovery.rs"]
@@ -59,8 +55,18 @@ mod retention;
 mod rows;
 #[path = "db/schema/mod.rs"]
 mod schema;
+#[path = "db/snapshot_diff.rs"]
+pub mod snapshot_diff;
+#[path = "db/stored_paths.rs"]
+mod stored_paths;
 #[path = "db/sync.rs"]
 pub mod sync;
+#[path = "db/tags.rs"]
+mod tags;
+#[path = "db/translation_versions.rs"]
+mod translation_versions;
+#[path = "db/usage_cache.rs"]
+mod usage_cache;
 #[path = "db/uploads.rs"]
 mod uploads;
 
@@ -71,6 +77,9 @@ pub use admin_users::{OwnerJobRow, UserListPage, UserListQuery, UserListRow, Use
 pub use invites::{InviteRecord, InviteUnavailable, InviteUser};
 pub use ownership::OwnedKind;
 pub use platform_settings::PlatformSettingsRecord;
+pub use documents::DocumentListFilter;
+pub use tags::tag_id_for_name;
+pub use translation_versions::TranslationVersionRecord;
 pub use page_quota::{
     BillingSource, PageBalanceWouldGoNegative, PageChargeRecord, PageLedgerEntry, PageReservation,
 };
@@ -127,7 +136,7 @@ pub struct Db {
     restore_gate: Arc<std::sync::RwLock<()>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct JobProcessRecord {
     pub job_id: String,
     pub pid: Option<u32>,
@@ -137,31 +146,8 @@ pub struct JobProcessRecord {
     pub updated_at: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AgentRuntimeSessionRecord {
-    pub conversation_id: String,
-    pub runtime_id: String,
-    pub session_cursor: String,
-    pub revision: u64,
-    pub updated_at: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PutAgentRuntimeSessionResult {
-    Updated(AgentRuntimeSessionRecord),
-    RevisionConflict(AgentRuntimeSessionRecord),
-}
-
-pub use agent_calculations::{
-    AgentCalculationArtifactInput, AgentCalculationArtifactRecord, AgentCalculationRunCreate,
-    AgentCalculationRunRecord, AgentCalculationStatus, AgentCalculationTransitionResult,
-};
 pub use document_metadata_suggestions::{
     ApplyDocumentMetadataSuggestionResult, StoredDocumentMetadataSuggestion,
-};
-pub use document_operations::{
-    CommitDocumentCandidateResult, DocumentOperationEventRecord, DocumentVersionRecord,
-    StoredDocumentOperation, StoredDocumentOperationAttempt,
 };
 pub use event_feed::{
     EventSourceVersion, NewFeedItem, SourceEvent, StoredEventFeed, StoredFeedItem,
@@ -169,6 +155,8 @@ pub use event_feed::{
 pub use event_projection_inputs::EventProjectionInput;
 pub use job_writes::NewRunWrite;
 pub use jobs::JobListSelection;
+pub use maintenance::CompactReport;
+pub use usage_cache::{UsageCacheEntry, UsageRollupRow};
 pub use model_requests::{
     ModelOperation, ModelRecoverySummary, ModelReservation, ModelSession, ModelSessionConflict,
 };
@@ -244,105 +232,15 @@ impl Db {
     /// 建表、补列、跑版本化迁移(都幂等)。恢复备份后也用它把旧结构补到最新。
     fn apply_schema(conn: &Connection) -> Result<()> {
         conn.execute_batch(
-            r#"
-            PRAGMA journal_mode=WAL;
-            CREATE TABLE IF NOT EXISTS uploads (
-                upload_id TEXT PRIMARY KEY,
-                filename TEXT NOT NULL,
-                stored_path TEXT NOT NULL,
-                bytes INTEGER NOT NULL,
-                page_count INTEGER NOT NULL,
-                uploaded_at TEXT NOT NULL,
-                developer_mode INTEGER NOT NULL,
-                content_hash TEXT NOT NULL DEFAULT ''
-            );
-            CREATE TABLE IF NOT EXISTS jobs (
-                job_id TEXT PRIMARY KEY,
-                workflow TEXT NOT NULL,
-                status_json TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                started_at TEXT,
-                finished_at TEXT,
-                upload_id TEXT,
-                pid INTEGER,
-                command_json TEXT NOT NULL,
-                request_json TEXT NOT NULL,
-                error TEXT,
-                stage TEXT,
-                stage_detail TEXT,
-                progress_current INTEGER,
-                progress_total INTEGER,
-                log_tail_json TEXT NOT NULL,
-                result_json TEXT,
-                runtime_json TEXT,
-                failure_json TEXT,
-                document_id TEXT
-            );
-            CREATE INDEX IF NOT EXISTS idx_jobs_updated_at ON jobs(updated_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_jobs_upload_id ON jobs(upload_id);
-            CREATE TABLE IF NOT EXISTS artifacts (
-                job_id TEXT PRIMARY KEY,
-                artifacts_json TEXT NOT NULL,
-                FOREIGN KEY(job_id) REFERENCES jobs(job_id) ON DELETE CASCADE
-            );
-            CREATE INDEX IF NOT EXISTS idx_artifacts_job_id ON artifacts(job_id);
-            CREATE TABLE IF NOT EXISTS job_artifact_entries (
-                job_id TEXT NOT NULL,
-                artifact_key TEXT NOT NULL,
-                artifact_group TEXT NOT NULL,
-                artifact_kind TEXT NOT NULL,
-                relative_path TEXT NOT NULL,
-                file_name TEXT,
-                content_type TEXT NOT NULL,
-                ready INTEGER NOT NULL,
-                size_bytes INTEGER,
-                checksum TEXT,
-                source_stage TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                PRIMARY KEY(job_id, artifact_key),
-                FOREIGN KEY(job_id) REFERENCES jobs(job_id) ON DELETE CASCADE
-            );
-            CREATE INDEX IF NOT EXISTS idx_job_artifact_entries_job_id ON job_artifact_entries(job_id);
-            CREATE TABLE IF NOT EXISTS events (
-                job_id TEXT NOT NULL,
-                seq INTEGER NOT NULL,
-                ts TEXT NOT NULL,
-                level TEXT NOT NULL,
-                stage TEXT,
-                stage_detail TEXT,
-                provider TEXT,
-                provider_stage TEXT,
-                event TEXT NOT NULL,
-                event_type TEXT,
-                progress_current INTEGER,
-                progress_total INTEGER,
-                payload_json TEXT,
-                retry_count INTEGER,
-                elapsed_ms INTEGER,
-                message TEXT NOT NULL,
-                PRIMARY KEY(job_id, seq)
-            );
-            CREATE INDEX IF NOT EXISTS idx_events_job_seq ON events(job_id, seq);
-            CREATE TABLE IF NOT EXISTS glossaries (
-                glossary_id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                description TEXT NOT NULL DEFAULT '',
-                source_lang TEXT NOT NULL DEFAULT '',
-                target_lang TEXT NOT NULL DEFAULT '',
-                enabled INTEGER NOT NULL DEFAULT 1,
-                entries_json TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_glossaries_updated_at ON glossaries(updated_at DESC);
-            "#,
+            // 最早几张表的幂等建表：schema/base.sql
+            include_str!("db/schema/base.sql"),
         )?;
         // 早的编号迁移要用到老表后来加的列（pre-library 的库上没有），先补列再跑迁移阶梯。
         ensure_legacy_columns(conn)?;
         // 图书馆表走版本化迁移,随 schema 保证存在(不依赖 init 被调用)
         run_versioned_migrations(conn)?;
+        // 上传按内容找书用的索引：建在迁移之后（很老的库上 uploads.content_hash 是迁移补的）。以前写在 init() 里。
+        conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_uploads_content_hash ON uploads(content_hash);")?;
         Ok(())
     }
 
@@ -350,10 +248,17 @@ impl Db {
         // 老表的列在 connect() 里的 apply_schema 已经补齐（`LEGACY_COLUMNS`）。
         let conn = self.connect()?;
         ensure_no_legacy_artifacts_json(&conn)?;
-        conn.execute_batch(
-            "CREATE INDEX IF NOT EXISTS idx_uploads_content_hash ON uploads(content_hash);",
-        )?;
         self.backfill_library_records()?;
+        // 事件日志以前存成了本机绝对路径（2b）：改成相对的。改完以后再跑什么都不动。
+        let relativized = self.relativize_stored_artifact_paths()?;
+        if relativized > 0 {
+            tracing::info!(relativized, "stored artifact paths made data-root relative");
+        }
+        // v36 书换成条目以后，本机记着的上次同步的书还是旧结构：改写一次，逐字段合并才比得上。
+        let upgraded = self.upgrade_legacy_sync_states()?;
+        if upgraded > 0 {
+            tracing::info!(upgraded, "sync states of books rewritten to the library item layout");
+        }
         Ok(())
     }
 
@@ -447,6 +352,33 @@ mod tests {
                 .to_string(),
         );
         job
+    }
+
+    #[test]
+    fn the_dead_tables_are_gone_after_the_migrations() {
+        // v31（2026-11-20）：RetainPDF 自己的 AI 留下的表和收藏删了；它们身上的同步触发器、索引也跟着没了，
+        // 书照常能写（documents 上没有指向它们的外键）
+        let fs = TestDbFs::new();
+        let db = fs.db();
+        db.init().expect("init db");
+        let conn = open_raw(&fs.db_path).expect("open sqlite");
+        let dead = [
+            "favorites", "assets", "ai_conversations", "ai_messages", "agent_calculation_runs",
+            "agent_calculation_artifacts", "document_operations", "document_operation_attempts",
+            "document_operation_events", "document_versions",
+        ];
+        for table in dead {
+            let left: i64 = conn
+                .query_row("SELECT COUNT(*) FROM sqlite_master WHERE tbl_name = ?1", params![table], |row| row.get(0))
+                .expect("query sqlite_master");
+            assert_eq!(left, 0, "{table} 和它的索引、触发器都该删了");
+        }
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        conn.execute_batch(
+            "INSERT INTO library_items(item_id, item_type, created_at, updated_at) VALUES('d1', 'reference', 't', 't');
+             INSERT INTO item_files(file_id, item_id, source_filename, added_at, updated_at) VALUES('d1', 'd1', 'b.pdf', 't', 't');",
+        )
+        .expect("library still writable");
     }
 
     #[test]
@@ -611,7 +543,8 @@ mod tests {
 
         // 以前一半在 apply_schema 里补、一半只在 init 里补；这里不照抄 LEGACY_COLUMNS，少了哪一列都要红。
         for (table, expected) in [
-            ("jobs", &["document_id", "run_generation", "worker_identity", "runtime_json", "failure_json"][..]),
+            // runtime_json 是老列，v33 拆成这几列和 job_stage_history 后删了。
+            ("jobs", &["document_id", "run_generation", "worker_identity", "stage_entered_at", "failure_json"][..]),
             (
                 "events",
                 &[
@@ -634,6 +567,62 @@ mod tests {
         assert_eq!(version, schema::versioned_migration_count());
         // 再起一次什么都不用补。
         fs.db().init().expect("second start");
+    }
+
+    /// 新建空库跑完全部建表和迁移的结构快照（2026-11-20）：`database/retainpdf-db/schema.sql`。
+    /// 看「现在每张表长什么样」只看那一个文件；结构变了这里红，`UPDATE_SCHEMA=1` 重新生成，看 diff。
+    fn fresh_schema(canonical: bool) -> String {
+        let fs = TestDbFs::new();
+        fs.db().init().expect("init fresh database");
+        schema::describe_schema(&open_raw(&fs.db_path).unwrap(), canonical).unwrap()
+    }
+
+    #[test]
+    fn the_schema_snapshot_is_up_to_date() {
+        let got = format!(
+            "-- 现在每张表的完整样子：新建空库跑完 schema/base.sql、LEGACY_COLUMNS 和全部编号迁移以后的结果。\n\
+             -- 测试生成，不要手改：UPDATE_SCHEMA=1 cargo test -p retainpdf-db schema_snapshot\n\
+             -- 主键写成 PRIMARY KEY#n（复合主键里的第几列）；FTS5 自己的影子表不单列。\n{}",
+            fresh_schema(false)
+        );
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("schema.sql");
+        if std::env::var_os("UPDATE_SCHEMA").is_some() {
+            fs::write(&path, &got).expect("write schema snapshot");
+            return;
+        }
+        let want = fs::read_to_string(&path).unwrap_or_default();
+        assert!(got == want, "表结构和 schema.sql 不一样：UPDATE_SCHEMA=1 cargo test -p retainpdf-db schema_snapshot 重新生成，看 diff");
+    }
+
+    /// 老库一路升上来，和新建的库应当一模一样（列顺序不算：ALTER 补的列排在最后）。
+    #[test]
+    fn an_old_database_upgraded_matches_a_fresh_one() {
+        let fs = TestDbFs::new();
+        create_pre_library_tables(&fs.db_path);
+        fs.db().init().expect("upgrade old database");
+        let upgraded = schema::describe_schema(&open_raw(&fs.db_path).unwrap(), true).unwrap();
+        let fresh = fresh_schema(true);
+        let only = |a: &str, b: &str| a.lines().filter(|line| !b.lines().any(|other| other == *line)).map(str::to_string).collect::<Vec<_>>();
+        assert!(
+            upgraded == fresh,
+            "老库升上来和新建的库不一样\n只在老库：{:#?}\n只在新库：{:#?}",
+            only(&upgraded, &fresh),
+            only(&fresh, &upgraded)
+        );
+    }
+
+    /// 只读比对一个真实的库和新建的库（默认不跑）：
+    /// `RETAINPDF_COMPARE_DB=<库文件> cargo test -p retainpdf-db compare_a_real_database -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn compare_a_real_database_with_a_fresh_one() {
+        let path = std::env::var("RETAINPDF_COMPARE_DB").expect("RETAINPDF_COMPARE_DB");
+        let conn = rusqlite::Connection::open_with_flags(&path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+        let real = schema::describe_schema(&conn, true).unwrap();
+        let fresh = fresh_schema(true);
+        let only = |a: &str, b: &str| a.lines().filter(|line| !b.lines().any(|other| other == *line)).map(str::to_string).collect::<Vec<_>>();
+        println!("只在真实库：{:#?}", only(&real, &fresh));
+        println!("只在新库：{:#?}", only(&fresh, &real));
     }
 
     /// rust_api 和 jobsd 同时起来升级同一个老库：以前两边都看到缺列、都去 ALTER，后到的报 duplicate column。
@@ -746,15 +735,15 @@ mod tests {
         conn.execute(
             r#"
             INSERT INTO jobs (
-                job_id, workflow, status_json, created_at, updated_at, started_at, finished_at,
+                job_id, workflow, status, created_at, updated_at, started_at, finished_at,
                 upload_id, pid, command_json, request_json, error, stage, stage_detail,
-                progress_current, progress_total, log_tail_json, result_json, runtime_json, failure_json
+                progress_current, progress_total, log_tail_json, result_json, last_error_at, failure_json
             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
             "#,
             params![
                 job_id,
-                serde_json::to_string(&WorkflowKind::Book).expect("workflow json"),
-                serde_json::to_string(&JobStatusKind::Succeeded).expect("status json"),
+                WorkflowKind::Book.as_str(),
+                JobStatusKind::Succeeded.as_str(),
                 now_iso(),
                 now_iso(),
                 Option::<String>::None,

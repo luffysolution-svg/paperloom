@@ -81,6 +81,7 @@
 @import "../../features/collections/ui/CollectionsView.css";
 @import "../pages/home/favorites.css";
 @import "../../ui/icons/EmptyState.css";
+@import "../../ui/icons/BrandLogo.css" layer(components);
 @import "../../features/library/ui/page/RecentJobsLibrary.css";
 @import "../../features/library/ui/page/LibraryBatchToolbar.css";
 @import "../../app/home/shell/AppBottomBar.css";
@@ -96,6 +97,9 @@
 @import "../../features/ingest/ui/components/upload/UploadWorkflowNotices.css";
 @import "../../features/ingest/ui/components/upload/ProcessingChoicePanel.css";
 @import "../../features/ingest/ui/components/upload/BatchUploadPanel.css";
+@import "../../features/ingest/ui/components/upload/UploadGuide.css";
+@import "../../features/ingest/ui/components/upload/UploadEnchantControls.css";
+@import "../../features/ingest/ui/components/upload/EnchantedFile.css";
 @import "../../features/ingest/ui/UploadWorkflowResponsive.css";
 @import "../pages/home/job-dialogs.css";
 /* 原 job-dialogs.utilities.css 按组件拆分（顺序与拆分前一致）。 */
@@ -107,6 +111,7 @@
 @import "../pages/home/settings-dialogs.css";
 @import "../../features/credentials/ui/CredentialsWorkbench.css";
 @import "../../features/credentials/ui/TranslationPanel.css";
+@import "../../features/credentials/ui/TranslationPanelGroups.css";
 @import "../../features/credentials/ui/CredentialFormFields.css";
 @import "../../features/credentials/ui/CredentialCard.css";
 @import "../../features/glossaries/ui/GlossariesDialog.css";
@@ -131,6 +136,7 @@
 /* 概览页签：layout 定义卡片底与标题，必须在最前；responsive 必须在最后。 */
 @import "../../features/book-detail/ui/tabs/overview/layout.css" layer(pages);
 @import "../../features/book-detail/ui/tabs/overview/info.css" layer(pages);
+@import "../../features/book-detail/ui/tabs/overview/versions.css" layer(pages);
 @import "../../features/book-detail/ui/tabs/overview/activity.css" layer(pages);
 @import "../../features/book-detail/ui/tabs/overview/quality.css" layer(pages);
 @import "../../features/book-detail/ui/tabs/history.css" layer(pages);
@@ -140,19 +146,22 @@
 /* 「进度」分区按组件拆分；layout 定义共享变量，必须在最前。 */
 @import "../pages/home/book-detail-processing/layout.css" layer(pages);
 @import "../pages/home/book-detail-processing/processing-card.css" layer(pages);
+@import "../pages/home/book-detail-processing/retranslate-model.css" layer(pages);
 @import "../pages/home/book-detail-processing/processing-head.css" layer(pages);
 @import "../pages/home/book-detail-processing/processing-hud.css" layer(pages);
 @import "../pages/home/book-detail-processing/processing-details.css" layer(pages);
 @import "../pages/home/book-detail-processing/pipeline-rail.css" layer(pages);
 @import "../pages/home/book-detail-processing/assembly-line.css" layer(pages);
 @import "../pages/home/book-detail-processing/assembly-line-labels.css" layer(pages);
-@import "../pages/home/book-detail-processing/editorial-flow.css" layer(pages);
 /* 翻译 agent 的编辑部画面（只引用户视图 EditorialStage 用到的几份，调试视图不进主页）。 */
 @import "../../features/editorial-room/ui/EditorialMotion.css" layer(pages);
 @import "../../features/editorial-room/ui/EditorialStage.css" layer(pages);
 @import "../../features/editorial-room/ui/office/EditorialOffice.css" layer(pages);
-@import "../../features/editorial-room/ui/EditorialFigure.css" layer(pages);
-@import "../../features/editorial-room/ui/EditorialRobot.css" layer(pages);
+@import "../../features/editorial-room/ui/office/OfficeMoments.css" layer(pages);
+@import "../../features/editorial-room/ui/office/OfficeFiling.css" layer(pages);
+@import "../../features/editorial-room/ui/office/props/props.css" layer(pages);
+@import "../../features/editorial-room/ui/office/cast/cast.css" layer(pages);
+@import "../../features/editorial-room/ui/office/cast/cast-motion.css" layer(pages);
 @import "../../features/editorial-room/ui/EditorialLivePanel.css" layer(pages);
 @import "../pages/home/book-detail-processing/ocr-range.css" layer(pages);
 @import "../pages/home/book-detail-processing/failure-card.css" layer(pages);

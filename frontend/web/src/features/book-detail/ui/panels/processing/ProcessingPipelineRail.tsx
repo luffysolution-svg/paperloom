@@ -4,7 +4,7 @@
 // 画面上没有字：站名、状态、用时、实时说明都在悬停（li 的 title）和读屏里（sr-only）。各站用时在上面 HUD 的耗时条上，
 // 「最近活动」在细节区（ProcessingActivity）。以前每站三四行字：名字、状态小标签、用时、「全部 134 页 · 模型」。
 //
-// 「重新处理」也挂在流水线上：没有任务在跑时，能重做的站名字旁边有个 ↻ 图标（OCR 站「重新 OCR」、翻译站「重译 / 精修」、
+// 「重新处理」也挂在流水线上：没有任务在跑时，能重做的站名字旁边有个 ↻ 图标（OCR 站「重新 OCR」、翻译站「重新翻译」、
 // 版面站「重新渲染」，任务停下时文档准备站「从头翻译」），点开在画面下面列出这一站能做的事。内容由调用方给（stationActions）。
 //
 // 承接原有 DOM 契约（测试与门禁依赖）：
@@ -15,11 +15,13 @@
 // loading（首帧未知）：任务数据还没回来时只占位不下结论 —— 各站「读取中…」，data-state="loading"，
 // 根节点带 data-loading="true"。曾经首帧一律按 pending 渲染成「未执行 / 尚未翻译」，而那份文档的 OCR 其实正在跑。
 
+import { BrandLogo } from "@/ui/icons/BrandLogo.jsx";
+import type { BrandLogo as BrandLogoEntry } from "@/platform/config/brand-logos.js";
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { Clock3, Coins, Cpu, FileText, Flag, Languages, Layers, RotateCcw, ScanText, TriangleAlert, X } from "lucide-react";
 import { IconButton } from "@retainpdf/ui";
 
-import type { LibraryCardItem } from "@/features/library/domain.js";
+import type { LibraryCardItem } from "@/platform/contracts/library-payloads.js";
 import {
   assemblyStations,
   clockText,
@@ -67,11 +69,11 @@ const STATION_GLYPH: Record<StationKey, typeof FileText> = {
 };
 
 /** 站下面的一个小标签：图标（或服务商标志）+ 数，整句在悬停里。由调用方给（processingHudModel().stationChips）。 */
-export type StationChipView = { key: string; kind: "pages" | "model" | "tokens"; text: string; title: string; logo?: string };
+export type StationChipView = { key: string; kind: "pages" | "model" | "tokens"; text: string; title: string; logo?: BrandLogoEntry | null };
 
 function ChipIcon({ chip }: { chip: StationChipView }) {
   if (chip.kind === "model") {
-    return chip.logo ? <img src={chip.logo} alt="" aria-hidden="true" /> : <Cpu aria-hidden="true" />;
+    return chip.logo ? <BrandLogo logo={chip.logo} /> : <Cpu aria-hidden="true" />;
   }
   if (chip.kind === "tokens") return <Coins aria-hidden="true" />;
   return <FileText aria-hidden="true" />;

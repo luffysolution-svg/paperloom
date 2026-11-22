@@ -21,32 +21,50 @@ impl Db {
         if retention_days == 0 {
             return Ok(0);
         }
-        let cutoff = event_cutoff_iso(retention_days);
-        let succeeded = serde_json::to_string(&JobStatusKind::Succeeded)?;
-        let failed = serde_json::to_string(&JobStatusKind::Failed)?;
-        let canceled = serde_json::to_string(&JobStatusKind::Canceled)?;
+        self.expire_events(&event_cutoff_iso(retention_days), None)
+    }
+
+    /// 让一个已经结束的任务的进度事件现在就到期（原始事件、给接口的事件流一起删，记账和 30 天清理一样，
+    /// 事件流不会再从日志重建回来）。任务记录、译文、日志文件都不动。没结束的任务不删，返回 0。
+    /// 2026-11-20 数据库瘦身：11-03 一个失败任务的事件有两份各 28 万条。
+    pub fn expire_job_events(&self, job_id: &str) -> Result<usize> {
+        let cutoff = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
+        self.expire_events(&cutoff, Some(job_id))
+    }
+
+    /// `only_job` 为空：所有已结束任务早于 `cutoff` 的事件（30 天清理），并记下全局截止点；
+    /// 给了任务编号：只清这一个（不动全局截止点）。
+    fn expire_events(&self, cutoff: &str, only_job: Option<&str>) -> Result<usize> {
+        let cutoff = cutoff.to_string();
+        let succeeded = JobStatusKind::Succeeded.as_str();
+        let failed = JobStatusKind::Failed.as_str();
+        let canceled = JobStatusKind::Canceled.as_str();
         let mut conn = self.connect()?;
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        // Remember cleanup for feeds that have not been initialized yet. A
-        // later projection rebuild must not resurrect expired JSONL history.
-        tx.execute(
-            "INSERT INTO event_feed_retention(singleton, cutoff) VALUES(1, ?1)
-             ON CONFLICT(singleton) DO UPDATE SET cutoff = MAX(cutoff, excluded.cutoff)",
-            [&cutoff],
-        )?;
+        if only_job.is_none() {
+            // Remember cleanup for feeds that have not been initialized yet. A
+            // later projection rebuild must not resurrect expired JSONL history.
+            tx.execute(
+                "INSERT INTO event_feed_retention(singleton, cutoff) VALUES(1, ?1)
+                 ON CONFLICT(singleton) DO UPDATE SET cutoff = MAX(cutoff, excluded.cutoff)",
+                [&cutoff],
+            )?;
+        }
+        // 已结束的任务（只清一个时再加上任务编号）。?5 为空时不限任务。
+        let terminal = "SELECT job_id FROM jobs WHERE status IN (?2, ?3, ?4) AND (?5 IS NULL OR job_id = ?5)";
         // A terminal child may only have been read through its parent's feed.
         // Persist its own cutoff even without raw events or a child feed, so
         // rerendering that child cannot restore already expired JSONL history.
         tx.execute(
             "INSERT INTO event_source_versions(job_id, revision, retention_cutoff)
-             SELECT job_id, 1, ?1 FROM jobs WHERE status_json IN (?2, ?3, ?4)
+             SELECT job_id, 1, ?1 FROM jobs WHERE status IN (?2, ?3, ?4) AND (?5 IS NULL OR job_id = ?5)
              ON CONFLICT(job_id) DO UPDATE SET
                  revision = revision + 1, retention_cutoff = excluded.retention_cutoff
              WHERE retention_cutoff IS NULL OR retention_cutoff < excluded.retention_cutoff",
-            params![cutoff, succeeded, failed, canceled],
+            params![cutoff, succeeded, failed, canceled, only_job],
         )?;
         tx.execute(
-            "UPDATE event_feeds SET
+            &format!("UPDATE event_feeds SET
                  epoch = CASE WHEN EXISTS (
                      SELECT 1 FROM event_feed_items
                      WHERE owner_job_id = event_feeds.owner_job_id AND ts < ?1
@@ -54,25 +72,25 @@ impl Db {
                  revision = revision + 1, retention_cutoff = ?1
              WHERE (retention_cutoff IS NULL OR retention_cutoff < ?1)
                AND owner_job_id IN (
-                   SELECT job_id FROM jobs WHERE status_json IN (?2, ?3, ?4)
-               )",
-            params![cutoff, succeeded, failed, canceled],
+                   {terminal}
+               )"),
+            params![cutoff, succeeded, failed, canceled, only_job],
         )?;
         tx.execute(
-            "DELETE FROM event_feed_items WHERE ts < ?1 AND owner_job_id IN (
-                 SELECT job_id FROM jobs WHERE status_json IN (?2, ?3, ?4)
-             )",
-            params![cutoff, succeeded, failed, canceled],
+            &format!("DELETE FROM event_feed_items WHERE ts < ?1 AND owner_job_id IN (
+                 {terminal}
+             )"),
+            params![cutoff, succeeded, failed, canceled, only_job],
         )?;
         let deleted = tx.execute(
-            r#"
-            DELETE FROM events
-            WHERE ts < ?1
-              AND job_id IN (
-                  SELECT job_id FROM jobs WHERE status_json IN (?2, ?3, ?4)
-              )
-            "#,
-            params![cutoff, succeeded, failed, canceled],
+            &format!(
+                "DELETE FROM events
+                 WHERE ts < ?1
+                   AND job_id IN (
+                       {terminal}
+                   )"
+            ),
+            params![cutoff, succeeded, failed, canceled, only_job],
         )?;
         tx.commit()?;
         Ok(deleted)
@@ -80,12 +98,12 @@ impl Db {
 
     /// 已经结束（成功、失败、取消）的任务编号，给派生缓存的回收用：排队、在跑的任务不回收。
     pub fn terminal_job_ids(&self) -> Result<Vec<String>> {
-        let succeeded = serde_json::to_string(&JobStatusKind::Succeeded)?;
-        let failed = serde_json::to_string(&JobStatusKind::Failed)?;
-        let canceled = serde_json::to_string(&JobStatusKind::Canceled)?;
+        let succeeded = JobStatusKind::Succeeded.as_str();
+        let failed = JobStatusKind::Failed.as_str();
+        let canceled = JobStatusKind::Canceled.as_str();
         let conn = self.connect()?;
         let mut stmt =
-            conn.prepare("SELECT job_id FROM jobs WHERE status_json IN (?1, ?2, ?3) ORDER BY job_id")?;
+            conn.prepare("SELECT job_id FROM jobs WHERE status IN (?1, ?2, ?3) ORDER BY job_id")?;
         let rows = stmt.query_map(params![succeeded, failed, canceled], |row| row.get(0))?;
         Ok(rows.collect::<rusqlite::Result<Vec<String>>>()?)
     }
@@ -101,14 +119,11 @@ impl Db {
     }
 
     fn job_ids_with_status(&self, statuses: &[JobStatusKind]) -> Result<Vec<String>> {
-        let encoded = statuses
-            .iter()
-            .map(serde_json::to_string)
-            .collect::<serde_json::Result<Vec<String>>>()?;
+        let encoded: Vec<&str> = statuses.iter().map(JobStatusKind::as_str).collect();
         let placeholders = vec!["?"; encoded.len()].join(", ");
         let conn = self.connect()?;
         let mut stmt = conn.prepare(&format!(
-            "SELECT job_id FROM jobs WHERE status_json IN ({placeholders}) ORDER BY job_id"
+            "SELECT job_id FROM jobs WHERE status IN ({placeholders}) ORDER BY job_id"
         ))?;
         let rows = stmt.query_map(rusqlite::params_from_iter(encoded.iter()), |row| row.get(0))?;
         Ok(rows.collect::<rusqlite::Result<Vec<String>>>()?)
@@ -142,7 +157,7 @@ impl Db {
                       SELECT upload_id FROM jobs WHERE upload_id IS NOT NULL
                   )
                   AND (content_hash = '' OR content_hash NOT IN (
-                      SELECT document_id FROM documents
+                      SELECT file_id FROM item_files
                   ))
                 "#,
             )?;
@@ -311,6 +326,36 @@ mod tests {
             1,
             "events for a still-running job must never be cleaned regardless of age"
         );
+    }
+
+    #[test]
+    fn one_finished_jobs_events_can_expire_now_without_touching_others() {
+        // 2026-11-20 数据库瘦身：一个失败任务的事件两份各 28 万条，提前清掉；别的任务、没结束的任务不动，全局截止点不挪
+        let fs = TestDbFs::new("events-one-job");
+        let db = fs.db();
+        db.init().expect("init db");
+        db.save_job(&job_with_status("job-noisy", JobStatusKind::Failed)).unwrap();
+        db.save_job(&job_with_status("job-other", JobStatusKind::Succeeded)).unwrap();
+        db.save_job(&job_with_status("job-running", JobStatusKind::Running)).unwrap();
+        let conn = Connection::open(&fs.db_path).expect("open sqlite");
+        for seq in 1..=3 {
+            insert_event_with_ts(&conn, "job-noisy", seq, &now_iso());
+        }
+        insert_event_with_ts(&conn, "job-other", 1, &now_iso());
+        insert_event_with_ts(&conn, "job-running", 1, &now_iso());
+        drop(conn);
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+
+        assert_eq!(db.expire_job_events("job-noisy").unwrap(), 3);
+        assert!(db.list_job_events("job-noisy", 100, 0).unwrap().is_empty());
+        assert_eq!(db.list_job_events("job-other", 100, 0).unwrap().len(), 1);
+        assert!(db.event_source_retention_cutoff("job-noisy").unwrap().is_some(), "记下截止点，事件流不会从日志重建回来");
+        assert!(db.event_source_retention_cutoff("job-other").unwrap().is_none());
+        assert_eq!(db.expire_job_events("job-running").unwrap(), 0, "没结束的任务不删");
+        assert_eq!(db.list_job_events("job-running", 100, 0).unwrap().len(), 1);
+        let conn = Connection::open(&fs.db_path).unwrap();
+        let global: i64 = conn.query_row("SELECT COUNT(*) FROM event_feed_retention", [], |row| row.get(0)).unwrap();
+        assert_eq!(global, 0, "只清一个任务不挪全局截止点");
     }
 
     #[test]

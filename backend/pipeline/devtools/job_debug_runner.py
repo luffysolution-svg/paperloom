@@ -14,12 +14,12 @@ if str(PIPELINE_ROOT) not in sys.path:
 
 from retainpdf_pipeline.foundation.shared.stage_specs import RENDER_STAGE_SCHEMA_VERSION
 from retainpdf_pipeline.foundation.shared.stage_specs import TRANSLATE_STAGE_SCHEMA_VERSION
-from retainpdf_translation.workflow.batching.batching import _is_low_risk_batchable_item
+from retainpdf_translation_classic.workflow.batching.batching import _is_low_risk_batchable_item
 from retainpdf_translation.services.context.execution_context import context_with_memory_guidance
-from retainpdf_translation.services.fast_path.keep_origin import _is_fast_path_keep_origin_item
-from retainpdf_translation.services.fast_path.keep_origin import _plan_item_view
+from retainpdf_translation_classic.services.fast_path.keep_origin import _is_fast_path_keep_origin_item
+from retainpdf_translation_classic.services.fast_path.keep_origin import _plan_item_view
 from retainpdf_translation.llm.shared.control_context import build_translation_control_context
-from retainpdf_translation.services.memory import JobMemoryStore
+from retainpdf_translation_classic.services.memory import JobMemoryStore
 
 
 def _job_root_from_arg(value: str) -> Path:
@@ -388,7 +388,7 @@ def retranslate_job(
     command = [
         sys.executable,
         "-m",
-        "retainpdf_pipeline.entrypoints.run_translate_only",
+        "retainpdf_pipeline.translate",
         "--spec",
         str(spec_path),
     ]
@@ -401,7 +401,7 @@ def rerender_job(job_root: Path, *, translated_pdf_name: str, render_mode: str) 
     command = [
         sys.executable,
         "-m",
-        "retainpdf_pipeline.entrypoints.run_render_only",
+        "retainpdf_pipeline.render",
         "--spec",
         str(spec_path),
     ]

@@ -207,8 +207,10 @@ fn run_step(
 ) -> Result<(), AppError> {
     let mut command = std::process::Command::new(deps.pipeline_command);
     command.arg(subcommand).args(args);
-    let (status, diagnostics) =
-        retainpdf_files::run_supervised(anchor, label, BUILD_TIMEOUT, command)?;
+    let (status, diagnostics) = match retainpdf_files::run_supervised(anchor, label, BUILD_TIMEOUT, command) {
+        Ok(result) => result,
+        Err(error) => return Err(error),
+    };
     if !status.success() {
         return Err(diagnostics.error(format!("failed to build {label}")));
     }

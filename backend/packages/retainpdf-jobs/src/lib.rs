@@ -52,7 +52,9 @@ pub use files::{
 pub use lifecycle::deletion::{
     ensure_deletable, ensure_no_dependents, find_job, remove_path_if_exists, JobDeletion,
 };
-pub use lifecycle::launcher::JobLaunchDeps;
+pub use lifecycle::launcher::{JobLaunchDeps, VersionLink};
+// 译文版本列表显示「改过 N 处」。
+pub use translations::user_edited_block_count;
 // 对外入口不许带 `runtime.job_id`：书库的建任务入口要在查书、查 OCR 之前先拒（先 400 再 404/409）。
 pub use lifecycle::creation::reject_client_job_id;
 pub use lifecycle::managed_credential_gc::cleanup_deleted_job_credentials;
@@ -68,12 +70,11 @@ pub use progress::stage_view::{build_job_stage_view, terminal_completion_note};
 pub use query::{job_search_text, JobQueries};
 pub use query_execution::QueryExecution;
 pub use reader::reader_regions::load_translation_pages;
-pub use reports::quality::api::{
-    quality_items_view, quality_summary_view, QualityApiDeps, QualityItemsParams, QualityItemsView,
-    QualitySummaryView,
-};
+pub use reports::quality::api::{quality_summary_view, QualityApiDeps, QualitySummaryView};
 pub use reports::usage::api::{
-    all_usage_view, document_usage_view, job_usage_view, UsageApiDeps, UsageSummaryView,
+    all_usage_view, document_usage_estimate_view, document_usage_view, job_usage_view, library_usage_estimate_view,
+    price_lookup_view, DocumentUsageEstimateQuery, LibraryUsageEstimateQuery, PriceLookupInput, PriceLookupView,
+    UsageApiDeps, UsageEstimateView, UsageSummaryView,
 };
 pub use runtime_gateway::{JobDriverRegistry, JobRuntime, JobRuntimeLauncher};
 pub use summary_loaders::SummaryCache;

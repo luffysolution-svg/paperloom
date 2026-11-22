@@ -1,3 +1,4 @@
+import { MODEL_LOGOS, VENDOR_LOGOS, type BrandLogo } from "./brand-logos.js";
 export const DEFAULT_OCR_PROVIDER = "paddle";
 
 export const OCR_PROVIDER_DEFINITIONS = [
@@ -5,7 +6,7 @@ export const OCR_PROVIDER_DEFINITIONS = [
     id: "paddle",
     label: "PaddleOCR",
     description: "百度飞桨在线 OCR，一本最多 999 页。",
-    logoUrl: "",
+    logo: VENDOR_LOGOS.paddlepaddle,
     tokenField: "paddle_token",
     runtimeConfigKey: "paddleToken",
     tokenLabel: "Paddle Access Token",
@@ -27,7 +28,7 @@ export const OCR_PROVIDER_DEFINITIONS = [
     id: "mineru",
     label: "MinerU",
     description: "MinerU 在线文档解析，一本最多 600 页。",
-    logoUrl: "",
+    logo: VENDOR_LOGOS.mineru,
     tokenField: "mineru_token",
     runtimeConfigKey: "mineruToken",
     tokenLabel: "MinerU API Token",
@@ -52,19 +53,21 @@ export const OCR_PROVIDER_DEFINITIONS = [
     label: "GLM-OCR",
     description: "智谱版面解析，公式出 LaTeX、表格出 HTML，不限页数；和智谱翻译共用一个 key。",
     // 设置里服务商卡片上的标志（和翻译「智谱」同一个）；没有标志的用线条图标。
-    logoUrl: "src/assets/providers/zai.svg",
+    logo: VENDOR_LOGOS.zhipu,
     tokenField: "",
     inlineOption: "credential",
     runtimeConfigKey: "glmOcrToken",
     tokenLabel: "智谱 API Key",
     tokenPlaceholder: "智谱 API Key（翻译用智谱时可以不填）",
-    validationButtonLabel: "",
+    // 检测（2026-11-22 用户要）：后端没有 GLM-OCR 专用的检测接口，借翻译的检测接口，
+    // 拿这个 key 向智谱发一个 max_tokens=1 的请求（模型用智谱的免费 flash，见 glmOcrProbePayload）。
+    validationButtonLabel: "检测 GLM-OCR",
     validationIdleMessage: "未检测",
     validationMissingMessage: "请先填写智谱 API Key；翻译用智谱时可以不填。",
     validationUnavailableMessage: "翻译选了智谱时可以不填，用翻译的同一个 key。",
-    docsUrl: "https://open.bigmodel.cn/usercenter/apikeys",
+    docsUrl: "https://open.bigmodel.cn/apikey/platform",
     docsLabel: "获取 Key",
-    supportsValidation: false,
+    supportsValidation: true,
     // 分段识别，多长的书都行。
     maxPages: 0,
     // 同样切成 10 页一片交（glm_ocr_driver.py），它「≤50MB」的限制落在每一片上。
@@ -119,7 +122,7 @@ export const TRANSLATION_PROVIDER_OPTIONS = [
     defaultModel: "qwen3.8-flash",
     defaultWorkers: 20,
     maxWorkers: 50,
-    logoUrl: "src/assets/providers/qwen.svg",
+    logo: MODEL_LOGOS.qwen,
     billingUrl: "https://platform.qianwenai.com/home/billing/overview",
     billingLabel: "Qwen 充值",
   },
@@ -131,7 +134,7 @@ export const TRANSLATION_PROVIDER_OPTIONS = [
     defaultModel: "deepseek-flash",
     defaultWorkers: 50,
     maxWorkers: 100,
-    logoUrl: "src/assets/providers/deepseek.svg",
+    logo: VENDOR_LOGOS.deepseek,
     docsUrl: TRANSLATION_PROVIDER_DEFINITION.docsUrl,
     docsLabel: TRANSLATION_PROVIDER_DEFINITION.docsLabel,
   },
@@ -143,7 +146,7 @@ export const TRANSLATION_PROVIDER_OPTIONS = [
     defaultModel: "claude-sonnet-5",
     defaultWorkers: 50,
     maxWorkers: 100,
-    logoUrl: "src/assets/providers/anthropic.svg",
+    logo: VENDOR_LOGOS.anthropic,
   },
   {
     id: "openai",
@@ -153,17 +156,19 @@ export const TRANSLATION_PROVIDER_OPTIONS = [
     defaultModel: "gpt-5.6-luna",
     defaultWorkers: 50,
     maxWorkers: 100,
-    logoUrl: "src/assets/providers/openai.svg",
+    logo: VENDOR_LOGOS.openai,
   },
   {
     id: "zhipu",
     label: "智谱",
+    // 设置里只有 Responses / Anthropic 两种（2026-11-01 用户定）；智谱没有 /responses，发出去时由
+    // translationProtocolFor 换成 OpenAI 格式（/chat/completions）。
     protocol: "openai_responses",
     baseUrl: ZHIPU_TRANSLATION_BASE_URL,
     defaultModel: "GLM-5.3-Flash",
     defaultWorkers: 5,
     maxWorkers: 50,
-    logoUrl: "src/assets/providers/zai.svg",
+    logo: VENDOR_LOGOS.zhipu,
     docsUrl: "https://bigmodel.cn/usercenter/proj-mgmt/apikeys",
     docsLabel: "智谱 API Key",
     billingUrl: "https://bigmodel.cn/finance-center/finance/pay",
@@ -177,7 +182,7 @@ export const TRANSLATION_PROVIDER_OPTIONS = [
     defaultModel: "deepseek-v4.1-flash",
     defaultWorkers: 5,
     maxWorkers: 100,
-    logoUrl: "",
+    logo: VENDOR_LOGOS.opencode,
     docsUrl: "https://opencode.ai/docs/go/",
     docsLabel: "OpenCode Go 文档",
   },
@@ -190,7 +195,8 @@ export const TRANSLATION_PROVIDER_OPTIONS = [
     defaultWorkers: 5,
     maxWorkers: 100,
     recommendedWorkers: 5,
-    logoUrl: "",
+    // 自定义接口没有固定标志：界面按填的接口地址认（vendorLogoForBaseUrl）。
+    logo: null as BrandLogo | null,
   },
 ];
 
@@ -219,6 +225,21 @@ export type TranslationThinking = typeof TRANSLATION_THINKING_OPTIONS[number]["i
 export function normalizeTranslationApiProtocol(value: unknown, fallback: TranslationApiProtocol = "openai_responses"): TranslationApiProtocol {
   const text = `${value || ""}`.trim().toLowerCase();
   return TRANSLATION_API_PROTOCOL_OPTIONS.some((option) => option.id === text) ? text as TranslationApiProtocol : fallback;
+}
+
+/** 发给后端的协议（契约 translation.api_protocol）：比设置里能选的多一个 openai（/chat/completions）。 */
+export type TranslationWireProtocol = TranslationApiProtocol | "openai";
+
+/**
+ * 实际发给后端的协议。设置里只留 Responses / Anthropic（2026-11-01 用户定），但智谱没有 /responses
+ * （/v4/responses 是 404，2026-11-22 用测试 key 实测；chat 正常）：接口地址是智谱时改成 OpenAI 格式，
+ * 用户不用改设置，以前存下的智谱配置也直接能用。
+ */
+export function translationProtocolFor(baseUrl: unknown, protocol: unknown): TranslationWireProtocol {
+  // 已经是 openai（换过一次的、或 GLM-OCR 检测直接给的）原样留着，不再落回 Responses。
+  if (`${protocol || ""}`.trim().toLowerCase() === "openai") return "openai";
+  const normalized = normalizeTranslationApiProtocol(protocol);
+  return normalized === "openai_responses" && isZhipuBaseUrl(baseUrl) ? "openai" : normalized;
 }
 
 export function normalizeTranslationThinking(value: unknown): TranslationThinking {
@@ -301,4 +322,30 @@ export function ocrMaxPages(provider: unknown): number {
 
 export function getOcrProviderDefinition(provider: unknown) {
   return OCR_PROVIDER_DEFINITIONS.find((item) => item.id === normalizeOcrProvider(provider)) || OCR_PROVIDER_DEFINITIONS[0];
+}
+
+/**
+ * GLM-OCR 的检测：借翻译的检测接口，拿这个 key 向智谱发一个 max_tokens=1 的请求。
+ * 协议固定用 OpenAI 格式（/chat/completions）、模型名用小写：智谱官方只文档化了 chat 接口，
+ * 照搬翻译预设的 Responses 协议时检测报红（2026-11-22 用户截图，key 是对的）。
+ */
+export function glmOcrProbePayload(token: string) {
+  const zhipu = TRANSLATION_PROVIDER_OPTIONS.find((option) => option.id === "zhipu");
+  return {
+    api_key: `${token || ""}`.trim(),
+    base_url: zhipu?.baseUrl || ZHIPU_TRANSLATION_BASE_URL,
+    model: `${zhipu?.defaultModel || "glm-5.3-flash"}`.toLowerCase(),
+    api_protocol: "openai",
+  };
+}
+
+/** 翻译检测接口的结果说的是「翻译 API」，GLM-OCR 这里换成智谱 key 的说法；其余字段原样。 */
+export function describeGlmOcrProbe<T extends { ok?: boolean; status?: unknown; summary?: unknown }>(result: T): T {
+  const status = `${result?.status ?? ""}`;
+  const summary = result?.ok
+    ? "智谱 API Key 可用，GLM-OCR 能用"
+    : status === "unauthorized"
+      ? "智谱 API Key 无效，请到智谱开放平台重新复制"
+      : `${result?.summary || "检测失败，请稍后重试"}`.replace(/翻译 ?API ?/g, "智谱接口");
+  return { ...result, summary };
 }

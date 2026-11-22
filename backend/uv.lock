@@ -10,6 +10,7 @@ members = [
     "retainpdf-pipeline",
     "retainpdf-translation",
     "retainpdf-translation-agent",
+    "retainpdf-translation-classic",
 ]
 
 [[package]]
@@ -253,7 +254,7 @@ wheels = [
 
 [[package]]
 name = "retainpdf-backend-workspace"
-version = "0.4.4"
+version = "0.4.5"
 source = { virtual = "." }
 dependencies = [
     { name = "retainpdf-base" },
@@ -261,6 +262,7 @@ dependencies = [
     { name = "retainpdf-pipeline" },
     { name = "retainpdf-translation" },
     { name = "retainpdf-translation-agent" },
+    { name = "retainpdf-translation-classic" },
 ]
 
 [package.optional-dependencies]
@@ -270,6 +272,7 @@ test = [
     { name = "retainpdf-pipeline", extra = ["test"] },
     { name = "retainpdf-translation", extra = ["test"] },
     { name = "retainpdf-translation-agent", extra = ["test"] },
+    { name = "retainpdf-translation-classic", extra = ["test"] },
 ]
 
 [package.metadata]
@@ -284,12 +287,14 @@ requires-dist = [
     { name = "retainpdf-translation", extras = ["test"], marker = "extra == 'test'", editable = "translation" },
     { name = "retainpdf-translation-agent", editable = "translation-agent" },
     { name = "retainpdf-translation-agent", extras = ["test"], marker = "extra == 'test'", editable = "translation-agent" },
+    { name = "retainpdf-translation-classic", editable = "translation-classic" },
+    { name = "retainpdf-translation-classic", extras = ["test"], marker = "extra == 'test'", editable = "translation-classic" },
 ]
 provides-extras = ["test"]
 
 [[package]]
 name = "retainpdf-base"
-version = "0.4.4"
+version = "0.4.5"
 source = { editable = "base" }
 
 [package.optional-dependencies]
@@ -303,7 +308,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "retainpdf-math"
-version = "0.4.4"
+version = "0.4.5"
 source = { editable = "math" }
 
 [package.optional-dependencies]
@@ -317,7 +322,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "retainpdf-pipeline"
-version = "0.4.4"
+version = "0.4.5"
 source = { editable = "pipeline" }
 dependencies = [
     { name = "pikepdf" },
@@ -327,6 +332,8 @@ dependencies = [
     { name = "retainpdf-base" },
     { name = "retainpdf-math" },
     { name = "retainpdf-translation" },
+    { name = "retainpdf-translation-agent", extra = ["engine"] },
+    { name = "retainpdf-translation-classic" },
     { name = "urllib3" },
 ]
 
@@ -347,20 +354,21 @@ requires-dist = [
     { name = "retainpdf-base", editable = "base" },
     { name = "retainpdf-math", editable = "math" },
     { name = "retainpdf-translation", editable = "translation" },
+    { name = "retainpdf-translation-agent", extras = ["engine"], editable = "translation-agent" },
+    { name = "retainpdf-translation-classic", editable = "translation-classic" },
     { name = "urllib3", specifier = "==2.5.0" },
 ]
 provides-extras = ["test"]
 
 [[package]]
 name = "retainpdf-translation"
-version = "0.4.4"
+version = "0.4.5"
 source = { editable = "translation" }
 dependencies = [
     { name = "pymupdf" },
     { name = "requests" },
     { name = "retainpdf-base" },
     { name = "retainpdf-math" },
-    { name = "retainpdf-translation-agent" },
     { name = "urllib3" },
 ]
 
@@ -376,15 +384,41 @@ requires-dist = [
     { name = "requests", specifier = "==2.32.5" },
     { name = "retainpdf-base", editable = "base" },
     { name = "retainpdf-math", editable = "math" },
-    { name = "retainpdf-translation-agent", editable = "translation-agent" },
     { name = "urllib3", specifier = "==2.5.0" },
 ]
 provides-extras = ["test"]
 
 [[package]]
 name = "retainpdf-translation-agent"
-version = "0.4.4"
+version = "0.4.5"
 source = { editable = "translation-agent" }
+
+[package.optional-dependencies]
+engine = [
+    { name = "requests" },
+    { name = "retainpdf-translation" },
+]
+test = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pytest", marker = "extra == 'test'", specifier = "==9.0.3" },
+    { name = "requests", marker = "extra == 'engine'", specifier = "==2.32.5" },
+    { name = "retainpdf-translation", marker = "extra == 'engine'", editable = "translation" },
+]
+provides-extras = ["engine", "test"]
+
+[[package]]
+name = "retainpdf-translation-classic"
+version = "0.4.5"
+source = { editable = "translation-classic" }
+dependencies = [
+    { name = "retainpdf-base" },
+    { name = "retainpdf-math" },
+    { name = "retainpdf-translation" },
+]
 
 [package.optional-dependencies]
 test = [
@@ -392,7 +426,12 @@ test = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pytest", marker = "extra == 'test'", specifier = "==9.0.3" }]
+requires-dist = [
+    { name = "pytest", marker = "extra == 'test'", specifier = "==9.0.3" },
+    { name = "retainpdf-base", editable = "base" },
+    { name = "retainpdf-math", editable = "math" },
+    { name = "retainpdf-translation", editable = "translation" },
+]
 provides-extras = ["test"]
 
 [[package]]

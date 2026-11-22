@@ -21,6 +21,27 @@ pub(crate) fn runtime_job() -> JobRuntimeState {
     .into_runtime()
 }
 
+/// Return the Python executable used by process tests on every platform.
+/// Windows virtual environments expose `python.exe`, while POSIX environments
+/// expose `bin/python3`.
+pub(crate) fn python_command() -> String {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let relative = if cfg!(windows) {
+        PathBuf::from("Scripts").join("python.exe")
+    } else {
+        PathBuf::from("bin").join("python3")
+    };
+    let candidates = std::env::var_os("UV_PROJECT_ENVIRONMENT")
+        .map(PathBuf::from)
+        .into_iter()
+        .chain([root.join("backend/.venv"), root.join(".venv")]);
+    candidates
+        .map(|venv| venv.join(&relative))
+        .find(|path| path.is_file())
+        .map(|path| path.to_string_lossy().into_owned())
+        .unwrap_or_else(|| if cfg!(windows) { "python" } else { "python3" }.to_string())
+}
+
 /// 建一个唯一的临时目录并返回；`name` 只为出问题时好认，唯一性靠随机后缀。
 pub(crate) fn temp_root(name: &str) -> PathBuf {
     let root = std::env::temp_dir().join(format!(
@@ -102,7 +123,7 @@ pub(crate) fn test_app_config(root: &Path) -> crate::config::AppConfig {
         downloads_dir,
         jobs_db_path: data_root.join("db").join("jobs.db"),
         output_root,
-        python_bin: "python3".to_string(),
+        python_bin: python_command(),
         pipeline_command: "retainpdf-pipeline".to_string(),
         bind_host: "127.0.0.1".to_string(),
         port: 41000,

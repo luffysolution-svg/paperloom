@@ -28,7 +28,7 @@ fn sql(state: &crate::AppState, statement: &str) {
 
 fn title(state: &crate::AppState) -> Option<String> {
     let conn = rusqlite::Connection::open(state.db.path()).expect("open db");
-    conn.query_row("SELECT title FROM documents WHERE document_id = 'd1'", [], |row| row.get(0)).ok()
+    conn.query_row("SELECT title FROM item_references WHERE item_id = 'd1'", [], |row| row.get(0)).ok()
 }
 
 #[tokio::test]
@@ -41,22 +41,27 @@ async fn back_up_now_then_restore_brings_the_library_back_and_keeps_a_safety_cop
     assert_eq!(body["data"]["auto_interval_hours"], 24);
     assert!(body["data"]["last_restore"].is_null(), "{body}");
 
-    sql(&state, "INSERT INTO documents(document_id, title, source_filename, added_at, updated_at) VALUES('d1', 'Before', 'a.pdf', 't', 't');");
+    sql(
+        &state,
+        "INSERT INTO library_items(item_id, item_type, created_at, updated_at) VALUES('d1', 'reference', 't', 't');
+         INSERT INTO item_references(item_id, title) VALUES('d1', 'Before');
+         INSERT INTO item_files(file_id, item_id, source_filename, added_at, updated_at) VALUES('d1', 'd1', 'a.pdf', 't', 't');",
+    );
     let (status, made) = call(&state, "POST", "/api/v1/database-backups").await;
     assert_eq!(status, StatusCode::OK, "{made}");
     assert_eq!(made["data"]["kind"], "manual");
     let id = made["data"]["id"].as_str().expect("id").to_string();
-    sql(&state, "UPDATE documents SET title = 'After' WHERE document_id = 'd1';");
+    sql(&state, "UPDATE item_references SET title = 'After' WHERE item_id = 'd1';");
 
     // 有任务在跑:不恢复,说明在等什么。
-    sql(&state, "INSERT INTO jobs(job_id, workflow, status_json, created_at, updated_at, command_json, request_json, log_tail_json)
-                 VALUES('j1', '\"book\"', '\"running\"', 't', 't', '[]', '{}', '[]');");
+    sql(&state, "INSERT INTO jobs(job_id, workflow, status, created_at, updated_at, command_json, request_json, log_tail_json)
+                 VALUES('j1', 'book', 'running', 't', 't', '[]', '{}', '[]');");
     let (status, body) = call(&state, "POST", &format!("/api/v1/database-backups/{id}/restore")).await;
     assert_eq!(status, StatusCode::CONFLICT, "{body}");
     assert!(body["message"].as_str().unwrap_or("").contains("任务"), "{body}");
     assert_eq!(body["error"]["details"]["reason"], "restore_blocked", "{body}");
     assert_eq!(title(&state).as_deref(), Some("After"));
-    sql(&state, "UPDATE jobs SET status_json = '\"succeeded\"' WHERE job_id = 'j1';");
+    sql(&state, "UPDATE jobs SET status = 'succeeded' WHERE job_id = 'j1';");
 
     let (status, body) = call(&state, "POST", &format!("/api/v1/database-backups/{id}/restore")).await;
     assert_eq!(status, StatusCode::OK, "{body}");
@@ -104,7 +109,7 @@ async fn a_restore_reconciles_jobs_that_were_running_when_the_backup_was_taken()
     assert_eq!(status, StatusCode::OK, "{made}");
     let id = made["data"]["id"].as_str().expect("id").to_string();
     // 备份之后这个任务结束了，所以现在可以恢复。
-    sql(&state, "UPDATE jobs SET status_json = '\"succeeded\"', pid = NULL WHERE job_id = 'j-busy';");
+    sql(&state, "UPDATE jobs SET status = 'succeeded', pid = NULL WHERE job_id = 'j-busy';");
 
     let (status, body) = call(&state, "POST", &format!("/api/v1/database-backups/{id}/restore")).await;
     assert_eq!(status, StatusCode::OK, "{body}");

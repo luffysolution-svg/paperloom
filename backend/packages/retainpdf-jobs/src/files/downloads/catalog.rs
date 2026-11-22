@@ -59,9 +59,10 @@ fn output_file(name: &str, query: &JobFilesQuery) -> Result<JobFile, AppError> {
         return Ok(JobFile::OcrImage(image.to_string()));
     }
     Ok(match name {
-        "translated.pdf" => JobFile::TranslatedPdf,
-        "side-by-side.pdf" => JobFile::SideBySidePdf,
-        "translated.docx" => JobFile::translated_docx(&crate::views::LayoutDocxQuery { dpi: query.dpi }),
+        "translated.pdf" => JobFile::TranslatedPdf { watermark: query.wants_watermark() },
+        "side-by-side.pdf" => JobFile::SideBySidePdf { watermark: query.wants_watermark() },
+        // Word 导出按用户要求始终不带水印。`watermark` 查询参数只控制两种 PDF。
+        "translated.docx" => JobFile::translated_docx(&crate::views::LayoutDocxQuery { dpi: query.dpi }, false),
         "ocr.md" => JobFile::OcrMarkdown,
         "ocr.zip" => JobFile::OcrMarkdownZip { include_job_dir: false },
         "all.zip" => JobFile::All,
@@ -264,7 +265,13 @@ mod tests {
 
     #[test]
     fn names_resolve_to_files() {
-        assert_eq!(output_file("translated.pdf", &query()).unwrap(), JobFile::TranslatedPdf);
+        assert_eq!(output_file("translated.pdf", &query()).unwrap(), JobFile::TranslatedPdf { watermark: true });
+        let plain = JobFilesQuery { watermark: Some("0".into()), ..query() };
+        assert_eq!(output_file("translated.pdf", &plain).unwrap(), JobFile::TranslatedPdf { watermark: false });
+        assert_eq!(output_file("side-by-side.pdf", &plain).unwrap(), JobFile::SideBySidePdf { watermark: false });
+        assert!(matches!(output_file("translated.docx", &query()).unwrap(), JobFile::TranslatedDocx(options) if !options.watermark));
+        let requested_watermark = JobFilesQuery { watermark: Some("1".into()), ..query() };
+        assert!(matches!(output_file("translated.docx", &requested_watermark).unwrap(), JobFile::TranslatedDocx(options) if !options.watermark));
         assert_eq!(
             output_file("ocr/images/page-1/fig.png", &query()).unwrap(),
             JobFile::OcrImage("page-1/fig.png".into())

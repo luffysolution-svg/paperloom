@@ -134,9 +134,9 @@ impl RenderPrepareProcess {
 mod tests {
     use super::*;
 
-    fn process(program: &str, args: &[&str]) -> RenderPrepareProcess {
-        let child = Command::new(program)
-            .args(args)
+    fn process(script: &str) -> RenderPrepareProcess {
+        let child = Command::new(crate::job_runner::test_support::python_command())
+            .args(["-c", script])
             .kill_on_drop(true)
             .spawn()
             .expect("spawn test process");
@@ -150,7 +150,7 @@ mod tests {
     #[tokio::test]
     async fn finish_stops_a_process_that_outlives_the_timeout() {
         let started = Instant::now();
-        let slow = process("sleep", &["30"]);
+        let slow = process("import time; time.sleep(30)");
         assert!(slow.child.id().is_some());
         // finish 消耗句柄；超时后必须把进程结束掉，而不是一直等。
         slow.finish(Duration::from_millis(200)).await;
@@ -160,7 +160,7 @@ mod tests {
     #[tokio::test]
     async fn finish_returns_when_the_process_is_done() {
         let started = Instant::now();
-        process("true", &[]).finish(Duration::from_secs(30)).await;
+        process("pass").finish(Duration::from_secs(30)).await;
         assert!(started.elapsed() < Duration::from_secs(5));
     }
 }
