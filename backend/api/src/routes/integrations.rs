@@ -14,7 +14,8 @@ use crate::routes::job_helpers::stream_file;
 use crate::services::integrations::{
     batch_export_download, export_batch, export_documents_to_obsidian_view,
     export_job_to_obsidian_view, markdown_export_download_async, obsidian_integration_view,
-    save_obsidian_settings_view, BatchExportInput, BatchExportView, MarkdownExportQuery,
+    save_obsidian_settings_view, sync_obsidian_reading as sync_reading_to_zotero,
+    BatchExportInput, BatchExportView, MarkdownExportQuery, SyncResult,
     ObsidianBatchExportRequest, ObsidianBatchExportView, ObsidianExportRequest, ObsidianExportView,
     ObsidianIntegrationView, ObsidianSettings,
 };
@@ -50,10 +51,10 @@ pub(crate) async fn sync_obsidian_reading(
     State(state): State<AppState>,
     ApiPath(job_id): ApiPath<String>,
     ApiJson(request): ApiJson<ObsidianExportRequest>,
-) -> Result<Json<ApiResponse<crate::services::integrations::SyncResult>>, AppError> {
+) -> Result<Json<ApiResponse<SyncResult>>, AppError> {
     let deps = build_integration_route_deps(&state);
     Ok(ok_json(
-        crate::services::integrations::sync_obsidian_reading(&deps, &job_id, &request).await?,
+        sync_reading_to_zotero(&deps, &job_id, &request).await?,
     ))
 }
 

@@ -351,69 +351,99 @@ fn render_source_body(
     }
 }
 
-pub(crate) fn source_markdown_note(
-    deps: &DownloadJobsDeps<'_>,
-    job: &JobSnapshot,
-    raw: Option<&str>,
-) -> Result<String, AppError> {
-    let normalized = stored_path(job, deps.data_root, StoredFile::NormalizedDocument)
-        .filter(|p| p.is_file())
-        .map(std::fs::read)
-        .transpose()?
-        .map(|bytes| serde_json::from_slice(&bytes))
-        .transpose()
-        .map_err(|e| AppError::internal(format!("读取规范化文献失败：{e}")))?
-        .unwrap_or(Value::Null);
-    let raw = raw.filter(|text| !text.trim().is_empty());
-    let (inherited, images) = if raw.is_none() {
-        ocr_source::markdown_sources(deps, job)
-    } else {
-        (None, None)
-    };
-    let inherited = inherited.map(std::fs::read_to_string).transpose()?;
-    let body = render_source_body(
-        &normalized,
-        raw.or(inherited.as_deref()),
-        images.as_deref(),
-        &mut ImagePlan::default(),
-    );
-    if body.trim().is_empty() {
-        return Err(AppError::not_ready("markdown"));
+impl DownloadJobsDeps<'_> {
+    pub(crate) fn source_markdown_note(
+        &self,
+        job: &JobSnapshot,
+        raw: Option<&str>,
+    ) -> Result<String, AppError> {
+        let normalized = stored_path(job, self.data_root, StoredFile::NormalizedDocument)
+            .filter(|p| p.is_file())
+            .map(std::fs::read)
+            .transpose()?
+            .map(|bytes| serde_json::from_slice(&bytes))
+            .transpose()
+            .map_err(|e| AppError::internal(format!("读取规范化文献失败：{e}")))?
+            .unwrap_or(Value::Null);
+        let raw = raw.filter(|text| !text.trim().is_empty());
+        let (inherited, images) = if raw.is_none() {
+            ocr_source::markdown_sources(self, job)
+        } else {
+            (None, None)
+        };
+        let inherited = inherited.map(std::fs::read_to_string).transpose()?;
+        let body = render_source_body(
+            &normalized,
+            raw.or(inherited.as_deref()),
+            images.as_deref(),
+            &mut ImagePlan::default(),
+        );
+        if body.trim().is_empty() {
+            return Err(AppError::not_ready("markdown"));
+        }
+        let (_, _, meta) = export_metadata(self, &job.job_id, job.ocr_language())?;
+        let mut fm = Vec::new();
+        note::common_frontmatter(&meta, &mut fm);
+        fm.push("paperloom_role: source".to_owned());
+        Ok(format!("---\n{}\n---\n\n{}", fm.join("\n"), body))
     }
-    let (_, _, meta) = export_metadata(deps, &job.job_id, job.ocr_language())?;
-    let mut fm = Vec::new();
-    note::common_frontmatter(&meta, &mut fm);
-    fm.push("paperloom_role: source".to_owned());
-    Ok(format!("---\n{}\n---\n\n{}", fm.join("\n"), body))
-}
 
-pub(crate) fn reader_export_frontmatter(
-    deps: &DownloadJobsDeps<'_>,
-    job: &str,
-    view: &mut crate::models::api::ReaderRegionsView,
-) -> Result<(), AppError> {
-    let snapshot = deps.db.get_job(job)?;
-    let normalized = stored_path(&snapshot, deps.data_root, StoredFile::NormalizedDocument)
-        .filter(|p| p.is_file())
-        .map(std::fs::read)
-        .transpose()?
-        .map(|data| serde_json::from_slice(&data))
-        .transpose()
-        .map_err(|e| AppError::internal(format!("读取规范化文献失败：{e}")))?
-        .unwrap_or(Value::Null);
-    table_math::format_export_regions(&normalized, &mut view.items);
-    let (_, _, mut meta) = export_metadata(deps, job, &view.source_language)?;
-    if meta.source_lang == "orig"
-        && view.source_language.eq_ignore_ascii_case("ch")
-        && has_chinese_prose(view.items.iter().filter_map(|i| i.source.text.as_deref()))
-    {
-        meta.source_lang = "zh".into();
+    pub(crate) fn prepare_reader_export(
+        &self,
+        job: &str,
+        view: &mut crate::models::api::ReaderRegionsView,
+    ) -> Result<(), AppError> {
+        use table_math::references::{link_sections, SectionKind};
+
+        let snapshot = self.db.get_job(job)?;
+        let normalized = stored_path(&snapshot, self.data_root, StoredFile::NormalizedDocument)
+            .filter(|p| p.is_file())
+            .map(std::fs::read)
+            .transpose()?
+            .map(|data| serde_json::from_slice(&data))
+            .transpose()
+            .map_err(|e| AppError::internal(format!("读取规范化文献失败：{e}")))?
+            .unwrap_or(Value::Null);
+        table_math::format_export_regions(&normalized, &mut view.items);
+        let (_, _, mut meta) = export_metadata(self, job, &view.source_language)?;
+        if meta.source_lang == "orig"
+            && view.source_language.eq_ignore_ascii_case("ch")
+            && has_chinese_prose(view.items.iter().filter_map(|i| i.source.text.as_deref()))
+        {
+            meta.source_lang = "zh".into();
+        }
+        view.source_language = meta.source_lang.clone();
+        let mut lines = Vec::new();
+        note::common_frontmatter(&meta, &mut lines);
+        view.export_frontmatter = Some(lines.join("\n"));
+        let kinds: Vec<_> = view
+            .items
+            .iter()
+            .map(|r| SectionKind::from_roles(r.sub_type.as_deref(), None))
+            .collect();
+        let mut source: Vec<_> = view
+            .items
+            .iter()
+            .map(|r| r.source.text.clone().unwrap_or_default())
+            .collect();
+        let mut translated: Vec<_> = view
+            .items
+            .iter()
+            .zip(&source)
+            .map(|(r, s)| r.translated.text.clone().unwrap_or_else(|| s.clone()))
+            .collect();
+        link_sections(&mut source, &kinds);
+        link_sections(&mut translated, &kinds);
+        for ((r, s), t) in view.items.iter_mut().zip(source).zip(translated) {
+            if r.source.text.is_some() {
+                r.source.text = Some(s);
+            }
+            if r.translated.text.is_some() {
+                r.translated.text = Some(t);
+            }
+        }
+        Ok(())
     }
-    view.source_language = meta.source_lang.clone();
-    let mut lines = Vec::new();
-    note::common_frontmatter(&meta, &mut lines);
-    view.export_frontmatter = Some(lines.join("\n"));
-    Ok(())
 }
 
 impl ExportSource {

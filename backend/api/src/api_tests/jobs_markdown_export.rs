@@ -18,6 +18,20 @@ mod batch_downloads;
 mod zotero_writeback_batch;
 
 #[tokio::test]
+async fn reader_export_rejects_invalid_query_with_the_api_error_contract() {
+    let app = build_app(setup("reader-export-query", false));
+    for endpoint in ["markdown", "regions"] {
+        let response = app.clone().oneshot(Request::builder()
+            .uri(format!("/api/v1/jobs/{JOB_ID}/reader/{endpoint}?obsidian=invalid"))
+            .header("X-API-Key", "test-key").body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let error = super::jobs_common::read_json(response).await;
+        assert_eq!(error["code"], 40000);
+        assert_eq!(error["message"], "invalid query parameters");
+    }
+}
+
+#[tokio::test]
 async fn agent_markdown_uses_export_formatting_and_preserves_raw_reader_content() {
     let state = setup("agent-markdown", false);
     let job = state.config.output_root.join(JOB_ID);

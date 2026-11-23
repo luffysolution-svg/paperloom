@@ -20,7 +20,5 @@ pub(crate) use api::{
     ZoteroItemPage, ZoteroStatus, ZoteroWritebackResult,
 };
 pub(crate) use batch::{batch_export_download, export_batch, BatchExportInput, BatchExportView};
-pub(crate) use markdown_export::{
-    markdown_export_download_async, reader_export_frontmatter, source_markdown_note, MarkdownExportQuery,
-};
+pub(crate) use markdown_export::{markdown_export_download_async, MarkdownExportQuery};
 pub(crate) use zotero::writeback::reading::SyncResult;

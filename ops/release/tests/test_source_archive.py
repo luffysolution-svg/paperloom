@@ -6,6 +6,8 @@ import io
 import json
 import fnmatch
 from pathlib import Path
+import shutil
+import subprocess
 import sys
 import tarfile
 
@@ -122,6 +124,29 @@ def test_docker_release_separates_manifest_platforms_from_image_config() -> None
     assert 'docker-candidates/${target}-manifest.json' in workflow
     assert 'docker-candidates/${target}-image.json' in workflow
     assert '.manifests[]' in workflow
-    assert '.config.Labels["org.opencontainers.image.revision"]' in workflow
+    assert "-f ops/release/verify_image_labels.jq" in workflow
     assert 'git merge-base --is-ancestor' in workflow
     assert "jq -r 'keys[]'" not in workflow
+
+
+def test_docker_release_checks_identity_for_every_requested_platform() -> None:
+    jq = shutil.which("jq")
+    if not jq:
+        pytest.skip("jq is required by the release runner")
+    labels = {"org.opencontainers.image.revision": "revision", "org.opencontainers.image.version": "1.2.3"}
+    image = {"config": {"Labels": labels}}
+    wrong = {"config": {"Labels": {**labels, "org.opencontainers.image.revision": "other"}}}
+    two = "linux/amd64,linux/arm64"
+    for platforms, configs, valid in [
+        ("linux/amd64", image, True),
+        (two, {"linux/amd64": image, "linux/arm64": image}, True),
+        (two, {"linux/amd64": image, "linux/arm64": wrong}, False),
+        (two, {"linux/amd64": image}, False),
+        (two, image, False),
+    ]:
+        result = subprocess.run(
+            [jq, "-e", "--arg", "platforms", platforms, "--arg", "revision", "revision",
+             "--arg", "version", "1.2.3", "-f", "verify_image_labels.jq"],
+            cwd=RELEASE_ROOT, input=json.dumps(configs), text=True, capture_output=True,
+        )
+        assert result.returncode == (0 if valid else 1), result.stderr

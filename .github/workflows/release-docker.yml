@@ -134,7 +134,7 @@ jobs:
             echo "platforms=$MANUAL_PLATFORMS" >> "$GITHUB_OUTPUT"
             echo "push=$MANUAL_PUSH" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.ref_type }}" = "tag" ]; then
-            echo "platforms=linux/amd64" >> "$GITHUB_OUTPUT"
+            echo "platforms=linux/amd64,linux/arm64" >> "$GITHUB_OUTPUT"
             echo "push=true" >> "$GITHUB_OUTPUT"
           else
             echo "platforms=linux/amd64" >> "$GITHUB_OUTPUT"
@@ -411,14 +411,9 @@ jobs:
               echo "actual: $actual_platforms" >&2
               exit 1
             fi
-            label_mismatches="$(
-              jq \
-                --arg revision "$GITHUB_SHA" \
-                --arg version "$EXPECTED_VERSION" \
-                'if .config.Labels["org.opencontainers.image.revision"] == $revision and .config.Labels["org.opencontainers.image.version"] == $version then 0 else 1 end' \
-                "docker-candidates/${target}-image.json"
-            )"
-            if [ "$label_mismatches" != "0" ]; then
+            if ! jq -e \
+                --arg platforms "$platforms" --arg revision "$GITHUB_SHA" --arg version "$EXPECTED_VERSION" \
+                -f ops/release/verify_image_labels.jq "docker-candidates/${target}-image.json" >/dev/null; then
               echo "Candidate OCI identity labels do not match this release for $target" >&2
               exit 1
             fi

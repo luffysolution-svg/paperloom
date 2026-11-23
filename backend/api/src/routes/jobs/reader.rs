@@ -10,9 +10,9 @@ use crate::models::api::{ApiResponse, ReaderMetadataView, ReaderRegionsView};
 use crate::AppState;
 
 use crate::routes::common::{
-    build_integration_route_deps, build_jobs_download_route_deps, ok_json, run_job_query, ApiPath,
+    build_integration_route_deps, build_jobs_download_route_deps, ok_json, request_base_url,
+    run_job_query, ApiPath, ApiQuery,
 };
-use crate::routes::download_response::markdown_document_response;
 use crate::routes::job_helpers::if_none_match_values;
 
 /// 带 ETag（弱校验，响应可能压缩）：浏览器带着上次的 ETag 来、译文和原文结构都没变就回 304，大书不用再传
@@ -26,7 +26,7 @@ pub struct ReaderExportQuery {
 pub async fn get_reader_regions(
     State(state): State<AppState>,
     ApiPath(job_id): ApiPath<String>,
-    axum::extract::Query(query): axum::extract::Query<ReaderExportQuery>,
+    ApiQuery(query): ApiQuery<ReaderExportQuery>,
     headers: HeaderMap,
 ) -> Result<Response, AppError> {
     let known: Vec<String> = if_none_match_values(&headers)
@@ -49,38 +49,8 @@ pub async fn get_reader_regions(
         Some(mut view) => {
             if query.obsidian {
                 let deps = build_integration_route_deps(&state);
-                crate::services::integrations::reader_export_frontmatter(
-                    &deps.download_deps(),
-                    &export_job_id,
-                    &mut view,
-                )?;
-                use retainpdf_jobs::paper_markdown::references::{link_sections, SectionKind};
-                let kinds: Vec<_> = view
-                    .items
-                    .iter()
-                    .map(|r| SectionKind::from_roles(r.sub_type.as_deref(), None))
-                    .collect();
-                let mut source: Vec<_> = view
-                    .items
-                    .iter()
-                    .map(|r| r.source.text.clone().unwrap_or_default())
-                    .collect();
-                let mut translated: Vec<_> = view
-                    .items
-                    .iter()
-                    .zip(&source)
-                    .map(|(r, s)| r.translated.text.clone().unwrap_or_else(|| s.clone()))
-                    .collect();
-                link_sections(&mut source, &kinds);
-                link_sections(&mut translated, &kinds);
-                for ((r, s), t) in view.items.iter_mut().zip(source).zip(translated) {
-                    if r.source.text.is_some() {
-                        r.source.text = Some(s);
-                    }
-                    if r.translated.text.is_some() {
-                        r.translated.text = Some(t);
-                    }
-                }
+                deps.download_deps()
+                    .prepare_reader_export(&export_job_id, &mut view)?;
             }
             ok_json::<ReaderRegionsView>(view).into_response()
         }
@@ -117,11 +87,22 @@ pub async fn get_reader_metadata(
 pub async fn get_markdown_document(
     State(state): State<AppState>,
     ApiPath(job_id): ApiPath<String>,
-    axum::extract::Query(query): axum::extract::Query<ReaderExportQuery>,
+    ApiQuery(query): ApiQuery<ReaderExportQuery>,
     headers: HeaderMap,
 ) -> Result<Response, AppError> {
     let export = query.obsidian.then(|| build_integration_route_deps(&state));
-    markdown_document_response(
-        &build_jobs_download_route_deps(&state), &headers, &job_id, export.as_ref(),
-    ).await
+    let deps = build_jobs_download_route_deps(&state);
+    let base_url = request_base_url(&headers, deps.default_port, &deps.bind_host);
+    let mut view = deps
+        .downloads
+        .markdown_document_view(&job_id, &base_url, |job, raw| match &export {
+            Some(export) => export.download_deps().source_markdown_note(job, raw.as_deref()),
+            None => raw.ok_or_else(|| AppError::not_ready("markdown")),
+        })
+        .await?;
+    if query.obsidian {
+        view.markdown_path.push_str("?obsidian=true");
+        view.markdown_url.push_str("?obsidian=true");
+    }
+    Ok(ok_json(view).into_response())
 }

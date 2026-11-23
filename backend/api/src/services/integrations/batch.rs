@@ -265,7 +265,7 @@ async fn prepare_batch_item(
             let path = stored_path(&job, deps.data_root, StoredFile::OcrMarkdown)
                 .ok_or_else(|| AppError::not_found("OCR Markdown 尚未生成"))?;
             let raw = std::fs::read_to_string(path)?;
-            let md = super::markdown_export::source_markdown_note(deps, &job, Some(&raw))?;
+            let md = deps.source_markdown_note(&job, Some(&raw))?;
             let mut files = vec![PreparedFile {
                 name: format!("{folder}/full.md"),
                 source: PreparedSource::Markdown(md),
