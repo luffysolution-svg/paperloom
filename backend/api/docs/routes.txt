@@ -1,7 +1,7 @@
 # 全部 HTTP 路由：方法 路径 多用户下网站账号的访问策略（signed 登录可用 / admin 只给管理员 /
 # closed 关闭 / public 不需要登录）。由 src/api_tests/route_manifest.rs 从接口登记表生成，不要手改：
 #   UPDATE_ROUTES=1 cargo test -p retainpdf-api --lib route_manifest
-# 137 条路径，162 个接口
+# 138 条路径，163 个接口
 GET    /api/v1/account/pages  signed
 GET    /api/v1/admin/invites  admin
 POST   /api/v1/admin/invites  admin
@@ -119,6 +119,7 @@ GET    /api/v1/jobs/:job_id/files/output/*name  signed
 GET    /api/v1/jobs/:job_id/files/pages/:page  signed
 GET    /api/v1/jobs/:job_id/markdown/export  signed
 POST   /api/v1/jobs/:job_id/obsidian/export  admin
+POST   /api/v1/jobs/:job_id/obsidian/zotero-sync  admin
 GET    /api/v1/jobs/:job_id/progress/editorial  signed
 GET    /api/v1/jobs/:job_id/progress/events  signed
 GET    /api/v1/jobs/:job_id/progress/layout  signed

@@ -51,7 +51,12 @@ impl Db {
             ON CONFLICT(owner_user_id, source, library_id, attachment_key) DO UPDATE SET
                 item_key = excluded.item_key,
                 document_id = excluded.document_id,
-                metadata_json = excluded.metadata_json,
+                metadata_json = CASE
+                    WHEN json_valid(excluded.metadata_json) AND json_valid(document_external_refs.metadata_json)
+                      AND json_type(excluded.metadata_json, '$.obsidian_sync') IS NULL
+                      AND json_type(document_external_refs.metadata_json, '$.obsidian_sync') = 'object'
+                    THEN json_set(excluded.metadata_json,'$.obsidian_sync',json_extract(document_external_refs.metadata_json,'$.obsidian_sync'))
+                    ELSE excluded.metadata_json END,
                 collection_path = excluded.collection_path,
                 updated_at = excluded.updated_at
             "#,
@@ -76,6 +81,26 @@ impl Db {
             "SELECT {COLUMNS} FROM document_external_refs WHERE document_id = ?1 ORDER BY updated_at DESC"
         ))?;
         let rows = stmt.query_map(params![document_id], row_to_ref)?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    pub fn sibling_external_refs(
+        &self,
+        current: &ExternalRefRecord,
+    ) -> Result<Vec<ExternalRefRecord>> {
+        let conn = self.connect()?;
+        let mut stmt=conn.prepare(&format!(
+            "SELECT {COLUMNS} FROM document_external_refs WHERE source=?1 AND library_id=?2 AND item_key=?3 AND document_id!=?4 AND owner_user_id=(SELECT owner_user_id FROM document_external_refs WHERE source=?1 AND library_id=?2 AND item_key=?3 AND document_id=?4 LIMIT 1) ORDER BY attachment_key"
+        ))?;
+        let rows = stmt.query_map(
+            params![
+                current.source,
+                current.library_id,
+                current.item_key,
+                current.document_id
+            ],
+            row_to_ref,
+        )?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 

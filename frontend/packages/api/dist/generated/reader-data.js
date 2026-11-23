@@ -11,7 +11,7 @@ export function getReaderMarkdown(apiPrefix, args, options) {
 }
 /** GET /api/v1/jobs/:job_id/reader/regions */
 export function getReaderRegions(apiPrefix, args, options) {
-    return request({ apiPrefix, method: "GET", path: `jobs/${encodePathParam(args.job_id)}/reader/regions`, options });
+    return request({ apiPrefix, method: "GET", path: `jobs/${encodePathParam(args.job_id)}/reader/regions`, query: args.query, options });
 }
 /** GET /api/v1/jobs/:job_id/reader/metadata */
 export function getReaderMetadata(apiPrefix, args, options) {

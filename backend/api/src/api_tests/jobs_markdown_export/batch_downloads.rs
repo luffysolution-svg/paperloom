@@ -140,6 +140,16 @@ async fn batch_downloads_obsidian_links_resolve_to_unique_notes_and_images() {
             .captures_iter(&text)
         {
             let target = &captures[1];
+            if let Some(anchor) = target.strip_prefix("#^").and_then(|a| a.split('|').next()) {
+                assert_eq!(
+                    text.lines()
+                        .filter(|line| line.ends_with(&format!(" ^{anchor}")))
+                        .count(),
+                    1,
+                    "{target} in {name}"
+                );
+                continue;
+            }
             let target = if target.ends_with(".pdf") {
                 target.to_owned()
             } else {

@@ -62,8 +62,8 @@ test("三份 md：原文、译文（跨页一段只出一次整段译文、没�
     "[1] A. Author, J. Chem. 2020.",
   ].join("\n\n") + "\n");
   assert.equal(md.bilingual, [
-    "# Smart Machine Learning\n\n# 智能机器学习",
-    "## Introduction\n\n## 引言",
+    "# Smart Machine Learning\n\n智能机器学习",
+    "## Introduction\n\n引言",
     "Solving the SE is hard, further compounding the curse.\n\n求解薛定谔方程很难，而且这进一步加剧了维度灾难。",
     "$$ H = T + V \\tag{1}$$",
     "![](images/page-2/a.jpg)",
@@ -97,7 +97,7 @@ test("打包：zip 里是 书名.en.md / .zh.md / .bilingual.md 和 images/，�
     const url = `${input?.url ?? input}`;
     requested.push(url);
     if (url.includes("/reader/regions")) {
-      return new Response(JSON.stringify({ code: 0, data: PAYLOAD }), { status: 200, headers: { "content-type": "application/json" } });
+      return new Response(JSON.stringify({ code: 0, data: { ...PAYLOAD, source_language: "en", export_frontmatter: 'title: "Quantum: Book"\ndoi: "10.1234/demo"' } }), { status: 200, headers: { "content-type": "application/json" } });
     }
     if (url.includes("page-2/a.jpg")) return new Response(new Uint8Array([1, 2, 3]), { status: 200 });
     return new Response("missing", { status: 404 });
@@ -107,7 +107,8 @@ test("打包：zip 里是 书名.en.md / .zh.md / .bilingual.md 和 images/，�
     assert.equal(bundle.filename, "Quantum Book-markdown.zip");
     const files = unzipSync(new Uint8Array(await bundle.blob.arrayBuffer()));
     assert.deepEqual(Object.keys(files).sort(), ["Quantum Book.bilingual.md", "Quantum Book.en.md", "Quantum Book.zh.md", "images/page-2/a.jpg"].sort());
-    assert.match(strFromU8(files["Quantum Book.zh.md"]), /^# 智能机器学习/);
+    assert.match(strFromU8(files["Quantum Book.en.md"]), /^---\ntitle: "Quantum: Book"\ndoi: "10\.1234\/demo"\npaperloom_role: source\nlanguage: en\n/);
+    assert.match(strFromU8(files["Quantum Book.zh.md"]), /^# 智能机器学习/m);
     assert.deepEqual([...files["images/page-2/a.jpg"]], [1, 2, 3]);
   } finally {
     globalThis.fetch = previousFetch;

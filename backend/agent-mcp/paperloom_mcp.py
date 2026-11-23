@@ -15,6 +15,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 import urllib.error
 import urllib.parse
@@ -36,7 +37,7 @@ SUPPORTED_PROTOCOL_VERSIONS = (
     "2025-03-26",
     "2024-11-05",
 )
-SERVER_VERSION = "0.4.5"
+SERVER_VERSION = "0.4.6"
 
 
 def _envelope(data: Any = None, *, warnings: list[str] | None = None, references: list[dict[str, Any]] | None = None) -> dict[str, Any]:
@@ -150,14 +151,14 @@ class PaperLoomApi:
         prepared = json.loads(result.stdout)["data"]
         return prepared["options"], prepared["configuration_checked"], []
 
-    def request(self, method: str, path: str, body: Any = None, *, query: dict[str, Any] | None = None) -> Any:
+    def request(self, method: str, path: str, body: Any = None, *, query: dict[str, Any] | None = None, output: pathlib.Path | None = None) -> Any:
         base, api_key = self._resolve_connection()
         if not base:
             raise RuntimeError("PaperLoom 后端未运行，请先打开 PaperLoom 桌面端，或设置 PAPERLOOM_API_BASE")
         url = base + path
         if query:
             url += "?" + urllib.parse.urlencode({k: v for k, v in query.items() if v is not None and v != ""})
-        headers = {"Accept": "application/json"}
+        headers = {"Accept": "application/zip" if output is not None else "application/json"}
         if api_key:
             headers["X-API-Key"] = api_key
         payload = None
@@ -168,6 +169,14 @@ class PaperLoomApi:
         try:
             opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
             with opener.open(req, timeout=600) as response:
+                if output is not None:
+                    with tempfile.TemporaryDirectory(dir=output.parent) as staging:
+                        archive = pathlib.Path(staging) / "export.zip"
+                        with archive.open("wb") as file:
+                            shutil.copyfileobj(response, file)
+                        size = archive.stat().st_size
+                        archive.replace(output)
+                    return {"output": str(output), "bytes": size}
                 raw = response.read()
                 value = json.loads(raw.decode("utf-8")) if raw else None
         except urllib.error.HTTPError as exc:
@@ -227,13 +236,20 @@ TOOLS: list[dict[str, Any]] = [
     {"name": "get_figure_resource", "description": "读取图表区域、图注上下文和对应页面图像资源。", "inputSchema": {"type": "object", "required": ["job_id", "item_id"], "properties": {"job_id": {"type": "string", "minLength": 1}, "item_id": {"type": "string", "minLength": 1}}}},
     {"name": "validate_evidence", "description": "校验 Agent 回答中的页码、区域、引用和支持等级。", "inputSchema": {"type": "object", "required": ["references"], "properties": {"references": {"type": "array", "minItems": 1, "items": {"type": "object"}}, "support_level": {"type": "string", "enum": ["direct", "inferred", "hypothesis", "unsupported", "conflicting"]}}}},
     {"name": "search_document", "description": "在任务的 Reader 内容中检索。", "inputSchema": {"type": "object", "required": ["query"], "properties": {"query": {"type": "string", "minLength": 1}, "job_id": {"type": "string"}, "document_id": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}}}},
-    {"name": "export_markdown", "description": "导出任务 Markdown。", "inputSchema": {"type": "object", "required": ["job_id"], "properties": {"job_id": {"type": "string", "minLength": 1}, "output": {"type": "string"}}}},
+    {"name": "export_markdown", "description": "导出含书目属性、公式和引文链接的原文 Markdown。离线使用请选择 obsidian_zip 并指定 output，包内包含笔记与附件。raw 返回 OCR 原稿。", "inputSchema": {"type": "object", "required": ["job_id"], "properties": {"job_id": {"type": "string", "minLength": 1}, "format": {"type": "string", "enum": ["markdown", "raw", "obsidian_zip"], "default": "markdown"}, "output": {"type": "string", "minLength": 1}, "include_source": {"type": "boolean", "description": "ZIP 中同时附上原文笔记，默认开启。仅 OCR 的任务始终导出原文。"}}}},
     {"name": "zotero_status", "description": "读取本机 Zotero 连接状态。", "inputSchema": {"type": "object", "properties": {}}},
     {"name": "zotero_collections", "description": "读取 Zotero 分类。", "inputSchema": {"type": "object", "required": ["library_id"], "properties": {"library_id": {"type": "string", "minLength": 1}}}},
     {"name": "zotero_items", "description": "读取 Zotero 条目和 PDF 附件。", "inputSchema": {"type": "object", "required": ["library_id"], "properties": {"library_id": {"type": "string", "minLength": 1}, "collection_key": {"type": "string"}, "q": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}}}},
-    {"name": "import_zotero_attachments", "description": "将 Zotero PDF 附件导入 PaperLoom。执行前需确认。", "inputSchema": {"type": "object", "required": ["library_id", "attachments"], "properties": {"library_id": {"type": "string", "minLength": 1}, "collection_key": {"type": "string"}, "attachments": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["item_key", "attachment_key"], "properties": {"item_key": {"type": "string"}, "attachment_key": {"type": "string"}}}}, "confirmed": {"type": "boolean"}}}},
+    {"name": "import_zotero_attachments", "description": "将 Zotero PDF 附件导入 PaperLoom。执行前需确认。", "inputSchema": {"type": "object", "required": ["library_id", "attachments"], "properties": {"library_id": {"type": "string", "minLength": 1}, "collection_key": {"type": "string"}, "attachments": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["item_key", "attachment_key"], "properties": {"item_key": {"type": "string"}, "attachment_key": {"type": "string"}, "supplement": {"type": "boolean", "description": "true 为补充材料，false 为主文，省略时自动识别。"}}}}, "confirmed": {"type": "boolean"}}}},
     {"name": "obsidian_status", "description": "读取可发现的 Obsidian Vault。", "inputSchema": {"type": "object", "properties": {}}},
-    {"name": "export_obsidian", "description": "将任务 Markdown 写入 Obsidian。执行前需确认。", "inputSchema": {"type": "object", "required": ["job_id", "vault_id"], "properties": {"job_id": {"type": "string", "minLength": 1}, "vault_id": {"type": "string", "minLength": 1}, "folder": {"type": "string"}, "include_source": {"type": "boolean"}, "on_conflict": {"type": "string", "enum": ["ask", "rename", "overwrite", "skip"]}, "confirmed": {"type": "boolean"}}}},
+    {"name": "export_obsidian", "description": "将笔记和附件写入 Obsidian。用 job_id 指定一个 OCR 或翻译任务，或用 document_ids 批量导出。执行前需确认。",
+     "inputSchema": {"type": "object", "required": ["vault_id"], "properties": {
+         "job_id": {"type": "string", "minLength": 1},
+         "document_ids": {"type": "array", "minItems": 1, "maxItems": 200, "items": {"type": "string", "minLength": 1}},
+         "vault_id": {"type": "string", "minLength": 1}, "folder": {"type": "string"},
+         "include_source": {"type": "boolean"}, "folder_by_collection": {"type": "boolean"},
+         "on_conflict": {"type": "string", "enum": ["ask", "rename", "overwrite", "skip"]}, "confirmed": {"type": "boolean"}}}},
+    {"name": "sync_obsidian_to_zotero", "description": "将已导出的主笔记里的书目修改和「阅读笔记」回写关联的 Zotero 条目。使用导出时的库和目录。", "inputSchema": {"type": "object", "required": ["job_id", "vault_id"], "properties": {"job_id": {"type": "string", "minLength": 1}, "vault_id": {"type": "string", "minLength": 1}, "folder": {"type": "string"}, "folder_by_collection": {"type": "boolean"}, "confirmed": {"type": "boolean"}}}},
     {"name": "writeback_zotero", "description": "将译文 PDF 写回 Zotero。执行前需确认。", "inputSchema": {"type": "object", "required": ["job_id"], "properties": {"job_id": {"type": "string", "minLength": 1}, "confirmed": {"type": "boolean"}}}},
     {"name": "run_batch_workflow", "description": "以 dry-run 或逐项任务方式执行批量 OCR/翻译，并持久化运行记录。", "inputSchema": {"type": "object", "required": ["items", "action"], "properties": {"items": {"type": "array", "minItems": 1, "items": {"type": "object", "properties": {"path": {"type": "string"}, "document_id": {"type": "string"}}}}, "action": {"type": "string", "enum": ["ocr", "translate"]}, "dry_run": {"type": "boolean"}, "confirmed": {"type": "boolean"}, "max_items": {"type": "integer", "minimum": 1, "maximum": 10000}, "failure_policy": {"type": "string", "enum": ["continue", "stop"]}, "options": {"type": "object"}}}},
     {"name": "get_run_status", "description": "读取批量工作流的清单、逐项状态和事件。", "inputSchema": {"type": "object", "required": ["run_id"], "properties": {"run_id": {"type": "string", "minLength": 1}}}},
@@ -320,7 +336,7 @@ def _batch_workflow(args: dict[str, Any], api: PaperLoomApi) -> dict[str, Any]:
         "created_at": now,
         "updated_at": now,
         "command": "run_batch_workflow",
-        "paperloom_version": "0.4.5",
+        "paperloom_version": "0.4.6",
         "inputs": plan,
         "options": {
             "action": action,
@@ -614,15 +630,28 @@ def _call_tool(name: str, args: dict[str, Any], api: PaperLoomApi) -> dict[str, 
         return _envelope(api.request("GET", "/api/v1/search", query={"q": args["query"], "limit": args.get("limit", 20), "document_id": document_id}))
     if name == "export_markdown":
         _required(args, ["job_id"])
-        data = api.request("GET", f"/api/v1/jobs/{urllib.parse.quote(args['job_id'], safe='')}/reader/markdown")
+        job_path = "/api/v1/jobs/" + urllib.parse.quote(args["job_id"], safe="")
+        references = [{"job_id": args["job_id"], "source_kind": "job"}]
+        export_format = args.get("format", "markdown")
+        if export_format == "obsidian_zip":
+            _required(args, ["output"])
+            data = api.request("GET", job_path + "/markdown/export",
+                               query={"include_source": "true" if args.get("include_source", True) else "false"},
+                               output=pathlib.Path(args["output"]).expanduser())
+            return _envelope(data, references=references)
+        if export_format not in {"raw", "markdown"}:
+            raise ValueError("format 需要 markdown、raw 或 obsidian_zip")
+        data = api.request("GET", job_path + "/reader/markdown", query={"obsidian": "true"} if export_format == "markdown" else None)
         if args.get("output"):
-            content = data if isinstance(data, str) else data.get("content_with_absolute_image_urls") or data.get("content")
+            content = data
+            if isinstance(data, dict):
+                content = data.get("content") if export_format == "raw" else data.get("content_with_absolute_image_urls") or data.get("content")
             if not isinstance(content, str):
                 raise ValueError("任务还没有可导出的 Markdown 正文")
             path = pathlib.Path(args["output"]).expanduser()
-            path.write_text(content, encoding="utf-8")
+            path.write_text(content, encoding="utf-8", newline="")
             data = {"output": str(path), "content": content}
-        return _envelope(data, references=[{"job_id": args["job_id"], "source_kind": "job"}])
+        return _envelope(data, references=references)
     if name == "zotero_status":
         return _envelope(api.request("GET", "/api/v1/integrations/zotero"))
     if name == "zotero_collections":
@@ -641,12 +670,24 @@ def _call_tool(name: str, args: dict[str, Any], api: PaperLoomApi) -> dict[str, 
         return _envelope(api.request("POST", "/api/v1/integrations/zotero/import", body))
     if name == "obsidian_status":
         return _envelope(api.request("GET", "/api/v1/integrations/obsidian"))
-    if name == "export_obsidian":
-        _required(args, ["job_id", "vault_id"])
+    if name in {"export_obsidian", "sync_obsidian_to_zotero"}:
+        sync = name == "sync_obsidian_to_zotero"
+        batch = "document_ids" in args
+        if batch and (sync or "job_id" in args or not args["document_ids"]):
+            raise ValueError("批量导出需要单独提供非空的 document_ids。回写阅读笔记使用 job_id。")
+        _required(args, ["vault_id"] if batch else ["vault_id", "job_id"])
         if args.get("confirmed") is not True:
-            return _envelope(None, warnings=["这是写入 Obsidian 的操作。请在 confirmed=true 后再次调用。"])
-        body = {key: args[key] for key in ("vault_id", "folder", "include_source", "on_conflict") if key in args}
-        return _envelope(api.request("POST", f"/api/v1/jobs/{urllib.parse.quote(args['job_id'], safe='')}/obsidian/export", body))
+            target = "Zotero" if sync else "Obsidian"
+            return _envelope(None, warnings=[f"这是写入 {target} 的操作。请在 confirmed=true 后再次调用。"])
+        fields = ("vault_id", "folder", "folder_by_collection")
+        if not sync:
+            fields += ("include_source", "on_conflict")
+        body = {key: args[key] for key in fields if key in args}
+        if batch:
+            body["document_ids"] = args["document_ids"]
+            return _envelope(api.request("POST", "/api/v1/integrations/obsidian/export-batch", body))
+        action = "zotero-sync" if sync else "export"
+        return _envelope(api.request("POST", f"/api/v1/jobs/{urllib.parse.quote(args['job_id'], safe='')}/obsidian/{action}", body))
     if name == "writeback_zotero":
         _required(args, ["job_id"])
         if args.get("confirmed") is not True:
@@ -699,7 +740,7 @@ PROMPTS = {
     "compare_papers": "按研究问题、方法、数据、指标、结果、局限和证据强度建立跨文献比较表。",
     "build_evidence_matrix": "建立 claim、source、page、item_id、quote、support_level 的证据矩阵。",
     "draft_literature_review": "基于已检索和去重的文献生成综述提纲，保留检索日期、纳入规则、排除记录和证据矩阵。",
-    "prepare_obsidian_note": "生成可增量更新的 Obsidian 笔记，只更新 PaperLoom 管理区块并保留用户手写内容。",
+    "prepare_obsidian_note": "使用 export_obsidian 将 OCR 或翻译任务的笔记和附件导入所选库。把用户要求的阅读笔记保存在主笔记的「阅读笔记」小节。需要离线文件时使用 export_markdown 的 obsidian_zip 格式。",
     "review_translation_quality": "按术语、公式、图表、段落完整性和页级证据检查翻译质量，列出问题所在 item_id 和建议修订。",
 }
 
@@ -754,7 +795,7 @@ def _resource_read(uri: str, api: PaperLoomApi) -> dict[str, Any]:
 RESOURCE_DEFINITIONS: list[dict[str, str]] = [
     {"uri": "paperloom://documents/{document_id}/metadata", "name": "Document metadata", "mimeType": "application/json"},
     {"uri": "paperloom://documents/{document_id}/outline", "name": "Document outline", "mimeType": "application/json"},
-    {"uri": "paperloom://jobs/{job_id}/markdown", "name": "Reader Markdown", "mimeType": "text/markdown"},
+    {"uri": "paperloom://jobs/{job_id}/markdown", "name": "Original OCR Markdown", "mimeType": "text/markdown"},
     {"uri": "paperloom://jobs/{job_id}/regions", "name": "Reader regions", "mimeType": "application/json"},
     {"uri": "paperloom://jobs/{job_id}/reports/{report}", "name": "Job report", "mimeType": "application/json"},
     {"uri": "paperloom://jobs/{job_id}/pages/{page}/image", "name": "Page image", "mimeType": "image/jpeg"},

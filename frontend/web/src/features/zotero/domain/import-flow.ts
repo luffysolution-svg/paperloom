@@ -4,6 +4,7 @@ import type { ZoteroCollection, ZoteroImportResult } from "@/platform/api/index.
 export type ZoteroSelection = {
   item_key: string;
   attachment_key: string;
+  supplement?: boolean;
   /** 勾选时所在分类；空串表示「全部文献」。 */
   collection_key: string;
   title: string;
@@ -59,7 +60,7 @@ export async function runZoteroImport({
   importAttachments: (payload: {
     library_id: string;
     collection_key?: string;
-    attachments: Array<{ item_key: string; attachment_key: string }>;
+    attachments: Array<{ item_key: string; attachment_key: string; supplement?: boolean }>;
   }) => Promise<ZoteroImportResult[]>;
   translateDocument: (documentId: string) => Promise<unknown>;
   requestLibraryRefresh: () => void;
@@ -76,7 +77,7 @@ export async function runZoteroImport({
       results.push(...await importAttachments({
         library_id: libraryId,
         collection_key: collectionKey || undefined,
-        attachments: group.map(({ item_key, attachment_key }) => ({ item_key, attachment_key })),
+        attachments: group.map(({ item_key, attachment_key, supplement }) => supplement === undefined ? { item_key, attachment_key } : { item_key, attachment_key, supplement }),
       }));
     } catch (error: any) {
       const message = `${error?.message || error}`;

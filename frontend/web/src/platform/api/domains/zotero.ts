@@ -142,7 +142,7 @@ export async function writeDocumentsToZotero(documentIds: string[]): Promise<Zot
 export async function importZoteroAttachments(payload: {
   library_id: string;
   collection_key?: string;
-  attachments: Array<{ item_key: string; attachment_key: string }>;
+  attachments: Array<{ item_key: string; attachment_key: string; supplement?: boolean }>;
 }): Promise<ZoteroImportResult[]> {
   const resp = await fetchProtected(endpoint("/import"), {
     method: "POST",

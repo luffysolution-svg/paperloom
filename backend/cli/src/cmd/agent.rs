@@ -127,6 +127,15 @@ pub enum ReaderCommand {
     Page { job_id: String, page: u32 },
     Region { job_id: String, item_id: String },
     Search { job_id: String, query: String },
+    /// Export source Markdown with bibliographic properties and citation links.
+    Markdown {
+        job_id: String,
+        /// Return the original OCR Markdown instead.
+        #[arg(long)]
+        raw: bool,
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -148,8 +157,9 @@ pub enum ZoteroCommand {
         library_id: String,
         #[arg(long)]
         collection_key: Option<String>,
-        #[arg(long, value_delimiter = ',')]
-        attachments: Vec<String>,
+        /// ITEM:ATTACHMENT or ITEM:ATTACHMENT:main / ITEM:ATTACHMENT:si.
+        #[arg(long, required = true, value_delimiter = ',', value_parser = parse_zotero_attachment)]
+        attachments: Vec<Value>,
         #[arg(long)]
         confirm: bool,
     },
@@ -165,24 +175,70 @@ pub enum ZoteroCommand {
 pub enum ObsidianCommand {
     Status,
     Export(ObsidianExportArgs),
+    /// Download the vault-ready notes, images and available PDFs as a ZIP.
+    Bundle {
+        job_id: String,
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(long, default_value_t = true, num_args = 0..=1, default_missing_value = "true", action = clap::ArgAction::Set)]
+        include_source: bool,
+    },
+    /// Sync edits from the existing vault note to its Zotero parent item.
+    SyncZotero {
+        job_id: String,
+        #[command(flatten)]
+        target: ObsidianTarget,
+        #[arg(long)]
+        confirm: bool,
+    },
+}
+
+#[derive(Args)]
+pub struct ObsidianTarget {
+    #[arg(long)]
+    vault_id: String,
+    #[arg(long)]
+    folder: Option<String>,
+    #[arg(long, num_args = 0..=1, default_missing_value = "true")]
+    folder_by_collection: Option<bool>,
+}
+
+impl ObsidianTarget {
+    fn payload(&self) -> Value {
+        json!({"vault_id": self.vault_id, "folder": self.folder, "folder_by_collection": self.folder_by_collection})
+    }
 }
 
 #[derive(Args)]
 pub struct ObsidianExportArgs {
+    #[command(flatten)]
+    target: ObsidianTarget,
+    #[arg(long, required_unless_present = "document_ids", conflicts_with = "document_ids")]
+    job_id: Option<String>,
+    #[arg(long, required_unless_present = "job_id", value_delimiter = ',')]
+    document_ids: Vec<String>,
+    #[arg(long, default_value_t = true, num_args = 0..=1, default_missing_value = "true", action = clap::ArgAction::Set)]
+    include_source: bool,
+    #[arg(long, default_value = "ask", value_parser = ["ask", "rename", "overwrite", "skip"])]
+    on_conflict: String,
     #[arg(long)]
-    pub vault_id: String,
-    #[arg(long)]
-    pub folder: String,
-    #[arg(long, value_delimiter = ',')]
-    pub document_ids: Vec<String>,
-    #[arg(long, default_value_t = true)]
-    pub include_source: bool,
-    #[arg(long, default_value_t = false)]
-    pub folder_by_collection: bool,
-    #[arg(long, default_value = "ask")]
-    pub on_conflict: String,
-    #[arg(long)]
-    pub confirm: bool,
+    confirm: bool,
+}
+
+fn parse_zotero_attachment(value: &str) -> Result<Value, String> {
+    let mut fields = value.split(':');
+    let item = fields.next().unwrap_or_default();
+    let attachment = fields.next().unwrap_or_default();
+    if item.is_empty() || attachment.is_empty() {
+        return Err("附件需要 ITEM:ATTACHMENT 或 ITEM:ATTACHMENT:main/si".to_owned());
+    }
+    let mut entry = json!({"item_key": item, "attachment_key": attachment});
+    match (fields.next(), fields.next()) {
+        (None, None) => {}
+        (Some(role @ ("main" | "si")), None) => entry["supplement"] = json!(role == "si"),
+        _ => return Err("附件类型需要 main 或 si".to_owned()),
+    }
+    Ok(entry)
 }
 
 #[derive(Subcommand)]
@@ -497,8 +553,8 @@ pub fn run(ctx: &Ctx, action: AgentCommand) -> Result<ExitCode> {
         AgentCommand::Capabilities => json!({
             "version": env!("CARGO_PKG_VERSION"),
             "transport": ["cli", "stdio-mcp"],
-            "features": ["pdf-upload", "ocr", "translation", "jobs", "reader-context", "zotero", "obsidian", "batch-workflow"],
-            "writes_require_confirmation": ["zotero.import", "zotero.writeback", "obsidian.export", "workflow.run"],
+            "features": ["pdf-upload", "ocr", "translation", "jobs", "reader-context", "reader.markdown", "zotero", "obsidian", "obsidian.bundle", "obsidian.sync-zotero", "batch-workflow"],
+            "writes_require_confirmation": ["zotero.import", "zotero.writeback", "obsidian.export", "obsidian.sync-zotero", "workflow.run"],
         }),
         AgentCommand::Mcp => unreachable!("MCP handled before command dispatch"),
         AgentCommand::PrepareJobOptions { action, with_secrets } => {
@@ -561,6 +617,18 @@ pub fn run(ctx: &Ctx, action: AgentCommand) -> Result<ExitCode> {
             }
         },
         AgentCommand::Reader { action } => match action {
+            ReaderCommand::Markdown { job_id, raw, output } => {
+                let query = if raw { "" } else { "?obsidian=true" };
+                let data = backend(ctx)?.get(&format!("/api/v1/jobs/{}/reader/markdown{query}", encode(&job_id)))?;
+                if let Some(path) = output {
+                    let key = if raw { "content" } else { "content_with_absolute_image_urls" };
+                    let content = data[key].as_str().context("任务没有可导出的 Markdown 正文")?;
+                    std::fs::write(&path, content).with_context(|| format!("无法写入 {}", path.display()))?;
+                    json!({"job_id": job_id, "output": path, "bytes": content.len()})
+                } else {
+                    data
+                }
+            }
             ReaderCommand::Outline { job_id } => {
                 json!({ "metadata": backend(ctx)?.get(&format!("/api/v1/jobs/{}/reader/metadata", encode(&job_id)))?, "regions": backend(ctx)?.get(&format!("/api/v1/jobs/{}/reader/regions", encode(&job_id)))? })
             }
@@ -614,8 +682,7 @@ pub fn run(ctx: &Ctx, action: AgentCommand) -> Result<ExitCode> {
                 if !confirm {
                     anyhow::bail!("Zotero 导入会写入 PaperLoom 书库，请加 --confirm 执行")
                 }
-                let list: Vec<Value> = attachments.into_iter().map(|value| { let mut it = value.splitn(2, ':'); json!({"item_key": it.next().unwrap_or_default(), "attachment_key": it.next().unwrap_or_default()}) }).collect();
-                backend(ctx)?.post("/api/v1/integrations/zotero/import", Some(&json!({"library_id":library_id,"collection_key":collection_key,"attachments":list})))?
+                backend(ctx)?.post("/api/v1/integrations/zotero/import", Some(&json!({"library_id": library_id, "collection_key": collection_key, "attachments": attachments})))?
             }
             ZoteroCommand::Writeback {
                 document_ids,
@@ -636,7 +703,27 @@ pub fn run(ctx: &Ctx, action: AgentCommand) -> Result<ExitCode> {
                 if !args.confirm {
                     anyhow::bail!("Obsidian 导出会写入笔记，请加 --confirm 执行")
                 }
-                backend(ctx)?.post("/api/v1/integrations/obsidian/export-batch", Some(&json!({"document_ids":args.document_ids,"vault_id":args.vault_id,"folder":args.folder,"include_source":args.include_source,"folder_by_collection":args.folder_by_collection,"on_conflict":args.on_conflict})))?
+                let mut body = args.target.payload();
+                body["include_source"] = json!(args.include_source);
+                body["on_conflict"] = json!(args.on_conflict);
+                if let Some(id) = args.job_id {
+                    backend(ctx)?.post(&format!("/api/v1/jobs/{}/obsidian/export", encode(&id)), Some(&body))?
+                } else {
+                    body["document_ids"] = json!(args.document_ids);
+                    backend(ctx)?.post("/api/v1/integrations/obsidian/export-batch", Some(&body))?
+                }
+            }
+            ObsidianCommand::Bundle { job_id, output, include_source } => {
+                let path = format!("/api/v1/jobs/{}/markdown/export?include_source={include_source}", encode(&job_id));
+                let bytes = backend(ctx)?.download(&path, &output)?;
+                json!({"job_id": job_id, "output": output, "bytes": bytes})
+            }
+            ObsidianCommand::SyncZotero { job_id, target, confirm } => {
+                if !confirm {
+                    anyhow::bail!("回写书目字段和阅读笔记会修改 Zotero 条目，请加 --confirm 执行")
+                }
+                let path = format!("/api/v1/jobs/{}/obsidian/zotero-sync", encode(&job_id));
+                backend(ctx)?.post(&path, Some(&target.payload()))?
             }
         },
         AgentCommand::Workflow {

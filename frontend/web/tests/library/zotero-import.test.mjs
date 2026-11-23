@@ -146,3 +146,18 @@ test("runZoteroImport: 不翻译时只导入；接口异常记到整组", async 
   assert.equal(summary.stored, 1);
   assert.deepEqual(summary.failed, [{ title: "二", message: "无法连接 Zotero" }]);
 });
+
+
+test("导入同条目的两份 PDF 时保留用户指定的主文和 SI 身份", async () => {
+  const sent = [];
+  await runZoteroImport({
+    libraryId: "users/0", translate: false,
+    selections: [
+      { item_key: "ITEM0001", attachment_key: "MAIN0001", collection_key: "", title: "Paper", supplement: false },
+      { item_key: "ITEM0001", attachment_key: "SUPP0001", collection_key: "", title: "Appendix", supplement: true },
+    ],
+    importAttachments: async (payload) => { sent.push(payload); return []; },
+    translateDocument: async () => {}, requestLibraryRefresh: () => {},
+  });
+  assert.deepEqual(sent[0].attachments.map((a) => a.supplement), [false, true]);
+});

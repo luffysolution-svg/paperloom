@@ -7,6 +7,7 @@ import type {
   LiveTranslationPageSnapshot,
   MarkdownDocumentView,
   ReaderMetadataView,
+  ReaderRegionsQuery,
   ReaderRegionsView,
 } from "@retainpdf/contracts/reader-data";
 import { encodePathParam, request, type RequestOptions } from "../request.js";
@@ -32,10 +33,10 @@ export function getReaderMarkdown(
 /** GET /api/v1/jobs/:job_id/reader/regions */
 export function getReaderRegions(
   apiPrefix: string | undefined,
-  args: { job_id: string },
+  args: { job_id: string; query?: ReaderRegionsQuery },
   options?: RequestOptions,
 ): Promise<ReaderRegionsView> {
-  return request<ReaderRegionsView>({ apiPrefix, method: "GET", path: `jobs/${encodePathParam(args.job_id)}/reader/regions`, options });
+  return request<ReaderRegionsView>({ apiPrefix, method: "GET", path: `jobs/${encodePathParam(args.job_id)}/reader/regions`, query: args.query, options });
 }
 
 /** GET /api/v1/jobs/:job_id/reader/metadata */

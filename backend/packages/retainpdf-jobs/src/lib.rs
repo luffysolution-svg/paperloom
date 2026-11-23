@@ -69,7 +69,8 @@ pub use progress::live_stage::{
 pub use progress::stage_view::{build_job_stage_view, terminal_completion_note};
 pub use query::{job_search_text, JobQueries};
 pub use query_execution::QueryExecution;
-pub use reader::reader_regions::load_translation_pages;
+pub use reader::paper_markdown;
+pub use reader::reader_regions::{load_table_translations, load_translation_pages};
 pub use reports::quality::api::{quality_summary_view, QualityApiDeps, QualitySummaryView};
 pub use reports::usage::api::{
     all_usage_view, document_usage_estimate_view, document_usage_view, job_usage_view, library_usage_estimate_view,

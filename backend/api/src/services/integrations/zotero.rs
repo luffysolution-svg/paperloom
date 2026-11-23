@@ -117,6 +117,7 @@ pub struct ZoteroNote {
 pub struct ZoteroExtras {
     pub annotations: Vec<ZoteroAnnotation>,
     pub notes: Vec<ZoteroNote>,
+    pub pdfs: Vec<(String, String, PathBuf)>,
 }
 
 fn page_index_of(position: &str) -> Option<i64> {
@@ -560,7 +561,31 @@ impl ZoteroClient {
             }
         }
         notes.sort_by(|a, b| a.0.cmp(&b.0));
+        let mut pdfs = Vec::new();
+        if item_key != attachment_key {
+            match self.children(library_id, item_key, "attachment").await {
+                Ok(children) => {
+                    for child in children {
+                        let data = &child["data"];
+                        if !is_pdf_attachment(data)
+                            || str_field(data, "note").contains("paperloom-document:")
+                        {
+                            continue;
+                        }
+                        if let Some(path) = enclosure_path(&child).filter(|p| p.is_file()) {
+                            pdfs.push((
+                                str_field(data, "key").to_string(),
+                                str_field(data, "title").to_string(),
+                                path,
+                            ));
+                        }
+                    }
+                }
+                Err(err) => tracing::warn!("Zotero sibling attachments unavailable: {err}"),
+            }
+        }
         Ok(ZoteroExtras {
+            pdfs,
             annotations,
             notes: notes.into_iter().map(|(_, note)| note).collect(),
         })
@@ -616,6 +641,7 @@ impl ZoteroClient {
             path,
             filename,
             snapshot: json!({
+                "attachment_title": str_field(data, "title"),
                 "data": item.get("data").cloned().unwrap_or(Value::Null),
                 "parsed_date": item.pointer("/meta/parsedDate").cloned().unwrap_or(Value::Null),
             }),

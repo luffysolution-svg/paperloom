@@ -61,6 +61,40 @@ def _set_recovered_text(block: dict, text: str) -> None:
         block["content"]["text"] = text
 
 
+def _recover_prose_gaps(block: dict, original: str, native: str) -> bool:
+    """Replace the damaged runs only. Keep the OCR equation spans on either side."""
+    gaps = list(re.finditer(r'\ufffd+', original))
+    changes = []
+    for gap in gaps:
+        left = ''.join(original[:gap.start()].split())[-4:]
+        right = ''.join(original[gap.end():].split())[:4]
+        if len(left) < 3 or len(right) < 3:
+            return False
+        candidates = re.findall(re.escape(left) + '(.{1,32}?)' + re.escape(right), native)
+        if len(candidates) != 1 or '\ufffd' in candidates[0]:
+            return False
+        changes.append(dict(before=left, old=gap.group(), after=right, value=candidates[0]))
+
+    replacements = [entry['value'] for entry in changes]
+
+    def replace_parts(parts: list[str]) -> list[str]:
+        if sum(len(re.findall(r'\ufffd+', part)) for part in parts) != len(changes):
+            return parts
+        values = iter(replacements)
+        return [re.sub(r'\ufffd+', lambda _: next(values), part) for part in parts]
+
+    _set_recovered_text(block, replace_parts([original])[0])
+    for spans in (block.get('segments', []),
+                  [s for line in block.get('lines', []) for s in line.get('spans', [])]):
+        for span, text in zip(spans, replace_parts([s.get('text', '') for s in spans])):
+            span['text'] = text
+    content = block.get('content', {})
+    if content.get('line_texts'):
+        content['line_texts'] = replace_parts(content['line_texts'])
+    block.setdefault('metadata', {}).update(pdf_text_recovered=True, pdf_text_replacements=changes)
+    return True
+
+
 def recover_corrupted_pdf_text(document: dict, pdf) -> int:
     """Repair only replacement-character blocks with a close text-layer match.
 
@@ -94,6 +128,11 @@ def recover_corrupted_pdf_text(document: dict, pdf) -> int:
                     damaged_pattern + r'[A-Za-z0-9]{0,3}',
                     unicodedata.normalize('NFKC', compact(plain)),
                 ) is not None
+            if plain and _recover_prose_gaps(block, original, compact(plain)):
+                repaired += 1
+                continue
+            if any(s.get('type') == 'inline_formula' for s in block.get('segments', [])):
+                continue
             close_text = SequenceMatcher(None, original_compact, compact(plain), autojunk=False).ratio() >= 0.8
             if not plain or '\ufffd' in plain or not (close_text or formula_match):
                 continue

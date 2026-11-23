@@ -81,6 +81,7 @@ export function ArtifactQuickDownloads({
   const [obsidianOpen, setObsidianOpen] = useState(false);
   const [zoteroOpen, setZoteroOpen] = useState(false);
   const translatedJobId = items.translated?.jobId || "";
+  const obsidianJobId = translatedJobId || items.markdown?.jobId || "";
   // 记住上次选的清晰度。读不到（隐私模式、禁用站点数据）时 readWordExportDpi 自己
   // 退回默认值，这里不需要再兜一层。
   const [dpi, setDpi] = useState(readWordExportDpi);
@@ -159,8 +160,8 @@ export function ArtifactQuickDownloads({
         variant="secondary"
         size="sm"
         className="book-detail-obsidian-action"
-        disabled={!translatedJobId}
-        title={translatedJobId ? "把译文与原文笔记写进 Obsidian 库" : "译文生成后可用"}
+        disabled={!obsidianJobId}
+        title={obsidianJobId ? "把文献笔记写入 Obsidian 库" : "识别完成后可用"}
         onClick={() => setObsidianOpen(true)}
       >
         <Gem aria-hidden="true" />
@@ -179,12 +180,8 @@ export function ArtifactQuickDownloads({
         <Upload aria-hidden="true" />
         <span>写回 Zotero</span>
       </Button> : null}
-      {canUseIntegrations && translatedJobId ? (
-        <>
-          <ObsidianExportDialog open={obsidianOpen} onOpenChange={setObsidianOpen} jobId={translatedJobId} />
-          <ZoteroWritebackDialog open={zoteroOpen} onOpenChange={setZoteroOpen} jobId={translatedJobId} />
-        </>
-      ) : null}
+      {canUseIntegrations && obsidianJobId ? <ObsidianExportDialog open={obsidianOpen} onOpenChange={setObsidianOpen} jobId={obsidianJobId} /> : null}
+      {canUseIntegrations && translatedJobId ? <ZoteroWritebackDialog open={zoteroOpen} onOpenChange={setZoteroOpen} jobId={translatedJobId} /> : null}
 
       {/*
         书籍详情本身就是一个对话框，这个必须是 nested——少了它没有独立的浮层层级，

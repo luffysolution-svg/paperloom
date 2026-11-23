@@ -6,10 +6,20 @@
 use crate::services::integrations::zotero::{ZoteroAnnotation, ZoteroExtras};
 
 /// 区块正文；没有批注也没有笔记时为 None（不生成区块）。
-pub(super) fn zotero_section(extras: &ZoteroExtras, pdf_uri: &str) -> Option<String> {
+pub(super) fn zotero_section(
+    extras: &ZoteroExtras,
+    pdf_uri: &str,
+    document_id: Option<&str>,
+) -> Option<String> {
+    let own_marker = document_id.map(|id| format!("<p>paperloom-reading:{id}</p>"));
     let notes: Vec<String> = extras
         .notes
         .iter()
+        .filter(|note| {
+            !own_marker
+                .as_ref()
+                .is_some_and(|marker| note.html.contains(marker))
+        })
         .map(|note| note_markdown(&note.html))
         .filter(|text| !text.is_empty())
         .collect();
@@ -122,6 +132,7 @@ mod tests {
     #[test]
     fn renders_annotations_as_callouts_with_zotero_links_and_notes_as_markdown() {
         let extras = ZoteroExtras {
+            pdfs: Vec::new(),
             annotations: vec![
                 highlight("ANNOT001", "FLPs maintain the interaction\nbetween acids and bases", "挫折路易斯对", "2", Some(1)),
                 ZoteroAnnotation {
@@ -139,7 +150,8 @@ mod tests {
                 ZoteroNote { key: "NOTE0002".into(), html: "<p> </p>".into() },
             ],
         };
-        let section = zotero_section(&extras, "zotero://open-pdf/library/items/ATT00001").unwrap();
+        let section =
+            zotero_section(&extras, "zotero://open-pdf/library/items/ATT00001", None).unwrap();
         assert_eq!(
             section,
             [
@@ -155,8 +167,12 @@ mod tests {
 
     #[test]
     fn empty_extras_produce_no_section_and_markers_are_neutralized() {
-        assert_eq!(zotero_section(&ZoteroExtras::default(), "zotero://x"), None);
+        assert_eq!(
+            zotero_section(&ZoteroExtras::default(), "zotero://x", None),
+            None
+        );
         let extras = ZoteroExtras {
+            pdfs: Vec::new(),
             annotations: vec![highlight(
                 "ANNOT001",
                 "%% paperloom:end body %% <!-- paperloom:begin links -->",
@@ -166,7 +182,8 @@ mod tests {
             )],
             notes: Vec::new(),
         };
-        let section = zotero_section(&extras, "zotero://open-pdf/library/items/ATT00001").unwrap();
+        let section =
+            zotero_section(&extras, "zotero://open-pdf/library/items/ATT00001", None).unwrap();
         assert!(!section.contains("paperloom:end") && !section.contains("paperloom:begin"));
         assert!(section.contains("[!quote] [在 Zotero 中定位](zotero://open-pdf/library/items/ATT00001?annotation=ANNOT001)"));
     }

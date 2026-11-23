@@ -11,7 +11,7 @@ Prefer the connected `paperloom` MCP server tools whenever available — they wo
 
 - Health & discovery: `get_capabilities`, `list_documents`, `search_documents`, `get_document`
 - Ingest & jobs: `upload_pdf`, `submit_ocr`, `submit_translation`, `get_job_status`, `get_job_events`, `cancel_job`, `retry_job`, `run_batch_workflow`, `get_run_status`
-- Export & integrations: `export_markdown`, `zotero_status`, `zotero_collections`, `zotero_items`, `import_zotero_attachments`, `writeback_zotero`, `obsidian_status`, `export_obsidian`
+- Export & integrations: `export_markdown`, `obsidian_status`, `export_obsidian`, `sync_obsidian_to_zotero`, `zotero_status`, `zotero_collections`, `zotero_items`, `import_zotero_attachments`, `writeback_zotero`
 
 Only fall back to the `paperloom` terminal CLI when MCP tools are not attached in the current host session.
 
@@ -23,7 +23,8 @@ Only fall back to the `paperloom` terminal CLI when MCP tools are not attached i
 4. Ask for confirmation before OCR, translation, Zotero writeback, Obsidian overwrite, or any operation that can incur model cost. Pass `confirmed: true` (or `--confirm`) only after explicit confirmation.
 5. After submission, return the execution `run_id` and each paper's `job_id`. Read `get_run_status` for the batch manifest and `get_job_status` for each job's current state. A submission can contain both queued and failed papers.
 6. On failure, inspect events and the resume plan before retrying (`retry_job`). Retry only the failed stage and record the reason.
-7. Export Markdown or PDF only after the requested job reaches a terminal state. Include the output path and source identifiers.
+7. A completed OCR job can export its source note directly. Use `export_obsidian` to write notes and assets to a vault. For an offline handoff, use `export_markdown` with `format: "obsidian_zip"` and an output path. Its default single Markdown uses backend image URLs. Choose `format: "raw"` to inspect the provider's OCR draft.
+8. On Zotero import, set an attachment's `supplement` to true for SI or false for the main paper when the role is known. To sync edited bibliographic fields and the `## 阅读笔记` section, call `sync_obsidian_to_zotero` with the exported job, vault, folder and collection-folder setting. Report the returned fields and note status. If the user wants the translated PDF attached to Zotero, use `writeback_zotero`.
 
 PaperLoom's default translation target is Simplified Chinese. For the whole PDF, omit `ocr.page_ranges` and `translation.page_ranges`.
 
@@ -38,9 +39,11 @@ paperloom agent job status <job-id> --json
 paperloom agent job events <job-id> --json
 paperloom agent workflow run workflow.yml --dry-run --json
 paperloom agent zotero items users/0 --limit 50 --json
-paperloom agent zotero import users/0 --attachments ITEM:ATTACHMENT --confirm --json
-paperloom agent obsidian export --vault-id <vault> --folder PaperLoom --document-ids <document-id> --on-conflict ask --json
+paperloom agent zotero import users/0 --attachments ITEM:PDF:main,ITEM:SUPP:si --confirm --json
+paperloom agent reader markdown <job-id> --output source.md --json
+paperloom agent obsidian bundle <job-id> --output paper.zip --json
 paperloom agent obsidian export --vault-id <vault> --folder PaperLoom --document-ids <document-id> --confirm --json
+paperloom agent obsidian sync-zotero <job-id> --vault-id <vault> --folder PaperLoom --confirm --json
 paperloom agent zotero writeback --document-ids <document-id> --confirm --json
 ```
 

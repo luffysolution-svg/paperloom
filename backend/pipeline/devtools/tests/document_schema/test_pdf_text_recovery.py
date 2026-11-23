@@ -51,3 +51,15 @@ def test_leaves_a_count_alone_when_the_pdf_has_no_matching_context():
         block = {"sub_type": "body", "text": text, "bbox": [15, 40, 400, 70]}
         assert recover_dropped_pdf_digits({"pages": [{"blocks": [block]}]}, pdf) == 0
         assert block["text"] == text
+
+
+def test_gap_repair_preserves_recognized_math_in_the_same_line():
+    from retainpdf_pipeline.ocr.document_schema.pdf_text_recovery import _recover_prose_gaps
+    source = r'后验 q _ { x } 通常为正态分布�(0，I)。'
+    block = {'content': {'text': source}, 'text': source, 'segments': [
+        {'type': 'text', 'text': '后验'}, {'type': 'inline_formula', 'text': 'q _ { x }'},
+        {'type': 'text', 'text': '通常为正态分布�(0，I)。'}]}
+    assert _recover_prose_gaps(block, source, '后验qₓ通常为正态分布𝒩(0，I)。')
+    assert block['content']['text'] == source.replace('�', '𝒩')
+    assert block['segments'][1] == {'type': 'inline_formula', 'text': 'q _ { x }'}
+    assert block['segments'][2]['text'].endswith('𝒩(0，I)。')

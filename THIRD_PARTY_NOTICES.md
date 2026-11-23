@@ -22,6 +22,8 @@ substitute for package copyright notices, license texts, or corresponding source
 | Latin Modern Math | GUST Font License | See `backend/packages/retainpdf2doc/assets/fonts/`; preserve the supplied license and manifest. |
 | VisualTeX vendored source | MIT | See `backend/packages/retainpdf2doc/NOTICE.md` and `LICENSE-VISUALTEX`; include these notices with its bundled output. |
 | DroidSansFallbackFull.ttf | Apache-2.0, embedded Google 2006 / Ascender notice | See `resources/fonts/NOTICE-DROID.txt` and `resources/licenses/Apache-2.0.txt`; bundled and installed copies have the same verified hash. |
+| math-core | MIT | Converts TeX in merged table cells to native MathML. |
+| pulldown-cmark | MIT | Converts Obsidian reading notes to Zotero note HTML. |
 | HTML Table Math 0.1.2 | Third-party Obsidian community plugin | Optional recommendation only; not bundled or installed by PaperLoom. |
 
 The 2026-10-04 inventory includes npm packages and bundled Python's certifi and

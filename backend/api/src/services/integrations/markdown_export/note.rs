@@ -45,6 +45,11 @@ pub(super) struct ZoteroNoteMeta {
     pub(super) tags: Vec<String>,
     /// 导入时所在分类「父/子」，不进 frontmatter，仅用于「按分类建子目录」。
     pub(super) collection_path: String,
+    pub(super) fields: Vec<(String, String)>,
+    pub(super) baseline: zotero::writeback::reading::Fields,
+    pub(super) attachment_key: String,
+    pub(super) library_id: String,
+    pub(super) supplement: bool,
 }
 
 impl NoteMeta {
@@ -61,7 +66,7 @@ impl NoteMeta {
             .filter(|title| !title.is_empty())
             .unwrap_or_else(|| job_id.to_string());
         Self {
-            title,
+            title: retainpdf_jobs::paper_markdown::plain_title(&title),
             authors: document
                 .map(|doc| parse_authors(&doc.authors_json))
                 .unwrap_or_default(),
@@ -82,12 +87,12 @@ impl NoteMeta {
     }
 
     /// 用 Zotero 条目覆盖书目信息（Zotero 里的元数据比 PDF 解析出来的可靠）。
-    pub(super) fn with_zotero(mut self, external: &ExternalRefRecord) -> Self {
+    pub(super) fn with_zotero(mut self, external: &ExternalRefRecord, filename: &str) -> Self {
         let snapshot: serde_json::Value =
             serde_json::from_str(&external.metadata_json).unwrap_or_default();
         let bib = ZoteroBibliography::from_snapshot(&snapshot);
         if !bib.title.is_empty() {
-            self.title = bib.title;
+            self.title = retainpdf_jobs::paper_markdown::plain_title(&bib.title);
         }
         if !bib.authors.is_empty() {
             self.authors = bib.authors;
@@ -95,6 +100,25 @@ impl NoteMeta {
         self.year = bib.year.or(self.year);
         if !bib.doi.is_empty() {
             self.doi = bib.doi;
+        }
+        if let Some(lang) = snapshot["data"]["language"]
+            .as_str()
+            .filter(|s| !s.trim().is_empty())
+        {
+            let code = lang
+                .trim()
+                .split(['-', '_'])
+                .next()
+                .unwrap_or(lang)
+                .to_lowercase();
+            let canonical = if matches!(code.as_str(), "zh" | "ch" | "chinese") {
+                "zh".into()
+            } else {
+                source_lang_suffix(&code)
+            };
+            if canonical != "orig" {
+                self.source_lang = canonical;
+            }
         }
         self.zotero = Some(ZoteroNoteMeta {
             item_key: external.item_key.clone(),
@@ -106,12 +130,50 @@ impl NoteMeta {
             citekey: bib.citekey,
             tags: bib.tags,
             collection_path: external.collection_path.clone(),
+            library_id: external.library_id.clone(),
+            supplement: snapshot["supplement"].as_bool().unwrap_or_else(|| {
+                super::supplements::is_supplement(filename)
+                    || ["attachment_title", "attachment_filename"]
+                        .iter()
+                        .any(|key| {
+                            snapshot[key]
+                                .as_str()
+                                .is_some_and(super::supplements::is_supplement)
+                        })
+            }),
+            attachment_key: external.attachment_key.clone(),
+            baseline: zotero::writeback::reading::bibliography(&snapshot["data"]),
+            fields: [
+                ("date", "date"),
+                ("volume", "volume"),
+                ("issue", "issue"),
+                ("pages", "pages"),
+                ("abstract", "abstractNote"),
+                ("source_language", "language"),
+            ]
+            .iter()
+            .filter_map(|(field, zkey)| {
+                snapshot["data"][*zkey]
+                    .as_str()
+                    .map(str::trim)
+                    .filter(|v| !v.is_empty())
+                    .map(|v| (field.to_string(), v.to_owned()))
+            })
+            .collect(),
         });
         self
     }
 
     /// citekey → 作者姓+年份+标题首词 → 标题 → job id。
     pub(super) fn note_name(&self) -> String {
+        let base = self.bibliographic_name();
+        match self.zotero.as_ref().filter(|z| z.supplement) {
+            Some(z) => format!("{base}.SI-{}", sanitize_file_name(&z.attachment_key)),
+            None => base,
+        }
+    }
+
+    fn bibliographic_name(&self) -> String {
         if let Some(citekey) = self.zotero.as_ref().map(|z| sanitize_file_name(&z.citekey)) {
             if !citekey.is_empty() {
                 return citekey;
@@ -231,12 +293,13 @@ pub(super) fn sanitize_file_name(raw: &str) -> String {
 fn source_lang_suffix(language: &str) -> String {
     let lang = language.trim().to_ascii_lowercase();
     let lang = match lang.as_str() {
-        "ch" | "chinese" | "zh-cn" | "zh_cn" => "zh".to_string(),
+        "ch" => "orig".to_string(), // OCR model hint, also used for English PDFs
+        "chinese" | "zh-cn" | "zh_cn" => "zh".to_string(),
         "english" => "en".to_string(),
         other => other.to_string(),
     };
     let valid = (2..=3).contains(&lang.len()) && lang.chars().all(|c| c.is_ascii_lowercase());
-    if valid && lang != TRANSLATED_LANG {
+    if valid {
         lang
     } else {
         "orig".to_string()
@@ -248,12 +311,25 @@ pub(super) struct NoteNames {
     pub(super) source_note: String,
     pub(super) assets_dir: String,
     pub(super) translated_pdf: String,
+    pub(super) original_pdf: Option<String>,
+    pub(super) related: Vec<(bool, String)>,
+    pub(super) si_pages: Vec<(String, std::collections::BTreeMap<String, usize>)>,
 }
 
 impl NoteNames {
     pub(super) fn new(base: String, source_lang: &str) -> Self {
         Self {
-            source_note: format!("{base}.{source_lang}"),
+            source_note: format!(
+                "{base}.{}",
+                if source_lang == "zh" {
+                    "orig"
+                } else {
+                    source_lang
+                }
+            ),
+            original_pdf: None,
+            related: vec![],
+            si_pages: vec![],
             assets_dir: format!("{base}.assets"),
             translated_pdf: format!("{base}.{TRANSLATED_LANG}.pdf"),
             base,
@@ -282,8 +358,11 @@ fn yaml_list(values: &[String]) -> String {
     )
 }
 
-fn common_frontmatter(meta: &NoteMeta, lines: &mut Vec<String>) {
+pub(super) fn common_frontmatter(meta: &NoteMeta, lines: &mut Vec<String>) {
     lines.push(format!("title: {}", yaml_str(&meta.title)));
+    if meta.note_name() != meta.title && !meta.title.is_empty() {
+        lines.push(format!("aliases: [{}]", yaml_str(&meta.title)));
+    }
     if !meta.authors.is_empty() {
         lines.push(format!("authors: {}", yaml_list(&meta.authors)));
     }
@@ -298,6 +377,7 @@ fn common_frontmatter(meta: &NoteMeta, lines: &mut Vec<String>) {
             ("citekey", &z.citekey),
             ("item_type", &z.item_type),
             ("publication", &z.publication),
+            ("publication_title", &z.publication),
             ("url", &z.url),
         ];
         for (key, value) in optional {
@@ -305,6 +385,21 @@ fn common_frontmatter(meta: &NoteMeta, lines: &mut Vec<String>) {
                 lines.push(format!("{key}: {}", yaml_str(value)));
             }
         }
+        for (key, value) in &z.fields {
+            lines.push(format!("{key}: {}", yaml_str(value)));
+        }
+        for (key, value) in [
+            ("zotero_item_uri", &z.select_uri),
+            ("zotero_pdf_uri", &z.pdf_uri),
+            ("zotero_library_id", &z.library_id),
+            ("zotero_attachment_key", &z.attachment_key),
+        ] {
+            lines.push(format!("{key}: {}", yaml_str(value)));
+        }
+        if !z.tags.is_empty() {
+            lines.push(format!("keywords: {}", yaml_list(&z.tags)));
+        }
+        lines.push(format!("zotero_item_key: {}", yaml_str(&z.item_key)));
         lines.push(format!("zotero_key: {}", yaml_str(&z.item_key)));
         lines.push(format!("zotero: {}", yaml_str(&z.select_uri)));
         lines.push(format!("zotero_pdf: {}", yaml_str(&z.pdf_uri)));
@@ -325,7 +420,12 @@ fn open_links(meta: &NoteMeta) -> String {
     if let Some(z) = &meta.zotero {
         links.push(format!("[在 Zotero 中查看]({})", z.select_uri));
     }
-    links.join(" · ")
+    let mut text = links.join(" · ");
+    if let Some(z) = &meta.zotero {
+        text.push_str("\n\n");
+        text.push_str(&zotero::writeback::reading::marker(&z.baseline));
+    }
+    text
 }
 
 /// 受管区块：重新导出时只替换标记之间的内容，标记外的手写内容保留（M2）。
@@ -335,6 +435,31 @@ fn managed(section: &str, body: &str) -> String {
         "%% paperloom:begin {section} %%\n{}\n%% paperloom:end {section} %%\n",
         body.trim_end()
     )
+}
+
+fn attachment_links(names: &NoteNames, fm: &mut Vec<String>) -> Vec<String> {
+    let link = |file: &str| format!("[[{}/{file}]]", names.assets_dir);
+    let mut links = Vec::new();
+    if let Some(file) = &names.original_pdf {
+        fm.push(format!("original_pdf: {}", yaml_str(&link(file))));
+        links.push(format!("原始 PDF：{}", link(file)));
+    }
+    for (supplement, key, label) in [
+        (true, "has_supplement", "补充材料"),
+        (false, "supplement_to", "主文 PDF"),
+    ] {
+        let files: Vec<_> = names
+            .related
+            .iter()
+            .filter(|(si, _)| *si == supplement)
+            .map(|(_, f)| link(f))
+            .collect();
+        if !files.is_empty() {
+            fm.push(format!("{key}: {}", yaml_list(&files)));
+            links.push(format!("{label}：{}", files.join(" · ")));
+        }
+    }
+    links
 }
 
 pub(super) fn translated_note(
@@ -363,7 +488,7 @@ pub(super) fn translated_note(
     }
     fm.push("tags: [literature, paperloom]".to_string());
 
-    let mut header = Vec::new();
+    let mut header = attachment_links(names, &mut fm);
     if has_source_note {
         header.push(format!("原文：[[{}]]", names.source_note));
     }
@@ -379,25 +504,50 @@ pub(super) fn translated_note(
         note.push('\n');
         note.push_str(&managed("zotero", section));
     }
+    if meta.zotero.is_some() {
+        note.push_str("\n## 阅读笔记\n");
+    }
     note
 }
 
-pub(super) fn source_note(meta: &NoteMeta, names: &NoteNames, body: &str) -> String {
+pub(super) fn source_note(
+    meta: &NoteMeta,
+    names: &NoteNames,
+    body: &str,
+    companion: bool,
+    zotero: Option<&str>,
+) -> String {
     let mut fm = Vec::new();
     common_frontmatter(meta, &mut fm);
-    fm.push(format!("language: {}", yaml_str(&meta.source_lang)));
-    fm.push(format!("paperloom_role: {}", yaml_str("source")));
     fm.push(format!(
-        "translation: {}",
-        yaml_str(&format!("[[{}]]", names.base))
+        "language: {}",
+        yaml_str(if meta.source_lang == "orig" {
+            "und"
+        } else {
+            &meta.source_lang
+        })
     ));
-    fm.push("tags: [paperloom]".to_string());
+    fm.push(format!("paperloom_role: {}", yaml_str("source")));
+    let mut links = attachment_links(names, &mut fm);
+    if companion {
+        fm.push(format!(
+            "translation: {}",
+            yaml_str(&format!("[[{}]]", names.base))
+        ));
+        links.push(format!("译文：[[{}]]", names.base));
+    }
+    fm.push("tags: [literature, paperloom]".to_string());
+    links.push(open_links(meta));
     let mut note = format!("---\n{}\n---\n\n", fm.join("\n"));
-    note.push_str(&managed(
-        "links",
-        &format!("译文：[[{}]]\n\n{}", names.base, open_links(meta)),
-    ));
+    note.push_str(&managed("links", &links.join("\n\n")));
     note.push('\n');
     note.push_str(&managed("body", body));
+    if let Some(section) = zotero {
+        note.push('\n');
+        note.push_str(&managed("zotero", section));
+    }
+    if !companion && meta.zotero.is_some() {
+        note.push_str("\n## 阅读笔记\n");
+    }
     note
 }

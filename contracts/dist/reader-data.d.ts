@@ -5,7 +5,7 @@
 /**
  * Endpoint input, query, and output DTOs published by reader-data.v1.schema.json.
  */
-export type ReaderDataSchema = JobFilesView | LiveTranslationCommitEvent | LiveTranslationLayout | LiveTranslationPageSnapshot | MarkdownDocumentView | ReaderMetadataView | ReaderRegionsView;
+export type ReaderDataSchema = JobFilesView | LiveTranslationCommitEvent | LiveTranslationLayout | LiveTranslationPageSnapshot | MarkdownDocumentView | ReaderMetadataView | ReaderRegionsQuery | ReaderRegionsView;
 export interface JobFilesView {
     job_id: string;
     /**
@@ -207,7 +207,18 @@ export interface ReaderPageMetadata {
     width: number;
     height: number;
 }
+export interface ReaderRegionsQuery {
+    /**
+     * Link numeric citations to note-local bibliography block IDs.
+     */
+    obsidian?: boolean;
+}
 export interface ReaderRegionsView {
+    source_language?: string;
+    /**
+     * Bibliographic YAML for the requested Obsidian export.
+     */
+    export_frontmatter?: string;
     items: ReaderRegionItem[];
 }
 /**

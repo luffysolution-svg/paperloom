@@ -50,8 +50,13 @@ pub(crate) struct BatchExportView {
 
 struct PreparedFile {
     name: String,
-    path: PathBuf,
-    archive: bool,
+    source: PreparedSource,
+}
+
+enum PreparedSource {
+    File(PathBuf),
+    Archive(PathBuf),
+    Markdown(String),
 }
 
 pub(crate) async fn export_batch(
@@ -153,10 +158,10 @@ pub(crate) async fn export_batch(
                 .map(|file| {
                     (
                         file.name.clone(),
-                        if file.archive {
-                            ZipSource::Archive(&file.path)
-                        } else {
-                            ZipSource::File(&file.path)
+                        match &file.source {
+                            PreparedSource::File(path) => ZipSource::File(path),
+                            PreparedSource::Archive(path) => ZipSource::Archive(path),
+                            PreparedSource::Markdown(text) => ZipSource::Bytes(text.as_bytes()),
                         },
                     )
                 })
@@ -174,6 +179,7 @@ fn latest_batch_job(
     document_id: &str,
     format: BatchExportFormat,
 ) -> Result<JobSnapshot, AppError> {
+    let mut ocr = None;
     for id in deps
         .db
         .job_ids_for_document(document_id)?
@@ -187,13 +193,30 @@ fn latest_batch_job(
             continue;
         }
         let usable = match format {
-            BatchExportFormat::Markdown => stored_path(&job, deps.data_root, StoredFile::OcrMarkdown)
-                .is_some_and(|path| path.is_file()),
+            BatchExportFormat::Markdown => {
+                stored_path(&job, deps.data_root, StoredFile::OcrMarkdown)
+                    .is_some_and(|path| path.is_file())
+            }
+            BatchExportFormat::Obsidian
+                if stored_path(&job, deps.data_root, StoredFile::NormalizedDocument)
+                    .is_some_and(|p| p.is_file()) =>
+            {
+                if job.workflow == WorkflowKind::Ocr {
+                    ocr.get_or_insert(job);
+                    continue;
+                }
+                stored_path(&job, deps.data_root, StoredFile::TranslationManifest)
+                    .is_some_and(|p| p.is_file())
+            }
+            BatchExportFormat::Obsidian => false,
             _ => job.workflow != WorkflowKind::Ocr,
         };
         if usable {
             return Ok(job);
         }
+    }
+    if let Some(job) = ocr {
+        return Ok(job);
     }
     Err(AppError::not_found(match format {
         BatchExportFormat::Markdown => "尚无可导出的 OCR Markdown，请先完成识别",
@@ -211,8 +234,7 @@ async fn prepare_batch_item(
 ) -> Result<Vec<PreparedFile>, AppError> {
     let file = |name: &str, path| PreparedFile {
         name: format!("{folder}/{name}"),
-        path,
-        archive: false,
+        source: PreparedSource::File(path),
     };
     if matches!(format, BatchExportFormat::Source) {
         let upload = deps
@@ -242,7 +264,12 @@ async fn prepare_batch_item(
         BatchExportFormat::Markdown => {
             let path = stored_path(&job, deps.data_root, StoredFile::OcrMarkdown)
                 .ok_or_else(|| AppError::not_found("OCR Markdown 尚未生成"))?;
-            let mut files = vec![file("full.md", path)];
+            let raw = std::fs::read_to_string(path)?;
+            let md = super::markdown_export::source_markdown_note(deps, &job, Some(&raw))?;
+            let mut files = vec![PreparedFile {
+                name: format!("{folder}/full.md"),
+                source: PreparedSource::Markdown(md),
+            }];
             if let Some(images) = stored_path(&job, deps.data_root, StoredFile::OcrImagesDir) {
                 for entry in walkdir::WalkDir::new(&images).follow_links(false) {
                     let entry = entry.map_err(|error| AppError::internal(error.to_string()))?;
@@ -267,8 +294,7 @@ async fn prepare_batch_item(
                     .await?;
             Ok(vec![PreparedFile {
                 name: folder.to_owned(),
-                path: download.path,
-                archive: true,
+                source: PreparedSource::Archive(download.path),
             }])
         }
         BatchExportFormat::Source => unreachable!(),

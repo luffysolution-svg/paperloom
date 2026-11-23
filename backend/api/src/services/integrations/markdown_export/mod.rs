@@ -2,10 +2,12 @@
 // 设计见 docs/ops/planning/zotero-obsidian-integration.md「F3」「F4」。
 
 mod images;
+mod supplements;
+use supplements::{related_pdfs, RelatedPdf};
 mod note;
 mod ocr_source;
 mod render;
-mod table_math;
+use retainpdf_jobs::paper_markdown as table_math;
 mod vault;
 mod zotero_notes;
 
@@ -31,7 +33,7 @@ use retainpdf_api_base::job_loading::load_supported_job;
 
 use self::images::{rewrite_image_links, ImagePlan, PlannedImage};
 use self::note::{NoteMeta, NoteNames};
-use self::render::{render_document, tighten_inline_math, RenderContext, TranslationIndex};
+use self::render::{render_document, RenderContext, TranslationIndex};
 
 pub(crate) use self::vault::{
     normalize_vault_folder, note_uri_path, ConflictPolicy, VaultWriteOutcome, VaultWriteStatus,
@@ -89,7 +91,8 @@ impl OwnedDownloadJobsDeps {
 
 struct ExportInputs<'a> {
     normalized: &'a Value,
-    translation_pages: &'a [(i64, Vec<Value>)],
+    translation_pages: Option<&'a [(i64, Vec<Value>)]>,
+    tables: &'a std::collections::HashMap<String, String>,
     /// OCR 服务产出的 md/full.md；有它时原文笔记与 Markdown 视图逐字一致。
     full_markdown: Option<&'a str>,
     images_dir: Option<&'a Path>,
@@ -177,51 +180,81 @@ struct ExportedNotes {
 }
 
 fn build_notes(inputs: &ExportInputs<'_>, names: NoteNames) -> ExportedNotes {
-    let translations = TranslationIndex::from_pages(inputs.translation_pages);
-    let exists = |rel: &str| inputs.images_dir.is_some_and(|dir| render::safe_image(dir, rel).is_some());
+    let translations = inputs.translation_pages.map(TranslationIndex::from_pages);
+
+    let exists = |rel: &str| {
+        inputs
+            .images_dir
+            .is_some_and(|dir| render::safe_image(dir, rel).is_some())
+    };
     let mut plan = ImagePlan::default();
 
     // 先渲染译文：图片编号以译文笔记中的出现顺序为准。
-    let translated_body = render_document(
-        inputs.normalized,
-        &RenderContext {
-            images_dir: inputs.images_dir,
-            translations: Some(&translations),
-        },
-        &mut plan,
-    );
-    let translated_body =
-        rewrite_image_links(&translated_body, &mut plan, &names.assets_dir, &exists);
-
-    let source = inputs.include_source.then(|| {
-        let body = match inputs.full_markdown.filter(|text| !text.trim().is_empty()) {
-            Some(full) => tighten_inline_math(full),
-            None => render_document(
+    let translated_body = translations
+        .as_ref()
+        .map(|index| {
+            render_document(
                 inputs.normalized,
                 &RenderContext {
                     images_dir: inputs.images_dir,
-                    translations: None,
+                    translations: Some(index),
+                    tables: Some(inputs.tables),
                 },
                 &mut plan,
-            ),
-        };
-        let body = table_math::normalize_table_math(&body);
+            )
+        })
+        .unwrap_or_default();
+    let translated_body =
+        rewrite_image_links(&translated_body, &mut plan, &names.assets_dir, &exists);
+
+    let translated_body = table_math::references::link_supplements(
+        &translated_body,
+        &names.si_pages,
+        &names.assets_dir,
+    );
+    let source_body = (inputs.include_source || translations.is_none()).then(|| {
+        let body = render_source_body(
+            inputs.normalized,
+            inputs.full_markdown,
+            inputs.images_dir,
+            &mut plan,
+        );
         let body = rewrite_image_links(&body, &mut plan, &names.assets_dir, &exists);
-        note::source_note(inputs.meta, &names, &body)
+        table_math::references::link_supplements(&body, &names.si_pages, &names.assets_dir)
     });
 
     let zotero_section = match (inputs.zotero_extras, &inputs.meta.zotero) {
-        (Some(extras), Some(z)) => zotero_notes::zotero_section(extras, &z.pdf_uri),
+        (Some(extras), Some(z)) => {
+            zotero_notes::zotero_section(extras, &z.pdf_uri, inputs.meta.document_id.as_deref())
+        }
         _ => None,
     };
-    let translated = note::translated_note(
-        inputs.meta,
-        &names,
-        &translated_body,
-        source.is_some(),
-        inputs.has_pdf,
-        zotero_section.as_deref(),
-    );
+    let (translated, source) = if translations.is_some() {
+        let side =
+            source_body.map(|body| note::source_note(inputs.meta, &names, &body, true, None));
+        (
+            note::translated_note(
+                inputs.meta,
+                &names,
+                &translated_body,
+                side.is_some(),
+                inputs.has_pdf,
+                zotero_section.as_deref(),
+            ),
+            side,
+        )
+    } else {
+        (
+            note::source_note(
+                inputs.meta,
+                &names,
+                &source_body.unwrap_or_default(),
+                false,
+                zotero_section.as_deref(),
+            ),
+            None,
+        )
+    };
     ExportedNotes {
         images: plan.entries().to_vec(),
         names,
@@ -235,9 +268,12 @@ struct ExportSource {
     job: JobSnapshot,
     normalized: Value,
     translation_pages: Vec<(i64, Vec<Value>)>,
+    tables: std::collections::HashMap<String, String>,
     full_markdown: Option<String>,
     images_dir: Option<PathBuf>,
     pdf: Option<PathBuf>,
+    original_pdf: Option<PathBuf>,
+    related: Vec<RelatedPdf>,
     meta: NoteMeta,
     zotero_extras: ZoteroExtrasState,
 }
@@ -248,6 +284,135 @@ struct NoteBundle {
     translated: String,
     source: Option<String>,
     assets: Vec<(String, PathBuf)>,
+}
+
+fn export_metadata(
+    deps: &DownloadJobsDeps<'_>,
+    job_id: &str,
+    language: &str,
+) -> Result<
+    (
+        Option<crate::models::api::DocumentRecord>,
+        Option<ExternalRefRecord>,
+        NoteMeta,
+    ),
+    AppError,
+> {
+    let document = deps.db.get_document_by_job_id(job_id)?;
+    let mut meta =
+        NoteMeta::from_document(document.as_ref(), job_id, language, deps.public_base_url);
+    let external = match &document {
+        Some(doc) => deps
+            .db
+            .external_refs_for_document(&doc.document_id)?
+            .into_iter()
+            .find(|r| r.source == zotero::SOURCE),
+        None => None,
+    };
+    if let Some(reference) = &external {
+        meta = meta.with_zotero(
+            reference,
+            document
+                .as_ref()
+                .map_or("", |doc| doc.source_filename.as_str()),
+        );
+    }
+    Ok((document, external, meta))
+}
+
+fn has_chinese_prose<'a>(blocks: impl Iterator<Item = &'a str>) -> bool {
+    blocks.take(60).any(|s| {
+        s.chars()
+            .filter(|c| ('\u{4e00}'..='\u{9fff}').contains(c))
+            .take(8)
+            .count()
+            == 8
+    })
+}
+
+fn render_source_body(
+    normalized: &Value,
+    raw: Option<&str>,
+    images_dir: Option<&Path>,
+    images: &mut ImagePlan,
+) -> String {
+    match raw.filter(|text| !text.trim().is_empty()) {
+        Some(text) => table_math::provider_markdown(normalized, text),
+        None => render_document(
+            normalized,
+            &RenderContext {
+                images_dir,
+                translations: None,
+                tables: None,
+            },
+            images,
+        ),
+    }
+}
+
+pub(crate) fn source_markdown_note(
+    deps: &DownloadJobsDeps<'_>,
+    job: &JobSnapshot,
+    raw: Option<&str>,
+) -> Result<String, AppError> {
+    let normalized = stored_path(job, deps.data_root, StoredFile::NormalizedDocument)
+        .filter(|p| p.is_file())
+        .map(std::fs::read)
+        .transpose()?
+        .map(|bytes| serde_json::from_slice(&bytes))
+        .transpose()
+        .map_err(|e| AppError::internal(format!("读取规范化文献失败：{e}")))?
+        .unwrap_or(Value::Null);
+    let raw = raw.filter(|text| !text.trim().is_empty());
+    let (inherited, images) = if raw.is_none() {
+        ocr_source::markdown_sources(deps, job)
+    } else {
+        (None, None)
+    };
+    let inherited = inherited.map(std::fs::read_to_string).transpose()?;
+    let body = render_source_body(
+        &normalized,
+        raw.or(inherited.as_deref()),
+        images.as_deref(),
+        &mut ImagePlan::default(),
+    );
+    if body.trim().is_empty() {
+        return Err(AppError::not_ready("markdown"));
+    }
+    let (_, _, meta) = export_metadata(deps, &job.job_id, job.ocr_language())?;
+    let mut fm = Vec::new();
+    note::common_frontmatter(&meta, &mut fm);
+    fm.push("paperloom_role: source".to_owned());
+    Ok(format!("---\n{}\n---\n\n{}", fm.join("\n"), body))
+}
+
+pub(crate) fn reader_export_frontmatter(
+    deps: &DownloadJobsDeps<'_>,
+    job: &str,
+    view: &mut crate::models::api::ReaderRegionsView,
+) -> Result<(), AppError> {
+    let snapshot = deps.db.get_job(job)?;
+    let normalized = stored_path(&snapshot, deps.data_root, StoredFile::NormalizedDocument)
+        .filter(|p| p.is_file())
+        .map(std::fs::read)
+        .transpose()?
+        .map(|data| serde_json::from_slice(&data))
+        .transpose()
+        .map_err(|e| AppError::internal(format!("读取规范化文献失败：{e}")))?
+        .unwrap_or(Value::Null);
+    table_math::format_export_regions(&normalized, &mut view.items);
+    let (_, _, mut meta) = export_metadata(deps, job, &view.source_language)?;
+    if meta.source_lang == "orig"
+        && view.source_language.eq_ignore_ascii_case("ch")
+        && has_chinese_prose(view.items.iter().filter_map(|i| i.source.text.as_deref()))
+    {
+        meta.source_lang = "zh".into();
+    }
+    view.source_language = meta.source_lang.clone();
+    let mut lines = Vec::new();
+    note::common_frontmatter(&meta, &mut lines);
+    view.export_frontmatter = Some(lines.join("\n"));
+    Ok(())
 }
 
 impl ExportSource {
@@ -264,7 +429,7 @@ impl ExportSource {
             })?;
         let manifest_ready = stored_path(&job, deps.data_root, StoredFile::TranslationManifest)
             .is_some_and(|p| p.is_file());
-        if !manifest_ready {
+        if !manifest_ready && job.workflow != crate::models::domain::WorkflowKind::Ocr {
             return Err(AppError::not_found(format!(
                 "translation not ready: {job_id}"
             )));
@@ -272,31 +437,47 @@ impl ExportSource {
         let normalized: Value =
             serde_json::from_str(&std::fs::read_to_string(&normalized_path)?)
                 .map_err(|err| AppError::internal(format!("parse normalized document: {err}")))?;
-        let translation_pages = load_translation_pages(deps.data_root, &job)?;
+        let translation_pages = if manifest_ready {
+            load_translation_pages(deps.data_root, &job)?
+        } else {
+            Vec::new()
+        };
         let (full_markdown, images_dir) = ocr_source::markdown_sources(deps, &job);
-        let full_markdown = full_markdown
-            .map(std::fs::read_to_string)
-            .transpose()?;
-        let document = deps
-            .db
-            .get_document_by_job_id(&job.job_id)
-            .map_err(|err| AppError::internal(err.to_string()))?;
-        let mut meta = NoteMeta::from_document(
-            document.as_ref(),
-            &job.job_id,
-            job.ocr_language(),
-            deps.public_base_url,
-        );
+        let tables = retainpdf_jobs::load_table_translations(deps.data_root, &job);
+        let full_markdown = full_markdown.map(std::fs::read_to_string).transpose()?;
+        let (document, external, mut meta) =
+            export_metadata(deps, &job.job_id, job.ocr_language())?;
+        let mut related = Vec::new();
+        let mut original_pdf =
+            stored_path(&job, deps.data_root, StoredFile::SourcePdf).filter(|p| p.is_file());
         if let Some(document) = &document {
-            let external = deps
-                .db
-                .external_refs_for_document(&document.document_id)
-                .map_err(|err| AppError::internal(err.to_string()))?;
-            if let Some(external) = external.first() {
-                meta = meta.with_zotero(external);
+            if original_pdf.is_none() {
+                original_pdf = deps
+                    .db
+                    .find_upload_for_document(&document.document_id)?
+                    .map(|u| PathBuf::from(u.stored_path))
+                    .filter(|p| p.is_file());
+            }
+            if let Some(external) = &external {
+                related = related_pdfs(deps, document, external, zotero_extras.loaded())?;
             }
         }
+        if meta.source_lang == "orig"
+            && job.ocr_language().eq_ignore_ascii_case("ch")
+            && has_chinese_prose(
+                normalized["pages"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .flat_map(|p| p["blocks"].as_array().into_iter().flatten())
+                    .filter_map(|b| b.pointer("/content/text").and_then(Value::as_str)),
+            )
+        {
+            meta.source_lang = "zh".into();
+        }
         Ok(Self {
+            original_pdf,
+            related,
             meta,
             images_dir,
             pdf: stored_path(&job, deps.data_root, StoredFile::TranslatedPdf)
@@ -304,6 +485,7 @@ impl ExportSource {
             job,
             normalized,
             translation_pages,
+            tables,
             full_markdown,
             zotero_extras,
         })
@@ -314,11 +496,28 @@ impl ExportSource {
     }
 
     fn bundle(&self, base: &str, include_source: bool) -> NoteBundle {
-        let names = NoteNames::new(base.to_string(), &self.meta.source_lang);
+        let mut names = NoteNames::new(base.to_string(), &self.meta.source_lang);
+        names.original_pdf = self
+            .original_pdf
+            .as_ref()
+            .map(|_| format!("{base}.source.pdf"));
+        names.si_pages = self
+            .related
+            .iter()
+            .filter(|p| p.supplement)
+            .map(|p| (p.filename.clone(), p.pages.clone()))
+            .collect();
+        names.related = self
+            .related
+            .iter()
+            .map(|pdf| (pdf.supplement, pdf.filename.clone()))
+            .collect();
         let exported = build_notes(
             &ExportInputs {
                 normalized: &self.normalized,
-                translation_pages: &self.translation_pages,
+                translation_pages: (self.job.workflow != crate::models::domain::WorkflowKind::Ocr)
+                    .then_some(self.translation_pages.as_slice()),
+                tables: &self.tables,
                 full_markdown: self.full_markdown.as_deref(),
                 images_dir: self.images_dir.as_deref(),
                 meta: &self.meta,
@@ -333,10 +532,25 @@ impl ExportSource {
             .iter()
             .filter_map(|image| {
                 let dir = self.images_dir.as_deref()?;
-                Some((image.file_name.clone(), render::safe_image(dir, &image.source_rel)?))
+                Some((
+                    image.file_name.clone(),
+                    render::safe_image(dir, &image.source_rel)?,
+                ))
             })
             .collect();
-        if let Some(pdf) = &self.pdf {
+        if let (Some(name), Some(path)) = (&exported.names.original_pdf, &self.original_pdf) {
+            assets.push((name.clone(), path.clone()));
+        }
+        assets.extend(
+            self.related
+                .iter()
+                .map(|pdf| (pdf.filename.clone(), pdf.path.clone())),
+        );
+        if let Some(pdf) = self
+            .pdf
+            .as_ref()
+            .filter(|_| self.job.workflow != crate::models::domain::WorkflowKind::Ocr)
+        {
             assets.push((exported.names.translated_pdf.clone(), pdf.clone()));
         }
         NoteBundle {
@@ -424,7 +638,7 @@ pub(crate) async fn markdown_export_download_async(
 }
 
 /// folder 后接 Zotero 分类路径；每级按文件名规则清洗，清洗后为空的级别跳过。
-fn folder_with_collection(folder: &str, collection_path: &str) -> String {
+pub(super) fn folder_with_collection(folder: &str, collection_path: &str) -> String {
     std::iter::once(folder.to_string())
         .chain(collection_path.split('/').map(note::sanitize_file_name))
         .filter(|part| !part.is_empty())

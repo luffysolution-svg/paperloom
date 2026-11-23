@@ -188,6 +188,21 @@ impl Backend {
         self.call(reqwest::Method::POST, path, body)
     }
 
+    pub fn download(&self, path: &str, output: &Path) -> Result<u64> {
+        let mut response = self.client.get(self.url(path))
+            .header("X-API-Key", &self.runtime.api_key).send()?;
+        let status = response.status();
+        if !status.is_success() {
+            let error: Value = response.json().unwrap_or(Value::Null);
+            bail!("{} (HTTP {status})", error["message"].as_str().unwrap_or("下载失败"));
+        }
+        let parent = output.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
+        let mut file = tempfile::NamedTempFile::new_in(parent)?;
+        let bytes = response.copy_to(file.as_file_mut())?;
+        file.persist(output).with_context(|| format!("无法保存 {}", output.display()))?;
+        Ok(bytes)
+    }
+
     pub fn upload_pdf(&self, path: &Path) -> Result<Value> {
         let file = std::fs::File::open(path).with_context(|| format!("无法打开 {}", path.display()))?;
         let part = reqwest::blocking::multipart::Part::reader(file)

@@ -106,6 +106,14 @@ export async function exportJobToObsidian(
   return readEnvelope(resp, "写入 Obsidian 库失败，请稍后重试。");
 }
 
+export async function syncObsidianReading(jobId: string, payload: {vault_id: string; folder: string; folder_by_collection: boolean}): Promise<{fields_written: string[]; note_status: string}> {
+  if (isMockMode()) throw new Error("演示模式不支持 Zotero 写回。");
+  const response = await fetchProtected(buildApiEndpoint(API_PREFIX, "jobs/" + encodeURIComponent(jobId) + "/obsidian/zotero-sync"), {
+    method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload),
+  });
+  return readEnvelope(response, "阅读笔记回写失败");
+}
+
 export async function exportDocumentsToObsidian(
   documentIds: string[],
   payload: {

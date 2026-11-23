@@ -98,7 +98,7 @@ Open the Markdown panel when you need to copy or search the text while reading t
 
 Exported notes include the title, authors, year, DOI, journal, Zotero links, and links to the PaperLoom document and task. Source and translation notes link to each other; the translated PDF and images are stored in a companion assets directory.
 
-Complex tables retain HTML and merged cells. The optional HTML Table Math 0.1.2 plugin can render formulas inside these tables. Existing Zotero highlights, annotations, and child notes are also exported, with page numbers and links that locate annotations in Zotero.
+Ordinary tables use Markdown math. Merged cells can render native MathML. Numbered citations link to bibliography entries in the same note. Existing Zotero highlights, annotations, and child notes are also exported, with page numbers and links that locate annotations in Zotero.
 
 <details>
 <summary>Show Obsidian frontmatter, note contents, tables, and Zotero annotations</summary>
@@ -188,7 +188,7 @@ Select papers in the library, click Save to Obsidian, and choose a vault and fol
 
 On repeat export, PaperLoom updates its managed content blocks and keeps your writing outside those blocks. Choose rename or skip when you want to keep an existing file.
 
-**Optional plugin for table formulas: HTML Table Math 0.1.2**. Search for `html-table-math` in Obsidian Community plugins, install it, and enable it. PaperLoom does not bundle or automatically install the plugin. Ordinary note text and export do not require it.
+Current exports use native Markdown math or MathML. The HTML Table Math community plugin remains useful for dollar-delimited math in HTML cells in older notes.
 
 ## Common questions
 

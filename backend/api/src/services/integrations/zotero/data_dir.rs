@@ -407,10 +407,12 @@ impl ZoteroDataDir {
                 .map(|name| name.to_string_lossy().to_string())
                 .filter(|name| name.to_lowercase().ends_with(".pdf"))
                 .unwrap_or_else(|| format!("{attachment_key}.pdf"));
+            let mut snapshot=item_snapshot(conn, parent_id, &parent_key)?;
+            snapshot["attachment_title"]=Value::String(title_of(conn,attachment_id)?.unwrap_or_default());
             Ok(ResolvedAttachment {
                 path,
                 filename,
-                snapshot: item_snapshot(conn, parent_id, &parent_key)?,
+                snapshot,
             })
         })
         .await
@@ -426,7 +428,7 @@ impl ZoteroDataDir {
         let library_id = validate_library_id(library_id)?.to_string();
         let item_key = validate_key(item_key)?.to_string();
         let attachment_key = validate_key(attachment_key)?.to_string();
-        self.run(move |_, conn, _| {
+        self.run(move |this, conn, _| {
             let library = library_row(conn, &library_id)?;
             let not_found = || AppError::not_found(format!("zotero object not found: {attachment_key}"));
             let attachment_id = item_id(conn, library, &attachment_key)?.ok_or_else(not_found)?;
@@ -476,7 +478,17 @@ impl ZoteroDataDir {
                     .collect::<Result<Vec<_>, _>>()
                     .map_err(sql_error)?;
             }
-            Ok(ZoteroExtras { annotations, notes })
+            let mut pdfs=Vec::new();
+            if let Some(parent)=item_id(conn,library,&item_key)? {
+                for sibling in this.child_pdfs(conn,parent)? {
+                    let Some(id)=item_id(conn,library,&sibling.key)? else {continue};
+                    let Some(row)=attachment_row(conn,id)? else {continue};
+                    if let Some(path)=this.attachment_file(&sibling.key,&row).filter(|p|p.is_file()) {
+                        pdfs.push((sibling.key,sibling.title,path));
+                    }
+                }
+            }
+            Ok(ZoteroExtras { annotations, notes, pdfs })
         })
         .await
     }

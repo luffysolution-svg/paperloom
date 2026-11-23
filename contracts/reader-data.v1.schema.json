@@ -28,6 +28,7 @@
       "method": "GET",
       "path": "/api/v1/jobs/:job_id/reader/regions",
       "client_name": "getReaderRegions",
+      "query": "ReaderRegionsQuery",
       "transport": "json",
       "output": "ReaderRegionsView",
       "rust_view": "ReaderRegionsView",
@@ -178,11 +179,18 @@
         "translated_block_text": { "type": "string", "description": "Present with continuation_group_id: this block's own share of the translation, while translated.text carries the whole group." }
       }
     },
+    "ReaderRegionsQuery": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "obsidian": { "type": "boolean", "description": "Link numeric citations to note-local bibliography block IDs." } }
+    },
     "ReaderRegionsView": {
       "type": "object",
       "additionalProperties": false,
       "required": ["items"],
       "properties": {
+        "source_language": { "type": "string" },
+        "export_frontmatter": { "type": "string", "description": "Bibliographic YAML for the requested Obsidian export." },
         "items": { "type": "array", "items": { "$ref": "#/definitions/ReaderRegionItem" } }
       }
     },

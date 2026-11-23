@@ -3,7 +3,7 @@ use retainpdf_core::models::api::to_absolute_url;
 use retainpdf_files::{job_markdown_view_path, job_ocr_images_base_path, job_ocr_markdown_path};
 use crate::views::{MarkdownDocumentView, MarkdownImageView};
 use retainpdf_core::models::domain::JobSnapshot;
-use retainpdf_core::storage_paths::{resolve_markdown_images_dir, resolve_markdown_path};
+use retainpdf_core::storage_paths::{resolve_markdown_path, resolve_ocr_markdown_images_dir};
 
 use retainpdf_api_base::job_loading::load_supported_job;
 use crate::files::downloads::{DownloadJobsDeps, JobDownloads};
@@ -28,44 +28,39 @@ static HTML_IMAGE_SRC_SQ: std::sync::LazyLock<regex::Regex> = std::sync::LazyLoc
 });
 
 impl<'a> JobDownloads<'a> {
-
     pub async fn markdown_document_view(
         &self,
         job_id: &str,
         base_url: &str,
+        format_content: impl FnOnce(&JobSnapshot, Option<String>) -> Result<String, AppError>,
     ) -> Result<MarkdownDocumentView, AppError> {
-        markdown_document_view(&self.deps, job_id, base_url).await
+        let deps = &self.deps;
+        let job = load_supported_job(deps.db, deps.data_root, job_id)?;
+        let raw = match resolve_markdown_path(&job, deps.data_root) {
+            Some(path) => Some(tokio::fs::read_to_string(path).await?),
+            None => None,
+        };
+        let content = format_content(&job, raw)?;
+        let raw_path = job_ocr_markdown_path(&job.job_id);
+        let markdown_path_url = job_markdown_view_path(&job.job_id);
+        let images_base_path = job_ocr_images_base_path(&job.job_id);
+        let images = markdown_images_view(deps, &job, base_url)?;
+        let content_with_absolute_image_urls =
+            rewrite_markdown_image_links_to_absolute_urls(&content, &job.job_id, base_url);
+        Ok(MarkdownDocumentView {
+            job_id: job.job_id.clone(),
+            ready: true,
+            content,
+            content_with_absolute_image_urls,
+            markdown_path: markdown_path_url.clone(),
+            markdown_url: to_absolute_url(base_url, &markdown_path_url),
+            raw_path: raw_path.clone(),
+            raw_url: to_absolute_url(base_url, &raw_path),
+            images_base_path: images_base_path.clone(),
+            images_base_url: to_absolute_url(base_url, &images_base_path),
+            images,
+        })
     }
-}
-
-async fn markdown_document_view(
-    deps: &DownloadJobsDeps<'_>,
-    job_id: &str,
-    base_url: &str,
-) -> Result<MarkdownDocumentView, AppError> {
-    let job = load_supported_job(deps.db, deps.data_root, job_id)?;
-    let markdown_path =
-        resolve_markdown_path(&job, deps.data_root).ok_or_else(|| AppError::not_ready("markdown"))?;
-    let content = tokio::fs::read_to_string(&markdown_path).await?;
-    let raw_path = job_ocr_markdown_path(&job.job_id);
-    let markdown_path_url = job_markdown_view_path(&job.job_id);
-    let images_base_path = job_ocr_images_base_path(&job.job_id);
-    let images = markdown_images_view(deps, &job, base_url)?;
-    let content_with_absolute_image_urls =
-        rewrite_markdown_image_links_to_absolute_urls(&content, &job.job_id, base_url);
-    Ok(MarkdownDocumentView {
-        job_id: job.job_id.clone(),
-        ready: true,
-        content,
-        content_with_absolute_image_urls,
-        markdown_path: markdown_path_url.clone(),
-        markdown_url: to_absolute_url(base_url, &markdown_path_url),
-        raw_path: raw_path.clone(),
-        raw_url: to_absolute_url(base_url, &raw_path),
-        images_base_path: images_base_path.clone(),
-        images_base_url: to_absolute_url(base_url, &images_base_path),
-        images,
-    })
 }
 
 fn markdown_images_view(
@@ -73,7 +68,7 @@ fn markdown_images_view(
     job: &JobSnapshot,
     base_url: &str,
 ) -> Result<Vec<MarkdownImageView>, AppError> {
-    let Some(images_dir) = resolve_markdown_images_dir(job, deps.data_root) else {
+    let Some(images_dir) = resolve_ocr_markdown_images_dir(job, deps.data_root) else {
         return Ok(Vec::new());
     };
     let mut images = Vec::new();

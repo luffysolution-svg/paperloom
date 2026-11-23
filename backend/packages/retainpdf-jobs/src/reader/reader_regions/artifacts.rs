@@ -8,8 +8,8 @@ use retainpdf_files::job_ocr_images_base_path;
 use retainpdf_core::models::domain::JobSnapshot;
 
 use super::value_extract::{
-    bbox_from_value, canonical_item_id, heading_level_from_block, reading_order_from_item,
-    region_type_from_item, source_text_from_item, sub_type_from_item, value_string,
+    bbox_from_value, canonical_item_id, reading_order_from_item, region_type_from_item,
+    source_text_from_item, sub_type_from_item, value_string,
 };
 use crate::{stored_path, StoredFile};
 
@@ -47,7 +47,7 @@ pub fn load_translation_manifest_pages(
 /// 表格翻译的结果：表格块编号 → 整表译文 HTML（`tables.v1.json` 里整表翻了的表）。
 ///
 /// 没开表格翻译、文件还没写出来、或者读不懂，都当没有：表格照旧显示原文，不让整页区块读不出来。
-pub(super) fn load_table_translations(data_root: &Path, job: &JobSnapshot) -> HashMap<String, String> {
+pub fn load_table_translations(data_root: &Path, job: &JobSnapshot) -> HashMap<String, String> {
     let Some(path) = stored_path(job, data_root, StoredFile::TableTranslations) else {
         return HashMap::new();
     };
@@ -112,7 +112,15 @@ pub(super) fn load_source_region_map(
         let Some(blocks) = page.get("blocks").and_then(Value::as_array) else {
             continue;
         };
-        for block in blocks {
+        let mut slots: Vec<_> = blocks
+            .iter()
+            .filter_map(|b| reading_order_from_item(b, b["block_id"].as_str().unwrap_or("")))
+            .collect();
+        slots.sort_unstable();
+        for (rank, block) in crate::paper_markdown::reading_blocks(blocks)
+            .into_iter()
+            .enumerate()
+        {
             let block_id = value_string(block.get("block_id"));
             if block_id.is_empty() {
                 continue;
@@ -141,14 +149,26 @@ pub(super) fn load_source_region_map(
                 })
                 .collect();
             let sub_type = sub_type_from_item(block);
+            let mut text = crate::paper_markdown::source_text(block);
+            let heading_level =
+                crate::paper_markdown::heading_level(block, &text).map(|n| n as i64);
+            if block["layout_role"] == "caption" || heading_level.is_some() {
+                text = crate::paper_markdown::heading_text(&text);
+            }
             let region = SourceRegion {
-                heading_level: heading_level_from_block(block, sub_type.as_deref()),
-                reading_order: reading_order_from_item(block, &block_id),
+                heading_level,
+                reading_order: if slots.len() == blocks.len() {
+                    Some(slots[rank])
+                } else {
+                    reading_order_from_item(block, &block_id)
+                },
                 sub_type,
                 block_id: block_id.clone(),
                 page: page_idx + 1,
                 bbox,
-                text: source_text_from_item(block),
+                text: Some(text)
+                    .filter(|s| !s.is_empty())
+                    .or_else(|| source_text_from_item(block)),
                 region_type: region_type_from_item(block),
                 asset_ids,
                 asset_urls,

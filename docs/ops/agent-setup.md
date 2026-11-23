@@ -205,9 +205,11 @@ paperloom agent zotero items users/0 --limit 50 --json
 
 ```powershell
 paperloom agent zotero import users/0 `
-  --attachments ITEM_KEY:ATTACHMENT_KEY `
+  --attachments ITEM_KEY:ATTACHMENT_KEY:main,ITEM_KEY:SI_KEY:si `
   --confirm --json
 ```
+
+附件类型可省略，交给后端识别。MCP 的 `import_zotero_attachments` 在每个附件上用 `supplement` 指定类型，主文为 `false`，SI 为 `true`。
 
 典型批量流程是先列出 collection 中的 PDF，再导入并对返回的 `document_id` 执行批量 OCR/翻译。完成后确认目标任务，再写回译文：
 
@@ -239,6 +241,16 @@ paperloom agent obsidian export `
 ```
 
 冲突策略支持 `ask`、`rename`、`overwrite` 和 `skip`。导出只更新 PaperLoom 受管区块，保留用户手写内容。覆盖或批量写入前，Agent 应先展示目标 Vault、目录和冲突策略。
+
+单篇可用 `--job-id` 选定 OCR 或翻译任务。MCP 的 `export_obsidian` 接受单篇 `job_id` 或批量 `document_ids`。使用 `--folder-by-collection` 可按 Zotero 分类建目录。离线交付使用 ZIP，单个 Markdown 的图片链接指向 PaperLoom 服务。
+
+```powershell
+paperloom agent reader markdown <job-id> --output source.md --json
+paperloom agent obsidian bundle <job-id> --output paper.zip --json
+paperloom agent obsidian sync-zotero <job-id> --vault-id <vault-id> --folder Literature/PaperLoom --confirm --json
+```
+
+MCP 的 `export_markdown` 默认返回带书目信息和引文链接的原文，`format: "raw"` 用于读取 OCR 原稿，`format: "obsidian_zip"` 与 `output` 一起使用。已导出的主笔记可用 `sync_obsidian_to_zotero` 回写书目和「阅读笔记」，使用导出时的目录和 `folder_by_collection` 设置。
 
 ## 9. 科研阅读和检索提示词
 

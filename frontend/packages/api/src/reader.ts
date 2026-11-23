@@ -2,9 +2,9 @@
 import * as generated from "./generated/reader-data.js";
 import { failWith, orOnStatus } from "./request.js";
 
-export async function fetchReaderRegions(jobId: string, apiPrefix?: string): Promise<any> {
+export async function fetchReaderRegions(jobId: string, apiPrefix?: string, obsidian = false): Promise<any> {
   return orOnStatus(
-    generated.getReaderRegions(apiPrefix, { job_id: jobId }, { onError: failWith("读取阅读区域失败，请稍后重试。") }),
+    generated.getReaderRegions(apiPrefix, { job_id: jobId, query: obsidian ? { obsidian: true } : undefined }, { onError: failWith("读取阅读区域失败，请稍后重试。") }),
     404,
     { items: [] },
   );

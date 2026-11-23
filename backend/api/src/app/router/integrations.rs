@@ -9,6 +9,8 @@ crate::endpoints! {
     PUT "/api/v1/integrations/obsidian/settings" => integrations::put_obsidian_settings, admin;
     /// 导出任务笔记到 Obsidian 库
     POST "/api/v1/jobs/:job_id/obsidian/export" => integrations::export_job_to_obsidian, admin;
+    /// 将库内笔记的书目修改和阅读笔记写回原 Zotero 条目
+    POST "/api/v1/jobs/:job_id/obsidian/zotero-sync" => integrations::sync_obsidian_reading, admin;
     /// 下载任务的 Obsidian Markdown 笔记包
     GET "/api/v1/jobs/:job_id/markdown/export" => integrations::download_markdown_export, signed;
     /// 批量导出文献到 Obsidian 库

@@ -22,7 +22,7 @@ export type ReaderMarkdownExport = {
 /** 公式编号（"(3)"）写进公式里：$$…$$ 结尾的放 \tag{3}，否则跟在后面。 */
 function withFormulaLabel(markdown: string, label: string): string {
   const tag = label.replace(/^\s*\(\s*|\s*\)\s*$/g, "").trim();
-  if (!tag) return markdown;
+  if (!tag || /\\tag\*?\s*\{/.test(markdown)) return markdown;
   const trimmed = markdown.trimEnd();
   if (trimmed.endsWith("$$") && trimmed.length > 4) return `${trimmed.slice(0, -2).trimEnd()} \\tag{${tag}}$$`;
   return `${trimmed} ${label.trim()}`;
@@ -74,7 +74,13 @@ function blockMarkdown(block: ReaderMdBlock, language: ReaderMdLanguage, pathOf:
 export function buildReaderMarkdownExport(regionsPayload: unknown): ReaderMarkdownExport | null {
   const blocks = buildReaderMdBlocks(normalizeReaderRegions(regionsPayload));
   if (!blocks || blocks.length === 0) return null;
-  const pathOf = assetPathMaker();
+  const makePath = assetPathMaker();
+  const used = new Map<string, string>();
+  const pathOf = (url: string) => {
+    const path = makePath(url);
+    used.set(url, path);
+    return path;
+  };
   const source: string[] = [];
   const translated: string[] = [];
   const bilingual: string[] = [];
@@ -84,18 +90,17 @@ export function buildReaderMarkdownExport(regionsPayload: unknown): ReaderMarkdo
     if (original) source.push(original);
     if (chinese) translated.push(chinese);
     // 双语：有译文的块原文下面紧跟译文；公式、图、没译文的只出一次。
-    if (original) bilingual.push(block.hasTranslation && chinese && chinese !== original ? `${original}\n\n${chinese}` : original);
+    let bilingualChinese = /\s\^ref-[\d-]+\s*$/.test(original) ? chinese.replace(/\s+\^ref-[\d-]+\s*$/, "") : chinese;
+    if (/^#{1,6} /.test(original)) {
+      // The translated title stays visible below the source title. Both share one outline entry.
+      bilingualChinese = block.kind === "heading"
+        ? bilingualChinese.replace(/^#{1,6}\s+/, "")
+        : bilingualChinese.replace(/^#{1,6} [^\n]*\n\n/, "");
+    }
+    if (original) bilingual.push(block.hasTranslation && chinese && chinese !== original ? `${original}\n\n${bilingualChinese}` : original);
   }
   const join = (parts: string[]) => `${parts.join("\n\n").trim()}\n`;
-  const assets: ReaderMarkdownExportAsset[] = [];
-  const seen = new Set<string>();
-  for (const block of blocks) {
-    for (const url of block.assetUrls) {
-      if (!url || seen.has(url)) continue;
-      seen.add(url);
-      assets.push({ url, path: pathOf(url) });
-    }
-  }
+  const assets = Array.from(used, ([url, path]) => ({ url, path }));
   return {
     source: join(source),
     translated: join(translated),

@@ -75,7 +75,8 @@ fn golden_job_export_keeps_paragraphs_whole_and_drops_page_noise() {
     let notes = build_notes(
         &ExportInputs {
             normalized: &normalized,
-            translation_pages: &pages,
+            translation_pages: Some(&pages),
+            tables: &Default::default(),
             full_markdown: None,
             images_dir: None,
             meta: &meta,
@@ -88,13 +89,30 @@ fn golden_job_export_keeps_paragraphs_whole_and_drops_page_noise() {
 
     assert_eq!(notes.names.base, "Smith2023Role");
     let translated = &notes.translated;
+    let linked = |text: &str| {
+        let mut blocks = vec![tighten_inline_math(text.trim().trim_start_matches("摘要:"))];
+        for page in normalized["pages"].as_array().unwrap() {
+            for b in page["blocks"].as_array().unwrap() {
+                if b["semantic_role"] == "reference" || b["sub_type"] == "reference_entry" {
+                    blocks.push(retainpdf_jobs::paper_markdown::source_text(b));
+                }
+            }
+        }
+        let mut refs = vec![true; blocks.len()];
+        refs[0] = false;
+        retainpdf_jobs::paper_markdown::references::link_sections(&mut blocks, &refs);
+        blocks.remove(0)
+    };
     // 跨栏翻译单元 p001-b008 + p001-b009 作为一整段输出一次，不在句中断开。
     let unit = item_field(&pages, "p001-b008", "translation_unit_translated_text");
-    assert_eq!(translated.matches(&unit).count(), 1);
+    assert_eq!(translated.matches("\n## 摘要\n").count(), 1);
+    let (_, notes_section) = translated.split_once("## 页下注").expect("translated note keeps page notes");
+    assert!(notes_section.contains("Institute of Organic Chemistry"));
+    assert_eq!(translated.matches(unit.trim_start_matches("摘要:")).count(), 1);
     for member in ["p001-b008", "p001-b009"] {
         let text = translated_of(&pages, member);
         assert_eq!(
-            translated.matches(&text).count(),
+            translated.matches(text.trim_start_matches("摘要:")).count(),
             1,
             "member {member} must appear once"
         );
@@ -114,9 +132,7 @@ fn golden_job_export_keeps_paragraphs_whole_and_drops_page_noise() {
     assert!(multi.len() >= 2);
     for (_, text) in multi {
         assert_eq!(
-            translated
-                .matches(&tighten_inline_math(text.trim()))
-                .count(),
+            translated.matches(&linked(text)).count(),
             1,
             "unit duplicated: {text:.40}"
         );
@@ -131,7 +147,7 @@ fn golden_job_export_keeps_paragraphs_whole_and_drops_page_noise() {
     for item in translated_items {
         let text = item["translated_text"].as_str().unwrap_or("").trim();
         assert!(
-            translated.contains(&tighten_inline_math(text)),
+            translated.contains(&linked(text)),
             "missing translation of {}",
             item["item_id"]
         );
@@ -163,7 +179,7 @@ fn golden_job_export_keeps_paragraphs_whole_and_drops_page_noise() {
     let source = notes.source.as_deref().expect("source note");
     assert!(source.contains("paperloom_role: \"source\""));
     assert!(source.contains("translation: \"[[Smith2023Role]]\""));
-    assert!(source.contains("Abstract: The first case of successful"));
+    assert!(source.contains("## Abstract\n\nThe first case of successful"));
     assert!(
         source.contains("www.chemeurj.org"),
         "source note keeps metadata"
@@ -180,7 +196,8 @@ fn include_source_false_omits_source_note_and_its_links() {
     let notes = build_notes(
         &ExportInputs {
             normalized: &normalized,
-            translation_pages: &pages,
+            translation_pages: Some(&pages),
+            tables: &Default::default(),
             full_markdown: None,
             images_dir: None,
             meta: &meta,
@@ -274,7 +291,8 @@ fn images_are_numbered_by_first_appearance_and_shared_by_both_notes() {
     let notes = build_notes(
         &ExportInputs {
             normalized: &normalized,
-            translation_pages: &pages,
+            translation_pages: Some(&pages),
+            tables: &Default::default(),
             full_markdown: Some(full_markdown),
             images_dir: Some(&images),
             meta: &meta,
@@ -357,7 +375,8 @@ fn image_block_uses_primary_asset_over_paddle_sub_crops() {
     let notes = build_notes(
         &ExportInputs {
             normalized: &normalized,
-            translation_pages: &[],
+            translation_pages: Some(&[]),
+            tables: &Default::default(),
             full_markdown: None,
             images_dir: Some(&images),
             meta: &meta,
@@ -408,7 +427,8 @@ fn backslash_math_delimiters_export_as_obsidian_math() {
         let notes = build_notes(
             &ExportInputs {
                 normalized: &normalized,
-                translation_pages: &pages,
+                translation_pages: Some(&pages),
+                tables: &Default::default(),
                 full_markdown,
                 images_dir: None,
                 meta: &meta,
@@ -478,7 +498,8 @@ fn paddle_inline_math_padding_is_trimmed_for_obsidian() {
     let notes = build_notes(
         &ExportInputs {
             normalized: &normalized,
-            translation_pages: &[],
+            translation_pages: Some(&[]),
+            tables: &Default::default(),
             // 原文笔记直接取 OCR 自带的 full.md，同样要收紧。
             full_markdown: Some("Ni/NiO $ _x $@C 原文"),
             images_dir: None,
@@ -501,7 +522,7 @@ fn paddle_inline_math_padding_is_trimmed_for_obsidian() {
     assert!(notes
         .translated
         .contains("It costs $5 and $10, or \\$ 3 \\$; $x$ stays."));
-    assert!(notes.translated.contains("<td>$H_{{2}}$ evolution</td>"));
+    assert!(notes.translated.contains("| $H_{{2}}$ evolution |"));
 }
 
 #[test]
@@ -514,14 +535,27 @@ fn mineru_table_equation_tags_render_as_obsidian_math_without_changing_captions(
     ]}]});
     let meta = self::meta();
     let source = format!("{table}\n\n{caption}");
-    let notes = build_notes(&ExportInputs {
-        normalized:&normalized, translation_pages:&[], full_markdown:Some(&source),
-        images_dir:None, meta:&meta, has_pdf:false, include_source:true, zotero_extras:None,
-    }, names_for(&meta));
+    let notes = build_notes(
+        &ExportInputs {
+            normalized: &normalized,
+            translation_pages: Some(&[]),
+            tables: &Default::default(),
+            full_markdown: Some(&source),
+            images_dir: None,
+            meta: &meta,
+            has_pdf: false,
+            include_source: true,
+            zotero_extras: None,
+        },
+        names_for(&meta),
+    );
     for note in [&notes.translated, notes.source.as_ref().unwrap()] {
-        assert!(note.contains("<td rowspan=\"2\">$CO_{2}$ reduction</td>"));
-        assert!(note.contains("$150.9 \\mu mol \\ g^{-1} \\ h^{-1}$"));
-        assert!(note.contains("<td colspan=\"2\">$H_{2}$</td>"));
+        assert!(
+            note.contains("<td rowspan=\"2\"><math") && note.contains("CO_{2}</annotation>"),
+            "{note}"
+        );
+        assert!(note.contains(r"150.9 \mu mol \ g^{-1} \ h^{-1}</annotation>"));
+        assert!(note.contains("<td colspan=\"2\"><math") && note.contains("H_{2}</annotation>"));
         assert!(note.contains(caption));
     }
 }
@@ -610,9 +644,12 @@ fn golden_source(document_id: Option<&str>, pdf: Option<PathBuf>) -> ExportSourc
         job,
         normalized: load_json(&golden_root().join("ocr/normalized/document.v1.json")),
         translation_pages: golden_translation_pages(),
+        tables: Default::default(),
         full_markdown: Some("# Source\n\nOriginal body.\n".to_string()),
         images_dir: None,
         pdf,
+        original_pdf: None,
+        related: vec![],
         meta,
         zotero_extras: super::ZoteroExtrasState::NotLinked,
     }
@@ -828,7 +865,7 @@ fn zotero_ref(citation_key: &str) -> crate::db::external_refs::ExternalRefRecord
 
 #[test]
 fn zotero_metadata_overrides_bibliography_and_adds_links() {
-    let meta = meta().with_zotero(&zotero_ref(""));
+    let meta = meta().with_zotero(&zotero_ref(""), "");
     assert_eq!(meta.title, "Constructing redox-active sites");
     assert_eq!(meta.year, Some(2026));
     assert_eq!(meta.note_name(), "Chai2026Constructing");
@@ -837,7 +874,8 @@ fn zotero_metadata_overrides_bibliography_and_adds_links() {
     let exported = build_notes(
         &ExportInputs {
             normalized: &normalized,
-            translation_pages: &pages,
+            translation_pages: Some(&pages),
+            tables: &Default::default(),
             full_markdown: None,
             images_dir: None,
             meta: &meta,
@@ -857,17 +895,18 @@ fn zotero_metadata_overrides_bibliography_and_adds_links() {
         assert!(!note.contains("citekey:"));
     }
 
-    let with_key = self::meta().with_zotero(&zotero_ref("chai2026constructing"));
+    let with_key = self::meta().with_zotero(&zotero_ref("chai2026constructing"), "");
     assert_eq!(with_key.note_name(), "chai2026constructing");
 }
 
 #[test]
 fn zotero_annotations_go_to_the_end_of_the_translated_note_only() {
     use crate::services::integrations::zotero::{ZoteroAnnotation, ZoteroExtras};
-    let meta = meta().with_zotero(&zotero_ref(""));
+    let meta = meta().with_zotero(&zotero_ref(""), "");
     let pages = golden_translation_pages();
     let normalized = load_json(&golden_root().join("ocr/normalized/document.v1.json"));
     let extras = ZoteroExtras {
+        pdfs: vec![],
         annotations: vec![ZoteroAnnotation {
             key: "ANNOT001".into(),
             kind: "highlight".into(),
@@ -880,7 +919,8 @@ fn zotero_annotations_go_to_the_end_of_the_translated_note_only() {
     let exported = build_notes(
         &ExportInputs {
             normalized: &normalized,
-            translation_pages: &pages,
+            translation_pages: Some(&pages),
+            tables: &Default::default(),
             full_markdown: None,
             images_dir: None,
             meta: &meta,
@@ -976,4 +1016,30 @@ fn collection_subfolder_is_sanitized() {
     );
     assert_eq!(super::folder_with_collection("", "A: B/..//C?"), "A B/C");
     assert_eq!(super::folder_with_collection("Lit", ""), "Lit");
+}
+
+#[test]
+fn deselecting_source_preserves_its_images_and_removes_its_managed_link() {
+    let dest = vault("keep-side-images");
+    let mut source = golden_source(Some("doc-assets"), None);
+    std::fs::create_dir_all(dest.0.join("input")).unwrap();
+    std::fs::write(dest.0.join("input/old.png"), b"figure").unwrap();
+    source.images_dir = Some(dest.0.join("input"));
+    source.full_markdown = Some("![Original](images/old.png)".into());
+    let export =
+        |include| write_to_vault(&source, &dest.0, "notes", include, ConflictPolicy::Ask).unwrap();
+    let first = export(true);
+    let side = dest.0.join(first.source_note_path.unwrap());
+    let body = read(&side);
+    let rel = body
+        .split("![Original](")
+        .nth(1)
+        .unwrap()
+        .split(')')
+        .next()
+        .unwrap();
+    export(false);
+    assert_eq!(read(&side), body);
+    assert!(side.parent().unwrap().join(rel).is_file());
+    assert!(!read(&dest.0.join(first.note_path)).contains("\nsource_note:"));
 }

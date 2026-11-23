@@ -98,7 +98,7 @@ Mở bảng Markdown khi cần sao chép hoặc tìm kiếm nội dung trong lú
 
 Ghi chú xuất ra có tiêu đề, tác giả, năm, DOI, tạp chí, liên kết Zotero và liên kết đến tài liệu cùng tác vụ trong PaperLoom. Ghi chú bản gốc và bản dịch liên kết với nhau; PDF đã dịch và hình ảnh được lưu trong thư mục tài nguyên đi kèm.
 
-Bảng phức tạp giữ dạng HTML và các ô gộp. Plugin tùy chọn HTML Table Math 0.1.2 có thể kết xuất công thức trong bảng. Highlight, chú thích và ghi chú con sẵn có trong Zotero cũng được xuất theo, kèm số trang và liên kết định vị chú thích trong Zotero.
+Bảng thông thường dùng công thức Markdown, còn ô gộp có thể hiển thị MathML trực tiếp. Nhấp vào số trích dẫn để đến mục tương ứng trong danh mục tài liệu tham khảo. Highlight, chú thích và ghi chú con sẵn có trong Zotero cũng được xuất theo, kèm số trang và liên kết định vị chú thích trong Zotero.
 
 <details>
 <summary>Xem frontmatter, nội dung, bảng và chú thích Zotero trong Obsidian</summary>
@@ -188,7 +188,7 @@ Chọn các bài trong thư viện, nhấn Lưu sang Obsidian rồi chọn vault
 
 Khi xuất lại, PaperLoom cập nhật các khối nội dung do ứng dụng quản lý và giữ phần bạn viết bên ngoài các khối đó. Chọn đổi tên hoặc bỏ qua nếu muốn giữ tệp hiện có.
 
-**Plugin tùy chọn cho công thức trong bảng: HTML Table Math 0.1.2**. Tìm `html-table-math` trong Community plugins của Obsidian, cài đặt rồi bật plugin. PaperLoom không đóng gói hoặc tự cài plugin. Văn bản thông thường và việc xuất ghi chú không yêu cầu plugin này.
+Các bản xuất mới dùng công thức Markdown hoặc MathML. Plugin HTML Table Math vẫn hữu ích cho công thức nằm giữa các dấu đô la trong ô HTML của ghi chú cũ.
 
 ## Câu hỏi thường gặp
 

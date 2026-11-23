@@ -18,6 +18,45 @@ mod batch_downloads;
 mod zotero_writeback_batch;
 
 #[tokio::test]
+async fn agent_markdown_uses_export_formatting_and_preserves_raw_reader_content() {
+    let state = setup("agent-markdown", false);
+    let job = state.config.output_root.join(JOB_ID);
+    let raw = "## 1.2 Samples\n\nEnergy E.\n\n![Chart](images/page-1/chart a.png)\n";
+    fs::write(job.join("md/full.md"), raw).unwrap();
+    let normalized = serde_json::json!({"pages": [{"blocks": [{
+        "content": {"kind": "text", "text": "Energy E."},
+        "segments": [{"type": "text", "text": "Energy "}, {"type": "inline_formula", "text": "E"}]
+    }]}]});
+    fs::write(job.join("ocr/normalized/document.v1.json"), normalized.to_string()).unwrap();
+    let app = build_app(state);
+    for query in ["", "?obsidian=true"] {
+        let response = app.clone().oneshot(Request::builder()
+            .uri(format!("/api/v1/jobs/{JOB_ID}/reader/markdown{query}"))
+            .header("X-API-Key", "test-key").body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let payload = super::jobs_common::read_json(response).await;
+        let data = &payload["data"];
+        let md = data["content"].as_str().unwrap();
+        if query.is_empty() {
+            assert_eq!(md, raw);
+        } else {
+            assert!(md.starts_with("---\n") && md.contains("paperloom_role: source"));
+            assert!(md.contains("### 1.2 Samples\n\nEnergy $E$."));
+            let absolute = data["content_with_absolute_image_urls"].as_str().unwrap();
+            assert!(absolute.contains("Energy $E$.") && absolute.contains("/ocr/images/page-1/chart%20a.png"));
+            assert!(data["markdown_url"].as_str().unwrap().ends_with(query));
+        }
+    }
+    fs::remove_file(job.join("md/full.md")).unwrap();
+    let response = app.oneshot(Request::builder()
+        .uri(format!("/api/v1/jobs/{JOB_ID}/reader/markdown?obsidian=true"))
+        .header("X-API-Key", "test-key").body(Body::empty()).unwrap()).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload = super::jobs_common::read_json(response).await;
+    assert!(payload["data"]["content"].as_str().unwrap().contains("Energy $E$."));
+}
+
+#[tokio::test]
 async fn markdown_export_recovery_keeps_source_markdown_and_images() {
     let state = setup("markdown-recovery-images", true);
     let original = state.db.get_job(JOB_ID).unwrap();
@@ -26,7 +65,8 @@ async fn markdown_export_recovery_keeps_source_markdown_and_images() {
     recovery.request_payload.source.artifact_job_id = JOB_ID.into();
     recovery.artifacts.as_mut().unwrap().job_root = Some("jobs/markdown-recovery-job".into());
     state.db.save_job(&recovery).unwrap();
-    let response = build_app(state).oneshot(Request::builder()
+    let app = build_app(state);
+    let response = app.clone().oneshot(Request::builder()
         .uri("/api/v1/jobs/markdown-recovery-job/markdown/export?include_source=true")
         .header("X-API-Key", "test-key").body(Body::empty()).unwrap()).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
@@ -34,6 +74,13 @@ async fn markdown_export_recovery_keeps_source_markdown_and_images() {
     let entries = zip_entries(bytes);
     assert!(entries.iter().any(|(name, bytes)| name.contains(".assets/") && bytes == b"png"), "recovery export must retain OCR images");
     assert!(entries.iter().any(|(name, bytes)| name.ends_with(".en.md") && String::from_utf8_lossy(bytes).contains("# Source title")), "source note must retain the provider Markdown");
+    let response = app.oneshot(Request::builder()
+        .uri("/api/v1/jobs/markdown-recovery-job/reader/markdown?obsidian=true")
+        .header("X-API-Key", "test-key").body(Body::empty()).unwrap()).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload = super::jobs_common::read_json(response).await;
+    let md = payload["data"]["content_with_absolute_image_urls"].as_str().unwrap();
+    assert!(md.contains("# Source title") && md.contains("/ocr/images/page-1/chart%20a.png"));
 }
 
 const JOB_ID: &str = "markdown-export-job";
@@ -195,6 +242,23 @@ async fn markdown_export_requires_translation() {
     let state = setup("markdown-export-untranslated", false);
     let (status, _, _) = export(state, "").await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn ocr_only_exports_one_original_note() {
+    let state = setup("obsidian-ocr-only", false);
+    let mut job = state.db.get_job(JOB_ID).unwrap();
+    job.workflow = crate::models::domain::WorkflowKind::Ocr;
+    job.request_payload.workflow = crate::models::domain::WorkflowKind::Ocr;
+    state.db.save_job(&job).unwrap();
+    let (status, _, body) = export(state, "?include_source=false").await;
+    assert_eq!(status, StatusCode::OK);
+    let files = zip_entries(body);
+    let notes: Vec<_> = files.iter().filter(|(n, _)| n.ends_with(".md")).collect();
+    assert_eq!(notes.len(), 1);
+    let note = String::from_utf8_lossy(&notes[0].1);
+    assert!(note.contains("paperloom_role: \"source\"") && note.contains("# Source title"));
+    assert!(!note.contains("译文：") && !note.contains("translated_pdf:"));
 }
 
 fn link_export_job_to_document(state: &crate::AppState) -> String {

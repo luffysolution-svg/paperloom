@@ -10,8 +10,8 @@ pub(crate) use obsidian::{OBSIDIAN_CONFIG_ENV, OBSIDIAN_VAULTS_DIR_ENV};
 pub(crate) use zotero::ZOTERO_API_ENV;
 
 pub(crate) use api::{
-    export_documents_to_obsidian_view, export_job_to_obsidian_view,
-    import_zotero_attachments_view, obsidian_integration_view, save_obsidian_settings_view,
+    export_documents_to_obsidian_view, export_job_to_obsidian_view, import_zotero_attachments_view,
+    obsidian_integration_view, save_obsidian_settings_view, sync_obsidian_reading,
     write_documents_to_zotero_view, write_translated_pdf_to_zotero_view, zotero_collections_view,
     zotero_items_view, zotero_status_view, IntegrationApiDeps, ItemsQuery, LibraryQuery,
     ObsidianBatchExportRequest, ObsidianBatchExportView, ObsidianExportRequest, ObsidianExportView,
@@ -19,9 +19,8 @@ pub(crate) use api::{
     ZoteroBatchWritebackView, ZoteroCollection, ZoteroImportRequest, ZoteroImportResult,
     ZoteroItemPage, ZoteroStatus, ZoteroWritebackResult,
 };
-pub(crate) use batch::{
-    batch_export_download, export_batch, BatchExportInput, BatchExportView,
-};
+pub(crate) use batch::{batch_export_download, export_batch, BatchExportInput, BatchExportView};
 pub(crate) use markdown_export::{
-    markdown_export_download_async, MarkdownExportQuery,
+    markdown_export_download_async, reader_export_frontmatter, source_markdown_note, MarkdownExportQuery,
 };
+pub(crate) use zotero::writeback::reading::SyncResult;

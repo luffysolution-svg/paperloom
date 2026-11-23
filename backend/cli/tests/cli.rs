@@ -195,6 +195,27 @@ fn a_backend_that_is_recorded_but_unreachable_blocks_changes() {
 }
 
 #[test]
+fn obsidian_agent_accepts_job_or_batch_and_requires_confirmation_for_writes() {
+    let sb = Sandbox::new();
+    for selector in ["--job-id", "--document-ids"] {
+        let out = sb.run(&["agent", "obsidian", "export", selector, "id", "--vault-id", "vault", "--include-source", "false"]);
+        assert_eq!(out.status.code(), Some(1));
+        assert!(String::from_utf8_lossy(&out.stderr).contains("--confirm"));
+    }
+    let invalid = sb.run(&["agent", "obsidian", "export", "--vault-id", "v", "--job-id", "j", "--document-ids", "d"]);
+    assert_eq!(invalid.status.code(), Some(2));
+    let sync = sb.run(&["agent", "obsidian", "sync-zotero", "j", "--vault-id", "v", "--folder-by-collection"]);
+    assert_eq!(sync.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&sync.stderr).contains("--confirm"));
+    for role in ["P:S", "P:M:main,P:S:si"] {
+        let args = ["agent", "zotero", "import", "users/0", "--attachments", role];
+        assert!(String::from_utf8_lossy(&sb.run(&args).stderr).contains("--confirm"));
+    }
+    let unknown = sb.run(&["agent", "zotero", "import", "users/0", "--attachments", "P:S:unknown"]);
+    assert_eq!(unknown.status.code(), Some(2));
+}
+
+#[test]
 fn compact_backs_up_first_drops_one_jobs_events_and_needs_yes_in_scripts() {
     // 2026-11-20 数据库瘦身：后端没开时整理库；脚本里不加 --yes 拒绝；先备份
     let sb = Sandbox::new();

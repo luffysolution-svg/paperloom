@@ -121,5 +121,9 @@ export function readerMdBlockMarkdown(block: ReaderMdBlock, language: ReaderMdLa
     const level = Math.min(Math.max(block.level, 1), 6);
     return `${"#".repeat(level)} ${text.replace(/\s*\n\s*/g, " ")}`;
   }
+  if (block.kind === "formula" && text && !text.startsWith("$$")) {
+    const formula = text.replace(/^\\\[([\s\S]*)\\\]$/, "$1").replace(/^\$([^$]+)\$$/, "$1").trim();
+    return "$$\n" + formula + "\n$$";
+  }
   return text;
 }

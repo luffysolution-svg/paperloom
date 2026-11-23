@@ -236,5 +236,32 @@ fn deserialize_request_spec_column(
 }
 
 fn deserialize_request_spec(raw: &str) -> Result<ResolvedJobSpec> {
-    serde_json::from_str::<ResolvedJobSpec>(raw).context("failed to deserialize job request/spec")
+    serde_json::from_str::<ResolvedJobSpec>(raw)
+        .or_else(|err| {
+            // Older persisted jobs carried the connection selector after resolution.
+            let mut saved: serde_json::Value = serde_json::from_str(raw)?;
+            if saved
+                .get_mut("translation")
+                .and_then(|v| v.as_object_mut())
+                .and_then(|t| t.remove("connection_id"))
+                .is_none()
+            {
+                return Err(err);
+            }
+            serde_json::from_value(saved)
+        })
+        .context("failed to deserialize job request/spec")
+}
+
+#[cfg(test)]
+mod legacy_request_tests {
+    use super::*;
+    #[test]
+    fn legacy_translation_connection_selector_is_read_only_compatibility() {
+        let mut json = serde_json::to_value(ResolvedJobSpec::default()).unwrap();
+        json["translation"]["connection_id"] = "retired".into();
+        assert!(deserialize_request_spec(&json.to_string()).is_ok());
+        json["translation"]["unrecognized_option"] = true.into();
+        assert!(deserialize_request_spec(&json.to_string()).is_err());
+    }
 }

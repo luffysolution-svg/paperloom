@@ -52,6 +52,9 @@ pub struct ReaderRegionItemView {
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
 pub struct ReaderRegionsView {
+    pub source_language: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub export_frontmatter: Option<String>,
     pub items: Vec<ReaderRegionItemView>,
 }
 

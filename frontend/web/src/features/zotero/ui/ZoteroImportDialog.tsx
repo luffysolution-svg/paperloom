@@ -1,5 +1,5 @@
 // 从 Zotero 选择文献导入书库（桌面端读本地 API，Docker 读挂载的数据目录）。
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BookOpen, LoaderCircle, Search } from "lucide-react";
 
 import {
@@ -257,8 +257,8 @@ export function ZoteroImportDialog({
                           <div className="home-zotero-item-meta">没有 PDF 附件</div>
                         ) : (
                           item.attachments.map((attachment) => (
+                            <Fragment key={attachment.key}>
                             <label
-                              key={attachment.key}
                               className={`home-zotero-attachment${attachment.available ? "" : " is-unavailable"}`}
                             >
                               <Checkbox
@@ -270,6 +270,25 @@ export function ZoteroImportDialog({
                               {attachment.document_id ? <em>已在书库</em> : null}
                               {attachment.available ? null : <em>未下载到本机</em>}
                             </label>
+                            {selected.has(selectionKey(item.key, attachment.key)) ? (
+                              <Select
+                                aria-label={"附件用途 · " + attachment.title}
+                                value={String(selected.get(selectionKey(item.key, attachment.key))?.supplement ?? "auto")}
+                                onChange={(event) => {
+                                  const key = selectionKey(item.key, attachment.key);
+                                  const role = event.target.value;
+                                  setSelected((previous) => {
+                                    const selection = previous.get(key);
+                                    return selection ? new Map(previous).set(key, { ...selection, supplement: role === "auto" ? undefined : role === "true" }) : previous;
+                                  });
+                                }}
+                              >
+                                <option value="auto">自动识别附件用途</option>
+                                <option value="false">主文 PDF</option>
+                                <option value="true">补充材料 PDF</option>
+                              </Select>
+                            ) : null}
+                            </Fragment>
                           ))
                         )}
                       </li>

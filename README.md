@@ -97,9 +97,9 @@ PaperLoom 是目前唯一面向图片型 / 扫描版 PDF、支持保留排版翻
 
 ### Obsidian：文献信息与正文
 
-导出笔记带有标题、作者、年份、DOI、期刊、Zotero 链接，以及 PaperLoom 文档和任务链接。原文笔记与译文笔记互链，译文 PDF 和图片放在配套资源目录里。
+导出笔记带有标题、作者、年份、DOI、期刊、Zotero 链接，以及 PaperLoom 文档和任务链接。完成 OCR 后即可导出原文笔记。已有译文时，原文和译文笔记互链。原 PDF、可用的补充材料、译文 PDF 和配图放在该文献的资源目录里。Zotero 关联文献还支持从同一对话框回写书目属性和阅读笔记。
 
-复杂表格保留 HTML 和合并单元格，表格公式可使用可选的 HTML Table Math 0.1.2 渲染。文献已有的 Zotero 高亮、批注和子笔记也会随导出带入，批注保留页码和“在 Zotero 中定位”链接。
+普通表格使用 Markdown 数学公式，含合并单元格的表格可直接显示原生 MathML。正文中的数字引文可点击跳转到文末条目。文献已有的 Zotero 高亮、批注和子笔记也会随导出带入，批注保留页码和“在 Zotero 中定位”链接。
 
 <details>
 <summary>展开 Obsidian 的 frontmatter、正文、表格与 Zotero 批注</summary>
@@ -191,7 +191,7 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 
 再次导出时，PaperLoom 更新自己管理的内容区块，保留你写在区块外的笔记。需要保留旧文件时，可以选择重命名或跳过。
 
-**表格公式可选插件：HTML Table Math 0.1.2**。在 Obsidian 社区插件中搜索 `html-table-math`，安装并启用即可。PaperLoom 不捆绑或自动安装这个插件；普通正文和笔记导出不需要安装它。
+当前导出的表格使用 Obsidian 原生数学或 MathML。旧笔记中 HTML 单元格里的美元符号公式仍可通过社区插件 HTML Table Math 显示。
 
 ## 常见问题
 

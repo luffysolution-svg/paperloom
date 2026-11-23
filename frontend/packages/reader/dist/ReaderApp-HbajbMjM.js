@@ -8141,7 +8141,7 @@ function vf({ edit: e }) {
     ) : null
   ] });
 }
-const wf = ha(() => import("./ReaderMarkdownPanel-BeOAn05I.js").then((e) => ({ default: e.ReaderMarkdownPanel })));
+const wf = ha(() => import("./ReaderMarkdownPanel-D3QrFCl1.js").then((e) => ({ default: e.ReaderMarkdownPanel })));
 function Sf(e) {
   const t = e.sourceOnly || !e.translatedUrl, n = !!(e.overlayContentAvailable && e.liveTranslationVisible && !e.assistantOpen), o = e.assistantOpen && e.mode === "compare" ? "source" : e.mode, a = !t && (o === "translated" || o === "compare");
   return {
@@ -8417,4 +8417,4 @@ export {
   ms as r,
   je as u
 };
-//# sourceMappingURL=ReaderApp-DsSATMmR.js.map
+//# sourceMappingURL=ReaderApp-HbajbMjM.js.map

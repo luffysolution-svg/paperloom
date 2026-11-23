@@ -129,9 +129,48 @@ class McpProtocolTests(unittest.TestCase):
     def test_markdown_export_writes_the_document_text(self):
         with tempfile.TemporaryDirectory() as root:
             path = pathlib.Path(root) / "reader.md"
-            result = mcp._call_tool("export_markdown", {"job_id": "job-1", "output": str(path)}, ReaderApi())
+            api = ReaderApi()
+            args = {"job_id": "job-1", "output": str(path)}
+            result = mcp._call_tool("export_markdown", args, api)
             self.assertEqual(path.read_text(encoding="utf-8"), result["data"]["content"])
             self.assertTrue(result["data"]["content"].startswith("# Title\n"))
+            self.assertEqual(api.calls[-1][3], {"obsidian": "true"})
+            mcp._call_tool("export_markdown", {**args, "format": "raw"}, api)
+            self.assertEqual(path.read_text(encoding="utf-8"), "# Title")
+            self.assertIsNone(api.calls[-1][3])
+
+    def test_vault_exports_and_zotero_note_sync_keep_their_targets(self):
+        api = FakeApi()
+        folder = {"vault_id": "vault", "folder": "Papers", "folder_by_collection": True}
+        args = {"job_id": "a/b", **folder}
+        mcp._call_tool("sync_obsidian_to_zotero", args, api)
+        self.assertEqual(api.calls, [])
+        mcp._call_tool("sync_obsidian_to_zotero", {**args, "confirmed": True}, api)
+        self.assertEqual(api.calls.pop(), ("POST", "/api/v1/jobs/a%2Fb/obsidian/zotero-sync", folder, None))
+        mcp._call_tool("export_obsidian", {**args, "include_source": False, "confirmed": True}, api)
+        self.assertEqual(api.calls.pop(), ("POST", "/api/v1/jobs/a%2Fb/obsidian/export", {**folder, "include_source": False}, None))
+        batch = {**folder, "document_ids": ["doc-1", "doc-2"]}
+        mcp._call_tool("export_obsidian", {**batch, "confirmed": True}, api)
+        self.assertEqual(api.calls.pop(), ("POST", "/api/v1/integrations/obsidian/export-batch", batch, None))
+        with self.assertRaisesRegex(ValueError, "document_ids"):
+            mcp._call_tool("export_obsidian", {**batch, "job_id": "job-1", "confirmed": True}, api)
+        self.assertEqual(api.calls, [])
+        attachments = [{"item_key": "A", "attachment_key": "P", "supplement": False},
+                       {"item_key": "A", "attachment_key": "S", "supplement": True}]
+        mcp._call_tool("import_zotero_attachments", {"library_id": "users/0", "attachments": attachments, "confirmed": True}, api)
+        self.assertEqual(api.calls.pop()[2]["attachments"], attachments)
+
+    def test_portable_export_requires_a_destination_and_uses_the_zip_endpoint(self):
+        api = mock.Mock()
+        args = {"job_id": "job-1", "format": "obsidian_zip", "include_source": False}
+        with self.assertRaisesRegex(ValueError, "output"):
+            mcp._call_tool("export_markdown", args, api)
+        api.request.assert_not_called()
+        api.request.return_value = {"output": "paper.zip", "bytes": 42}
+        data = mcp._call_tool("export_markdown", {**args, "output": "paper.zip"}, api)
+        api.request.assert_called_once_with("GET", "/api/v1/jobs/job-1/markdown/export",
+                                            query={"include_source": "false"}, output=pathlib.Path("paper.zip"))
+        self.assertEqual(data["data"], api.request.return_value)
 
     def test_run_resources_include_manifest_and_evidence(self):
         resources = mcp.handle({"jsonrpc": "2.0", "id": 11, "method": "resources/list", "params": {}}, FakeApi())

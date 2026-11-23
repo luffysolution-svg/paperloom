@@ -197,6 +197,8 @@ pub(super) fn write_to_vault(
         let mut files_written = 0;
         std::fs::create_dir_all(&dir)?;
         let main_text = merged(&main, &bundle.translated, overwrite, keep);
+        let assets_dir = dir.join(&bundle.names.assets_dir);
+        files_written += copy_assets(&assets_dir, &bundle)?;
         write_atomically(&note_path, main_text.as_bytes())?;
         files_written += 1;
         let source_note_path = match &bundle.source {
@@ -210,8 +212,14 @@ pub(super) fn write_to_vault(
             }
             None => None,
         };
-        let (written, assets_removed) = sync_assets(&dir.join(&bundle.names.assets_dir), &bundle)?;
-        files_written += written;
+        // A deselected companion note stays in the vault, including its annotations.
+        // Clean only files which neither surviving note links to.
+        let side_text = if source_path.is_file() {
+            std::fs::read_to_string(&source_path)?
+        } else {
+            String::new()
+        };
+        let assets_removed = prune_assets(&assets_dir, &bundle, [&main_text, &side_text])?;
         return Ok(VaultWriteOutcome {
             status: if updated {
                 VaultWriteStatus::Updated
@@ -239,9 +247,9 @@ fn merged(existing: &Existing, new_text: &str, overwrite: bool, keep: &[&str]) -
 }
 
 /// 复制资源；删除资源目录里由导出生成、但本次不再引用的文件（只认我们的命名模式）。
-fn sync_assets(assets_dir: &Path, bundle: &NoteBundle) -> Result<(usize, usize), AppError> {
+fn copy_assets(assets_dir: &Path, bundle: &NoteBundle) -> Result<usize, AppError> {
     if bundle.assets.is_empty() && !assets_dir.exists() {
-        return Ok((0, 0));
+        return Ok(0);
     }
     std::fs::create_dir_all(assets_dir)?;
     let mut written = 0;
@@ -254,18 +262,33 @@ fn sync_assets(assets_dir: &Path, bundle: &NoteBundle) -> Result<(usize, usize),
             written += 1;
         }
     }
+    Ok(written)
+}
+
+fn prune_assets(
+    assets_dir: &Path,
+    bundle: &NoteBundle,
+    retained: [&str; 2],
+) -> Result<usize, AppError> {
+    if !assets_dir.is_dir() {
+        return Ok(0);
+    }
     let mut removed = 0;
     for entry in std::fs::read_dir(assets_dir)?.filter_map(Result::ok) {
         let name = entry.file_name().to_string_lossy().to_string();
         // 本次没有译文 PDF 时，上次导出的那份也算过期产物。
         let ours = is_generated_asset(&name) || name == bundle.names.translated_pdf;
         let keep = bundle.assets.iter().any(|(asset, _)| *asset == name);
-        if ours && !keep && entry.path().is_file() {
+        if ours
+            && !keep
+            && !retained.iter().any(|text| text.contains(&name))
+            && entry.path().is_file()
+        {
             std::fs::remove_file(entry.path())?;
             removed += 1;
         }
     }
-    Ok((written, removed))
+    Ok(removed)
 }
 
 /// fig-001-p03.png / tab-002.jpg / eq-010-p12.webp
@@ -384,6 +407,27 @@ pub(super) fn merge_note(old: &str, new: &str, keep: &[&str]) -> Option<String> 
         .iter()
         .filter_map(|entry| entry.key.as_deref())
         .collect();
+    let mut edited = std::collections::HashSet::new();
+    let mut baseline_marker = None;
+    use crate::services::integrations::zotero::writeback::reading;
+    if let (Some(old_base), Some(mut next)) =
+        (reading::saved_fields(&old), reading::saved_fields(new))
+    {
+        if let Ok((yaml, _)) = reading::read_note(&old) {
+            if let Ok(local) = reading::note_fields(&yaml) {
+                let generated = reading::marker(&next);
+                for (key, value) in local {
+                    if old_base.get(&key).is_some_and(|v| v != &value)
+                        && next.get(&key) != Some(&value)
+                    {
+                        edited.insert(key.clone());
+                        next.insert(key.clone(), old_base[&key].clone());
+                    }
+                }
+                baseline_marker = Some((generated, reading::marker(&next)));
+            }
+        }
+    }
     let user_tags = old_fm
         .iter()
         .find(|entry| entry.key.as_deref() == Some("tags"));
@@ -391,15 +435,27 @@ pub(super) fn merge_note(old: &str, new: &str, keep: &[&str]) -> Option<String> 
     for entry in &new_fm {
         match (entry.key.as_deref(), user_tags) {
             (Some("tags"), Some(tags)) => fm.extend(tags.lines.iter().cloned()),
+            (Some(key), _) if edited.contains(key) => {
+                if let Some(previous) = old_fm.iter().find(|e| e.key.as_deref() == Some(key)) {
+                    fm.extend(previous.lines.iter().cloned());
+                }
+            }
             _ => fm.extend(entry.lines.iter().cloned()),
         }
     }
     for entry in &old_fm {
-        if entry
-            .key
-            .as_deref()
-            .is_none_or(|key| !new_keys.contains(&key))
-        {
+        if entry.key.as_deref().is_none_or(|key| {
+            !new_keys.contains(&key)
+                && !matches!(
+                    key,
+                    "source_note"
+                        | "translation"
+                        | "translated_pdf"
+                        | "original_pdf"
+                        | "has_supplement"
+                        | "supplement_to"
+                )
+        }) {
             fm.extend(entry.lines.iter().cloned());
         }
     }
@@ -427,6 +483,9 @@ pub(super) fn merge_note(old: &str, new: &str, keep: &[&str]) -> Option<String> 
             }
             (None, None) => {}
         }
+    }
+    if let Some((new_marker, merged_marker)) = baseline_marker {
+        body = body.replacen(&new_marker, &merged_marker, 1);
     }
     Some(format!("---\n{}\n---\n{body}", fm.join("\n")))
 }

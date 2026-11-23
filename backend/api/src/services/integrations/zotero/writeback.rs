@@ -1,3 +1,5 @@
+pub(crate) mod reading;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;

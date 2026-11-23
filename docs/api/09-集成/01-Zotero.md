@@ -44,3 +44,18 @@ POST /api/v1/integrations/zotero/import
 本地 API 读 `items/<附件>/children` 中的 annotation 与 `items/<条目>/children` 中的 note；数据目录读 `itemAnnotations` / `itemNotes`。
 
 翻译不在导入接口里提交：前端拿到 `document_id` 后沿用书库的「翻译此文档」流程，带上当前的翻译设置。
+
+## Obsidian 笔记与 Zotero 回写
+
+书籍详情的「保存到 Obsidian」支持仅完成 OCR 的文献。此时主笔记是原文。翻译任务可以同时导出译文主笔记和原文副笔记。原 PDF、插图和译文 PDF 使用同一篇笔记的资源目录。导入时可将选中的附件标为主文或补充材料。同一 Zotero 条目下的补充材料 PDF 会写入该目录，主文通过 `has_supplement` 链接 SI，SI 通过 `supplement_to` 链接主文。已解析的 SI 支持由图表编号定位 PDF 页。
+
+要回写，在主笔记属性里编辑 `publication_title`、`date`、`volume`、`issue`、`pages`、`doi`、`url`、`abstract`、`keywords`、`source_language` 或 `title`，并在「阅读笔记」标题下写下读后记录。在同一导出对话框选好 Vault 和目录，点击「将已有笔记回写 Zotero」。PaperLoom 使用 Zotero 10 本地写入授权，按条目版本提交修改并回读。双方对同一字段或同一条阅读笔记作了不同修改时，界面会提示核对。重复操作会更新同一条子笔记，内含返回 Obsidian 的链接。
+
+```http
+POST /api/v1/jobs/:job_id/obsidian/zotero-sync
+Content-Type: application/json
+
+{"vault_id":"mounted:Research","folder":"Papers","folder_by_collection":false}
+```
+
+成功结果的 `fields_written` 列出写回的属性，`note_status` 为 `created`、`updated` 或 `unchanged`。个人库和群组库使用相同入口。数据目录模式支持导入和导出，笔记回写需要连接 Zotero 本地 API。

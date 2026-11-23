@@ -19,7 +19,7 @@ pub(super) fn bbox_from_value(value: Option<&Value>) -> Option<Vec<f64>> {
     Some(bbox)
 }
 
-pub(super) fn canonical_item_id(value: &str) -> String {
+pub(crate) fn canonical_item_id(value: &str) -> String {
     let Some((page, block)) = value.split_once("-b") else {
         return value.to_string();
     };
@@ -143,19 +143,6 @@ pub(super) fn reading_order_from_item(item: &Value, item_id: &str) -> Option<i64
 
 pub(super) fn sub_type_from_item(item: &Value) -> Option<String> {
     value_string_first(item, &["sub_type", "normalized_sub_type"])
-}
-
-pub(super) fn heading_level_from_block(block: &Value, sub_type: Option<&str>) -> Option<i64> {
-    let provider_level = block
-        .get("metadata")
-        .and_then(|metadata| metadata.get("raw_title_level"))
-        .and_then(Value::as_i64)
-        .filter(|level| (1..=6).contains(level));
-    match sub_type? {
-        "title" => Some(provider_level.unwrap_or(1)),
-        "heading" => Some(provider_level.unwrap_or(2)),
-        _ => None,
-    }
 }
 
 /// Only translation units that actually joined several blocks carry a group id;

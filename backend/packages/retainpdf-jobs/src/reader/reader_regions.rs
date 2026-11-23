@@ -12,17 +12,18 @@ mod cache;
 mod metadata;
 mod value_extract;
 
-use artifacts::{
-    has_translation_manifest, load_source_region_map, load_table_translations, SourceRegion,
+use artifacts::{has_translation_manifest, load_source_region_map, SourceRegion};
+pub use artifacts::{
+    load_table_translations, load_translation_manifest_pages as load_translation_pages,
 };
-pub use artifacts::load_translation_manifest_pages as load_translation_pages;
 pub(crate) use metadata::load_reader_metadata_view;
 use value_extract::{
-    bbox_from_value, block_translated_text_from_item, canonical_item_id,
+    bbox_from_value, block_translated_text_from_item,
     continuation_group_from_item, markdown_from_item, reading_order_from_item,
     region_type_from_item, source_text_from_item, sub_type_from_item, translated_text_from_item,
     translation_status_from_item, value_string,
 };
+pub(crate) use value_extract::canonical_item_id;
 
 /// 区块数据的指纹（当 ETag 用）：输入文件没变就不变，见 `cache.rs`。
 pub(crate) fn reader_regions_fingerprint(data_root: &Path, job: &JobSnapshot) -> String {
@@ -60,7 +61,11 @@ fn build_reader_regions_view(
     if !has_translation_manifest(data_root, job) {
         let mut items = source_only_items(source_regions, &HashSet::new());
         sort_in_reading_order(&mut items);
-        return Ok(ReaderRegionsView { items });
+        return Ok(ReaderRegionsView {
+            items,
+            source_language: job.ocr_language().to_string(),
+            export_frontmatter: None,
+        });
     }
     let table_translations = load_table_translations(data_root, job);
     let mut items = Vec::new();
@@ -166,7 +171,11 @@ fn build_reader_regions_view(
     ));
     apply_table_translations(&mut items, &table_translations);
     sort_in_reading_order(&mut items);
-    Ok(ReaderRegionsView { items })
+    Ok(ReaderRegionsView {
+        items,
+        source_language: job.ocr_language().to_string(),
+        export_frontmatter: None,
+    })
 }
 
 /// 表格翻译（`translation.tables = translate`）整表翻了的表：译文框里放整表译文 HTML，状态记成已翻译。
@@ -179,8 +188,9 @@ fn apply_table_translations(items: &mut [ReaderRegionItemView], tables: &HashMap
         let Some(html) = tables.get(&canonical_item_id(&item.item_id)) else {
             continue;
         };
-        item.translated.text = Some(html.clone());
-        item.markdown = Some(html.clone());
+        let markdown = crate::paper_markdown::normalize_table_math(html);
+        item.translated.text = Some(markdown.clone());
+        item.markdown = Some(markdown);
         item.status = "translated".to_string();
     }
 }

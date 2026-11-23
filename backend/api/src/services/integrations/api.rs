@@ -35,7 +35,9 @@ use crate::services::jobs::{stored_path, StoredFile};
 const MAX_IMPORT_ATTACHMENTS: usize = 200;
 const MAX_OBSIDIAN_BATCH_DOCUMENTS: usize = 200;
 
+mod reading_sync;
 mod zotero_batch;
+pub(crate) use reading_sync::sync_obsidian_reading;
 pub(crate) use zotero_batch::{
     write_documents_to_zotero_view, ZoteroBatchWritebackRequest, ZoteroBatchWritebackView,
 };
@@ -155,6 +157,7 @@ pub(crate) async fn zotero_items_view(
 pub(crate) struct ImportAttachment {
     pub item_key: String,
     pub attachment_key: String,
+    pub supplement: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -265,7 +268,12 @@ async fn import_one(
         ImportStatus::Imported
     };
 
-    let bibliography = ZoteroBibliography::from_snapshot(&resolved.snapshot);
+    let mut snapshot = resolved.snapshot;
+    if let Some(si) = attachment.supplement {
+        snapshot["supplement"] = si.into();
+    }
+    snapshot["attachment_filename"] = serde_json::Value::String(resolved.filename.clone());
+    let bibliography = ZoteroBibliography::from_snapshot(&snapshot);
     let db = deps.db.clone();
     let record = ExternalRefRecord {
         source: zotero::SOURCE.into(),
@@ -273,7 +281,7 @@ async fn import_one(
         item_key: attachment.item_key.clone(),
         attachment_key: attachment.attachment_key.clone(),
         document_id: document_id.clone(),
-        metadata_json: resolved.snapshot.to_string(),
+        metadata_json: snapshot.to_string(),
         collection_path: folder.into(),
         created_at: String::new(),
         updated_at: String::new(),
@@ -512,21 +520,36 @@ pub(crate) struct ObsidianBatchExportView {
     pub failed: usize,
 }
 
-fn latest_exportable_job_id(db: &Db, document_id: &str) -> Result<Option<String>, AppError> {
+fn latest_exportable_job_id(
+    db: &Db,
+    data_root: &std::path::Path,
+    document_id: &str,
+) -> Result<Option<String>, AppError> {
     db.get_document(document_id)
         .map_err(|_| AppError::not_found(format!("document not found: {document_id}")))?;
     let job_ids = db
         .job_ids_for_document(document_id)
         .map_err(|err| AppError::internal(err.to_string()))?;
+    let mut ocr = None;
     for job_id in job_ids.into_iter().rev() {
         let Ok(job) = db.get_job(&job_id) else {
             continue;
         };
-        if job.status == JobStatusKind::Succeeded && job.workflow != WorkflowKind::Ocr {
+        if job.status != JobStatusKind::Succeeded
+            || !stored_path(&job, data_root, StoredFile::NormalizedDocument)
+                .is_some_and(|p| p.is_file())
+        {
+            continue;
+        }
+        if job.workflow == WorkflowKind::Ocr {
+            ocr.get_or_insert(job_id);
+        } else if stored_path(&job, data_root, StoredFile::TranslationManifest)
+            .is_some_and(|p| p.is_file())
+        {
             return Ok(Some(job_id));
         }
     }
-    Ok(None)
+    Ok(ocr)
 }
 
 pub(crate) async fn export_documents_to_obsidian_view(
@@ -560,7 +583,7 @@ pub(crate) async fn export_documents_to_obsidian_view(
     let mut failed = 0;
 
     for document_id in document_ids {
-        let job_id = match latest_exportable_job_id(deps.db, &document_id) {
+        let job_id = match latest_exportable_job_id(deps.db, deps.data_root, &document_id) {
             Ok(Some(job_id)) => job_id,
             Ok(None) => {
                 failed += 1;
@@ -568,7 +591,7 @@ pub(crate) async fn export_documents_to_obsidian_view(
                     document_id,
                     job_id: None,
                     result: None,
-                    message: Some("没有可导出的已完成译文".to_string()),
+                    message: Some("尚无可导出的识别结果或译文".to_string()),
                 });
                 continue;
             }

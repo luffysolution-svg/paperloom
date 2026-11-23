@@ -46,6 +46,17 @@ pub(crate) async fn export_job_to_obsidian(
     ))
 }
 
+pub(crate) async fn sync_obsidian_reading(
+    State(state): State<AppState>,
+    ApiPath(job_id): ApiPath<String>,
+    ApiJson(request): ApiJson<ObsidianExportRequest>,
+) -> Result<Json<ApiResponse<crate::services::integrations::SyncResult>>, AppError> {
+    let deps = build_integration_route_deps(&state);
+    Ok(ok_json(
+        crate::services::integrations::sync_obsidian_reading(&deps, &job_id, &request).await?,
+    ))
+}
+
 pub(crate) async fn export_documents_to_obsidian(
     State(state): State<AppState>,
     ApiJson(request): ApiJson<ObsidianBatchExportRequest>,

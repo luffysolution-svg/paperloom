@@ -1,21 +1,21 @@
-import { e as T, m as U, a as j, b as z, n as E, p as I, r as y, c as B, d as F, s as H, w as L } from "../markdown-math-DN_X3M3x.js";
-import { n as f } from "../reader-regions-B6o2DsPy.js";
-import { a as v } from "../reader-regions-B6o2DsPy.js";
-import { b as h, r as p } from "../reader-blocks-BxElLvLX.js";
-function g(e, s) {
-  const n = s.replace(/^\s*\(\s*|\s*\)\s*$/g, "").trim();
-  if (!n) return e;
-  const t = e.trimEnd();
-  return t.endsWith("$$") && t.length > 4 ? `${t.slice(0, -2).trimEnd()} \\tag{${n}}$$` : `${t} ${s.trim()}`;
+import { e as y, m as z, a as E, b as I, n as U, p as B, r as F, c as H, d as L, s as v, w as P } from "../markdown-math-DN_X3M3x.js";
+import { n as p } from "../reader-regions-B6o2DsPy.js";
+import { a as A } from "../reader-regions-B6o2DsPy.js";
+import { b as g, r as M } from "../reader-blocks-CX-ULKQa.js";
+function w(a, n) {
+  const s = n.replace(/^\s*\(\s*|\s*\)\s*$/g, "").trim();
+  if (!s || /\\tag\*?\s*\{/.test(a)) return a;
+  const e = a.trimEnd();
+  return e.endsWith("$$") && e.length > 4 ? `${e.slice(0, -2).trimEnd()} \\tag{${s}}$$` : `${e} ${n.trim()}`;
 }
-function M() {
-  const e = /* @__PURE__ */ new Map(), s = /* @__PURE__ */ new Set();
-  return (n) => {
-    const t = e.get(n);
-    if (t) return t;
-    let o = n;
+function $() {
+  const a = /* @__PURE__ */ new Map(), n = /* @__PURE__ */ new Set();
+  return (s) => {
+    const e = a.get(s);
+    if (e) return e;
+    let o = s;
     try {
-      o = new URL(n, "http://local.invalid/").pathname;
+      o = new URL(s, "http://local.invalid/").pathname;
     } catch {
     }
     const i = (() => {
@@ -24,64 +24,66 @@ function M() {
       } catch {
         return o;
       }
-    })(), l = ((i.includes("/images/") ? i.slice(i.lastIndexOf("/images/") + 8) : "") || i.split("/").filter(Boolean).pop() || "image").replace(/^\/+/, "").split("/").map((a) => a.replace(/[^\w.\-一-鿿]+/g, "_") || "_").join("/");
-    let r = `images/${l}`;
-    for (let a = 2; s.has(r); a += 1) r = `images/${l.replace(/(\.[^./]+)?$/, `-${a}$1`)}`;
-    return s.add(r), e.set(n, r), r;
+    })(), c = ((i.includes("/images/") ? i.slice(i.lastIndexOf("/images/") + 8) : "") || i.split("/").filter(Boolean).pop() || "image").replace(/^\/+/, "").split("/").map((t) => t.replace(/[^\w.\-一-鿿]+/g, "_") || "_").join("/");
+    let l = `images/${c}`;
+    for (let t = 2; n.has(l); t += 1) l = `images/${c.replace(/(\.[^./]+)?$/, `-${t}$1`)}`;
+    return n.add(l), a.set(s, l), l;
   };
 }
-function w(e, s, n) {
-  let t = e;
-  for (const o of s)
-    o && t.includes(o) && (t = t.split(o).join(n(o)));
-  return t;
+function k(a, n, s) {
+  let e = a;
+  for (const o of n)
+    o && e.includes(o) && (e = e.split(o).join(s(o)));
+  return e;
 }
-function u(e, s, n) {
-  if (e.kind === "figure")
-    return e.assetUrls.map((o) => `![](${n(o)})`).join(`
+function h(a, n, s) {
+  if (a.kind === "figure")
+    return a.assetUrls.map((o) => `![](${s(o)})`).join(`
 
 `);
-  let t = w(p(e, s), e.assetUrls, n);
-  return e.kind === "formula" && e.label && (t = g(t, e.label)), t;
+  let e = k(M(a, n), a.assetUrls, s);
+  return a.kind === "formula" && a.label && (e = w(e, a.label)), e;
 }
-function b(e) {
-  const s = h(f(e));
-  if (!s || s.length === 0) return null;
-  const n = M(), t = [], o = [], i = [];
-  for (const r of s) {
-    const a = u(r, "source", n), c = r.hasTranslation ? u(r, "translated", n) : a;
-    a && t.push(a), c && o.push(c), a && i.push(r.hasTranslation && c && c !== a ? `${a}
+function R(a) {
+  const n = g(p(a));
+  if (!n || n.length === 0) return null;
+  const s = $(), e = /* @__PURE__ */ new Map(), o = (t) => {
+    const r = s(t);
+    return e.set(t, r), r;
+  }, i = [], u = [], f = [];
+  for (const t of n) {
+    const r = h(t, "source", o), d = t.hasTranslation ? h(t, "translated", o) : r;
+    r && i.push(r), d && u.push(d);
+    let m = /\s\^ref-[\d-]+\s*$/.test(r) ? d.replace(/\s+\^ref-[\d-]+\s*$/, "") : d;
+    /^#{1,6} /.test(r) && (m = t.kind === "heading" ? m.replace(/^#{1,6}\s+/, "") : m.replace(/^#{1,6} [^\n]*\n\n/, "")), r && f.push(t.hasTranslation && d && d !== r ? `${r}
 
-${c}` : a);
+${m}` : r);
   }
-  const d = (r) => `${r.join(`
+  const c = (t) => `${t.join(`
 
 `).trim()}
-`, m = [], l = /* @__PURE__ */ new Set();
-  for (const r of s)
-    for (const a of r.assetUrls)
-      !a || l.has(a) || (l.add(a), m.push({ url: a, path: n(a) }));
+`, l = Array.from(e, ([t, r]) => ({ url: t, path: r }));
   return {
-    source: d(t),
-    translated: d(o),
-    bilingual: d(i),
-    hasTranslation: s.some((r) => r.hasTranslation),
-    assets: m
+    source: c(i),
+    translated: c(u),
+    bilingual: c(f),
+    hasTranslation: n.some((t) => t.hasTranslation),
+    assets: l
   };
 }
 export {
-  b as buildReaderMarkdownExport,
-  T as extractMarkdownMath,
-  U as materializeMarkdownMathFallbackHtml,
-  j as materializeMarkdownMathHtml,
-  z as mathFailureStats,
-  v as normalizeBlockKey,
-  E as normalizeMathTex,
-  I as parseMarkdownWithMath,
-  y as renderMathFallbackHtml,
-  B as resetMarkdownMathEngineLoader,
-  F as revealProtectedTokens,
-  H as setMarkdownMathEngineLoader,
-  L as wrapMathSvgHtml
+  R as buildReaderMarkdownExport,
+  y as extractMarkdownMath,
+  z as materializeMarkdownMathFallbackHtml,
+  E as materializeMarkdownMathHtml,
+  I as mathFailureStats,
+  A as normalizeBlockKey,
+  U as normalizeMathTex,
+  B as parseMarkdownWithMath,
+  F as renderMathFallbackHtml,
+  H as resetMarkdownMathEngineLoader,
+  L as revealProtectedTokens,
+  v as setMarkdownMathEngineLoader,
+  P as wrapMathSvgHtml
 };
 //# sourceMappingURL=content.js.map

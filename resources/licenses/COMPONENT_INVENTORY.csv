@@ -811,6 +811,7 @@ rust,ctutils,0.4.2,Apache-2.0 OR MIT,Windows target metadata
 rust,deranged,0.5.8,MIT OR Apache-2.0,Windows target metadata
 rust,digest,0.11.3,MIT OR Apache-2.0,Windows target metadata
 rust,displaydoc,0.2.5,MIT OR Apache-2.0,Windows target metadata
+rust,dtoa,1.0.11,MIT OR Apache-2.0,Windows target metadata
 rust,either,1.15.0,MIT OR Apache-2.0,Windows target metadata
 rust,encoding_rs,0.8.35,(Apache-2.0 OR MIT) AND BSD-3-Clause,Windows target metadata
 rust,fallible-iterator,0.3.0,MIT/Apache-2.0,Windows target metadata
@@ -867,6 +868,8 @@ rust,markup5ever,0.38.0,MIT OR Apache-2.0,Windows target metadata
 rust,markup5ever_rcdom,0.38.0+unofficial,MIT OR Apache-2.0,Windows target metadata
 rust,matchers,0.2.0,MIT,Windows target metadata
 rust,matchit,0.7.3,MIT AND BSD-3-Clause,Windows target metadata
+rust,math-core,0.4.0,MIT,Windows target metadata
+rust,math-core-renderer-internal,0.4.0,MIT,Windows target metadata
 rust,md5,0.7.0,Apache-2.0/MIT,Windows target metadata
 rust,memchr,2.8.0,Unlicense OR MIT,Windows target metadata
 rust,mime,0.3.17,MIT OR Apache-2.0,Windows target metadata
@@ -897,6 +900,8 @@ rust,powerfmt,0.2.0,MIT OR Apache-2.0,Windows target metadata
 rust,ppv-lite86,0.2.21,MIT OR Apache-2.0,Windows target metadata
 rust,precomputed-hash,0.1.1,MIT,Windows target metadata
 rust,proc-macro2,1.0.106,MIT OR Apache-2.0,Windows target metadata
+rust,pulldown-cmark,0.13.6,MIT,Windows target metadata
+rust,pulldown-cmark-escape,0.11.0,MIT,Windows target metadata
 rust,quinn,0.11.9,MIT OR Apache-2.0,Windows target metadata
 rust,quinn-proto,0.11.14,MIT OR Apache-2.0,Windows target metadata
 rust,quinn-udp,0.5.14,MIT OR Apache-2.0,Windows target metadata
@@ -942,13 +947,17 @@ rust,slab,0.4.12,MIT,Windows target metadata
 rust,smallvec,1.15.1,MIT OR Apache-2.0,Windows target metadata
 rust,socket2,0.6.3,MIT OR Apache-2.0,Windows target metadata
 rust,spin,0.9.8,MIT,Windows target metadata
+rust,stable-arena,0.2.0,Apache-2.0 OR MIT,Windows target metadata
 rust,stable_deref_trait,1.2.1,MIT OR Apache-2.0,Windows target metadata
 rust,string_cache,0.9.0,MIT OR Apache-2.0,Windows target metadata
 rust,string_cache_codegen,0.6.1,MIT OR Apache-2.0,Windows target metadata
+rust,strum,0.27.2,MIT,Windows target metadata
+rust,strum_macros,0.27.2,MIT,Windows target metadata
 rust,subtle,2.6.1,BSD-3-Clause,Windows target metadata
 rust,syn,2.0.117,MIT OR Apache-2.0,Windows target metadata
 rust,sync_wrapper,1.0.2,Apache-2.0,Windows target metadata
 rust,synstructure,0.13.2,MIT,Windows target metadata
+rust,tempfile,3.27.0,MIT OR Apache-2.0,Windows target metadata
 rust,tendril,0.5.1,MIT OR Apache-2.0,Windows target metadata
 rust,thiserror,1.0.69,MIT OR Apache-2.0,Windows target metadata
 rust,thiserror,2.0.18,MIT OR Apache-2.0,Windows target metadata

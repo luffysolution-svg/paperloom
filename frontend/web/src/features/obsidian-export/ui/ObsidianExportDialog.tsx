@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ExternalLink, Gem, LoaderCircle } from "lucide-react";
+import { openExternalUri } from "../open-note.js";
+import { ZoteroReadingSyncAction } from "./ZoteroReadingSyncAction.js";
 import { ObsidianBatchExportSummary } from "./ObsidianBatchExportSummary.js";
 
 import {
@@ -27,19 +29,6 @@ import {
   type ObsidianExportResult,
   type ObsidianIntegration,
 } from "@/platform/api/index.js";
-
-/**
- * 交给系统打开 obsidian:// 链接。桌面端的窗口拦截只对 window.open 放行
- * 白名单协议；浏览器里直接改 location 不会离开当前页，只是唤起 Obsidian。
- */
-export function openExternalUri(uri: string): void {
-  if (typeof window === "undefined" || !uri) return;
-  if ((window as any).retainPdfDesktop) {
-    window.open(uri, "_blank");
-  } else {
-    window.location.href = uri;
-  }
-}
 
 type Phase =
   | { kind: "form" }
@@ -210,10 +199,9 @@ export function ObsidianExportDialog({
                 }}
               >
                 <DialogDescription>
-                  译文笔记与原文笔记分开保存、互相链接；图片按出现顺序重命名，与译文
-                  PDF 一起放在同名 .assets 目录。
+                  识别完成后可保存原文。已有译文时可生成互链笔记，配图、原 PDF 和可用的补充材料放在同名 .assets 目录。
                   {batchMode
-                    ? "同名冲突会自动另存为新笔记；没有已完成译文的文献会列在结果中。"
+                    ? "同名冲突会自动另存，未完成识别的文献会列在结果中。"
                     : "再次保存会更新同一篇，你在标记外写的内容会保留。"}
                 </DialogDescription>
                 <label>
@@ -248,7 +236,7 @@ export function ObsidianExportDialog({
                   className="book-detail-obsidian-check"
                   checked={includeSource}
                   onChange={(event) => setIncludeSource(event.target.checked)}
-                  label="同时保存原文笔记"
+                  label="有译文时同时保存原文笔记"
                 />
                 <Checkbox
                   id="book-detail-obsidian-by-collection"
@@ -289,6 +277,10 @@ export function ObsidianExportDialog({
               <ObsidianBatchExportSummary result={phase.result} />
             ) : null}
 
+            {!batchMode && jobId && (phase.kind === "form" || phase.kind === "done") ? (
+              <ZoteroReadingSyncAction jobId={jobId} vaultId={vaultId} folder={folder} byCollection={byCollection}
+                busy={busy} setBusy={setBusy} setError={setError} />
+            ) : null}
             {error ? (
               <p className="book-detail-obsidian-error" role="alert">
                 {error}

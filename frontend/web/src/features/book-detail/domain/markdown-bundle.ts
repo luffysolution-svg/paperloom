@@ -59,15 +59,21 @@ function zipAsync(files: Zippable): Promise<Uint8Array> {
 
 /** 打好的包：文件名和内容。拼不出块（老任务）时 null。 */
 export async function buildMarkdownBundle({ jobId, title }: { jobId: string; title: string }): Promise<{ filename: string; blob: Blob } | null> {
-  const regions = await fetchReaderRegions(jobId, API_PREFIX);
+  const regions = await fetchReaderRegions(jobId, API_PREFIX, true);
   const markdown = buildReaderMarkdownExport(regions);
   if (!markdown) return null;
   const base = markdownBundleBaseName(title, jobId);
   const encoder = new TextEncoder();
-  const files: Zippable = { [`${base}.en.md`]: encoder.encode(markdown.source) };
+  const lang = String(regions?.source_language || "").toLowerCase();
+  const suffix = /^(?:ch|chinese|zh(?:[-_]cn)?)$/.test(lang) ? "zh" : lang === "english" ? "en" : /^[a-z]{2,3}$/.test(lang) ? lang : "source";
+  const sourceSuffix = suffix === "zh" && markdown.hasTranslation ? "source.zh" : suffix;
+  const properties = regions?.export_frontmatter || "title: " + JSON.stringify(title || base);
+  const note = (body: string, role: string, language: string) =>
+    encoder.encode(["---", properties, "paperloom_role: " + role, "language: " + language, "tags: [literature, paperloom]", "---", "", body].join("\n"));
+  const files: Zippable = { [`${base}.${sourceSuffix}.md`]: note(markdown.source, "source", suffix === "source" ? "und" : suffix) };
   if (markdown.hasTranslation) {
-    files[`${base}.zh.md`] = encoder.encode(markdown.translated);
-    files[`${base}.bilingual.md`] = encoder.encode(markdown.bilingual);
+    files[`${base}.zh.md`] = note(markdown.translated, "translation", "zh");
+    files[`${base}.bilingual.md`] = note(markdown.bilingual, "bilingual", "mul");
   }
   const images = await fetchImages(markdown.assets);
   // 图片本来就压过，原样存（level 0）省时间；md 用默认压缩。

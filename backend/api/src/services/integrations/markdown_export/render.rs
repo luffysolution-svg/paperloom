@@ -2,12 +2,17 @@
 // backend/pipeline/retainpdf_pipeline/ocr/document_schema/markdown_fallback.py，
 // 两边改动需同步；差异：这里跳过页眉/页脚/页码，并可把正文换成译文，行内公式按 Obsidian 的要求收紧。
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Component, Path};
 
 use serde_json::{Map, Value};
 
 use super::images::{ImageKind, ImagePlan};
+pub(super) use retainpdf_jobs::paper_markdown::tighten_inline_math;
+use retainpdf_jobs::paper_markdown::{
+    append_notes, format_outline, heading_level, heading_text, join_prose, page_note,
+    render_formula, restore_inline_math, source_text, PageFlow,
+};
 
 /// 块 id（规范化为 `p001-b0008`）→ 该块应输出的译文。
 ///
@@ -147,6 +152,7 @@ pub(super) struct RenderContext<'a> {
     pub(super) images_dir: Option<&'a Path>,
     /// None 表示渲染原文。
     pub(super) translations: Option<&'a TranslationIndex>,
+    pub(super) tables: Option<&'a HashMap<String, String>>,
 }
 
 /// 渲染整篇；图片以 `images/<rel>` 形式输出（与 md/full.md 同一种写法），
@@ -168,22 +174,63 @@ pub(super) fn render_document(
         .unwrap_or_default();
     pages.sort_by_key(|(index, page)| (page_index(page).unwrap_or(*index as i64), *index));
 
-    let mut rendered = Vec::new();
+    let mut rendered: Vec<String> = Vec::new();
+    let mut references = Vec::new();
+    let layout = PageFlow::new(document);
+    let mut positions = HashMap::new();
+    let mut notes = BTreeMap::<i64, Vec<String>>::new();
     for (index, page) in pages {
         let page_idx = page_index(page).unwrap_or(index as i64);
-        let mut blocks: Vec<(usize, &Value)> = page
-            .get("blocks")
-            .and_then(Value::as_array)
-            .map(|blocks| blocks.iter().enumerate().collect())
-            .unwrap_or_default();
-        blocks.sort_by_key(|(index, block)| block_sort_key(block, *index));
-        for (_, block) in blocks {
-            if let Some(text) = render_block(block, page_idx, assets, ctx, plan) {
+        let Some(blocks) = page["blocks"].as_array() else {
+            continue;
+        };
+        for block in retainpdf_jobs::paper_markdown::reading_blocks(blocks) {
+            let id = block["block_id"].as_str().unwrap_or("");
+            if layout.panels.contains(id) {
+                continue;
+            }
+            if block["sub_type"] == "formula_number" {
+                if let (Some(previous), Some(label)) = (
+                    rendered.last_mut(),
+                    block.pointer("/content/text").and_then(Value::as_str),
+                ) {
+                    if add_formula_number(previous, label) {
+                        continue;
+                    }
+                }
+            }
+            if let Some(mut text) = render_block(block, page_idx, assets, ctx, plan) {
+                if page_note(block) {
+                    notes.entry(page_idx + 1).or_default().push(text);
+                    continue;
+                }
+                if let Some(&previous) = layout.joins.get(id).and_then(|head| positions.get(head)) {
+                    join_prose(&mut rendered[previous], &text);
+                    positions.insert(id, previous);
+                    continue;
+                }
+                if let Some((_, label)) = layout.abstracts.get(id) {
+                    if retainpdf_jobs::paper_markdown::abstract_parts(&text).is_none() {
+                        text = format!("{label}: {text}");
+                    }
+                }
+                if layout.primary_title.is_some_and(|primary| {
+                    block.pointer("/content/text").and_then(Value::as_str) == Some(primary)
+                }) && text.starts_with('#')
+                {
+                    text = format!("# {}", text.trim_start_matches('#').trim_start());
+                }
+                positions.insert(id, rendered.len());
+                references.push(
+                    block["sub_type"] == "reference_entry" || block["semantic_role"] == "reference",
+                );
                 rendered.push(text);
             }
         }
     }
-    let body = rendered.join("\n\n");
+    append_notes(&mut rendered, notes);
+    retainpdf_jobs::paper_markdown::references::link_sections(&mut rendered, &references);
+    let body = format_outline(&rendered.join("\n\n"), layout.primary_title);
     let body = body.trim();
     if body.is_empty() {
         String::new()
@@ -192,19 +239,37 @@ pub(super) fn render_document(
     }
 }
 
+fn add_formula_number(previous: &mut String, label: &str) -> bool {
+    let Some(body) = previous.trim_end().strip_suffix("$$") else {
+        return false;
+    };
+    if !body.starts_with("$$") {
+        return false;
+    }
+    let label = label
+        .trim()
+        .trim_start_matches('(')
+        .trim_end_matches(')')
+        .trim();
+    if label.is_empty()
+        || !label
+            .chars()
+            .all(|c| c.is_alphanumeric() || ".-".contains(c))
+    {
+        return false;
+    }
+    if !body.contains(r"\tag{") {
+        *previous = format!("{} \\tag{{{label}}}\n$$", body.trim_end());
+    }
+    true
+}
+
 fn page_index(page: &Value) -> Option<i64> {
     page.get("page_index").and_then(Value::as_i64).or_else(|| {
         page.get("page")
             .and_then(Value::as_i64)
             .map(|p| (p - 1).max(0))
     })
-}
-
-fn block_sort_key(block: &Value, index: usize) -> (i64, i64, usize) {
-    let int = |key: &str| block.get(key).and_then(Value::as_i64);
-    let order = int("order").unwrap_or(index as i64);
-    let reading_order = int("reading_order").or(int("order")).unwrap_or(0).max(0);
-    (reading_order, order, index)
 }
 
 fn lower(block: &Value, key: &str) -> String {
@@ -258,7 +323,6 @@ fn render_block(
         return None;
     }
 
-    let source_text = content_str("text");
     let image_links = |kind: ImageKind, plan: &mut ImagePlan| {
         let alt = image_alt(content);
         let resolve = |asset_id: &String| resolve_asset(ctx.images_dir, assets, asset_id, page_idx);
@@ -285,13 +349,19 @@ fn render_block(
     if kind == "image" || matches!(sub_type.as_str(), "image" | "figure" | "chart") {
         let links = image_links(ImageKind::Figure, plan);
         return non_empty(if links.is_empty() {
-            source_text
+            content_str("text")
         } else {
             links.join("\n\n")
         });
     }
 
-    if kind == "formula" || sub_type.contains("formula") {
+    if kind == "formula"
+        || matches!(
+            sub_type.as_str(),
+            "formula" | "display_formula" | "interline_equation"
+        )
+    {
+        let source_text = content_str("text");
         if source_text.is_empty() {
             return non_empty(image_links(ImageKind::Equation, plan).join("\n\n"));
         }
@@ -300,35 +370,58 @@ fn render_block(
 
     if kind == "table" || matches!(sub_type.as_str(), "table" | "table_html") {
         let table = content_str("table_html");
-        let table = if table.is_empty() { source_text } else { table };
+        let table = ctx
+            .tables
+            .and_then(|tables| tables.get(&canonical_block_id(block["block_id"].as_str()?)))
+            .cloned()
+            .unwrap_or_else(|| {
+                if table.is_empty() {
+                    content_str("text")
+                } else {
+                    table
+                }
+            });
         if table.is_empty() {
             return non_empty(image_links(ImageKind::Table, plan).join("\n\n"));
         }
-        return Some(tighten_inline_math(&super::table_math::normalize_table_math(&table)));
+        return Some(tighten_inline_math(
+            &super::table_math::normalize_table_math(&table),
+        ));
     }
 
     let block_id = block.get("block_id").and_then(Value::as_str).unwrap_or("");
     let text = match ctx.translations.map(|index| index.translated(block_id)) {
-        Some(Some(Translated::Text(text))) => text,
+        Some(Some(Translated::Text(text))) => restore_inline_math(block, &text, true),
         Some(Some(Translated::Absorbed)) => return None,
         // 译文笔记里，未翻译的元数据块（网址、下载声明、版权、单位等）只是噪声；
         // 原文笔记照常保留。参考文献不属于 metadata，不受影响。
-        Some(None) if lower(block, "semantic_role") == "metadata" => return None,
-        _ => source_text,
+        Some(None)
+            if lower(block, "semantic_role") == "metadata"
+                && layout_role != "footnote"
+                && !page_note(block)
+                && !sub_type.ends_with("_footnote") =>
+        {
+            return None
+        }
+        _ => source_text(block),
     };
     let text = tighten_inline_math(text.trim());
     let text = text.as_str();
     if text.is_empty() {
         return None;
     }
-    if layout_role == "title"
-        || matches!(structure_role.as_str(), "document_title" | "title")
-        || matches!(sub_type.as_str(), "title" | "doc_title")
-    {
-        return Some(format!("# {}", single_line(text)));
-    }
-    if layout_role == "heading" || structure_role == "heading" || sub_type == "heading" {
-        return Some(format!("## {}", single_line(text)));
+    if let Some(level) = heading_level(
+        block,
+        block
+            .pointer("/content/text")
+            .and_then(Value::as_str)
+            .unwrap_or(text),
+    ) {
+        return Some(format!(
+            "{} {}",
+            "#".repeat(level),
+            heading_text(&single_line(text))
+        ));
     }
     if layout_role == "list_item" {
         return Some(
@@ -339,6 +432,9 @@ fn render_block(
                 .join("\n"),
         );
     }
+    if layout_role == "caption" || structure_role.ends_with("_caption") {
+        return Some(heading_text(text));
+    }
     Some(text.to_string())
 }
 
@@ -348,153 +444,6 @@ fn non_empty(value: String) -> Option<String> {
 
 fn single_line(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
-/// PaddleOCR-VL 的行内公式写成 `$ V_{Ni} $`，Obsidian 要求 `$` 内侧紧贴内容，否则不当公式渲染。
-/// 只收紧两侧都有空白的一对（金额如 `$5 and $10` 不受影响），跳过 `$$…$$` 与 `\$`。
-/// 模型返回的 `\(…\)`、`\[…\]` 也转成 Obsidian 支持的美元定界符。
-pub(super) fn tighten_inline_math(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut rest = text;
-    while let Some(pos) = find_math_start(rest) {
-        out.push_str(&rest[..pos]);
-        let after = &rest[pos..];
-        if after.starts_with(['`', '~']) {
-            let consumed = text.len() - rest.len();
-            let end = code_end(text, consumed + pos) - consumed;
-            out.push_str(&rest[pos..end]);
-            rest = &rest[end..];
-            continue;
-        }
-        if after.starts_with('\\') {
-            let display = after.starts_with(r"\[");
-            let closing = if display { r"\]" } else { r"\)" };
-            let body = &after[2..];
-            if let Some((end, _)) = body
-                .match_indices(closing)
-                .find(|&(i, _)| !is_escaped(body, i))
-            {
-                let inner = body[..end].trim();
-                if !inner.is_empty() {
-                    if display {
-                        out.push_str("$$\n");
-                        out.push_str(inner);
-                        out.push_str("\n$$");
-                    } else {
-                        out.push('$');
-                        out.push_str(&inner.replace(['\r', '\n'], " "));
-                        out.push('$');
-                    }
-                    rest = &body[end + 2..];
-                    continue;
-                }
-            }
-            out.push_str(&after[..2]);
-            rest = body;
-            continue;
-        }
-        if let Some(display) = after.strip_prefix("$$") {
-            let end = display.find("$$").map_or(after.len(), |end| end + 4);
-            out.push_str(&after[..end]);
-            rest = &after[end..];
-            continue;
-        }
-        let body = &after[1..];
-        match find_unescaped_dollar(body).filter(|&end| !body[..end].contains('\n')) {
-            Some(end) => {
-                let inner = &body[..end];
-                let padded =
-                    inner.starts_with(char::is_whitespace) && inner.ends_with(char::is_whitespace);
-                out.push('$');
-                out.push_str(if padded && !inner.trim().is_empty() {
-                    inner.trim()
-                } else {
-                    inner
-                });
-                out.push('$');
-                rest = &body[end + 1..];
-            }
-            None => {
-                out.push('$');
-                rest = body;
-            }
-        }
-    }
-    out.push_str(rest);
-    out
-}
-
-fn is_escaped(text: &str, index: usize) -> bool {
-    text[..index]
-        .bytes()
-        .rev()
-        .take_while(|&b| b == b'\\')
-        .count()
-        % 2
-        == 1
-}
-
-fn code_end(text: &str, index: usize) -> usize {
-    let marker = text.as_bytes()[index];
-    let width = text.as_bytes()[index..]
-        .iter()
-        .take_while(|&&b| b == marker)
-        .count();
-    let line_start = text[..index].rfind('\n').map_or(0, |i| i + 1);
-    let fenced = width >= 3 && text[line_start..index].trim().is_empty();
-    if marker == b'~' && !fenced {
-        return index + width;
-    }
-    let mut cursor = index + width;
-    while let Some(offset) = text[cursor..].find(marker as char) {
-        let start = cursor + offset;
-        let run_width = text.as_bytes()[start..]
-            .iter()
-            .take_while(|&&b| b == marker)
-            .count();
-        cursor = start + run_width;
-        let line_start = text[..start].rfind('\n').map_or(0, |i| i + 1);
-        let line_end = text[cursor..].find('\n').map_or(text.len(), |i| cursor + i);
-        if (fenced
-            && run_width >= width
-            && text[line_start..start].trim().is_empty()
-            && text[cursor..line_end].trim().is_empty())
-            || (!fenced && run_width == width)
-        {
-            return cursor;
-        }
-    }
-    if fenced {
-        text.len()
-    } else {
-        index + width
-    }
-}
-
-fn find_math_start(text: &str) -> Option<usize> {
-    text.char_indices()
-        .find(|&(i, c)| {
-            (matches!(c, '$' | '`' | '~')
-                || text[i..].starts_with(r"\(")
-                || text[i..].starts_with(r"\["))
-                && !is_escaped(text, i)
-        })
-        .map(|(i, _)| i)
-}
-
-fn find_unescaped_dollar(text: &str) -> Option<usize> {
-    text.char_indices()
-        .find(|&(i, c)| c == '$' && !is_escaped(text, i))
-        .map(|(i, _)| i)
-}
-
-fn render_formula(text: &str) -> String {
-    if (text.starts_with("$$") && text.ends_with("$$") && text.len() >= 4)
-        || (text.starts_with("\\[") && text.ends_with("\\]"))
-    {
-        return tighten_inline_math(text);
-    }
-    format!("$$\n{text}\n$$")
 }
 
 fn asset_ids(content: Option<&Value>) -> Vec<String> {
@@ -581,9 +530,11 @@ fn resolve_asset(
 }
 
 pub(super) fn safe_image(root: &Path, relative: &str) -> Option<std::path::PathBuf> {
-    if relative.is_empty() || !Path::new(relative).components().all(|part| {
-        matches!(part, Component::Normal(_) | Component::CurDir)
-    }) {
+    if relative.is_empty()
+        || !Path::new(relative)
+            .components()
+            .all(|part| matches!(part, Component::Normal(_) | Component::CurDir))
+    {
         return None;
     }
     let path = root.join(relative).canonicalize().ok()?;

@@ -24,6 +24,9 @@ base64 = "0.22"
 chrono = { version = "0.4", features = ["serde", "clock"] }
 fastrand = "2"
 lopdf = "0.32"
+html5ever = "0.38"
+markup5ever_rcdom = "0.38"
+math-core = "0.4"
 mime_guess = "2"
 regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream", "multipart"] }
