@@ -90,7 +90,8 @@ export function buildReaderMarkdownExport(regionsPayload: unknown): ReaderMarkdo
     if (original) source.push(original);
     if (chinese) translated.push(chinese);
     // 双语：有译文的块原文下面紧跟译文；公式、图、没译文的只出一次。
-    let bilingualChinese = /\s\^ref-[\d-]+\s*$/.test(original) ? chinese.replace(/\s+\^ref-[\d-]+\s*$/, "") : chinese;
+    const referenceAnchor = /\s+\^ref-(?:author-)?[\d-]+\s*$/;
+    let bilingualChinese = referenceAnchor.test(original) ? chinese.replace(referenceAnchor, "") : chinese;
     if (/^#{1,6} /.test(original)) {
       // The translated title stays visible below the source title. Both share one outline entry.
       bilingualChinese = block.kind === "heading"

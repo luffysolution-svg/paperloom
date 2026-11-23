@@ -13,6 +13,7 @@ use retainpdf_jobs::paper_markdown::{
     append_notes, format_outline, heading_level, heading_text, join_prose, page_note,
     render_formula, restore_inline_math, source_text, PageFlow,
 };
+use retainpdf_jobs::paper_markdown::references::{self, SectionKind};
 
 /// 块 id（规范化为 `p001-b0008`）→ 该块应输出的译文。
 ///
@@ -175,7 +176,7 @@ pub(super) fn render_document(
     pages.sort_by_key(|(index, page)| (page_index(page).unwrap_or(*index as i64), *index));
 
     let mut rendered: Vec<String> = Vec::new();
-    let mut references = Vec::new();
+    let mut kinds = Vec::new();
     let layout = PageFlow::new(document);
     let mut positions = HashMap::new();
     let mut notes = BTreeMap::<i64, Vec<String>>::new();
@@ -221,15 +222,13 @@ pub(super) fn render_document(
                     text = format!("# {}", text.trim_start_matches('#').trim_start());
                 }
                 positions.insert(id, rendered.len());
-                references.push(
-                    block["sub_type"] == "reference_entry" || block["semantic_role"] == "reference",
-                );
+                kinds.push(SectionKind::from_block(block));
                 rendered.push(text);
             }
         }
     }
+    references::link_sections(&mut rendered, &kinds);
     append_notes(&mut rendered, notes);
-    retainpdf_jobs::paper_markdown::references::link_sections(&mut rendered, &references);
     let body = format_outline(&rendered.join("\n\n"), layout.primary_title);
     let body = body.trim();
     if body.is_empty() {
@@ -397,6 +396,7 @@ fn render_block(
         // 原文笔记照常保留。参考文献不属于 metadata，不受影响。
         Some(None)
             if lower(block, "semantic_role") == "metadata"
+                && !references::is_heading(&content_str("text"))
                 && layout_role != "footnote"
                 && !page_note(block)
                 && !sub_type.ends_with("_footnote") =>

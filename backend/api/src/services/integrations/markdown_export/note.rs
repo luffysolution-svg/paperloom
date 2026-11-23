@@ -431,8 +431,10 @@ fn open_links(meta: &NoteMeta) -> String {
 /// 受管区块：重新导出时只替换标记之间的内容，标记外的手写内容保留（M2）。
 /// 标记用 Obsidian 注释 `%% … %%`，实时预览里也不显示（HTML 注释会显示）。
 fn managed(section: &str, body: &str) -> String {
+    // A block ID must end its paragraph. The closing comment starts a new one.
+    let gap = if section == "body" { "\n" } else { "" };
     format!(
-        "%% paperloom:begin {section} %%\n{}\n%% paperloom:end {section} %%\n",
+        "%% paperloom:begin {section} %%\n{}\n{gap}%% paperloom:end {section} %%\n",
         body.trim_end()
     )
 }

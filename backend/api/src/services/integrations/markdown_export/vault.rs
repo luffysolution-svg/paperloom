@@ -170,10 +170,10 @@ pub(super) fn write_to_vault(
             _ => false,
         });
 
-        let overwrite = if foreign || unmergeable {
+        if foreign || unmergeable {
             match policy {
                 ConflictPolicy::Rename => continue,
-                ConflictPolicy::Overwrite => true,
+                ConflictPolicy::Overwrite => {}
                 ConflictPolicy::Ask | ConflictPolicy::Skip => {
                     let status = if policy == ConflictPolicy::Ask {
                         VaultWriteStatus::Conflict
@@ -189,21 +189,19 @@ pub(super) fn write_to_vault(
                     });
                 }
             }
-        } else {
-            false
-        };
+        }
 
-        let updated = matches!(main, Existing::Ours(_)) && !overwrite;
+        let updated = matches!(&main, Existing::Ours(text) if has_section(text, "body"));
         let mut files_written = 0;
         std::fs::create_dir_all(&dir)?;
-        let main_text = merged(&main, &bundle.translated, overwrite, keep);
+        let main_text = merged(&main, &bundle.translated, keep);
         let assets_dir = dir.join(&bundle.names.assets_dir);
         files_written += copy_assets(&assets_dir, &bundle)?;
         write_atomically(&note_path, main_text.as_bytes())?;
         files_written += 1;
         let source_note_path = match &bundle.source {
             Some(note) => {
-                write_atomically(&source_path, merged(&side, note, overwrite, &[]).as_bytes())?;
+                write_atomically(&source_path, merged(&side, note, &[]).as_bytes())?;
                 files_written += 1;
                 Some(join_rel(
                     &folder,
@@ -237,9 +235,9 @@ pub(super) fn write_to_vault(
     )))
 }
 
-fn merged(existing: &Existing, new_text: &str, overwrite: bool, keep: &[&str]) -> String {
+fn merged(existing: &Existing, new_text: &str, keep: &[&str]) -> String {
     match existing {
-        Existing::Ours(old) if !overwrite => {
+        Existing::Ours(old) => {
             merge_note(old, new_text, keep).unwrap_or_else(|| new_text.to_string())
         }
         _ => new_text.to_string(),

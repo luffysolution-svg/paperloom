@@ -75,6 +75,11 @@ pub fn format_export_regions(document: &Value, items: &mut Vec<ReaderRegionItemV
         } else {
             previous_abstract = None;
             if let Some(level) = row.heading_level {
+                if row.sub_type.as_deref() == Some("metadata")
+                    && super::references::is_heading(source)
+                {
+                    row.sub_type = Some("heading".into());
+                }
                 let first = primary
                     .as_ref()
                     .is_some_and(|p| p == &compact(&plain_title(source)));

@@ -1,6 +1,6 @@
 [package]
 name = "retainpdf-cli"
-version = "0.4.6"
+version = "0.4.7"
 edition = "2021"
 description = "RetainPDF 命令行:配置、状态、环境检查、备份、同步"
 default-run = "retainpdf"

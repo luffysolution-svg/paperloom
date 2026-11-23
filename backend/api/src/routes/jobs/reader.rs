@@ -54,10 +54,11 @@ pub async fn get_reader_regions(
                     &export_job_id,
                     &mut view,
                 )?;
-                let refs: Vec<_> = view
+                use retainpdf_jobs::paper_markdown::references::{link_sections, SectionKind};
+                let kinds: Vec<_> = view
                     .items
                     .iter()
-                    .map(|r| r.sub_type.as_deref() == Some("reference_entry"))
+                    .map(|r| SectionKind::from_roles(r.sub_type.as_deref(), None))
                     .collect();
                 let mut source: Vec<_> = view
                     .items
@@ -70,8 +71,8 @@ pub async fn get_reader_regions(
                     .zip(&source)
                     .map(|(r, s)| r.translated.text.clone().unwrap_or_else(|| s.clone()))
                     .collect();
-                retainpdf_jobs::paper_markdown::references::link_sections(&mut source, &refs);
-                retainpdf_jobs::paper_markdown::references::link_sections(&mut translated, &refs);
+                link_sections(&mut source, &kinds);
+                link_sections(&mut translated, &kinds);
                 for ((r, s), t) in view.items.iter_mut().zip(source).zip(translated) {
                     if r.source.text.is_some() {
                         r.source.text = Some(s);

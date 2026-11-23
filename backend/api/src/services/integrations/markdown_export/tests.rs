@@ -98,8 +98,9 @@ fn golden_job_export_keeps_paragraphs_whole_and_drops_page_noise() {
                 }
             }
         }
-        let mut refs = vec![true; blocks.len()];
-        refs[0] = false;
+        use retainpdf_jobs::paper_markdown::references::SectionKind;
+        let mut refs = vec![SectionKind::Reference; blocks.len()];
+        refs[0] = SectionKind::Prose;
         retainpdf_jobs::paper_markdown::references::link_sections(&mut blocks, &refs);
         blocks.remove(0)
     };
@@ -186,6 +187,21 @@ fn golden_job_export_keeps_paragraphs_whole_and_drops_page_noise() {
     );
     assert!(!source.contains(&translated_of(&pages, "p001-b008")));
     assert!(notes.images.is_empty(), "golden fixture has no image files");
+}
+
+#[test]
+fn untranslated_bibliography_heading_survives_metadata_filtering() {
+    let doc = json!({"pages":[{"blocks":[
+        {"block_id":"head","sub_type":"metadata","semantic_role":"metadata","content":{"kind":"text","text":"REFERENCES"}},
+        {"block_id":"entry","sub_type":"reference_entry","content":{"kind":"text","text":"1. First paper."}}
+    ]}]});
+    let meta = meta();
+    let notes = build_notes(&ExportInputs {
+        normalized: &doc, translation_pages: Some(&[]), tables: &Default::default(),
+        full_markdown: None, images_dir: None, meta: &meta, has_pdf: false,
+        include_source: true, zotero_extras: None,
+    }, names_for(&meta));
+    assert!(notes.translated.contains("## REFERENCES\n\n1. First paper. ^ref-1\n\n%% paperloom:end body %%"));
 }
 
 #[test]
@@ -751,6 +767,22 @@ fn vault_export_handles_foreign_note_by_policy() {
         write_to_vault(&source, &vault.0, "", true, ConflictPolicy::Overwrite).expect("overwrite");
     assert_eq!(overwrite.status, VaultWriteStatus::Created);
     assert!(read(&foreign).contains("paperloom_document: \"doc-1\""));
+}
+
+#[test]
+fn overwriting_a_foreign_companion_keeps_the_owned_notes_in_the_pair() {
+    let vault = vault("companion-overwrite");
+    let source = golden_source(Some("doc-1"), None);
+    let first = write_to_vault(&source, &vault.0, "", true, ConflictPolicy::Ask).unwrap();
+    let main = vault.0.join(first.note_path);
+    let side = vault.0.join(first.source_note_path.unwrap());
+    std::fs::write(&main, format!("{}\nMy reading notes.\n", read(&main))).unwrap();
+    std::fs::write(&side, "Unrelated source note").unwrap();
+
+    let update = write_to_vault(&source, &vault.0, "", true, ConflictPolicy::Overwrite).unwrap();
+    assert_eq!(update.status, VaultWriteStatus::Updated);
+    assert!(read(&main).contains("My reading notes."));
+    assert!(read(&side).contains("paperloom_role: \"source\""));
 }
 
 #[test]

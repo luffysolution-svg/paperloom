@@ -1793,7 +1793,7 @@ dependencies = [
 
 [[package]]
 name = "retainpdf-cli"
-version = "0.4.6"
+version = "0.4.7"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1930,6 +1930,7 @@ dependencies = [
  "chrono",
  "fastrand",
  "html5ever",
+ "icu_normalizer",
  "lopdf",
  "markup5ever_rcdom",
  "math-core",

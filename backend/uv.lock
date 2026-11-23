@@ -254,7 +254,7 @@ wheels = [
 
 [[package]]
 name = "retainpdf-backend-workspace"
-version = "0.4.6"
+version = "0.4.7"
 source = { virtual = "." }
 dependencies = [
     { name = "retainpdf-base" },
@@ -294,7 +294,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "retainpdf-base"
-version = "0.4.6"
+version = "0.4.7"
 source = { editable = "base" }
 
 [package.optional-dependencies]
@@ -308,7 +308,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "retainpdf-math"
-version = "0.4.6"
+version = "0.4.7"
 source = { editable = "math" }
 
 [package.optional-dependencies]
@@ -322,7 +322,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "retainpdf-pipeline"
-version = "0.4.6"
+version = "0.4.7"
 source = { editable = "pipeline" }
 dependencies = [
     { name = "pikepdf" },
@@ -362,7 +362,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "retainpdf-translation"
-version = "0.4.6"
+version = "0.4.7"
 source = { editable = "translation" }
 dependencies = [
     { name = "pymupdf" },
@@ -390,7 +390,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "retainpdf-translation-agent"
-version = "0.4.6"
+version = "0.4.7"
 source = { editable = "translation-agent" }
 
 [package.optional-dependencies]
@@ -412,7 +412,7 @@ provides-extras = ["engine", "test"]
 
 [[package]]
 name = "retainpdf-translation-classic"
-version = "0.4.6"
+version = "0.4.7"
 source = { editable = "translation-classic" }
 dependencies = [
     { name = "retainpdf-base" },

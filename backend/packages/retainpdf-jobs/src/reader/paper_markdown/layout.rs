@@ -147,6 +147,7 @@ impl<'a> PageFlow<'a> {
         pages.sort_by_key(|(n, _)| *n);
         let first_page = pages.first().map(|(n, _)| *n);
         let mut previous: Option<(i64, &Value, &Value)> = None;
+        let mut previous_reference: Option<&Value> = None;
         let mut in_abstract = false;
         for (index, page) in pages {
             let Some(blocks) = page["blocks"].as_array() else {
@@ -213,6 +214,23 @@ impl<'a> PageFlow<'a> {
                     if inside && !id.is_empty() {
                         flow.panels.insert(id);
                         continue;
+                    }
+                }
+                // OCR can split one numbered reference between columns or pages.
+                if !value.is_empty() {
+                    let previous = previous_reference.take();
+                    if super::references::SectionKind::from_block(block)
+                        == super::references::SectionKind::Reference
+                    {
+                        if super::references::entry_number(value).is_some() {
+                            previous_reference = Some(block);
+                        } else if let Some(left) = previous.filter(|left| {
+                            text(left).ends_with(|c: char| c.is_alphanumeric() || c == '-')
+                                && value.starts_with(|c: char| c.is_lowercase() || cjk(c))
+                        }) {
+                            flow.join_blocks(left, block);
+                            previous_reference = Some(block);
+                        }
                     }
                 }
                 let heading = super::heading_level(block, value);
@@ -308,20 +326,22 @@ impl<'a> PageFlow<'a> {
             }
             if let (Some((prev_idx, prev_page, left)), Some(&right)) = (previous, visible.first()) {
                 if prev_idx + 1 == index && continues(left, prev_page, right, page) {
-                    if let (Some(l), Some(r)) =
-                        (left["block_id"].as_str(), right["block_id"].as_str())
-                    {
-                        flow.joins.insert(r, l);
-                        flow.boundaries.insert((
-                            edge(&compact(text(left)), false),
-                            edge(&compact(text(right)), true),
-                        ));
-                    }
+                    flow.join_blocks(left, right);
                 }
             }
             previous = visible.last().map(|&b| (index, page, b));
         }
         flow
+    }
+
+    fn join_blocks(&mut self, left: &'a Value, right: &'a Value) {
+        if let (Some(l), Some(r)) = (left["block_id"].as_str(), right["block_id"].as_str()) {
+            self.joins.insert(r, l);
+            self.boundaries.insert((
+                edge(&compact(text(left)), false),
+                edge(&compact(text(right)), true),
+            ));
+        }
     }
 
     pub fn provider_body(&self, raw: &str) -> String {

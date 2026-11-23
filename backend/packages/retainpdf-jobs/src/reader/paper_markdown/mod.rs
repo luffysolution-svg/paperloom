@@ -1,4 +1,5 @@
 //! Markdown shared by the reader download and the Obsidian exporter.
+mod author_year;
 mod layout;
 mod math;
 pub mod references;
@@ -151,6 +152,9 @@ pub fn heading_level(block: &Value, source: &str) -> Option<usize> {
     let sub = block["sub_type"].as_str().unwrap_or("");
     let role = block["structure_role"].as_str().unwrap_or("");
     let layout = block["layout_role"].as_str().unwrap_or("");
+    if sub == "metadata" && references::is_heading(source) {
+        return Some(2);
+    }
     if !matches!(sub, "title" | "doc_title" | "heading" | "paragraph_title")
         && !matches!(role, "document_title" | "title" | "heading")
         && !matches!(layout, "title" | "heading")
@@ -308,6 +312,7 @@ pub fn provider_markdown(document: &Value, raw: &str) -> String {
     // Reuse annotated spans for exact paragraph matches, leaving provider-specific
     // phrasing, already-delimited formulas, and fenced examples intact.
     let mut annotated = std::collections::HashMap::new();
+    let mut citation_kinds = std::collections::HashMap::new();
     for block in document["pages"]
         .as_array()
         .into_iter()
@@ -317,6 +322,12 @@ pub fn provider_markdown(document: &Value, raw: &str) -> String {
         if let Some(flat) = block.pointer("/content/text").and_then(Value::as_str) {
             if block.pointer("/content/kind").and_then(Value::as_str) == Some("text") {
                 let formatted = restore_inline_math(block, flat, false);
+                let kind = references::SectionKind::from_block(block);
+                if kind != references::SectionKind::Prose {
+                    for line in formatted.lines() {
+                        citation_kinds.insert(line.trim().to_owned(), kind);
+                    }
+                }
                 if formatted != flat {
                     annotated.insert(flat, formatted);
                 }
@@ -387,12 +398,16 @@ pub fn provider_markdown(document: &Value, raw: &str) -> String {
             .into_owned();
     }
     let body = flow.provider_body(&body);
-    let mut body = normalize_table_math(&format_outline(
+    let body = normalize_table_math(&format_outline(
         &tighten_inline_math(&body),
         flow.primary_title,
     ));
-    references::link_sections(std::slice::from_mut(&mut body), &[]);
-    body
+    let mut lines: Vec<_> = body.split('\n').map(str::to_owned).collect();
+    let kinds: Vec<_> = lines.iter()
+        .map(|line| citation_kinds.get(line.trim()).copied().unwrap_or(references::SectionKind::Prose))
+        .collect();
+    references::link_sections(&mut lines, &kinds);
+    lines.join("\n")
 }
 
 static ABSTRACT: LazyLock<Regex> = LazyLock::new(|| {
@@ -613,5 +628,68 @@ mod tests {
         assert!(md[0].contains("[[#^ref-2|²]]"));
         assert!(md[0].contains("$x[1]$ and [3] and [1](url)"));
         assert!(md[0].ends_with("[2] Second. ^ref-2"));
+    }
+
+    #[test]
+    fn author_year_groups_and_narrative_citations_resolve_only_matching_bibliographies() {
+        let mut lines = vec![
+            "Lal and Paul (2025);（Arpaci et al., 2026a, 2026b）。参见Arpaci等人（2026a）。".to_owned(),
+            "The year 2025, Unknown and Paul (2025), Code `Arpaci et al., 2026a`.".to_owned(),
+            "Unclear: Kim (2020).".to_owned(),
+            "## References".to_owned(),
+            "Lal C, Paul S (2025) Research.".to_owned(),
+            "Arpaci I, Karataş K, Gibreel O (2026a) First.".to_owned(),
+            "Arpaci I, Gibreel O, Al-Sharafi MA (2026b) Second.".to_owned(),
+            "Kim A (2020) One.".to_owned(),
+            "Kim B (2020) Two.".to_owned(),
+        ];
+        references::link_sections(&mut lines, &[]);
+        assert_eq!(lines[0], "Lal and Paul ([[#^ref-author-1|2025]]);（Arpaci et al., [[#^ref-author-2|2026a]], [[#^ref-author-3|2026b]]）。参见Arpaci等人（[[#^ref-author-2|2026a]]）。");
+        assert!(!lines[1].contains("[[") && !lines[2].contains("[["));
+        assert!(lines[4].ends_with(" ^ref-author-1"));
+
+        let mut bare = vec!["See [1–2].\n## References\n1 Guo D. First.\n2 Sun J. Second.".to_owned()];
+        references::link_sections(&mut bare, &[]);
+        assert!(bare[0].contains("[[#^ref-1|1]], [[#^ref-2|2]]"));
+        assert!(bare[0].ends_with("2 Sun J. Second. ^ref-2"));
+        let mut captions = vec!["<div>Comparison [1,3].</div>\n\n吴克登 <sup>1</sup>，陈炎 <sup>2</sup>\n\n## References\n1 Guo D. First.\n2 Sun J. Second.".to_owned()];
+        references::link_sections(&mut captions, &[]);
+        assert!(captions[0].contains(r##"<a class="internal-link" data-href="#^ref-1" href="#^ref-1">1</a>, 3"##));
+        assert!(captions[0].contains("吴克登 <sup>1</sup>，陈炎 <sup>2</sup>"));
+        use references::SectionKind;
+        let mut blocks = vec!["Figure 2. Studies<sup>[1,</sup> <sup>2]</sup>.".to_owned(),
+            "1. First.".to_owned(), "2. Second.".to_owned()];
+        let caption = SectionKind::from_roles(Some("image_caption"), Some("metadata"));
+        references::link_sections(&mut blocks, &[caption, SectionKind::Reference, SectionKind::Reference]);
+        assert_eq!(blocks[0], "Figure 2. Studies[[#^ref-1|¹]], [[#^ref-2|²]].");
+    }
+
+    #[test]
+    fn provider_links_bare_superscripts_to_complete_bibliography_entries() {
+        let byline = "Juhwan Noh, $^{1}$ Jaehoon Kim, $^{2}$";
+        let first = "2. Hinuma et al. (2016). Computational screening";
+        let tail = "and high-pressure synthesis. Nat. Commun. 7, 11962.";
+        let doc = json!({"pages":[{"blocks":[
+            {"block_id":"authors","sub_type":"metadata","content":{"kind":"text","text":byline}},
+            {"block_id":"ref2","sub_type":"reference_entry","content":{"kind":"text","text":first}}
+        ]},{"blocks":[
+            {"block_id":"ref2-cont","sub_type":"reference_entry","content":{"kind":"text","text":tail}}
+        ]}]});
+        let notation = "10², cm², Fe³⁺, x<sup>2</sup>, ¹³C and $n^{3}$.";
+        let body = format!(
+            "{byline}\n\n## Introduction\n\nMaterials,⁵ oxides,⁹,¹⁰ and applications.¹¹-¹³\n\n\
+             Earlier models¹ ⁻ ³, ⁵ and Fischer et al. $^{{4}}$ agree. GDB-17$^{{6}}$；研究等$^{{7}}$指出。\n\n\
+             Studies<sup>8</sup>. Missing⁹⁹, mixed⁵⁻⁹⁹.\n\n{notation}\n\n\
+             `Code⁵` and [[#^ref-5|⁵]].\n\n## References\n\n1. First.\n\n{first}\n\n{tail}\n\n{}",
+            (3..=13).map(|n| format!("{n}. Reference.")).collect::<Vec<_>>().join("\n\n")
+        );
+        let md = provider_markdown(&doc, &body);
+        assert!(md.contains("Materials,[[#^ref-5|⁵]] oxides,[[#^ref-9|⁹]], [[#^ref-10|¹⁰]]"));
+        assert!(md.contains("applications.[[#^ref-11|¹¹]], [[#^ref-12|¹²]], [[#^ref-13|¹³]]"));
+        assert!(md.contains("models[[#^ref-1|¹]], [[#^ref-2|²]], [[#^ref-3|³]], [[#^ref-5|⁵]]"));
+        assert!(md.contains("et al. [[#^ref-4|⁴]] agree. GDB-17[[#^ref-6|⁶]]；研究等[[#^ref-7|⁷]]指出。"));
+        assert!(md.contains("Studies[[#^ref-8|⁸]]. Missing⁹⁹, mixed⁵⁻⁹⁹."));
+        assert!(md.contains(byline) && md.contains(notation) && md.contains("`Code⁵` and [[#^ref-5|⁵]]."));
+        assert!(md.contains(&format!("{first} {tail} ^ref-2")));
     }
 }
