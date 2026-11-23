@@ -71,18 +71,27 @@ pub(crate) fn bibliography(data: &Value) -> Fields {
         .collect()
 }
 
-const PREFIX: &str = "%% paperloom:bibliography ";
-pub(crate) fn marker(fields: &Fields) -> String {
-    format!(
-        "{PREFIX}{} %%",
-        URL_SAFE_NO_PAD.encode(serde_json::to_vec(fields).unwrap())
-    )
-}
-pub(crate) fn saved_fields(note: &str) -> Option<Fields> {
-    let encoded = note
-        .lines()
-        .find_map(|l| l.strip_prefix(PREFIX)?.strip_suffix(" %%"))?;
+fn decode_legacy_marker(line: &str) -> Option<Fields> {
+    let encoded = line.strip_prefix("%% paperloom:bibliography ")?.strip_suffix(" %%")?;
     serde_json::from_slice(&URL_SAFE_NO_PAD.decode(encoded).ok()?).ok()
+}
+
+/// The range includes the original line ending so migration leaves handwritten text intact.
+pub(crate) fn legacy_bibliography(note: &str) -> Option<(Fields, std::ops::Range<usize>)> {
+    let start = note.find("%% paperloom:begin links %%")?;
+    let end = start + note[start..].find("%% paperloom:end links %%")?;
+    let mut pos = start;
+    for line in note[start..end].split_inclusive('\n') {
+        if let Some(fields) = decode_legacy_marker(line.trim_end_matches(['\r', '\n'])) {
+            return Some((fields, pos..pos + line.len()));
+        }
+        pos += line.len();
+    }
+    None
+}
+
+pub(crate) fn note_key(canonical_path: &std::path::Path) -> String {
+    format!("{:x}", md5::compute(canonical_path.to_string_lossy().as_bytes()))
 }
 
 pub(crate) fn note_fields(yaml: &Value) -> Result<Fields, AppError> {
@@ -337,9 +346,11 @@ impl ZoteroWriteClient {
             return Err(AppError::conflict("Zotero 返回了其他条目"));
         }
         let remote = bibliography(&item["data"]);
-        let export_marker = marker(export);
+        let export_hash = format!("{:x}", md5::compute(json!(export).to_string()));
         let previous = previous.unwrap_or_default();
-        let (base_local, base_remote) = if previous.export == export_marker {
+        let (base_local, base_remote) = if previous.export == export_hash
+            || decode_legacy_marker(&previous.export).as_ref() == Some(export)
+        {
             (&previous.local, &previous.remote)
         } else {
             (export, export)
@@ -483,7 +494,7 @@ impl ZoteroWriteClient {
                 remote,
                 reading: reading_hash,
                 remote_note: note_hash,
-                export: export_marker,
+                export: export_hash,
             },
             verified,
         ))
@@ -493,6 +504,16 @@ impl ZoteroWriteClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn legacy_marker_is_only_removed_from_managed_links() {
+        let marker = "%% paperloom:bibliography eyJ0aXRsZSI6Ik9sZCJ9 %%";
+        let mut note = format!("%% paperloom:begin links %%\r\n{marker}\r\n%% paperloom:end links %%\r\nMy example:\r\n{marker}\r\n");
+        let (fields, line) = legacy_bibliography(&note).unwrap();
+        assert_eq!(fields["title"], "Old");
+        note.replace_range(line, "");
+        assert!(legacy_bibliography(&note).is_none());
+        assert!(note.ends_with(&format!("My example:\r\n{marker}\r\n")));
+    }
 
     #[test]
     fn reads_user_section_and_preserves_scientific_markup() {

@@ -9,6 +9,7 @@ mod ocr_source;
 mod render;
 use retainpdf_jobs::paper_markdown as table_math;
 mod vault;
+pub(super) use vault::write_atomically;
 mod zotero_notes;
 
 #[cfg(test)]
@@ -599,6 +600,9 @@ pub(crate) fn markdown_export_download(
     std::fs::create_dir_all(&artifacts_dir)?;
     let zip_path = artifacts_dir.join(format!("{}-obsidian{variant}.zip", source.job.job_id));
     write_zip_atomically(&zip_path, &entries)?;
+    if let (Some(doc), Some(zotero)) = (&source.meta.document_id, &source.meta.zotero) {
+        deps.db.save_obsidian_bibliography(doc, &format!("job:{job_id}"), &zotero.baseline)?;
+    }
     // Content-Disposition 直接拼文件名，非 ASCII 会失败；中文笔记名只体现在包内。
     let download_name = if names.base.is_ascii() {
         format!("{}.zip", names.base)
@@ -662,7 +666,7 @@ pub(crate) fn obsidian_vault_export(
         Some(zotero) => folder_with_collection(folder, &zotero.collection_path),
         None => folder.to_string(),
     };
-    vault::write_to_vault(&source, vault_root, &folder, include_source, policy)
+    vault::write_to_vault(deps.db, &source, vault_root, &folder, include_source, policy)
 }
 
 pub(crate) async fn obsidian_vault_export_async(

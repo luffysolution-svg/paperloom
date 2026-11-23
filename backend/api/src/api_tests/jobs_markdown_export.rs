@@ -680,6 +680,13 @@ async fn zotero_routes_browse_import_dedupe_and_feed_note_metadata() {
     let entries = zip_entries(body);
     let (name, note) = entries.first().expect("note");
     assert_eq!(name, "Chai2026Constructing.md");
+    for (name, bytes) in &entries {
+        if name.ends_with(".md") {
+            assert!(!std::str::from_utf8(bytes).unwrap().contains("paperloom:bibliography"));
+        }
+    }
+    let archive_base = state.db.obsidian_bibliography(&document_id, "new-vault-location", JOB_ID).unwrap().unwrap();
+    assert_eq!(archive_base["title"], "Constructing redox-active sites");
     let note = String::from_utf8(note.clone()).unwrap();
     assert!(
         note.contains("zotero: \"zotero://select/library/items/ITEM0001\""),

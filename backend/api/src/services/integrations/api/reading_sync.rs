@@ -46,10 +46,10 @@ pub(crate) async fn sync_obsidian_reading(
         if !entry.file_type()?.is_file() || entry.path().extension().is_none_or(|e| e != "md") {
             continue;
         }
-        let Ok(text) = std::fs::read_to_string(entry.path()) else {
+        let Ok(raw) = std::fs::read_to_string(entry.path()) else {
             continue;
         };
-        let text = text.replace("\r\n", "\n");
+        let text = raw.replace("\r\n", "\n");
         let header = text
             .strip_prefix("---\n")
             .and_then(|s| s.split_once("\n---\n"))
@@ -74,16 +74,25 @@ pub(crate) async fn sync_obsidian_reading(
                 "此目录有多份同一文献的主笔记，请在该目录保留要同步的一份",
             ));
         }
-        selected = Some((entry.path(), yaml, body, text));
+        selected = Some((entry.path(), yaml, body, raw));
     }
-    let (file, yaml, body, text) =
+    let (file, yaml, body, mut raw) =
         selected.ok_or_else(|| AppError::not_found("所选目录没有与此 Zotero 文献对应的主笔记"))?;
     let mut snapshot: Value = serde_json::from_str(&external.metadata_json)
         .map_err(|_| AppError::conflict("Zotero 导入快照不可读"))?;
-    let baseline =
-        reading::saved_fields(&text).unwrap_or_else(|| reading::bibliography(&snapshot["data"]));
+    let id = reading::note_key(&file);
+    let baseline = match reading::legacy_bibliography(&raw) {
+        Some((legacy, marker)) => {
+            deps.db.save_obsidian_bibliography(&document.document_id, &id, &legacy)?;
+            raw.replace_range(marker, "");
+            markdown_export::write_atomically(&file, raw.as_bytes())?;
+            legacy
+        }
+        None => deps.db.obsidian_bibliography(
+            &document.document_id, &id, yaml["paperloom_job"].as_str().unwrap_or(job),
+        )?.unwrap_or_else(|| reading::bibliography(&snapshot["data"])),
+    };
     let local = reading::note_fields(&yaml)?;
-    let id = format!("{:x}", md5::compute(file.to_string_lossy().as_bytes()));
     let previous = snapshot
         .get("obsidian_sync")
         .and_then(|s| s.get(&id))

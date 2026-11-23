@@ -1,7 +1,7 @@
 -- 现在每张表的完整样子：新建空库跑完 schema/base.sql、LEGACY_COLUMNS 和全部编号迁移以后的结果。
 -- 测试生成，不要手改：UPDATE_SCHEMA=1 cargo test -p retainpdf-db schema_snapshot
 -- 主键写成 PRIMARY KEY#n（复合主键里的第几列）；FTS5 自己的影子表不单列。
--- user_version 38
+-- user_version 39
 
 TABLE artifacts
   job_id TEXT PRIMARY KEY#1
@@ -434,6 +434,13 @@ TABLE model_sessions
   created_at TEXT NOT NULL
   FOREIGN KEY (job_id) REFERENCES jobs(job_id) ON UPDATE NO ACTION ON DELETE CASCADE
   PRIMARY KEY (job_id)
+
+TABLE obsidian_bibliography
+  document_id TEXT NOT NULL PRIMARY KEY#1
+  note_key TEXT NOT NULL PRIMARY KEY#2
+  fields_json TEXT NOT NULL
+  FOREIGN KEY (document_id) REFERENCES item_files(file_id) ON UPDATE NO ACTION ON DELETE CASCADE
+  PRIMARY KEY (document_id, note_key)
 
 TABLE page_ledger
   entry_id INTEGER PRIMARY KEY#1

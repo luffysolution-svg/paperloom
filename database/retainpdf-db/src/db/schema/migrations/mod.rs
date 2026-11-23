@@ -201,6 +201,11 @@ pub(super) const MIGRATIONS: &[Migration] = &[
         name: "external_refs",
         sql: include_str!("v38_external_refs.sql"),
     },
+    Migration {
+        version: 39,
+        name: "obsidian_bibliography",
+        sql: include_str!("v39_obsidian_bibliography.sql"),
+    },
 ];
 
 #[cfg(test)]

@@ -240,6 +240,10 @@ fn include_source_false_omits_source_note_and_its_links() {
 struct TempDir(PathBuf);
 
 impl TempDir {
+    fn db(&self) -> super::Db {
+        super::Db::new(self.0.join("jobs.db"), self.0.clone())
+    }
+
     fn new(label: &str) -> Self {
         let path = std::env::temp_dir().join(format!(
             "paperloom-md-export-{label}-{:016x}",
@@ -692,7 +696,7 @@ fn vault_export_creates_then_updates_preserving_user_content() {
     let source = golden_source(Some("doc-1"), Some(pdf.clone()));
 
     let first =
-        write_to_vault(&source, &vault.0, "Lit/Chem", true, ConflictPolicy::Ask).expect("create");
+        write_to_vault(&vault.db(), &source, &vault.0, "Lit/Chem", true, ConflictPolicy::Ask).expect("create");
     assert_eq!(first.status, VaultWriteStatus::Created);
     assert_eq!(first.note_path, "Lit/Chem/Smith2023Role.md");
     assert_eq!(
@@ -716,7 +720,7 @@ fn vault_export_creates_then_updates_preserving_user_content() {
     std::fs::write(&note_path, edited).expect("edit");
 
     let second =
-        write_to_vault(&source, &vault.0, "Lit/Chem", true, ConflictPolicy::Ask).expect("update");
+        write_to_vault(&vault.db(), &source, &vault.0, "Lit/Chem", true, ConflictPolicy::Ask).expect("update");
     assert_eq!(second.status, VaultWriteStatus::Updated);
     let note = read(&note_path);
     assert!(
@@ -741,30 +745,30 @@ fn vault_export_handles_foreign_note_by_policy() {
     let foreign = vault.0.join("Smith2023Role.md");
     std::fs::write(&foreign, "---\ntitle: mine\n---\n\nhands off\n").expect("foreign");
 
-    let ask = write_to_vault(&source, &vault.0, "", true, ConflictPolicy::Ask).expect("ask");
+    let ask = write_to_vault(&vault.db(), &source, &vault.0, "", true, ConflictPolicy::Ask).expect("ask");
     assert_eq!(ask.status, VaultWriteStatus::Conflict);
     assert_eq!(ask.files_written, 0);
     assert_eq!(read(&foreign), "---\ntitle: mine\n---\n\nhands off\n");
 
-    let skip = write_to_vault(&source, &vault.0, "", true, ConflictPolicy::Skip).expect("skip");
+    let skip = write_to_vault(&vault.db(), &source, &vault.0, "", true, ConflictPolicy::Skip).expect("skip");
     assert_eq!(skip.status, VaultWriteStatus::Skipped);
 
     let renamed =
-        write_to_vault(&source, &vault.0, "", true, ConflictPolicy::Rename).expect("rename");
+        write_to_vault(&vault.db(), &source, &vault.0, "", true, ConflictPolicy::Rename).expect("rename");
     assert_eq!(renamed.status, VaultWriteStatus::Created);
     assert_eq!(renamed.note_path, "Smith2023Role-2.md");
     let note = read(&vault.0.join("Smith2023Role-2.md"));
     assert!(note.contains("source_note: \"[[Smith2023Role-2.en]]\""));
     assert_eq!(read(&foreign), "---\ntitle: mine\n---\n\nhands off\n");
     // 之后即使默认的 ask 也直接更新之前另存的 -2，不再重复询问。
-    let again = write_to_vault(&source, &vault.0, "", true, ConflictPolicy::Ask).expect("again");
+    let again = write_to_vault(&vault.db(), &source, &vault.0, "", true, ConflictPolicy::Ask).expect("again");
     assert_eq!(
         (again.status, again.note_path.as_str()),
         (VaultWriteStatus::Updated, "Smith2023Role-2.md")
     );
 
     let overwrite =
-        write_to_vault(&source, &vault.0, "", true, ConflictPolicy::Overwrite).expect("overwrite");
+        write_to_vault(&vault.db(), &source, &vault.0, "", true, ConflictPolicy::Overwrite).expect("overwrite");
     assert_eq!(overwrite.status, VaultWriteStatus::Created);
     assert!(read(&foreign).contains("paperloom_document: \"doc-1\""));
 }
@@ -773,13 +777,13 @@ fn vault_export_handles_foreign_note_by_policy() {
 fn overwriting_a_foreign_companion_keeps_the_owned_notes_in_the_pair() {
     let vault = vault("companion-overwrite");
     let source = golden_source(Some("doc-1"), None);
-    let first = write_to_vault(&source, &vault.0, "", true, ConflictPolicy::Ask).unwrap();
+    let first = write_to_vault(&vault.db(), &source, &vault.0, "", true, ConflictPolicy::Ask).unwrap();
     let main = vault.0.join(first.note_path);
     let side = vault.0.join(first.source_note_path.unwrap());
     std::fs::write(&main, format!("{}\nMy reading notes.\n", read(&main))).unwrap();
     std::fs::write(&side, "Unrelated source note").unwrap();
 
-    let update = write_to_vault(&source, &vault.0, "", true, ConflictPolicy::Overwrite).unwrap();
+    let update = write_to_vault(&vault.db(), &source, &vault.0, "", true, ConflictPolicy::Overwrite).unwrap();
     assert_eq!(update.status, VaultWriteStatus::Updated);
     assert!(read(&main).contains("My reading notes."));
     assert!(read(&side).contains("paperloom_role: \"source\""));
@@ -789,14 +793,14 @@ fn overwriting_a_foreign_companion_keeps_the_owned_notes_in_the_pair() {
 fn vault_export_treats_note_without_markers_as_conflict() {
     let vault = vault("markers");
     let source = golden_source(None, None);
-    write_to_vault(&source, &vault.0, "", false, ConflictPolicy::Ask).expect("create");
+    write_to_vault(&vault.db(), &source, &vault.0, "", false, ConflictPolicy::Ask).expect("create");
     let path = vault.0.join("Smith2023Role.md");
     let stripped = read(&path)
         .replace("%% paperloom:begin body %%", "")
         .replace("%% paperloom:end body %%", "");
     std::fs::write(&path, stripped).expect("strip");
     let outcome =
-        write_to_vault(&source, &vault.0, "", false, ConflictPolicy::Ask).expect("export");
+        write_to_vault(&vault.db(), &source, &vault.0, "", false, ConflictPolicy::Ask).expect("export");
     assert_eq!(outcome.status, VaultWriteStatus::Conflict);
 }
 
@@ -814,7 +818,7 @@ fn vault_export_prunes_only_generated_assets() {
     ] {
         std::fs::write(assets.join(name), b"x").expect("asset");
     }
-    let outcome = write_to_vault(&source, &vault.0, "", true, ConflictPolicy::Ask).expect("export");
+    let outcome = write_to_vault(&vault.db(), &source, &vault.0, "", true, ConflictPolicy::Ask).expect("export");
     assert_eq!(outcome.assets_removed, 3);
     assert!(assets.join("my-sketch.png").is_file());
     assert!(!assets.join("fig-099-p01.png").exists());
@@ -861,12 +865,12 @@ fn merge_drops_sections_no_longer_exported() {
     let old = "---\ntitle: \"a\"\nmine: 1\n---\n\n<!-- paperloom:begin links -->\n原文：[[x.en]]\n<!-- paperloom:end links -->\n\n<!-- paperloom:begin body -->\nold\n<!-- paperloom:end body -->\n\nafter\n";
     let new =
         "---\ntitle: \"b\"\n---\n\n%% paperloom:begin body %%\nnew\n%% paperloom:end body %%\n";
-    let merged = merge_note(old, new, &[]).expect("merge");
+    let merged = merge_note(old, new, &[], &Default::default()).expect("merge");
     assert_eq!(
         merged,
         "---\ntitle: \"b\"\nmine: 1\n---\n\n%% paperloom:begin body %%\nnew\n%% paperloom:end body %%\n\nafter\n"
     );
-    assert!(merge_note("no markers", new, &[]).is_none());
+    assert!(merge_note("no markers", new, &[], &Default::default()).is_none());
 }
 
 fn zotero_ref(citation_key: &str) -> crate::db::external_refs::ExternalRefRecord {
@@ -892,6 +896,50 @@ fn zotero_ref(citation_key: &str) -> crate::db::external_refs::ExternalRefRecord
         collection_path: "能源/光催化".into(),
         created_at: String::new(),
         updated_at: String::new(),
+    }
+}
+
+#[test]
+fn legacy_bibliography_moves_to_db_and_each_note_keeps_its_own_edits() {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+    use crate::services::integrations::zotero::writeback::reading;
+
+    let dest = vault("legacy-bibliography");
+    let db = dest.db();
+    let upload = crate::models::UploadRecord {
+        upload_id: "legacy".into(), filename: "test.pdf".into(), stored_path: "test.pdf".into(),
+        bytes: 1, page_count: 1, uploaded_at: crate::models::now_iso(), developer_mode: false,
+        content_hash: "doc-1".into(),
+    };
+    db.save_upload(&upload).unwrap();
+    db.upsert_document_from_upload(&upload).unwrap();
+    let mut source = golden_source(Some("doc-1"), None);
+    let mut external = zotero_ref("Reference");
+    source.meta = meta().with_zotero(&external, "");
+    let bundle = source.bundle("Reference", true);
+    let fields = &source.meta.zotero.as_ref().unwrap().baseline;
+    let legacy = format!("%% paperloom:bibliography {} %%\n%% paperloom:end links %%",
+        URL_SAFE_NO_PAD.encode(serde_json::to_vec(fields).unwrap()));
+    let main = dest.0.join("Reference.md");
+    let side = dest.0.join("Reference.en.md");
+    let old_title = "Constructing redox-active sites";
+    std::fs::write(&main, bundle.translated
+        .replace("%% paperloom:end links %%", &legacy)
+        .replace(&format!("title: \"{old_title}\""), "title: \"My local title\"") + "\nMy annotations.\n").unwrap();
+    std::fs::write(&side, bundle.source.unwrap().replace("%% paperloom:end links %%", &legacy)).unwrap();
+    let mut remote: Value = serde_json::from_str(&external.metadata_json).unwrap();
+    remote["data"]["title"] = json!("Updated at Zotero");
+    external.metadata_json = remote.to_string();
+    source.meta = meta().with_zotero(&external, "");
+    for _ in 0..2 {
+        write_to_vault(&db, &source, &dest.0, "", true, ConflictPolicy::Ask).unwrap();
+        assert!(read(&main).contains("title: \"My local title\"") && read(&main).contains("My annotations."));
+        assert!(read(&side).contains("title: \"Updated at Zotero\""));
+        for (file, title) in [(&main, old_title), (&side, "Updated at Zotero")] {
+            assert!(!read(file).contains("paperloom:bibliography"));
+            let key = reading::note_key(&file.canonicalize().unwrap());
+            assert_eq!(db.obsidian_bibliography("doc-1", &key, "job-1").unwrap().unwrap()["title"], title);
+        }
     }
 }
 
@@ -1012,7 +1060,7 @@ title: \"a\"
 ",
         zotero("hl 1")
     );
-    let first = merge_note(&old, &new, &[]).expect("merge");
+    let first = merge_note(&old, &new, &[], &Default::default()).expect("merge");
     assert!(
         first.contains(&format!(
             "{body}
@@ -1033,9 +1081,9 @@ title: \"a\"
 {body}
 "
     );
-    let kept = merge_note(&first, &without, &["zotero"]).expect("keep");
+    let kept = merge_note(&first, &without, &["zotero"], &Default::default()).expect("keep");
     assert!(kept.contains(&zotero("hl 1")));
-    let dropped = merge_note(&first, &without, &[]).expect("drop");
+    let dropped = merge_note(&first, &without, &[], &Default::default()).expect("drop");
     assert!(!dropped.contains("paperloom:begin zotero"));
     assert!(dropped.contains("my notes"));
 }
@@ -1059,7 +1107,7 @@ fn deselecting_source_preserves_its_images_and_removes_its_managed_link() {
     source.images_dir = Some(dest.0.join("input"));
     source.full_markdown = Some("![Original](images/old.png)".into());
     let export =
-        |include| write_to_vault(&source, &dest.0, "notes", include, ConflictPolicy::Ask).unwrap();
+        |include| write_to_vault(&dest.db(), &source, &dest.0, "notes", include, ConflictPolicy::Ask).unwrap();
     let first = export(true);
     let side = dest.0.join(first.source_note_path.unwrap());
     let body = read(&side);

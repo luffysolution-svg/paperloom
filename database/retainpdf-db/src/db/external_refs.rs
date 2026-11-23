@@ -2,6 +2,8 @@
 
 use anyhow::Result;
 use rusqlite::{params, OptionalExtension, Row};
+use serde_json::Value;
+use std::collections::BTreeMap;
 
 use crate::models::domain::now_iso;
 
@@ -37,6 +39,36 @@ fn row_to_ref(row: &Row<'_>) -> rusqlite::Result<ExternalRefRecord> {
 }
 
 impl Db {
+    pub fn obsidian_bibliography(
+        &self,
+        document: &str,
+        note_key: &str,
+        job: &str,
+    ) -> Result<Option<BTreeMap<String, Value>>> {
+        let fields: Option<String> = self.connect()?.query_row(
+            "SELECT fields_json FROM obsidian_bibliography
+             WHERE document_id=?1 AND note_key IN (?2, ?3)
+             ORDER BY (note_key=?2) DESC LIMIT 1",
+            params![document, note_key, format!("job:{job}")],
+            |row| row.get(0),
+        ).optional()?;
+        Ok(fields.map(|raw| serde_json::from_str(&raw)).transpose()?)
+    }
+
+    pub fn save_obsidian_bibliography(
+        &self,
+        document: &str,
+        note_key: &str,
+        fields: &BTreeMap<String, Value>,
+    ) -> Result<()> {
+        self.connect()?.execute(
+            "INSERT INTO obsidian_bibliography (document_id, note_key, fields_json) VALUES (?1, ?2, ?3)
+             ON CONFLICT(document_id, note_key) DO UPDATE SET fields_json=excluded.fields_json",
+            params![document, note_key, serde_json::to_string(fields)?],
+        )?;
+        Ok(())
+    }
+
     /// 按 (source, library_id, attachment_key) 写入；created_at 只在首次写入时生效。
     pub fn upsert_external_ref(&self, record: &ExternalRefRecord) -> Result<()> {
         let conn = self.connect()?;

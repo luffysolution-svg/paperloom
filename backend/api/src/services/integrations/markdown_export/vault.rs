@@ -2,11 +2,14 @@
 // 用户在标记外写的内容、自己加的 frontmatter 键与 tags 保留。
 // 规则见 docs/ops/planning/zotero-obsidian-integration.md「F4」。
 
+use std::collections::HashSet;
 use std::path::Path;
 
 use serde::Serialize;
 
+use crate::db::Db;
 use crate::error::AppError;
+use crate::services::integrations::zotero::writeback::reading;
 
 use super::note::sanitize_file_name;
 use super::{ExportSource, NoteBundle, ZoteroExtrasState};
@@ -104,6 +107,7 @@ fn inspect(path: &Path, source: &ExportSource) -> Result<Existing, AppError> {
 }
 
 pub(super) fn write_to_vault(
+    db: &Db,
     source: &ExportSource,
     vault_root: &Path,
     folder: &str,
@@ -194,14 +198,13 @@ pub(super) fn write_to_vault(
         let updated = matches!(&main, Existing::Ours(text) if has_section(text, "body"));
         let mut files_written = 0;
         std::fs::create_dir_all(&dir)?;
-        let main_text = merged(&main, &bundle.translated, keep);
         let assets_dir = dir.join(&bundle.names.assets_dir);
         files_written += copy_assets(&assets_dir, &bundle)?;
-        write_atomically(&note_path, main_text.as_bytes())?;
+        let main_text = write_note(db, &source.meta, &note_path, &main, &bundle.translated, keep)?;
         files_written += 1;
         let source_note_path = match &bundle.source {
             Some(note) => {
-                write_atomically(&source_path, merged(&side, note, &[]).as_bytes())?;
+                write_note(db, &source.meta, &source_path, &side, note, &[])?;
                 files_written += 1;
                 Some(join_rel(
                     &folder,
@@ -235,13 +238,60 @@ pub(super) fn write_to_vault(
     )))
 }
 
-fn merged(existing: &Existing, new_text: &str, keep: &[&str]) -> String {
-    match existing {
-        Existing::Ours(old) => {
-            merge_note(old, new_text, keep).unwrap_or_else(|| new_text.to_string())
+fn write_note(
+    db: &Db,
+    meta: &super::NoteMeta,
+    path: &Path,
+    existing: &Existing,
+    new_text: &str,
+    keep: &[&str],
+) -> Result<String, AppError> {
+    let mut edited = HashSet::new();
+    let mut snapshot = None;
+    let old_note = match existing {
+        Existing::Ours(old) if has_section(old, "body") => Some(old.as_str()),
+        _ => None,
+    };
+    if let (Some(document), Some(zotero)) = (&meta.document_id, &meta.zotero) {
+        // The file may be new. Its parent already exists and has the same canonical
+        // spelling that the Zotero writeback path uses, including on Windows.
+        let directory = path.parent().expect("note directory").canonicalize()?;
+        let key = reading::note_key(&directory.join(path.file_name().expect("note filename")));
+        let mut next = zotero.baseline.clone();
+        let mut previous = None;
+        if let Some(old) = old_note {
+            let (yaml, _) = reading::read_note(old)?;
+            let base = match reading::legacy_bibliography(old) {
+                Some((legacy, _)) => legacy,
+                None => db
+                    .obsidian_bibliography(
+                        document, &key, yaml["paperloom_job"].as_str().unwrap_or(&meta.job_id),
+                    )?
+                    .unwrap_or_else(|| zotero.baseline.clone()),
+            };
+            for (field, value) in reading::note_fields(&yaml)? {
+                if let Some(original) = base.get(&field)
+                    .filter(|&before| before != &value && next.get(&field) != Some(&value))
+                {
+                    edited.insert(field.clone());
+                    next.insert(field, original.clone());
+                }
+            }
+            previous = Some(base);
         }
-        _ => new_text.to_string(),
+        db.save_obsidian_bibliography(document, &key, &next)?;
+        snapshot = Some((document, key, previous));
     }
+    let text = old_note
+        .and_then(|old| merge_note(old, new_text, keep, &edited))
+        .unwrap_or_else(|| new_text.to_owned());
+    if let Err(error) = write_atomically(path, text.as_bytes()) {
+        if let Some((document, key, Some(previous))) = snapshot {
+            db.save_obsidian_bibliography(document, &key, &previous)?;
+        }
+        return Err(error);
+    }
+    Ok(text)
 }
 
 /// 复制资源；删除资源目录里由导出生成、但本次不再引用的文件（只认我们的命名模式）。
@@ -311,7 +361,7 @@ pub(super) fn is_generated_asset(name: &str) -> bool {
     prefix_ok && number_ok && page_ok && parts.next().is_none()
 }
 
-fn write_atomically(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
+pub(in crate::services::integrations) fn write_atomically(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
     let tmp = parent.join(format!(".paperloom-{:016x}.tmp", fastrand::u64(..)));
     std::fs::write(&tmp, bytes)?;
@@ -395,7 +445,7 @@ const SECTIONS: [&str; 3] = ["links", "body", "zotero"];
 /// 合并：受管 frontmatter 键取新值（tags 若用户已有则保留用户的），用户自己的键保留；
 /// 受管区块整块替换，标记外内容保留。旧文件没有 body 区块时返回 None。
 /// keep 中的区块在新内容里缺席时原样保留（本次没读到数据，不等于数据没了）。
-pub(super) fn merge_note(old: &str, new: &str, keep: &[&str]) -> Option<String> {
+pub(super) fn merge_note(old: &str, new: &str, keep: &[&str], edited: &HashSet<String>) -> Option<String> {
     let old = old.replace("\r\n", "\n");
     let (old_fm, old_body) = split_frontmatter(&old);
     let (new_fm, new_body) = split_frontmatter(new);
@@ -405,27 +455,6 @@ pub(super) fn merge_note(old: &str, new: &str, keep: &[&str]) -> Option<String> 
         .iter()
         .filter_map(|entry| entry.key.as_deref())
         .collect();
-    let mut edited = std::collections::HashSet::new();
-    let mut baseline_marker = None;
-    use crate::services::integrations::zotero::writeback::reading;
-    if let (Some(old_base), Some(mut next)) =
-        (reading::saved_fields(&old), reading::saved_fields(new))
-    {
-        if let Ok((yaml, _)) = reading::read_note(&old) {
-            if let Ok(local) = reading::note_fields(&yaml) {
-                let generated = reading::marker(&next);
-                for (key, value) in local {
-                    if old_base.get(&key).is_some_and(|v| v != &value)
-                        && next.get(&key) != Some(&value)
-                    {
-                        edited.insert(key.clone());
-                        next.insert(key.clone(), old_base[&key].clone());
-                    }
-                }
-                baseline_marker = Some((generated, reading::marker(&next)));
-            }
-        }
-    }
     let user_tags = old_fm
         .iter()
         .find(|entry| entry.key.as_deref() == Some("tags"));
@@ -481,9 +510,6 @@ pub(super) fn merge_note(old: &str, new: &str, keep: &[&str]) -> Option<String> 
             }
             (None, None) => {}
         }
-    }
-    if let Some((new_marker, merged_marker)) = baseline_marker {
-        body = body.replacen(&new_marker, &merged_marker, 1);
     }
     Some(format!("---\n{}\n---\n{body}", fm.join("\n")))
 }
